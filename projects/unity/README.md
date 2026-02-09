@@ -41,7 +41,7 @@ Unity 性能優化專項
 
 **使用時機**: 遊戲性能出現問題時
 
-### 4. **unity-architecture** (進行中)
+### 4. **unity-architecture**
 Unity 專案架構模式
 
 **涵蓋**:
@@ -52,6 +52,19 @@ Unity 專案架構模式
 - Dependency Injection
 
 **使用時機**: 設計大型 Unity 專案架構時
+
+### 5. **unity-google-play**
+Google Play 上架完整指南
+
+**涵蓋**:
+- AAB 200MB 限制處理
+- Play Asset Delivery (PAD)
+- Keystore 簽名管理
+- Build Settings 配置
+- Google Play Console 設定
+- 測試與發佈流程
+
+**使用時機**: 準備上架 Google Play 或處理 AAB 過大問題時
 
 ## 🚀 安裝方式
 
@@ -116,6 +129,21 @@ ln -s /path/to/claude-code-skills/projects/unity .claude/skills
   - 使用對象池、緩存等技術
 ```
 
+### 場景 4: Google Play 上架
+
+```
+你: "要上架 Google Play，但 AAB 超過 200MB 怎麼辦？"
+
+自動觸發: unity-google-play
+
+會做什麼:
+  - 檢查 AAB 大小
+  - 提供瘦身技巧（壓縮、IL2CPP、Stripping）
+  - 如果仍超過，配置 Play Asset Delivery
+  - 提供完整的 Build 和上架流程
+  - 檢查 Keystore 配置
+```
+
 ## 🎮 Unity 特定的反幻覺機制
 
 這些 skills 會強制驗證：
@@ -163,7 +191,8 @@ ln -s /path/to/claude-code-skills/projects/unity .claude/skills
 ```
 HIGH (Unity 特定問題)
 ├─ unity-performance (性能問題)
-└─ unity-multiplatform (平台問題)
+├─ unity-multiplatform (平台問題)
+└─ unity-google-play (上架問題)
 
 MEDIUM (架構設計)
 └─ unity-architecture

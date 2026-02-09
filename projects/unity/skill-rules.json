@@ -45,6 +45,20 @@
         "primary_skill": "unity-architecture",
         "priority": "MEDIUM"
       }
+    },
+    {
+      "name": "unity-google-play-priority",
+      "description": "Google Play 上架問題優先使用 unity-google-play skill",
+      "when": {
+        "user_mentions_any": [
+          "上架", "Google Play", "AAB", "200MB", "Play Console",
+          "Play Asset Delivery", "PAD", "發佈", "審核", "keystore"
+        ]
+      },
+      "then": {
+        "primary_skill": "unity-google-play",
+        "priority": "HIGH"
+      }
     }
   ],
 
@@ -60,6 +74,10 @@
     "unity-multiplatform": {
       "collaborates_with": ["unity-performance", "unity-best-practices"],
       "reason": "多平台開發需要考慮性能和最佳實踐"
+    },
+    "unity-google-play": {
+      "collaborates_with": ["unity-performance", "unity-multiplatform", "unity-best-practices"],
+      "reason": "Google Play 上架需要考慮性能優化、多平台支援和最佳實踐"
     }
   },
 
