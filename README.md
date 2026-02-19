@@ -211,20 +211,98 @@ cd /path/to/your-unity-project
 
 ---
 
+## 使用指南
+
+### Commands — 在對話中直接打
+
+```
+/plan 加一個使用者登入功能，用 JWT + refresh token
+/plan 重構 API 層，把 controller 和 service 分離
+```
+
+```
+/verify                  # 完整檢查
+/verify quick            # 快速：只跑 build + types
+/verify pre-pr           # PR 前：全部 + 安全掃描
+```
+
+```
+/code-review             # 審查所有 uncommitted changes
+```
+
+```
+/checkpoint create api-done    # 建立回復點
+/checkpoint verify api-done    # 比對現在 vs 當時
+/checkpoint list               # 列出所有回復點
+```
+
+### Skills — 自動觸發 + 強制觸發
+
+Skills 有兩種觸發方式：
+
+**1. 自動觸發（用對關鍵字）：**
+
+| 你怎麼說 | 自動觸發 |
+|---------|---------|
+| 「這個 test 一直 fail」「有 bug」「壞了」 | `systematic-debugging` |
+| 「API 很慢」「要優化」「有瓶頸」 | `performance-optimization` |
+| 「設計一個 API」「架構怎麼做」 | `backend-patterns` |
+| 「review 這個 PR」「幫我看 code」 | `code-review-skill` |
+| 「找一下這個函數在哪」 | `evidence-based-coding`（強制搜尋不猜） |
+
+**2. 強制觸發（用 `/` 指定 skill 名稱）：**
+
+```
+/systematic-debugging 這個 API 回傳 500 但 log 沒有錯誤
+/performance-optimization 首頁載入要 8 秒
+/security-checklist 幫我檢查這個 API 的安全性
+/testing-strategy 這個模組該怎麼寫測試
+/decision-log 記錄我們決定用 PostgreSQL 而不是 MongoDB
+```
+
+### Contexts — 在對話開頭指定模式
+
+```
+用 dev 模式，幫我實作使用者登入功能
+用 review 模式，幫我看這次的改動
+用 research 模式，幫我理解這個專案的架構
+```
+
+### Rules — 不用做任何事
+
+每次對話自動載入。Claude 會自動遵守：
+- 不可變性 — 不會寫出直接修改物件的 code
+- 檔案 <800 行、函數 <50 行
+- Conventional Commits 格式
+- 安全檢查 — 不會 hardcode secrets
+
+### Hooks — 完全自動
+
+不需要手動操作，會在背景自動執行：
+- 編輯 .ts/.tsx 後自動跑 TypeScript 型別檢查
+- 編輯 JS/TS 後自動 Prettier 格式化
+- 有 `console.log` 殘留時自動警告
+- 50 次工具呼叫後提醒你 `/compact`
+- 阻止在 tmux 外跑 dev server
+
+---
+
 ## 建議工作流
 
 ```
-開始新功能  →  /plan 描述需求
-                ↓
-確認計畫    →  開始寫 code（rules 自動生效）
-                ↓
-寫到一半    →  /checkpoint create 階段名稱
-                ↓
-寫完        →  /code-review
-                ↓
-修完問題    →  /verify pre-pr
-                ↓
-全部 PASS   →  commit & push
+新功能 ───→ /plan 需求描述
+             ↓ 確認
+寫 code ──→ （rules 自動生效、skills 自動觸發）
+             ↓
+中途存檔 ─→ /checkpoint create 名稱
+             ↓
+遇到 bug ─→ 直接說「這個 test fail 了」或 /systematic-debugging
+             ↓
+寫完 ─────→ /code-review
+             ↓
+修完問題 ─→ /verify pre-pr
+             ↓
+全 PASS ──→ commit & push
 ```
 
 ---
