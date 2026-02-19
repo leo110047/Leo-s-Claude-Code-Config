@@ -1,171 +1,225 @@
 #!/bin/bash
 
-# Claude Code Skills 安裝腳本
-# 用途：快速安裝全域或專案特定 skills
+# Leo's Claude Code Config — 安裝腳本
+# 用途：將 skills、commands、contexts、rules、hooks 安裝到 ~/.claude/
 
 set -e
 
-# 顏色輸出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Claude Code Skills 安裝程序${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo ""
-
-# 獲取腳本所在目錄（倉庫根目錄）
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CLAUDE_DIR="$HOME/.claude"
 
+# ─────────────────────────────────────
+# 工具函數
+# ─────────────────────────────────────
+
+link_component() {
+    local src="$1"
+    local dest="$2"
+    local name="$3"
+
+    if [ ! -e "$src" ]; then
+        echo -e "  ${YELLOW}[跳過] $name — 來源不存在${NC}"
+        return
+    fi
+
+    if [ -L "$dest" ]; then
+        local current_target
+        current_target=$(readlink "$dest")
+        if [ "$current_target" = "$src" ]; then
+            echo -e "  ${GREEN}[已安裝] $name${NC}"
+            return
+        fi
+        rm "$dest"
+    elif [ -e "$dest" ]; then
+        echo -e "  ${YELLOW}[備份] $name — 備份現有檔案到 ${dest}.bak${NC}"
+        mv "$dest" "${dest}.bak"
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+    ln -s "$src" "$dest"
+    echo -e "  ${GREEN}[安裝] $name${NC}"
+}
+
+show_help() {
+    echo "用法: ./install.sh [選項]"
+    echo ""
+    echo "選項:"
+    echo "  all         安裝所有組件（預設）"
+    echo "  skills      只安裝全域 skills"
+    echo "  commands    只安裝 commands"
+    echo "  contexts    只安裝 contexts"
+    echo "  rules       只安裝 rules"
+    echo "  hooks       只安裝 hooks"
+    echo "  unity       安裝 Unity 專案 skills 到當前目錄"
+    echo "  uninstall   移除所有 symlinks"
+    echo "  status      檢查安裝狀態"
+    echo "  help        顯示此幫助"
+    echo ""
+    echo "範例:"
+    echo "  ./install.sh              # 安裝全部"
+    echo "  ./install.sh skills rules # 只安裝 skills 和 rules"
+    echo "  ./install.sh unity        # 在 Unity 專案中安裝"
+    echo "  ./install.sh status       # 檢查狀態"
+}
+
+install_skills() {
+    link_component "$REPO_DIR/skills/global" "$CLAUDE_DIR/skills" "全域 Skills (11 個)"
+}
+
+install_commands() {
+    link_component "$REPO_DIR/commands" "$CLAUDE_DIR/commands" "Commands (4 個)"
+}
+
+install_contexts() {
+    link_component "$REPO_DIR/contexts" "$CLAUDE_DIR/contexts" "Contexts (3 個)"
+}
+
+install_rules() {
+    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (3 個)"
+}
+
+install_hooks() {
+    link_component "$REPO_DIR/hooks/scripts" "$CLAUDE_DIR/hooks/scripts" "Hook Scripts (5 個)"
+    echo ""
+    echo -e "  ${CYAN}[提示] Hooks 需要手動配置:${NC}"
+    echo -e "  ${CYAN}  1. 將 hooks/hooks.json 的內容合併到 ~/.claude/settings.json${NC}"
+    echo -e "  ${CYAN}  2. 將路徑中的 \${HOOKS_DIR} 替換為:${NC}"
+    echo -e "  ${CYAN}     $CLAUDE_DIR/hooks${NC}"
+}
+
+install_unity() {
+    local project_dir="$(pwd)"
+    if [ ! -d "Assets" ]; then
+        echo -e "${YELLOW}警告：當前目錄不像是 Unity 專案（沒有 Assets 資料夾）${NC}"
+        read -p "是否繼續？(y/n): " cont
+        if [ "$cont" != "y" ]; then
+            echo -e "${RED}安裝取消${NC}"
+            return
+        fi
+    fi
+    mkdir -p "$project_dir/.claude"
+    link_component "$REPO_DIR/skills/projects/unity" "$project_dir/.claude/skills" "Unity Skills (5 個)"
+}
+
+show_status() {
+    echo -e "${BLUE}安裝狀態檢查${NC}"
+    echo ""
+
+    local components=("skills:$CLAUDE_DIR/skills" "commands:$CLAUDE_DIR/commands" "contexts:$CLAUDE_DIR/contexts" "rules:$CLAUDE_DIR/rules" "hooks:$CLAUDE_DIR/hooks/scripts")
+
+    for item in "${components[@]}"; do
+        local name="${item%%:*}"
+        local path="${item##*:}"
+
+        if [ -L "$path" ]; then
+            local target
+            target=$(readlink "$path")
+            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
+        elif [ -e "$path" ]; then
+            echo -e "  ${YELLOW}[存在但非 symlink]${NC} $name: $path"
+        else
+            echo -e "  ${RED}[未安裝]${NC} $name"
+        fi
+    done
+}
+
+do_uninstall() {
+    echo -e "${YELLOW}移除安裝...${NC}"
+    local paths=("$CLAUDE_DIR/skills" "$CLAUDE_DIR/commands" "$CLAUDE_DIR/contexts" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/hooks/scripts")
+
+    for p in "${paths[@]}"; do
+        if [ -L "$p" ]; then
+            rm "$p"
+            echo -e "  ${GREEN}[移除] $p${NC}"
+        fi
+    done
+    echo -e "${GREEN}完成${NC}"
+}
+
+# ─────────────────────────────────────
+# 主程式
+# ─────────────────────────────────────
+
+echo -e "${BLUE}════════════════════════════════════════${NC}"
+echo -e "${BLUE}  Leo's Claude Code Config Installer${NC}"
+echo -e "${BLUE}════════════════════════════════════════${NC}"
+echo ""
 echo -e "${YELLOW}倉庫位置：${NC}$REPO_DIR"
 echo ""
 
-# 選擇安裝類型
-echo "請選擇安裝類型："
-echo "  1) 全域 Skills (所有專案通用)"
-echo "  2) Unity 專案 Skills (當前目錄)"
-echo "  3) 全域 + Unity Skills (全部安裝)"
-echo ""
-read -p "請輸入選項 (1/2/3): " choice
+# 無參數 = 安裝全部
+if [ $# -eq 0 ]; then
+    set -- "all"
+fi
 
-case $choice in
-    1)
-        echo -e "\n${GREEN}安裝全域 Skills...${NC}"
-
-        # 檢查是否已存在
-        if [ -e ~/.claude/skills ]; then
-            echo -e "${YELLOW}警告：~/.claude/skills 已存在${NC}"
-            read -p "是否覆蓋？(y/n): " overwrite
-            if [ "$overwrite" != "y" ]; then
-                echo -e "${RED}安裝取消${NC}"
-                exit 1
-            fi
-            rm -rf ~/.claude/skills
-        fi
-
-        # 創建符號連結
-        mkdir -p ~/.claude
-        ln -s "$REPO_DIR/global" ~/.claude/skills
-
-        echo -e "${GREEN}✓ 全域 Skills 已安裝到 ~/.claude/skills/${NC}"
-        echo -e "${GREEN}✓ 使用符號連結，自動同步更新${NC}"
+case "$1" in
+    help|-h|--help)
+        show_help
+        exit 0
         ;;
-
-    2)
-        echo -e "\n${GREEN}安裝 Unity 專案 Skills...${NC}"
-
-        # 檢查是否在 Unity 專案中
-        if [ ! -d "Assets" ]; then
-            echo -e "${YELLOW}警告：當前目錄不像是 Unity 專案（沒有 Assets 資料夾）${NC}"
-            read -p "是否繼續？(y/n): " continue
-            if [ "$continue" != "y" ]; then
-                echo -e "${RED}安裝取消${NC}"
-                exit 1
-            fi
-        fi
-
-        # 檢查是否已存在
-        if [ -e .claude/skills ]; then
-            echo -e "${YELLOW}警告：.claude/skills 已存在${NC}"
-            read -p "是否覆蓋？(y/n): " overwrite
-            if [ "$overwrite" != "y" ]; then
-                echo -e "${RED}安裝取消${NC}"
-                exit 1
-            fi
-            rm -rf .claude/skills
-        fi
-
-        # 創建符號連結
-        mkdir -p .claude
-        ln -s "$REPO_DIR/projects/unity" .claude/skills
-
-        echo -e "${GREEN}✓ Unity Skills 已安裝到 .claude/skills/${NC}"
-        echo -e "${GREEN}✓ 使用符號連結，自動同步更新${NC}"
+    status)
+        show_status
+        exit 0
         ;;
-
-    3)
-        echo -e "\n${GREEN}安裝全域 + Unity Skills...${NC}"
-
-        # 安裝全域
-        if [ -e ~/.claude/skills ]; then
-            echo -e "${YELLOW}警告：~/.claude/skills 已存在${NC}"
-            read -p "是否覆蓋全域 skills？(y/n): " overwrite_global
-            if [ "$overwrite_global" == "y" ]; then
-                rm -rf ~/.claude/skills
-                mkdir -p ~/.claude
-                ln -s "$REPO_DIR/global" ~/.claude/skills
-                echo -e "${GREEN}✓ 全域 Skills 已安裝${NC}"
-            else
-                echo -e "${YELLOW}跳過全域 skills 安裝${NC}"
-            fi
-        else
-            mkdir -p ~/.claude
-            ln -s "$REPO_DIR/global" ~/.claude/skills
-            echo -e "${GREEN}✓ 全域 Skills 已安裝${NC}"
-        fi
-
-        # 安裝 Unity
-        if [ -e .claude/skills ]; then
-            echo -e "${YELLOW}警告：.claude/skills 已存在${NC}"
-            read -p "是否覆蓋 Unity skills？(y/n): " overwrite_unity
-            if [ "$overwrite_unity" == "y" ]; then
-                rm -rf .claude/skills
-                mkdir -p .claude
-                ln -s "$REPO_DIR/projects/unity" .claude/skills
-                echo -e "${GREEN}✓ Unity Skills 已安裝${NC}"
-            else
-                echo -e "${YELLOW}跳過 Unity skills 安裝${NC}"
-            fi
-        else
-            mkdir -p .claude
-            ln -s "$REPO_DIR/projects/unity" .claude/skills
-            echo -e "${GREEN}✓ Unity Skills 已安裝${NC}"
-        fi
-        ;;
-
-    *)
-        echo -e "${RED}無效的選項${NC}"
-        exit 1
+    uninstall)
+        do_uninstall
+        exit 0
         ;;
 esac
 
+mkdir -p "$CLAUDE_DIR"
+
+for arg in "$@"; do
+    case "$arg" in
+        all)
+            echo -e "${GREEN}安裝所有組件...${NC}"
+            echo ""
+            install_skills
+            install_commands
+            install_contexts
+            install_rules
+            install_hooks
+            ;;
+        skills)
+            install_skills
+            ;;
+        commands)
+            install_commands
+            ;;
+        contexts)
+            install_contexts
+            ;;
+        rules)
+            install_rules
+            ;;
+        hooks)
+            install_hooks
+            ;;
+        unity)
+            install_unity
+            ;;
+        *)
+            echo -e "${RED}未知選項: $arg${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
 echo ""
-echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}════════════════════════════════════════${NC}"
 echo -e "${GREEN}安裝完成！${NC}"
-echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}════════════════════════════════════════${NC}"
 echo ""
-
-# 驗證安裝
-echo -e "${YELLOW}驗證安裝...${NC}"
-
-if [ $choice -eq 1 ] || [ $choice -eq 3 ]; then
-    if [ -L ~/.claude/skills ]; then
-        echo -e "${GREEN}✓ 全域 skills 符號連結正確${NC}"
-        skill_count=$(find ~/.claude/skills -maxdepth 1 -type d ! -name ".*" | wc -l | tr -d ' ')
-        echo -e "${GREEN}✓ 找到 $skill_count 個 skills${NC}"
-    fi
-fi
-
-if [ $choice -eq 2 ] || [ $choice -eq 3 ]; then
-    if [ -L .claude/skills ]; then
-        echo -e "${GREEN}✓ Unity skills 符號連結正確${NC}"
-        skill_count=$(find .claude/skills -maxdepth 1 -type d ! -name ".*" | wc -l | tr -d ' ')
-        echo -e "${GREEN}✓ 找到 $skill_count 個 Unity skills${NC}"
-    fi
-fi
-
+echo -e "${YELLOW}下一步：${NC}"
+echo "  1. 重啟 Claude Code"
+echo "  2. 試試 /plan、/verify、/code-review 等命令"
+echo "  3. 查看 ./install.sh status 確認安裝狀態"
 echo ""
-echo -e "${BLUE}下一步：${NC}"
-echo "  - 重啟 Claude Code"
-echo "  - 測試 skills 是否正常工作"
-echo "  - 查看 README.md 瞭解使用方法"
-echo ""
-echo -e "${YELLOW}測試建議：${NC}"
-echo '  問 Claude: "getUserById 函數在哪裡？"'
-echo '  期望：Claude 會用 Grep 搜尋，而不是猜測'
-echo ""
-
-echo -e "${GREEN}享受使用 Claude Code Skills！ 🚀${NC}"
