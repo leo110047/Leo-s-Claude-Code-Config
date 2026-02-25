@@ -2,7 +2,7 @@
 
 // Cross-platform notification — only sends when terminal is NOT focused
 // Supports: macOS (osascript), Windows (PowerShell), Linux (notify-send)
-// Trigger: Notification hook (permission_prompt, idle_prompt, elicitation_dialog)
+// Trigger: Stop hook (response complete), Notification hook (permission_prompt, elicitation_dialog)
 
 const { execSync } = require("child_process");
 const os = require("os");
