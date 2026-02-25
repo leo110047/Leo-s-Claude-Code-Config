@@ -26,7 +26,7 @@ function getMessage(data) {
   if (notifType && NOTIFICATION_MESSAGES[notifType]) {
     return NOTIFICATION_MESSAGES[notifType];
   }
-  return "需要你的注意";
+  return null;
 }
 
 function isMac() {
@@ -133,6 +133,9 @@ try {
   }
 
   const message = getMessage(data);
+  if (!message) {
+    process.exit(0);
+  }
   sendNotification(message);
 } catch (e) {
   process.exit(0);
