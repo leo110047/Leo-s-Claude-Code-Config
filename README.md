@@ -78,8 +78,8 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/leo110047/Skills.git
-cd Skills
+git clone https://github.com/leo110047/Leo-s-Claude-Code-Config.git
+cd Leo-s-Claude-Code-Config
 
 # 2. 一鍵安裝（含 hooks 自動合併）
 ./install.sh
@@ -272,11 +272,11 @@ cd /path/to/your-unity-project
 
 ```
 「這個 test 一直 fail」   → systematic-debugging
-「API 很慢」              → performance-optimization
+「API 很慢」             → performance-optimization
 「設計一個 API」          → backend-patterns
-「review 這個 PR」        → code-review-skill
+「review 這個 PR」       → code-review-skill
 「Schema 怎麼設計」       → database-patterns
-「設定 GitHub Actions」   → ci-cd-integration
+「設定 GitHub Actions」  → ci-cd-integration
 ```
 
 **強制觸發**（用 `/` 指定 skill 名稱）：
