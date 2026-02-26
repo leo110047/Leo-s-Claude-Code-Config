@@ -222,6 +222,17 @@ LOW（工具性質）
 | `/map-codebase` | 產出結構化 codebase 分析文件 | `tech`、`arch`、`quality`、`conventions`、`testing` |
 | `/verify-config` | 配置健康檢查 | `quick` |
 
+```bash
+/discuss 我想加一個使用者登入功能           # 先釐清灰色地帶
+/plan 實作 OAuth2 登入，支援 Google 和 GitHub  # 設計先行，確認才動工
+/verify quick                               # 快速檢查 build + types
+/verify --goal "OAuth 登入, token 刷新"      # 三層驗證：EXISTS → SUBSTANTIVE → WIRED
+/checkpoint create oauth-done               # 建立回復點
+/checkpoint pause                           # 跨 session 存檔
+/code-review --spec                         # 兩階段審查：需求對照 + 品質
+/map-codebase arch                          # 產出架構分析文件
+```
+
 ---
 
 ## Rules — 永遠生效的底線
