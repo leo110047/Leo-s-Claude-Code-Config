@@ -17,17 +17,51 @@
       "Bash(git checkout *)",
       "Bash(git stash*)",
       "Bash(git remote *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(ls)",
       "Bash(ls *)",
+      "Bash(cd)",
       "Bash(cd *)",
       "Bash(pwd)",
       "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
       "Bash(wc *)",
       "Bash(which *)",
       "Bash(echo *)",
+      "Bash(printf *)",
       "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(rm *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(sed *)",
+      "Bash(awk *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(diff *)",
+      "Bash(tee *)",
+      "Bash(xargs *)",
+      "Bash(test *)",
+      "Bash([ *)",
+      "Bash(export *)",
+      "Bash(env *)",
+      "Bash(tar *)",
+      "Bash(unzip *)",
+      "Bash(curl *)",
+      "Bash(chmod *)",
       "Bash(python3 *)",
+      "Bash(python *)",
       "Bash(node *)",
-      "Bash(jq *)"
+      "Bash(jq *)",
+      "Bash(realpath *)",
+      "Bash(readlink *)",
+      "Bash(basename *)",
+      "Bash(dirname *)"
     ],
     "deny": [
       "Bash(sudo *)",
@@ -141,6 +175,19 @@
           }
         ],
         "description": "Desktop notification when response completes (only when terminal is not focused)"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "general-purpose",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review the subagent's final output. Check: (1) Did it claim completion? If so, does the output contain concrete evidence (file paths, test results, command output) — not just 'Done!' or 'All set!'? (2) Are there red flags like 'should work', 'probably', or missing verification steps? If the output lacks evidence of completion, respond with a brief note about what verification is missing. If the output contains proper evidence, respond with 'LGTM'.",
+            "timeout": 30
+          }
+        ],
+        "description": "Lightweight spec review for general-purpose subagent output"
       }
     ],
     "Notification": [
