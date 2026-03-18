@@ -1,4 +1,4 @@
-# Claude Config Verification Report
+# goldband Config Verification Report
 
 ## Scope
 
@@ -16,9 +16,12 @@
 ## Static Checks
 
 - JSON validation:
+- TOML validation:
 - `SKILL.md` frontmatter:
 - Reference links:
 - Hook script references:
+- Codex repo files:
+- Codex execpolicy:
 
 ## Router Replay
 

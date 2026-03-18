@@ -1,14 +1,15 @@
 {
   "schema_version": "1.0",
   "name": "goldband",
-  "version": "1.4.0",
-  "description": "Production-focused Claude Code config with measurable hook guardrails, usage telemetry, on-demand safety modes, and modular skill packs.",
+  "version": "1.5.0",
+  "description": "Production-focused Claude Code and Codex config with measurable guardrails, usage telemetry, on-demand safety modes, and modular skill packs.",
   "author": "Leo",
   "license": "MIT",
   "homepage": "https://github.com/leo110047/goldband",
   "repository": "https://github.com/leo110047/goldband",
   "keywords": [
     "claude-code",
+    "codex",
     "hooks",
     "skills",
     "guardrails",

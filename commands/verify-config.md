@@ -1,4 +1,4 @@
-Perform a comprehensive health check of the goldband installation.
+Perform a comprehensive health check of the goldband installation and repo assets.
 
 ## Instructions
 
@@ -19,7 +19,7 @@ Report:
 - whether the resolved path is writable/readable
 - whether the runtime had to fall back to temp storage
 
-### 1. Symlink Checks
+### 1. Claude Install Checks
 
 Check these paths exist and point to valid targets:
 - `~/.claude/skills` → either:
@@ -32,7 +32,19 @@ Check these paths exist and point to valid targets:
 
 For each: report OK if target is valid, WARNING if exists but target is ambiguous, ERROR if missing.
 
-### 2. Hook Checks
+### 2. Codex Install Checks
+
+Check these paths exist and point to valid targets:
+- `~/.codex/AGENTS.md` → should point to this repo's `codex/AGENTS.md`
+- `~/.codex/config.toml` → should point to this repo's `codex/config.toml`
+- `~/.codex/rules` → should point to this repo's `codex/rules`
+- `~/.agents/skills` → should be a managed directory with `.goldband-profile` and portable skill symlinks
+
+Also report Codex profile metadata when `~/.agents/skills/.goldband-profile` exists:
+- active profile (`core` / `full`)
+- installed skill count
+
+### 3. Hook Checks
 
 Check `~/.claude/settings.json` for hooks configuration:
 - Count total hooks defined (UserPromptSubmit + PreToolUse + PostToolUse + Stop + SubagentStop + Notification)
@@ -45,35 +57,51 @@ Check `~/.claude/settings.json` for hooks configuration:
   - SubagentStop exists for `general-purpose` and uses prompt-based completion review
 - Report OK with count if all scripts found, WARNING for missing scripts
 
-### 3. Skill Checks
+### 4. Skill Checks
 
-For each installed skill under `~/.claude/skills`:
-- Verify SKILL.md exists
+For each installed Claude skill under `~/.claude/skills`:
+- Verify `SKILL.md` exists
 - Check YAML frontmatter has `name` and `description` fields
 - Count lines — report WARNING if over 500 lines
-- Check for reference/ directory and verify linked files exist in SKILL.md
+- Check for `reference/` or `references/` links and verify linked files exist
 - Report total skill count
 
-Also report profile metadata when `.goldband-profile` exists:
+Also report Claude profile metadata when `~/.claude/skills/.goldband-profile` exists:
 - active profile (`core` / `dev` / `full`)
 - installed skill count
 
-### 4. Context Checks
+### 5. Context Checks
 
-Count .md files in the contexts directory. Verify each is non-empty. Report count.
+Count `.md` files in the contexts directory. Verify each is non-empty. Report count.
 
-### 5. Rule Checks
+### 6. Rule Checks
 
-Count .md files in the rules directory. Verify each is non-empty. Report count.
+Count `.md` files in the rules directory. Verify each is non-empty. Report count.
 
-### 6. JSON Validation
+### 7. Repo Syntax and Policy Validation
 
-Validate these JSON files have correct syntax:
+Validate these repo files:
+
+JSON:
 - `hooks/hooks.json`
 - `skills/global/skill-rules.json`
 - `.claude-plugin/plugin.json`
 
-Use `cat FILE | python3 -c "import sys,json; json.load(sys.stdin); print('OK')"` or similar.
+TOML:
+- `.codex/config.toml`
+- `codex/config.toml`
+
+Required files:
+- `AGENTS.md`
+- `codex/AGENTS.md`
+- `codex/rules/default.rules`
+
+Codex execpolicy:
+- `codex execpolicy check --rules codex/rules/default.rules -- git status --short` → should resolve to `allow`
+- `codex execpolicy check --rules codex/rules/default.rules -- git push origin main` → should resolve to `prompt`
+- `codex execpolicy check --rules codex/rules/default.rules -- rm README.md` → should resolve to `prompt`
+
+If the `codex` CLI is unavailable, report a WARNING and skip the execpolicy step.
 
 ## Output Format
 
@@ -82,22 +110,26 @@ Use `cat FILE | python3 -c "import sys,json; json.load(sys.stdin); print('OK')"`
 ║  goldband Health Check                 ║
 ╚════════════════════════════════════════╝
 
-Symlinks:
-  [OK]      skills profile: dev (14 個)
-  [OK]      skills links point to /path/to/repo/skills/global/*
-  [OK]      commands → /path/to/repo/commands
-  ...
-
 Plugin Data:
   [OK]      CLAUDE_PLUGIN_DATA available at /path/to/data
   [WARNING] using temp fallback at /tmp/claude-config-verification (expected outside plugin context or on older runtimes)
 
+Claude Install:
+  [OK]      skills profile: full (20 個)
+  [OK]      commands → /path/to/repo/commands
+  ...
+
+Codex Install:
+  [OK]      codex config → /path/to/repo/codex/config.toml
+  [OK]      codex skills profile: full (15 個)
+  ...
+
 Hooks:
-  [OK]      9 hooks configured in settings.json
+  [OK]      8 hooks configured in settings.json
   [OK]      All hook scripts exist
 
 Skills:
-  [OK]      14 skills found
+  [OK]      20 installed Claude skills found
   [WARNING] backend-patterns/SKILL.md: 520 lines (>500)
   ...
 
@@ -107,11 +139,13 @@ Contexts:
 Rules:
   [OK]      3 rules found
 
-JSON Validation:
-  [OK]      hooks.json — valid
-  [OK]      skill-rules.json — valid
+Repo Validation:
+  [OK]      hooks/hooks.json — valid
+  [OK]      codex/config.toml — valid
+  [OK]      codex/rules/default.rules: git status --short — allow
+  ...
 
 Summary: X OK, Y WARNING, Z ERROR
 ```
 
-If the `quick` argument is provided, only run checks 1 (Symlinks) and 2 (Hooks).
+If the `quick` argument is provided, only run checks 1, 2, and 3.

@@ -98,6 +98,55 @@ function validateJsonFile(rootDir, relativePath) {
   }
 }
 
+function validateTomlFile(rootDir, relativePath) {
+  const filePath = path.join(rootDir, relativePath);
+  if (!fs.existsSync(filePath)) {
+    return { file: relativePath, ok: false, message: 'missing' };
+  }
+
+  const result = spawnSync('python3', [
+    '-c',
+    'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb")); print("OK")',
+    filePath
+  ], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    maxBuffer: 2 * 1024 * 1024
+  });
+
+  if (result.error) {
+    return {
+      file: relativePath,
+      ok: false,
+      message: result.error.message
+    };
+  }
+
+  if (result.status !== 0) {
+    return {
+      file: relativePath,
+      ok: false,
+      message: (result.stderr || result.stdout || 'invalid TOML').trim()
+    };
+  }
+
+  return { file: relativePath, ok: true, message: 'valid' };
+}
+
+function validateRequiredFile(rootDir, relativePath) {
+  const filePath = path.join(rootDir, relativePath);
+  if (!fs.existsSync(filePath)) {
+    return { file: relativePath, ok: false, message: 'missing' };
+  }
+
+  const raw = fs.readFileSync(filePath, 'utf8').trim();
+  if (raw.length === 0) {
+    return { file: relativePath, ok: false, message: 'empty' };
+  }
+
+  return { file: relativePath, ok: true, message: 'present' };
+}
+
 function checkSkillFrontmatter(skillPath) {
   const relativePath = path.relative(process.cwd(), skillPath);
   const raw = fs.readFileSync(skillPath, 'utf8');
@@ -207,11 +256,88 @@ function runRouterReplay(rootDir) {
   };
 }
 
+function isCodexAvailable() {
+  const result = spawnSync('codex', ['--version'], {
+    encoding: 'utf8',
+    maxBuffer: 2 * 1024 * 1024
+  });
+
+  return !result.error;
+}
+
+function parseCodexExecpolicyOutput(rawOutput) {
+  const trimmed = (rawOutput || '').trim();
+  const jsonStart = trimmed.indexOf('{');
+  if (jsonStart === -1) {
+    throw new Error('missing JSON payload');
+  }
+
+  return JSON.parse(trimmed.slice(jsonStart));
+}
+
+function runCodexExecpolicyCheck(rootDir, args) {
+  const rulePath = path.join(rootDir, 'codex', 'rules', 'default.rules');
+  const result = spawnSync('codex', ['execpolicy', 'check', '--rules', rulePath, '--pretty', '--', ...args.command], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    maxBuffer: 2 * 1024 * 1024
+  });
+
+  if (result.error) {
+    return {
+      label: args.label,
+      ok: false,
+      message: result.error.message
+    };
+  }
+
+  if (result.status !== 0) {
+    return {
+      label: args.label,
+      ok: false,
+      message: (result.stderr || result.stdout || 'execpolicy check failed').trim()
+    };
+  }
+
+  try {
+    const parsed = parseCodexExecpolicyOutput(result.stdout || '');
+    const actualDecision = parsed.decision;
+    if (actualDecision !== args.expectedDecision) {
+      return {
+        label: args.label,
+        ok: false,
+        message: `expected ${args.expectedDecision}, got ${actualDecision || 'unknown'}`
+      };
+    }
+
+    return {
+      label: args.label,
+      ok: true,
+      message: actualDecision
+    };
+  } catch (error) {
+    return {
+      label: args.label,
+      ok: false,
+      message: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 function buildSummary(rootDir, args) {
   const jsonChecks = [
     validateJsonFile(rootDir, path.join('hooks', 'hooks.json')),
     validateJsonFile(rootDir, path.join('skills', 'global', 'skill-rules.json')),
     validateJsonFile(rootDir, path.join('.claude-plugin', 'plugin.json'))
+  ];
+  const tomlChecks = [
+    validateTomlFile(rootDir, path.join('.codex', 'config.toml')),
+    validateTomlFile(rootDir, path.join('codex', 'config.toml'))
+  ];
+  const requiredFileChecks = [
+    validateRequiredFile(rootDir, 'AGENTS.md'),
+    validateRequiredFile(rootDir, path.join('codex', 'AGENTS.md')),
+    validateRequiredFile(rootDir, path.join('codex', 'rules', 'default.rules'))
   ];
 
   const skillFiles = findFilesRecursive(path.join(rootDir, 'skills'), filePath => path.basename(filePath) === 'SKILL.md');
@@ -219,47 +345,104 @@ function buildSummary(rootDir, args) {
   const referenceChecks = skillFiles.map(checkReferenceLinks);
   const hookCheck = checkHookReferences(rootDir);
   const replay = args.routerReplay ? runRouterReplay(rootDir) : null;
+  const codexRuleChecks = [];
+  const additionalWarnings = [];
+
+  if (isCodexAvailable()) {
+    codexRuleChecks.push(
+      runCodexExecpolicyCheck(rootDir, {
+        label: 'codex/rules/default.rules: git status --short',
+        command: ['git', 'status', '--short'],
+        expectedDecision: 'allow'
+      }),
+      runCodexExecpolicyCheck(rootDir, {
+        label: 'codex/rules/default.rules: git push origin main',
+        command: ['git', 'push', 'origin', 'main'],
+        expectedDecision: 'prompt'
+      }),
+      runCodexExecpolicyCheck(rootDir, {
+        label: 'codex/rules/default.rules: rm README.md',
+        command: ['rm', 'README.md'],
+        expectedDecision: 'prompt'
+      })
+    );
+  } else {
+    additionalWarnings.push('codex CLI not available; execpolicy checks skipped');
+  }
 
   const errors = [
     ...jsonChecks.filter(item => !item.ok).map(item => `${item.file}: ${item.message}`),
+    ...tomlChecks.filter(item => !item.ok).map(item => `${item.file}: ${item.message}`),
+    ...requiredFileChecks.filter(item => !item.ok).map(item => `${item.file}: ${item.message}`),
     ...frontmatterChecks.flatMap(item => item.errors.map(error => `${item.file}: ${error}`)),
     ...referenceChecks.flatMap(item => item.missing.map(ref => `${item.file}: missing ${ref}`)),
-    ...hookCheck.errors
+    ...hookCheck.errors,
+    ...codexRuleChecks.filter(item => !item.ok).map(item => `${item.label}: ${item.message}`)
   ];
 
   if (replay && !replay.ok) {
     errors.push('router replay failed');
   }
 
-  const warnings = frontmatterChecks.flatMap(item => item.warnings.map(warning => `${item.file}: ${warning}`));
+  const warnings = [
+    ...frontmatterChecks.flatMap(item => item.warnings.map(warning => `${item.file}: ${warning}`)),
+    ...additionalWarnings
+  ];
 
   return {
     ok: errors.length === 0,
     jsonChecks,
+    tomlChecks,
+    requiredFileChecks,
     hookCheck,
+    codexRuleChecks,
     skillCount: skillFiles.length,
-    frontmatterWarnings: warnings,
+    warnings,
     replay,
     errors
   };
 }
 
 function printHuman(summary) {
-  console.log('Claude Config Verification');
-  console.log('===========================');
+  console.log('goldband Config Verification');
+  console.log('============================');
   console.log(`Overall: ${summary.ok ? 'PASS' : 'FAIL'}`);
   console.log(`Skills:  ${summary.skillCount}`);
   console.log(`Hooks:   ${summary.hookCheck.ok ? `OK (${summary.hookCheck.checked} refs)` : 'FAIL'}`);
+  if (summary.codexRuleChecks.length > 0) {
+    const passedCodexChecks = summary.codexRuleChecks.filter(item => item.ok).length;
+    console.log(`Codex:   ${passedCodexChecks}/${summary.codexRuleChecks.length} execpolicy checks passed`);
+  }
   console.log('');
   console.log('JSON:');
   for (const item of summary.jsonChecks) {
     console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file} — ${item.message}`);
   }
 
-  if (summary.frontmatterWarnings.length > 0) {
+  console.log('');
+  console.log('TOML:');
+  for (const item of summary.tomlChecks) {
+    console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file} — ${item.message}`);
+  }
+
+  console.log('');
+  console.log('Repo Files:');
+  for (const item of summary.requiredFileChecks) {
+    console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file} — ${item.message}`);
+  }
+
+  if (summary.codexRuleChecks.length > 0) {
+    console.log('');
+    console.log('Codex Execpolicy:');
+    for (const item of summary.codexRuleChecks) {
+      console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.label} — ${item.message}`);
+    }
+  }
+
+  if (summary.warnings.length > 0) {
     console.log('');
     console.log('Warnings:');
-    for (const warning of summary.frontmatterWarnings) {
+    for (const warning of summary.warnings) {
       console.log(`  [WARN] ${warning}`);
     }
   }
@@ -285,7 +468,7 @@ function main() {
   appendHistory({
     ok: summary.ok,
     skillCount: summary.skillCount,
-    warningCount: summary.frontmatterWarnings.length,
+    warningCount: summary.warnings.length,
     errorCount: summary.errors.length,
     replayRequested: args.routerReplay,
     replayPassed: summary.replay ? summary.replay.ok : null
@@ -300,7 +483,7 @@ function main() {
       ok: summary.ok,
       skillCount: summary.skillCount,
       errorCount: summary.errors.length,
-      warningCount: summary.frontmatterWarnings.length
+      warningCount: summary.warnings.length
     }
   });
 

@@ -1,0 +1,95 @@
+# goldband Codex default execpolicy rules
+
+prefix_rule(
+    pattern = ["git", ["status", "diff", "log", "show", "rev-parse"]],
+    decision = "allow",
+    justification = "Read-only git inspection commands",
+    match = [
+        "git status --short",
+        "git diff --stat",
+        "git log --oneline -5",
+        "git show HEAD~1",
+        "git rev-parse --show-toplevel",
+    ],
+    not_match = [
+        "git push origin main",
+        "git checkout -b feature-x",
+    ],
+)
+
+prefix_rule(
+    pattern = [["ls", "pwd", "cat", "head", "tail", "wc", "find", "rg", "sed", "awk", "sort", "uniq", "jq"]],
+    decision = "allow",
+    justification = "Read-only inspection commands",
+    match = [
+        "ls -la",
+        "pwd",
+        "cat README.md",
+        "find . -maxdepth 2 -type f",
+        "rg \"TODO\" src/",
+    ],
+    not_match = [
+        "rm -rf /tmp/demo",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushes affect a shared remote and should stay user-confirmed",
+    match = [
+        "git push",
+        "git push origin main",
+        "git push --force-with-lease origin feature-x",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "reset"],
+    decision = "prompt",
+    justification = "Reset can rewrite the working tree or branch state",
+    match = [
+        "git reset --hard",
+        "git reset --soft HEAD~1",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rm"],
+    decision = "prompt",
+    justification = "File deletion should stay explicitly approved",
+    match = [
+        "rm -rf tmp/build",
+        "rm README.md",
+    ],
+)
+
+prefix_rule(
+    pattern = ["terraform", "destroy"],
+    decision = "prompt",
+    justification = "Infrastructure destruction should always be confirmed",
+    match = [
+        "terraform destroy",
+        "terraform destroy -auto-approve",
+    ],
+)
+
+prefix_rule(
+    pattern = ["kubectl", "delete"],
+    decision = "prompt",
+    justification = "Cluster deletes should stay explicitly approved",
+    match = [
+        "kubectl delete pod demo",
+        "kubectl delete deployment api",
+    ],
+)
+
+prefix_rule(
+    pattern = ["helm", "uninstall"],
+    decision = "prompt",
+    justification = "Helm uninstall mutates shared environments",
+    match = [
+        "helm uninstall demo",
+    ],
+)
+prefix_rule(pattern=["rm", "-rf", "/Users/leo/.claude/settings.json.bak", "/Users/leo/.claude/settings.json.bak.1773840983", "/Users/leo/.codex/config.toml.bak", "/Users/leo/.codex/AGENTS.md.bak", "/Users/leo/.codex/rules.bak"], decision="allow")

@@ -1,0 +1,42 @@
+# goldband Codex global defaults
+#
+# Keep runtime controls here.
+# Put long-form behavior and workflow guidance in AGENTS.md.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+personality = "pragmatic"
+web_search = "cached"
+
+# Let Codex reuse CLAUDE.md in repositories that already standardize on it.
+project_doc_fallback_filenames = ["CLAUDE.md"]
+project_doc_max_bytes = 65536
+
+[shell_environment_policy]
+inherit = "core"
+exclude = ["*_SECRET", "*_KEY", "*_TOKEN", "*_PASSWORD", "*_CREDENTIAL"]
+
+[tui]
+notifications = true
+notification_method = "auto"
+
+[history]
+persistence = "save-all"
+
+[features]
+memories = true
+shell_tool = true
+
+[profiles.fast]
+model_reasoning_effort = "low"
+
+[profiles.thorough]
+model_reasoning_effort = "xhigh"
+
+[profiles.readonly]
+sandbox_mode = "read-only"
+approval_policy = "on-request"
+
+[profiles.full_auto]
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"

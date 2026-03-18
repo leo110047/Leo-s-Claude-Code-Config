@@ -1,0 +1,7 @@
+# goldband project config for Codex
+#
+# Bridge setting: if another repository uses CLAUDE.md as its primary instruction
+# file, Codex can treat it as a fallback instructions source.
+
+project_doc_fallback_filenames = ["CLAUDE.md"]
+project_doc_max_bytes = 65536

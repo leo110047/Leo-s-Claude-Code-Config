@@ -1,12 +1,14 @@
 ---
 name: claude-config-verification
 description: |
-  Use when modifying a Claude Code config/plugin repo with `skills/`, `hooks/`,
-  `commands/`, `contexts/`, `rules/`, `.claude-plugin/`, or install scripts and
-  you need a concrete health check before claiming the change is safe.
+  Use when modifying the goldband config repo across Claude Code or Codex
+  assets (`skills/`, `hooks/`, `commands/`, `contexts/`, `rules/`,
+  `.claude-plugin/`, `.codex/`, `codex/`, or install scripts) and you need a
+  concrete health check before claiming the change is safe.
 
-  Best fit for config repositories that need JSON/frontmatter validation,
-  hook reference checks, plugin-data probing, and optional router replay.
+  Best fit for config repositories that need JSON/TOML validation, hook
+  reference checks, Codex rule validation, plugin-data probing, and optional
+  router replay.
 allowed-tools:
   - Read
   - Grep
@@ -14,14 +16,16 @@ allowed-tools:
   - Bash
 ---
 
-# Claude Config Verification
+# goldband Config Verification
 
 ## When to Use
 
 - After changing hook router logic, hook policies, or worker behavior
+- After changing Codex global templates, execpolicy rules, or portable-skill install logic
 - After editing `hooks/hooks.json`, `skill-rules.json`, or `.claude-plugin/plugin.json`
+- After editing `.codex/config.toml`, `codex/config.toml`, `codex/rules/default.rules`, or `AGENTS.md`
 - After adding/removing skills, commands, contexts, or rules
-- Before claiming a Claude Code config/plugin repo is ready to ship
+- Before claiming the goldband Claude/Codex config repo is ready to ship
 - Before depending on `${CLAUDE_PLUGIN_DATA}` for persistent plugin state
 
 ## Scripts
@@ -31,9 +35,11 @@ allowed-tools:
   - Verifies the target directory can be created, written, and read back
   - Falls back to temp storage when the current execution context does not expose plugin data
 - `scripts/verify-claude-config.js`
-  - Validates JSON files
+  - Validates JSON and TOML files
   - Checks `SKILL.md` frontmatter and linked reference files
   - Verifies hook script references in `hooks/hooks.json`
+  - Verifies required Codex repo files exist
+  - Runs `codex execpolicy check` against `codex/rules/default.rules` when the `codex` CLI is available
   - Records a verification history entry in stable plugin data when available
 - `scripts/verify-claude-config.js --router-replay`
   - Runs the hook router replay harness when router behavior changed
@@ -42,8 +48,10 @@ allowed-tools:
 
 - Do not assume `${CLAUDE_PLUGIN_DATA}` exists in every execution path. Claude Code `2.1.78` was live-verified to inject it inside a plugin `SessionStart` hook, but standalone script execution may still fall back.
 - Do not stop at JSON syntax validation; stale hook references and broken reference links are equally shipping blockers.
+- Do not claim Codex support is safe if `codex/rules/default.rules` has not been syntax-checked against real commands.
 - Do not claim router changes are safe without replay when policy or worker code changed.
 - Do not add a new global skill without also updating installer profiles and inventory documentation.
+- Do not change shared policy text without checking both the Claude adapter (`rules/`, `hooks/`) and the Codex adapter (`AGENTS.md`, `codex/rules/`).
 - Do not add scripts or assets to a skill and forget to mention them in `SKILL.md`; undiscoverable files are almost as bad as missing files.
 
 ## Memory and Reports

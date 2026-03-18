@@ -1,10 +1,10 @@
 # goldband
 
-> Claude Code 的緊箍咒 — Skills, hooks & guardrails that keep your AI disciplined.
+> Shared engineering guardrails for Claude Code and Codex.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-我的 Claude Code 配置集合，經過日常密集使用演化而來。核心設計理念：**防止 AI 幻覺、系統性除錯、證據驅動開發、流程編排強制設計先行**。
+我的 AI coding agent 配置集合，同時支援 **Claude Code** 與 **Codex**。核心設計理念：**防止 AI 幻覺、系統性除錯、證據驅動開發、流程編排強制設計先行**。
 
 ---
 
@@ -20,6 +20,7 @@
 - [Contexts — 模式切換](#contexts--模式切換)
 - [Permissions — 權限設定](#permissions--權限設定)
 - [Hooks — 自動化守護](#hooks--自動化守護)
+- [Codex — 全域設定](#codex--全域設定)
 - [Unity 專案 Skills](#unity-專案-skills)
 - [使用指南](#使用指南)
 - [建議工作流](#建議工作流)
@@ -38,6 +39,7 @@
 | **Rules** | 3 | coding-style、security、git-workflow |
 | **Contexts** | 4 | dev、review、research、debug 模式切換 |
 | **Hooks** | Router + 6 hook phases | `UserPromptSubmit` prompt suggestions、router 分派阻斷策略、context 監控、async format/typecheck、console 稽核、桌面通知 |
+| **Codex** | global AGENTS + config + rules + 15 portable skills | `AGENTS.md`、`.codex/config.toml`、`codex/` 全域模板、`~/.agents/skills` 安裝路徑 |
 
 ---
 
@@ -59,7 +61,7 @@
 | `database-patterns` | Schema 設計、查詢優化、Migration | MEDIUM |
 | `api-design` | REST 設計、Error format、Pagination | MEDIUM |
 | `ci-cd-integration` | GitHub Actions、部署策略、Pipeline | MEDIUM |
-| `claude-config-verification` | 驗證 Claude Code config/plugin repo、hooks、skills 與 plugin data | MEDIUM |
+| `claude-config-verification` | 驗證 goldband repo、Claude hooks、Codex assets 與 plugin data | MEDIUM |
 | `planning-workflow` | `/plan` 時自動觸發，結構化任務拆解 | MEDIUM |
 | `subagent-development` | Subagent 調度、兩階段 review、prompt 工程 | MEDIUM |
 | `commit-conventions` | Git commit 格式 | LOW |
@@ -78,7 +80,7 @@
 | `/checkpoint` | 建立/比對工作回復點，支援 `pause`/`resume` 跨 session 續接 |
 | `/code-review` | 兩階段審查：Stage 1 Spec Compliance（`--spec`）+ Stage 2 品質審查 |
 | `/map-codebase` | 產出 STACK / CONVENTIONS / ARCHITECTURE / TESTING / CONCERNS 分析 |
-| `/verify-config` | 檢查配置安裝狀態（symlinks、hooks、skills） |
+| `/verify-config` | 檢查 Claude + Codex 配置健康狀態 |
 
 ---
 
@@ -89,10 +91,13 @@
 git clone https://github.com/leo110047/goldband.git
 cd goldband
 
-# 2. 一鍵安裝（含 hooks 自動合併）
+# 2. 一鍵安裝 Claude Code（含 hooks 自動合併）
 ./install.sh   # 預設 pack-core（core-security，最低 token）
 
-# 3. 重啟 Claude Code，完成！
+# 3. 安裝 Codex（全域 AGENTS/config/rules + portable skills）
+./install.sh codex-full
+
+# 4. 重啟 Claude Code / Codex，完成！
 ```
 
 ### 選擇性安裝
@@ -107,6 +112,10 @@ cd goldband
 ./install.sh all               # 相容舊用法，等同 pack-quality
 ./install.sh commands          # 只裝 commands
 ./install.sh all-full          # 全組件 + skills-full（舊行為）
+./install.sh codex-core        # Codex 核心設定 + core portable skills
+./install.sh codex-full        # Codex 完整設定 + 15 個 portable skills
+./install.sh codex-skills      # 只裝 Codex portable skills 到 ~/.agents/skills
+./install.sh all-tools         # Claude Code all-full + Codex full
 ./install.sh skills-dev rules  # 裝 dev profile + rules
 ./install.sh unity             # 在 Unity 專案中安裝專案 skills
 ./install.sh status            # 檢查安裝狀態
@@ -120,6 +129,8 @@ cd goldband
 - `full`: `dev` + `ci-cd-integration`、`commit-conventions`、`decision-log`、`new-skill-scaffold`、`skill-developer`、`subagent-development`
 
 > **Note**: hooks 安裝需要 `jq`。若未安裝，會顯示手動合併提示。macOS 安裝: `brew install jq`
+>
+> **Codex Note**: Codex portable skills 會安裝到 `~/.agents/skills`；全域設定會安裝到 `~/.codex/AGENTS.md`、`~/.codex/config.toml`、`~/.codex/rules/`。
 
 ---
 
@@ -170,6 +181,13 @@ cd goldband
 │       └── tools/replay-hook-router.js
 ├── .claude-plugin/
 │   └── plugin.json                     # 產品化 metadata + pack 定義
+├── .codex/
+│   └── config.toml                     # 專案級 Codex config（含 CLAUDE.md fallback）
+├── codex/
+│   ├── AGENTS.md                       # Codex 全域 AGENTS 模板
+│   ├── config.toml                     # Codex 全域 config 模板
+│   └── rules/default.rules             # Codex execpolicy 規則
+├── AGENTS.md                           # repo-level Codex instructions
 ├── examples/                           # 範例 CLAUDE.md
 ├── install.sh                          # 安裝腳本
 └── README.md
@@ -193,7 +211,7 @@ HIGH
 MEDIUM
 ├─ careful-mode              高風險 CLI 操作的按需防呆
 ├─ freeze-mode               唯讀調查模式，阻擋 edits 與非唯讀 Bash
-├─ claude-config-verification Claude Code config/plugin repo 驗證
+├─ claude-config-verification goldband repo + Claude/Codex config 驗證
 ├─ code-review-skill         代碼審查（含 Spec Compliance Review）
 ├─ backend-patterns          架構設計
 ├─ testing-strategy          測試策略
@@ -254,7 +272,7 @@ LOW（工具性質）
 | `/checkpoint` | 建立/比對工作回復點 | `create`、`verify`、`list`、`pause`、`resume` |
 | `/code-review` | 兩階段安全+品質審查 | `--spec`、`--spec <file>` |
 | `/map-codebase` | 產出結構化 codebase 分析文件 | `tech`、`arch`、`quality`、`conventions`、`testing` |
-| `/verify-config` | 配置健康檢查 | `quick` |
+| `/verify-config` | Claude + Codex 配置健康檢查 | `quick` |
 
 ```bash
 /discuss 我想加一個使用者登入功能                # 先釐清灰色地帶
@@ -365,12 +383,57 @@ node hooks/scripts/tools/report-usage-summary.js --days 30
 
 目前 telemetry 會追蹤：
 - prompt-trigger rule match 與 suggestion emission（`UserPromptSubmit`）
-- code-backed skills（例如 `claude-config-verification` scripts）
+- code-backed skills（例如 `claude-config-verification` 的 dual-tool 驗證 scripts）
 - on-demand modes 的 enable/disable
 - mode enforcement block 事件
 
 限制：
 - 目前 runtime 的 hook payload 沒有直接給 active skill list，所以仍然無法知道建議後的純 markdown skill 是否真的被採用；現有資料是 prompt-trigger telemetry，不是完整 skill usage truth。
+
+---
+
+## Codex — 全域設定
+
+goldband 現在也提供 Codex 端的安裝資產：
+
+- `codex/AGENTS.md` → `~/.codex/AGENTS.md`
+- `codex/config.toml` → `~/.codex/config.toml`
+- `codex/rules/default.rules` → `~/.codex/rules/default.rules`
+- portable skills → `~/.agents/skills`
+
+安裝命令：
+
+```bash
+./install.sh codex-core
+./install.sh codex-full
+./install.sh all-tools
+```
+
+目前 Codex portable skills 安裝的是工具無關、可重用的 15 個 skill：
+
+- `evidence-based-coding`
+- `systematic-debugging`
+- `file-search`
+- `planning-workflow`
+- `security-checklist`
+- `performance-optimization`
+- `api-design`
+- `backend-patterns`
+- `code-review-skill`
+- `database-patterns`
+- `testing-strategy`
+- `ci-cd-integration`
+- `commit-conventions`
+- `decision-log`
+- `subagent-development`
+
+不直接搬過去的，是明顯綁 Claude runtime 的部分，例如 `careful-mode`、`freeze-mode`、`claude-config-verification`、`skill-developer`、`new-skill-scaffold`。
+
+共享策略：
+
+- `Codex` 用 `AGENTS.md`、`.codex/config.toml`、`codex/rules/`、`.agents/skills`
+- `Claude Code` 用 `settings.json`、`hooks/`、`commands/`、`contexts/`、`skills/`
+- 兩邊共用的是工程守則與 portable skill 內容，不是 hook lifecycle 或 settings schema
 
 ---
 
@@ -478,7 +541,7 @@ cd /path/to/your-unity-project
 | Hook 沒有執行 | hooks 未合併到 settings.json | 執行 `./install.sh hooks`，確認 jq 已安裝 |
 | `jq` 未安裝 | macOS 預設無 jq | `brew install jq`，然後重新 `./install.sh hooks` |
 | Skill 載入但內容不完整 | profile links 缺失/破損 | 執行 `./install.sh status` 檢查 `.goldband-profile` 與 skill links，必要時重跑 `./install.sh pack-core` |
-| `/verify-config` 報告 ERROR | 安裝不完整 | 執行 `./install.sh` 全部重裝 |
+| `/verify-config` 報告 ERROR | 安裝不完整或 repo 驗證失敗 | Claude 問題重跑 `./install.sh all-full`；雙工具一起對齊則跑 `./install.sh all-tools` |
 | Hooks 路徑錯誤 | `${HOOKS_DIR}` 未替換 | 重新執行 `./install.sh hooks`（自動替換）或手動編輯 settings.json |
 | TypeScript 檢查沒有跑 | 無 tsconfig.json | Hook 只在找到 tsconfig.json 的專案中執行 |
 | Prettier 格式化失敗 | Prettier 未安裝 | Hook 靜默失敗，無影響。可用 `npm i -D prettier` 安裝 |
