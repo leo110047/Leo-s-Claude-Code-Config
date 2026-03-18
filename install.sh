@@ -387,6 +387,7 @@ merge_hooks_config() {
             | map(last);
 
         {
+            UserPromptSubmit: merge_phase("UserPromptSubmit"),
             PreToolUse: merge_phase("PreToolUse"),
             PostToolUse: merge_phase("PostToolUse"),
             Stop: merge_phase("Stop"),

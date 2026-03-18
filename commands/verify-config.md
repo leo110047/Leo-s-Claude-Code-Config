@@ -35,12 +35,14 @@ For each: report OK if target is valid, WARNING if exists but target is ambiguou
 ### 2. Hook Checks
 
 Check `~/.claude/settings.json` for hooks configuration:
-- Count total hooks defined (PreToolUse + PostToolUse + Stop + Notification)
+- Count total hooks defined (UserPromptSubmit + PreToolUse + PostToolUse + Stop + SubagentStop + Notification)
 - For each hook, verify the script file referenced in `command` exists
 - Verify:
+  - UserPromptSubmit has exactly one skill suggestion command (`skill-activation-suggestions.js`)
   - PreToolUse has exactly one router command (`hook-router.js`)
   - PostToolUse has one router command + async worker commands (`post-edit-worker.js --task format/typecheck`)
   - Stop hook exists and does not rely on matcher filtering
+  - SubagentStop exists for `general-purpose` and uses prompt-based completion review
 - Report OK with count if all scripts found, WARNING for missing scripts
 
 ### 3. Skill Checks
@@ -91,7 +93,7 @@ Plugin Data:
   [WARNING] using temp fallback at /tmp/claude-config-verification (expected outside plugin context or on older runtimes)
 
 Hooks:
-  [OK]      8 hooks configured in settings.json
+  [OK]      9 hooks configured in settings.json
   [OK]      All hook scripts exist
 
 Skills:

@@ -71,6 +71,18 @@
     ]
   },
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${HOOKS_DIR}/scripts/hooks/skill-activation-suggestions.js\""
+          }
+        ],
+        "description": "Prompt-time skill suggestions + prompt-trigger telemetry"
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "*",

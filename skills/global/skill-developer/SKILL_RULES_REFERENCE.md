@@ -1,315 +1,59 @@
-# skill-rules.json - Complete Reference
+# skill-rules.json Reference
 
-Complete schema and configuration reference for `.claude/skills/skill-rules.json`.
+`skills/global/skill-rules.json` is a governance document for humans. It is not loaded by Claude Code as executable runtime config.
 
-## Table of Contents
+## What It Is For
 
-- [File Location](#file-location)
-- [Complete TypeScript Schema](#complete-typescript-schema)
-- [Field Guide](#field-guide)
-- [Example: Guardrail Skill](#example-guardrail-skill)
-- [Example: Domain Skill](#example-domain-skill)
-- [Validation](#validation)
+- documenting priority rules
+- recording conflict-resolution policy
+- centralizing anti-hallucination reminders
+- describing intended collaboration between skills
 
----
+## What It Is Not For
 
-## File Location
+- live prompt matching
+- live hook dispatch
+- automatic file-path or content-based activation
 
-**Path:** `.claude/skills/skill-rules.json`
+Those runtime behaviors live elsewhere:
+- prompt suggestions: `hooks/scripts/lib/skill-activation/activation-rules.js`
+- blocking/non-blocking tool policies: `hooks/scripts/lib/hook-router/*`
 
-This JSON file defines all skills and their trigger conditions for the auto-activation system.
+## Current Top-Level Fields
 
----
+### `priority_rules`
 
-## Complete TypeScript Schema
+Human-readable precedence rules such as:
+- debugging before review
+- performance vs architecture separation
+- review defers to debugging when bugs are present
 
-```typescript
-interface SkillRules {
-    version: string;
-    skills: Record<string, SkillRule>;
-}
+### `conflict_resolution`
 
-interface SkillRule {
-    type: 'guardrail' | 'domain';
-    enforcement: 'block' | 'suggest' | 'warn';
-    priority: 'critical' | 'high' | 'medium' | 'low';
+Narrative guidance for ambiguous overlaps between skills.
 
-    promptTriggers?: {
-        keywords?: string[];
-        intentPatterns?: string[];  // Regex strings
-    };
+### `anti_hallucination_rules`
 
-    fileTriggers?: {
-        pathPatterns: string[];     // Glob patterns
-        pathExclusions?: string[];  // Glob patterns
-        contentPatterns?: string[]; // Regex strings
-        createOnly?: boolean;       // Only trigger on file creation
-    };
+Cross-cutting evidence requirements that reinforce `evidence-based-coding`.
 
-    blockMessage?: string;  // For guardrails, {file_path} placeholder
+### `global_reminders`
 
-    skipConditions?: {
-        sessionSkillUsed?: boolean;      // Skip if used in session
-        fileMarkers?: string[];          // e.g., ["@skip-validation"]
-        envOverride?: string;            // e.g., "SKIP_DB_VERIFICATION"
-    };
-}
-```
+Reusable reminders for maintainers about verification discipline.
 
----
+### `skill_collaboration`
 
-## Field Guide
+A map of how skills should defer, collaborate, or stay within scope.
 
-### Top Level
+### `metadata`
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `version` | string | Yes | Schema version (currently "1.0") |
-| `skills` | object | Yes | Map of skill name → SkillRule |
+Version and authorship notes for the governance document itself.
 
-### SkillRule Fields
+## When To Edit `skill-rules.json`
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | "guardrail" (enforced) or "domain" (advisory) |
-| `enforcement` | string | Yes | "block" (PreToolUse), "suggest" (UserPromptSubmit), or "warn" |
-| `priority` | string | Yes | "critical", "high", "medium", or "low" |
-| `promptTriggers` | object | Optional | Triggers for UserPromptSubmit hook |
-| `fileTriggers` | object | Optional | Triggers for PreToolUse hook |
-| `blockMessage` | string | Optional* | Required if enforcement="block". Use `{file_path}` placeholder |
-| `skipConditions` | object | Optional | Escape hatches and session tracking |
+Edit it when you change:
+- priority policy
+- overlap resolution
+- anti-hallucination governance
+- collaboration expectations between skills
 
-*Required for guardrails
-
-### promptTriggers Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `keywords` | string[] | Optional | Exact substring matches (case-insensitive) |
-| `intentPatterns` | string[] | Optional | Regex patterns for intent detection |
-
-### fileTriggers Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `pathPatterns` | string[] | Yes* | Glob patterns for file paths |
-| `pathExclusions` | string[] | Optional | Glob patterns to exclude (e.g., test files) |
-| `contentPatterns` | string[] | Optional | Regex patterns to match file content |
-| `createOnly` | boolean | Optional | Only trigger when creating new files |
-
-*Required if fileTriggers is present
-
-### skipConditions Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `sessionSkillUsed` | boolean | Optional | Skip if skill already used this session |
-| `fileMarkers` | string[] | Optional | Skip if file contains comment marker |
-| `envOverride` | string | Optional | Environment variable name to disable skill |
-
----
-
-## Example: Guardrail Skill
-
-Complete example of a blocking guardrail skill with all features:
-
-```json
-{
-  "database-verification": {
-    "type": "guardrail",
-    "enforcement": "block",
-    "priority": "critical",
-
-    "promptTriggers": {
-      "keywords": [
-        "prisma",
-        "database",
-        "table",
-        "column",
-        "schema",
-        "query",
-        "migration"
-      ],
-      "intentPatterns": [
-        "(add|create|implement).*?(user|login|auth|tracking|feature)",
-        "(modify|update|change).*?(table|column|schema|field)",
-        "database.*?(change|update|modify|migration)"
-      ]
-    },
-
-    "fileTriggers": {
-      "pathPatterns": [
-        "**/schema.prisma",
-        "**/migrations/**/*.sql",
-        "database/src/**/*.ts",
-        "form/src/**/*.ts",
-        "email/src/**/*.ts",
-        "users/src/**/*.ts",
-        "projects/src/**/*.ts",
-        "utilities/src/**/*.ts"
-      ],
-      "pathExclusions": [
-        "**/*.test.ts",
-        "**/*.spec.ts"
-      ],
-      "contentPatterns": [
-        "import.*[Pp]risma",
-        "PrismaService",
-        "prisma\\.",
-        "\\.findMany\\(",
-        "\\.findUnique\\(",
-        "\\.findFirst\\(",
-        "\\.create\\(",
-        "\\.createMany\\(",
-        "\\.update\\(",
-        "\\.updateMany\\(",
-        "\\.upsert\\(",
-        "\\.delete\\(",
-        "\\.deleteMany\\("
-      ]
-    },
-
-    "blockMessage": "⚠️ BLOCKED - Database Operation Detected\n\n📋 REQUIRED ACTION:\n1. Use Skill tool: 'database-verification'\n2. Verify ALL table and column names against schema\n3. Check database structure with DESCRIBE commands\n4. Then retry this edit\n\nReason: Prevent column name errors in Prisma queries\nFile: {file_path}\n\n💡 TIP: Add '// @skip-validation' comment to skip future checks",
-
-    "skipConditions": {
-      "sessionSkillUsed": true,
-      "fileMarkers": [
-        "@skip-validation"
-      ],
-      "envOverride": "SKIP_DB_VERIFICATION"
-    }
-  }
-}
-```
-
-### Key Points for Guardrails
-
-1. **type**: Must be "guardrail"
-2. **enforcement**: Must be "block"
-3. **priority**: Usually "critical" or "high"
-4. **blockMessage**: Required, clear actionable steps
-5. **skipConditions**: Session tracking prevents repeated nagging
-6. **fileTriggers**: Usually has both path and content patterns
-7. **contentPatterns**: Catch actual usage of technology
-
----
-
-## Example: Domain Skill
-
-Complete example of a suggestion-based domain skill:
-
-```json
-{
-  "project-catalog-developer": {
-    "type": "domain",
-    "enforcement": "suggest",
-    "priority": "high",
-
-    "promptTriggers": {
-      "keywords": [
-        "layout",
-        "layout system",
-        "grid",
-        "grid layout",
-        "toolbar",
-        "column",
-        "cell editor",
-        "cell renderer",
-        "submission",
-        "submissions",
-        "blog dashboard",
-        "datagrid",
-        "data grid",
-        "CustomToolbar",
-        "GridLayoutDialog",
-        "useGridLayout",
-        "auto-save",
-        "column order",
-        "column width",
-        "filter",
-        "sort"
-      ],
-      "intentPatterns": [
-        "(how does|how do|explain|what is|describe).*?(layout|grid|toolbar|column|submission|catalog)",
-        "(add|create|modify|change).*?(toolbar|column|cell|editor|renderer)",
-        "blog dashboard.*?"
-      ]
-    },
-
-    "fileTriggers": {
-      "pathPatterns": [
-        "frontend/src/features/submissions/**/*.tsx",
-        "frontend/src/features/submissions/**/*.ts"
-      ],
-      "pathExclusions": [
-        "**/*.test.tsx",
-        "**/*.test.ts"
-      ]
-    }
-  }
-}
-```
-
-### Key Points for Domain Skills
-
-1. **type**: Must be "domain"
-2. **enforcement**: Usually "suggest"
-3. **priority**: "high" or "medium"
-4. **blockMessage**: Not needed (doesn't block)
-5. **skipConditions**: Optional (less critical)
-6. **promptTriggers**: Usually has extensive keywords
-7. **fileTriggers**: May have only path patterns (content less important)
-
----
-
-## Validation
-
-### Check JSON Syntax
-
-```bash
-cat .claude/skills/skill-rules.json | jq .
-```
-
-If valid, jq will pretty-print the JSON. If invalid, it will show the error.
-
-### Common JSON Errors
-
-**Trailing comma:**
-```json
-{
-  "keywords": ["one", "two",]  // ❌ Trailing comma
-}
-```
-
-**Missing quotes:**
-```json
-{
-  type: "guardrail"  // ❌ Missing quotes on key
-}
-```
-
-**Single quotes (invalid JSON):**
-```json
-{
-  'type': 'guardrail'  // ❌ Must use double quotes
-}
-```
-
-### Validation Checklist
-
-- [ ] JSON syntax valid (use `jq`)
-- [ ] All skill names match SKILL.md filenames
-- [ ] Guardrails have `blockMessage`
-- [ ] Block messages use `{file_path}` placeholder
-- [ ] Intent patterns are valid regex (test on regex101.com)
-- [ ] File path patterns use correct glob syntax
-- [ ] Content patterns escape special characters
-- [ ] Priority matches enforcement level
-- [ ] No duplicate skill names
-
----
-
-**Related Files:**
-- [SKILL.md](SKILL.md) - Main skill guide
-- [TRIGGER_TYPES.md](TRIGGER_TYPES.md) - Complete trigger documentation
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Debugging configuration issues
+Do not edit it as a substitute for wiring runtime behavior. If the live system should behave differently, change the actual hook/router code too.

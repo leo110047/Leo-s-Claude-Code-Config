@@ -35,7 +35,7 @@ ln -s $(pwd)/skills ~/.claude/skills
 | **security-checklist** | 安全最佳實踐（OWASP Top 10） |
 | **commit-conventions** | Git commit 規範（Conventional Commits） |
 | **decision-log** | 架構決策記錄（ADR） |
-| **file-search** | 代碼搜尋（ripgrep + ast-grep） |
+| **file-search** | 代碼搜尋（`rg` 優先，`sg` 僅在可用時使用） |
 | **new-skill-scaffold** | 產生符合 repo 慣例的新 skill scaffold |
 
 ### 工具 Skills
@@ -197,10 +197,12 @@ MEDIUM (中等優先級)
 ├─ testing-strategy
 ├─ careful-mode
 └─ freeze-mode
+```
 
 ## 📈 Usage Telemetry
 
 目前會追蹤：
+- prompt-trigger rule match 與 suggestion emission（`UserPromptSubmit`）
 - code-backed skills（例如 `claude-config-verification` scripts）
 - on-demand modes（`careful-mode` / `freeze-mode` 的 enable/disable）
 - mode enforcement block 事件
@@ -212,8 +214,9 @@ node hooks/scripts/tools/report-usage-summary.js --days 30
 ```
 
 限制：
-- 目前 runtime 沒有在 hook payload 直接提供 active skill 名單，所以純 markdown auto-trigger skills 還無法做完整自動 usage telemetry。
+- 目前 runtime 沒有在 hook payload 直接提供 active skill 名單，所以仍然無法知道建議後的純 markdown skill 是否真的被採用；現有資料是 prompt-trigger telemetry，不是完整 skill usage truth。
 
+```text
 LOW (低優先級 - 工具性質)
 ├─ commit-conventions
 ├─ decision-log

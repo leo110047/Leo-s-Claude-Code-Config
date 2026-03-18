@@ -1,305 +1,85 @@
-# Trigger Types - Complete Guide
+# Trigger Types
 
-Complete reference for configuring skill triggers in Claude Code's skill auto-activation system.
+This repo currently has three real trigger surfaces for skills. Anything beyond these should be documented as future work or implemented with a dedicated hook.
 
-## Table of Contents
+## 1. Native Skill Routing
 
-- [Keyword Triggers (Explicit)](#keyword-triggers-explicit)
-- [Intent Pattern Triggers (Implicit)](#intent-pattern-triggers-implicit)
-- [File Path Triggers](#file-path-triggers)
-- [Content Pattern Triggers](#content-pattern-triggers)
-- [Best Practices Summary](#best-practices-summary)
+Claude uses the skill's frontmatter and body to decide when to load it.
 
----
+### What matters most
 
-## Keyword Triggers (Explicit)
+- `name`
+- `description`
+- the first screenful of `SKILL.md`
 
-### How It Works
+### Best practice
 
-Case-insensitive substring matching in user's prompt.
+Write descriptions as trigger guidance, not as human summaries.
 
-### Use For
+Good:
 
-Topic-based activation where user explicitly mentions the subject.
-
-### Configuration
-
-```json
-"promptTriggers": {
-  "keywords": ["layout", "grid", "toolbar", "submission"]
-}
+```yaml
+description: Use when a task involves bugs, failing tests, crashes, or unexpected behavior and root-cause investigation must happen before proposing fixes.
 ```
 
-### Example
+Bad:
 
-- User prompt: "how does the **layout** system work?"
-- Matches: "layout" keyword
-- Activates: `project-catalog-developer`
-
-### Best Practices
-
-- Use specific, unambiguous terms
-- Include common variations ("layout", "layout system", "grid layout")
-- Avoid overly generic words ("system", "work", "create")
-- Test with real prompts
-
----
-
-## Intent Pattern Triggers (Implicit)
-
-### How It Works
-
-Regex pattern matching to detect user's intent even when they don't mention the topic explicitly.
-
-### Use For
-
-Action-based activation where user describes what they want to do rather than the specific topic.
-
-### Configuration
-
-```json
-"promptTriggers": {
-  "intentPatterns": [
-    "(create|add|implement).*?(feature|endpoint)",
-    "(how does|explain).*?(layout|workflow)"
-  ]
-}
+```yaml
+description: Covers debugging workflows, logging, root causes, and bug fixing.
 ```
 
-### Examples
+## 2. Prompt-Time Suggestions via `UserPromptSubmit`
 
-**Database Work:**
-- User prompt: "add user tracking feature"
-- Matches: `(add).*?(feature)`
-- Activates: `database-verification`, `error-tracking`
+This repo has an explicit suggestion layer:
 
-**Component Creation:**
-- User prompt: "create a dashboard widget"
-- Matches: `(create).*?(component)` (if component in pattern)
-- Activates: `frontend-dev-guidelines`
+- Hook: `hooks/scripts/hooks/skill-activation-suggestions.js`
+- Rules: `hooks/scripts/lib/skill-activation/activation-rules.js`
 
-### Best Practices
+Each rule can include:
+- `keywords`
+- `patterns`
+- `priority`
+- `hint`
 
-- Capture common action verbs: `(create|add|modify|build|implement)`
-- Include domain-specific nouns: `(feature|endpoint|component|workflow)`
-- Use non-greedy matching: `.*?` instead of `.*`
-- Test patterns thoroughly with regex tester (https://regex101.com/)
-- Don't make patterns too broad (causes false positives)
-- Don't make patterns too specific (causes false negatives)
+Example shape:
 
-### Common Pattern Examples
-
-```regex
-# Database Work
-(add|create|implement).*?(user|login|auth|feature)
-
-# Explanations
-(how does|explain|what is|describe).*?
-
-# Frontend Work
-(create|add|make|build).*?(component|UI|page|modal|dialog)
-
-# Error Handling
-(fix|handle|catch|debug).*?(error|exception|bug)
-
-# Workflow Operations
-(create|add|modify).*?(workflow|step|branch|condition)
-```
-
----
-
-## File Path Triggers
-
-### How It Works
-
-Glob pattern matching against the file path being edited.
-
-### Use For
-
-Domain/area-specific activation based on file location in the project.
-
-### Configuration
-
-```json
-"fileTriggers": {
-  "pathPatterns": [
-    "frontend/src/**/*.tsx",
-    "form/src/**/*.ts"
-  ],
-  "pathExclusions": [
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
-}
-```
-
-### Glob Pattern Syntax
-
-- `**` = Any number of directories (including zero)
-- `*` = Any characters within a directory name
-- Examples:
-  - `frontend/src/**/*.tsx` = All .tsx files in frontend/src and subdirs
-  - `**/schema.prisma` = schema.prisma anywhere in project
-  - `form/src/**/*.ts` = All .ts files in form/src subdirs
-
-### Example
-
-- File being edited: `frontend/src/components/Dashboard.tsx`
-- Matches: `frontend/src/**/*.tsx`
-- Activates: `frontend-dev-guidelines`
-
-### Best Practices
-
-- Be specific to avoid false positives
-- Use exclusions for test files: `**/*.test.ts`
-- Consider subdirectory structure
-- Test patterns with actual file paths
-- Use narrower patterns when possible: `form/src/services/**` not `form/**`
-
-### Common Path Patterns
-
-```glob
-# Frontend
-frontend/src/**/*.tsx        # All React components
-frontend/src/**/*.ts         # All TypeScript files
-frontend/src/components/**   # Only components directory
-
-# Backend Services
-form/src/**/*.ts            # Form service
-email/src/**/*.ts           # Email service
-users/src/**/*.ts           # Users service
-
-# Database
-**/schema.prisma            # Prisma schema (anywhere)
-**/migrations/**/*.sql      # Migration files
-database/src/**/*.ts        # Database scripts
-
-# Workflows
-form/src/workflow/**/*.ts              # Workflow engine
-form/src/workflow-definitions/**/*.json # Workflow definitions
-
-# Test Exclusions
-**/*.test.ts                # TypeScript tests
-**/*.test.tsx               # React component tests
-**/*.spec.ts                # Spec files
-```
-
----
-
-## Content Pattern Triggers
-
-### How It Works
-
-Regex pattern matching against the file's actual content (what's inside the file).
-
-### Use For
-
-Technology-specific activation based on what the code imports or uses (Prisma, controllers, specific libraries).
-
-### Configuration
-
-```json
-"fileTriggers": {
-  "contentPatterns": [
-    "import.*[Pp]risma",
-    "PrismaService",
-    "\\.findMany\\(",
-    "\\.create\\("
-  ]
-}
-```
-
-### Examples
-
-**Prisma Detection:**
-- File contains: `import { PrismaService } from '@project/database'`
-- Matches: `import.*[Pp]risma`
-- Activates: `database-verification`
-
-**Controller Detection:**
-- File contains: `export class UserController {`
-- Matches: `export class.*Controller`
-- Activates: `error-tracking`
-
-### Best Practices
-
-- Match imports: `import.*[Pp]risma` (case-insensitive with [Pp])
-- Escape special regex chars: `\\.findMany\\(` not `.findMany(`
-- Patterns use case-insensitive flag
-- Test against real file content
-- Make patterns specific enough to avoid false matches
-
-### Common Content Patterns
-
-```regex
-# Prisma/Database
-import.*[Pp]risma                # Prisma imports
-PrismaService                    # PrismaService usage
-prisma\.                         # prisma.something
-\.findMany\(                     # Prisma query methods
-\.create\(
-\.update\(
-\.delete\(
-
-# Controllers/Routes
-export class.*Controller         # Controller classes
-router\.                         # Express router
-app\.(get|post|put|delete|patch) # Express app routes
-
-# Error Handling
-try\s*\{                        # Try blocks
-catch\s*\(                      # Catch blocks
-throw new                        # Throw statements
-
-# React/Components
-export.*React\.FC               # React functional components
-export default function.*       # Default function exports
-useState|useEffect              # React hooks
-```
-
----
-
-## Best Practices Summary
-
-### DO:
-✅ Use specific, unambiguous keywords
-✅ Test all patterns with real examples
-✅ Include common variations
-✅ Use non-greedy regex: `.*?`
-✅ Escape special characters in content patterns
-✅ Add exclusions for test files
-✅ Make file path patterns narrow and specific
-
-### DON'T:
-❌ Use overly generic keywords ("system", "work")
-❌ Make intent patterns too broad (false positives)
-❌ Make patterns too specific (false negatives)
-❌ Forget to test with regex tester (https://regex101.com/)
-❌ Use greedy regex: `.*` instead of `.*?`
-❌ Match too broadly in file paths
-
-### Testing Your Triggers
-
-**Test keyword/intent triggers:**
-```bash
-echo '{"session_id":"test","prompt":"your test prompt"}' | \
-  npx tsx .claude/hooks/skill-activation-prompt.ts
-```
-
-**Test file path/content triggers:**
-```bash
-cat <<'EOF' | npx tsx .claude/hooks/skill-verification-guard.ts
+```js
 {
-  "session_id": "test",
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/path/to/test/file.ts"}
+  skill: 'systematic-debugging',
+  priority: 'critical',
+  hint: 'Use before proposing fixes for bugs, test failures, or unexpected behavior.',
+  keywords: ['bug', 'debug', 'error', 'failing test'],
+  patterns: [/\b(stack trace|root cause)\b/i]
 }
-EOF
 ```
 
----
+### When to add a suggestion rule
 
-**Related Files:**
-- [SKILL.md](SKILL.md) - Main skill guide
-- [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md) - Complete skill-rules.json schema
-- [PATTERNS_LIBRARY.md](PATTERNS_LIBRARY.md) - Ready-to-use pattern library
+- The skill is broadly useful and often under-triggered
+- The prompt surface is easy to recognize with low false-positive risk
+- A concise hint materially improves behavior
+
+### When not to add one
+
+- The skill is niche or project-specific
+- The matching terms are too generic
+- The rule would mostly duplicate native routing without improving outcomes
+
+## 3. Explicit Invocation
+
+The user can always force a skill via:
+
+- `/skill-name`
+- direct mention in the prompt
+
+This is still important for low-frequency or high-friction skills such as `careful-mode` and `freeze-mode`.
+
+## What Is Not Generic Runtime Behavior Today
+
+These are not general-purpose, repo-wide skill triggers right now:
+
+- file-path based skill auto-activation
+- file-content based skill auto-activation
+- actual “skill was used” truth from hook payloads
+
+If you need one of those, implement a dedicated hook or mode and document it explicitly instead of pretending the generic skill system already supports it.
