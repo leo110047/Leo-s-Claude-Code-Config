@@ -86,6 +86,67 @@
     }
   },
   {
+    "id": "pretool-block-force-push-when-careful-mode-active",
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "git push --force-with-lease origin main"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "git push --force"
+      ]
+    }
+  },
+  {
+    "id": "pretool-allow-safe-push-when-careful-mode-active",
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "git push origin main"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stderrIncludes": [
+        "review branch/commits/remote"
+      ]
+    }
+  },
+  {
     "id": "posttool-edit-ts-async-tasks",
     "input": {
       "hook_event_name": "PostToolUse",

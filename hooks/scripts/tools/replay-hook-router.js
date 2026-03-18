@@ -78,6 +78,29 @@ function loadMetrics(filePath) {
     .filter(Boolean);
 }
 
+function prepareModeStateFixture(fixture, modeStateFile) {
+  try {
+    if (fs.existsSync(modeStateFile)) {
+      fs.unlinkSync(modeStateFile);
+    }
+  } catch {
+    // Ignore cleanup failures before the next fixture.
+  }
+
+  const modeState = fixture.setup && fixture.setup.modeState;
+  if (!modeState || typeof modeState !== 'object') {
+    return;
+  }
+
+  const payload = {
+    sessionId: typeof modeState.sessionId === 'string' ? modeState.sessionId : 'default',
+    updatedAt: new Date().toISOString(),
+    modes: modeState.modes && typeof modeState.modes === 'object' ? modeState.modes : {}
+  };
+
+  fs.writeFileSync(modeStateFile, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+}
+
 function formatRatio(numerator, denominator) {
   if (denominator === 0) return '0.00%';
   return `${((numerator / denominator) * 100).toFixed(2)}%`;
@@ -92,8 +115,9 @@ function run() {
   const metricsFile = path.join(os.tmpdir(), `goldband-router-metrics-${runId}.jsonl`);
   const contextStateFile = path.join(os.tmpdir(), `goldband-router-context-${runId}.json`);
   const debounceFile = path.join(os.tmpdir(), `goldband-router-debounce-${runId}.json`);
+  const modeStateFile = path.join(os.tmpdir(), `goldband-router-mode-${runId}.json`);
 
-  const tempFiles = [metricsFile, contextStateFile, debounceFile];
+  const tempFiles = [metricsFile, contextStateFile, debounceFile, modeStateFile];
 
   try {
     const invocationResults = [];
@@ -102,6 +126,7 @@ function run() {
       for (const fixture of fixtures) {
         const stdinPayload = JSON.stringify(fixture.input || {});
         const startNs = process.hrtime.bigint();
+        prepareModeStateFixture(fixture, modeStateFile);
 
         const result = spawnSync(process.execPath, [routerScript], {
           input: stdinPayload,
@@ -112,7 +137,9 @@ function run() {
             HOOK_ROUTER_METRICS_ENABLED: '1',
             HOOK_ROUTER_METRICS_FILE: metricsFile,
             HOOK_ROUTER_CONTEXT_STATE_FILE: contextStateFile,
-            HOOK_ROUTER_DEBOUNCE_FILE: debounceFile
+            HOOK_ROUTER_DEBOUNCE_FILE: debounceFile,
+            HOOK_ROUTER_MODE_STATE_FILE: modeStateFile,
+            ...(fixture.env || {})
           }
         });
 

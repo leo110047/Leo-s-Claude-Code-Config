@@ -1,4 +1,6 @@
 const { detectSecrets, isSecretScanExcluded } = require('./secret-patterns');
+const { isModeActive } = require('./mode-state');
+const { matchCarefulModeRisk } = require('./careful-mode-rules');
 
 function shouldBlockDevServer(command) {
   if (!command || process.platform === 'win32') {
@@ -6,6 +8,10 @@ function shouldBlockDevServer(command) {
   }
 
   return /(npm run dev\b|pnpm( run)? dev\b|yarn dev\b|bun run dev\b)/.test(command);
+}
+
+function resolveSessionId(input) {
+  return input.session_id || process.env.CLAUDE_SESSION_ID || 'default';
 }
 
 function shouldBlockDocFile(filePath) {
@@ -25,6 +31,23 @@ function evaluatePreToolUse(input) {
 
   if (toolName === 'Bash') {
     const command = toolInput.command || '';
+    const sessionId = resolveSessionId(input);
+    const carefulModeRisk = isModeActive(sessionId, 'careful-mode')
+      ? matchCarefulModeRisk(command)
+      : null;
+
+    if (carefulModeRisk) {
+      return {
+        decision: 'block',
+        blockedBy: 'careful-mode',
+        logs: [
+          '[Hook] BLOCKED: careful-mode is active for this session',
+          `[Hook] Risk: ${carefulModeRisk.detail}`,
+          `[Hook] Command: ${command}`,
+          '[Hook] Disable with the same careful-mode script used to enable this session.'
+        ]
+      };
+    }
 
     if (shouldBlockDevServer(command)) {
       return {

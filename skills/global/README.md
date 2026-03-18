@@ -24,6 +24,7 @@ ln -s $(pwd)/skills ~/.claude/skills
 | **backend-patterns** | 後端架構模式 | 🟡 Medium |
 | **performance-optimization** | 性能優化（前端+後端） | 🟡 Medium |
 | **claude-config-verification** | Claude Code 配置 repo 驗證、hook replay、plugin data probe | 🟡 Medium |
+| **careful-mode** | 按需啟用高風險操作防呆（force-push、destroy、delete 類命令） | 🟡 Medium |
 
 ### 專業領域 Skills
 
@@ -148,6 +149,12 @@ Claude：[使用 Grep 搜尋 "getUserById"]
 2. **涵蓋**: OWASP Top 10, 輸入驗證, 認證授權
 3. **不包括**: 滲透測試（僅防禦性安全）
 
+### 高風險操作時
+
+1. **手動調用**: `/careful-mode`
+2. **用途**: 暫時阻擋 `rm -rf`、force-push、destroy/delete 類 Bash 操作
+3. **流程**: 先用 `node scripts/careful-mode.js enable`，做完再 `disable`
+
 ## 🚀 最佳實踐
 
 ### DO ✅
@@ -178,7 +185,8 @@ HIGH (高優先級)
 MEDIUM (中等優先級)
 ├─ code-review-skill
 ├─ backend-patterns
-└─ testing-strategy
+├─ testing-strategy
+└─ careful-mode
 
 LOW (低優先級 - 工具性質)
 ├─ commit-conventions
