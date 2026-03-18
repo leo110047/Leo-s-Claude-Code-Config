@@ -19,6 +19,14 @@ allowed-tools:
 - Generating changelogs automatically
 - Implementing semantic versioning
 
+## Gotchas
+
+- Do not make the type describe the file kind (`docs`, `test`) when the real intent is a feature or fix.
+- Do not stuff unrelated changes into one commit just to satisfy Conventional Commits formatting.
+- Do not hide breaking changes in the body only; use `!` or `BREAKING CHANGE:` explicitly.
+- Do not write subjects in past tense, title case, or as issue-tracker notes; keep them imperative and specific.
+- Do not rely on scope to rescue a vague subject line; the subject still needs to stand on its own.
+
 ## Conventional Commits Format
 
 ```

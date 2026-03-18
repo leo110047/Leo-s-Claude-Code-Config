@@ -116,8 +116,9 @@ function run() {
   const contextStateFile = path.join(os.tmpdir(), `goldband-router-context-${runId}.json`);
   const debounceFile = path.join(os.tmpdir(), `goldband-router-debounce-${runId}.json`);
   const modeStateFile = path.join(os.tmpdir(), `goldband-router-mode-${runId}.json`);
+  const usageFile = path.join(os.tmpdir(), `goldband-router-usage-${runId}.jsonl`);
 
-  const tempFiles = [metricsFile, contextStateFile, debounceFile, modeStateFile];
+  const tempFiles = [metricsFile, contextStateFile, debounceFile, modeStateFile, usageFile];
 
   try {
     const invocationResults = [];
@@ -139,6 +140,7 @@ function run() {
             HOOK_ROUTER_CONTEXT_STATE_FILE: contextStateFile,
             HOOK_ROUTER_DEBOUNCE_FILE: debounceFile,
             HOOK_ROUTER_MODE_STATE_FILE: modeStateFile,
+            GOLDBAND_USAGE_FILE: usageFile,
             ...(fixture.env || {})
           }
         });

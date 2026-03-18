@@ -58,6 +58,14 @@ Is the task self-contained?
 - Debugging that requires iterative investigation
 - Tasks that depend on unfinished work
 
+## Gotchas
+
+- Do not use subagents for shared-context debugging or ambiguous architecture work.
+- Do not trust a subagent's completion report until you have read every changed file yourself.
+- Do not parallelize tasks with hidden shared state, shared files, or order dependencies.
+- Do not give a vague prompt and expect a precise deliverable; subagents amplify prompt quality.
+- Do not let subagents expand scope beyond the declared boundaries just because the extra work looks helpful.
+
 ## Fresh Context Per Task
 
 **Why fresh context matters:**

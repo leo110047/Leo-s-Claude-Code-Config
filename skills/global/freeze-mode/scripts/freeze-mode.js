@@ -13,18 +13,18 @@ function resolveHookModule(relativePath) {
 }
 
 const { runModeCli } = resolveHookModule('mode-cli.js');
-const { CAREFUL_MODE_GUARDS } = resolveHookModule('careful-mode-rules.js');
+const { FREEZE_MODE_PROTECTIONS } = resolveHookModule('freeze-mode-rules.js');
 
 try {
   runModeCli({
     argv: process.argv,
-    modeName: 'careful-mode',
-    displayName: 'Careful Mode',
-    protections: CAREFUL_MODE_GUARDS,
-    source: 'skills/global/careful-mode/scripts/careful-mode.js'
+    modeName: 'freeze-mode',
+    displayName: 'Freeze Mode',
+    protections: FREEZE_MODE_PROTECTIONS,
+    source: 'skills/global/freeze-mode/scripts/freeze-mode.js'
   });
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[careful-mode] ${message}`);
+  console.error(`[freeze-mode] ${message}`);
   process.exit(1);
 }

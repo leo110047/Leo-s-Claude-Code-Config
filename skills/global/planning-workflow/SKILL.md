@@ -30,6 +30,14 @@ Vague plans produce vague results. Every step must be concrete enough that a fre
 - Structuring work for subagent execution
 - Any multi-step implementation that will take more than 10 minutes
 
+## Gotchas
+
+- Do not hide multiple actions inside one task just because they touch the same feature.
+- Do not use vague placeholders like "update the config" or "fix the bug"; name exact files and expected outcomes.
+- Do not push verification to the end only; each task needs its own check.
+- Do not plan implementation steps before reading the current code and constraints.
+- Do not present a plan as locked if the user has not approved the tradeoffs or sequencing yet.
+
 ## Task Granularity
 
 Each task in a plan should take **2-5 minutes** to execute. If a task feels like it will take longer, break it down further.

@@ -16,6 +16,21 @@ allowed-tools:
 
 Pipeline design patterns and deployment strategies for modern applications using GitHub Actions and related tooling.
 
+## When to Use
+
+- Designing or refactoring CI pipelines
+- Splitting build, test, deploy, and promotion stages
+- Hardening release automation, environments, or secret handling
+- Improving CI reliability, determinism, or diagnosability
+
+## Gotchas
+
+- Do not collapse build, test, release, and deploy into one opaque job if failures need different owners or rollback paths.
+- Do not trust a green local script as proof that CI is correct; pipelines must pass in a clean environment with explicit dependencies.
+- Do not leak secrets through logs, artifacts, caches, or debug output while wiring automation.
+- Do not add aggressive caching before the pipeline is deterministic; stale cache wins create the worst kind of flaky CI.
+- Do not design deployment stages without a promotion and rollback story.
+
 ## GitHub Actions Workflow Patterns
 
 ### Workflow Structure

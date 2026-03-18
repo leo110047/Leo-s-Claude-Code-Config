@@ -25,6 +25,7 @@ ln -s $(pwd)/skills ~/.claude/skills
 | **performance-optimization** | 性能優化（前端+後端） | 🟡 Medium |
 | **claude-config-verification** | Claude Code 配置 repo 驗證、hook replay、plugin data probe | 🟡 Medium |
 | **careful-mode** | 按需啟用高風險操作防呆（force-push、destroy、delete 類命令） | 🟡 Medium |
+| **freeze-mode** | 按需啟用唯讀調查模式，阻擋 Edit/Write 與非唯讀 Bash | 🟡 Medium |
 
 ### 專業領域 Skills
 
@@ -155,6 +156,12 @@ Claude：[使用 Grep 搜尋 "getUserById"]
 2. **用途**: 暫時阻擋 `rm -rf`、force-push、destroy/delete 類 Bash 操作
 3. **流程**: 先用 `node scripts/careful-mode.js enable`，做完再 `disable`
 
+### 唯讀調查時
+
+1. **手動調用**: `/freeze-mode`
+2. **用途**: 將 session 鎖成 inspection-only，阻擋 Edit/Write 與非唯讀 Bash
+3. **流程**: 先用 `node scripts/freeze-mode.js enable`，調查完再 `disable`
+
 ## 🚀 最佳實踐
 
 ### DO ✅
@@ -186,7 +193,24 @@ MEDIUM (中等優先級)
 ├─ code-review-skill
 ├─ backend-patterns
 ├─ testing-strategy
-└─ careful-mode
+├─ careful-mode
+└─ freeze-mode
+
+## 📈 Usage Telemetry
+
+目前會追蹤：
+- code-backed skills（例如 `claude-config-verification` scripts）
+- on-demand modes（`careful-mode` / `freeze-mode` 的 enable/disable）
+- mode enforcement block 事件
+
+摘要查看：
+
+```bash
+node hooks/scripts/tools/report-usage-summary.js --days 30
+```
+
+限制：
+- 目前 runtime 沒有在 hook payload 直接提供 active skill 名單，所以純 markdown auto-trigger skills 還無法做完整自動 usage telemetry。
 
 LOW (低優先級 - 工具性質)
 ├─ commit-conventions

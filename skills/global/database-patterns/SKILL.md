@@ -16,6 +16,21 @@ allowed-tools:
 
 Database design patterns, query optimization, and data management best practices for building reliable, performant data layers.
 
+## When to Use
+
+- Designing schemas, constraints, and indexes
+- Planning migrations or transactional boundaries
+- Reviewing ORM usage, query shape, or denormalization tradeoffs
+- Investigating whether the data layer design is stable and operable
+
+## Gotchas
+
+- Do not denormalize before you have measured a real read bottleneck and identified the query pattern causing it.
+- Do not add indexes blindly; every new index increases write cost, storage, and maintenance overhead.
+- Do not trust ORM defaults for transactions, cascades, eager loading, or locking without reading what SQL they actually generate.
+- Do not run schema changes without considering rollback, lock time, and backfill strategy.
+- Do not claim a query fix without `EXPLAIN`/`EXPLAIN ANALYZE` or equivalent plan evidence.
+
 ## Schema Design Principles
 
 ### Normalization vs Denormalization Decision Tree

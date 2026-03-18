@@ -23,6 +23,14 @@ Automatically activates when you mention:
 - YAML frontmatter
 - 500-line rule
 
+## Gotchas
+
+- Do not treat a skill as "just markdown"; scripts, assets, references, and state can carry more value than prose.
+- Do not write the description as a human summary; it should tell the model when to trigger the skill.
+- Do not stuff every detail into `SKILL.md`; use progressive disclosure and keep the entrypoint focused.
+- Do not add blocking hooks for low-signal annoyances; reserve friction for mistakes that are genuinely expensive.
+- Do not add scripts or references without surfacing them in `SKILL.md`, or the skill becomes undiscoverable.
+
 ---
 
 ## System Overview

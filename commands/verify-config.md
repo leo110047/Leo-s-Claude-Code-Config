@@ -77,7 +77,7 @@ Use `cat FILE | python3 -c "import sys,json; json.load(sys.stdin); print('OK')"`
 ╚════════════════════════════════════════╝
 
 Symlinks:
-  [OK]      skills profile: dev (12 個)
+  [OK]      skills profile: dev (14 個)
   [OK]      skills links point to /path/to/repo/skills/global/*
   [OK]      commands → /path/to/repo/commands
   ...

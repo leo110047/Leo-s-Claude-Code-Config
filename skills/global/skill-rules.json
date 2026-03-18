@@ -198,6 +198,11 @@
       "collaborates_with": ["security-checklist", "ci-cd-integration"],
       "reason": "High-friction protections should be opt-in during risky operation windows, not always-on"
     },
+    "freeze-mode": {
+      "focus": "read-only investigation windows for sensitive systems",
+      "collaborates_with": ["systematic-debugging", "security-checklist"],
+      "reason": "When the goal is inspection without mutation, stronger session-wide friction is safer than relying on operator memory"
+    },
     "planning-workflow": {
       "focus": "structured task planning and breakdown",
       "collaborates_with": ["evidence-based-coding"],

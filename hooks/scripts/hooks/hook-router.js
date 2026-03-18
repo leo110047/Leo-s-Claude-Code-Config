@@ -10,6 +10,7 @@ const { evaluatePreToolUse } = require('../lib/hook-router/pretool-policy');
 const { evaluatePostToolUse } = require('../lib/hook-router/posttool-policy');
 const { evaluateStop, evaluateNotification } = require('../lib/hook-router/stop-policy');
 const { appendMetric } = require('../lib/hook-router/metrics');
+const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
 
 const MAX_STDIN_BYTES = 1024 * 1024;
 
@@ -42,7 +43,8 @@ function defaultOutcome() {
     blockedBy: null,
     logs: [],
     outputJson: null,
-    spawnedProcesses: 0
+    spawnedProcesses: 0,
+    usageEvents: []
   };
 }
 
@@ -115,6 +117,9 @@ async function main() {
 
   writeLogs(outcome.logs);
   appendMetric(metric);
+  for (const usageEvent of outcome.usageEvents || []) {
+    appendUsageEvent(usageEvent);
+  }
 
   if (process.env.HOOK_ROUTER_DEBUG_METRICS === '1') {
     console.error(`[HookRouterMetrics] ${JSON.stringify(metric)}`);

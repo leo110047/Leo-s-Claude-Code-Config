@@ -25,6 +25,14 @@ allowed-tools:
 - Conducting security audits
 - Responding to security advisories
 
+## Gotchas
+
+- Do not treat the checklist as a substitute for threat modeling; controls must match the real attack surface.
+- Do not log secrets, tokens, or PII while adding diagnostics for security work.
+- Do not rely on client-side validation or authorization as a security boundary.
+- Do not ignore dependency advisories because the exploit path is inconvenient to test; triage them explicitly.
+- Do not drift into offensive security or penetration testing tasks; this skill is for defensive hardening and review.
+
 ## OWASP Top 10 (2021)
 
 The OWASP Top 10 represents the most critical web application security risks. Each item below

@@ -38,6 +38,14 @@ Choose **ast-grep** for:
 - Syntax-aware matching (understanding code semantics)
 - Complex refactoring (finding specific code patterns)
 
+## Gotchas
+
+- Do not start with a repo-wide broad search if a likely directory or file type is already obvious.
+- Do not stop at the match list; read the actual files before making behavioral claims.
+- Do not use plain text search when the task depends on syntax or structure; switch to `ast-grep`.
+- Do not dump hundreds of raw matches into the response; summarize and narrow.
+- Do not assume "no matches" proves absence when ignored files, generated output, or binary content may be excluded from the search.
+
 ## Invoking Search Tools
 
 In MassGen, use the `execute_command` tool to run ripgrep and ast-grep:

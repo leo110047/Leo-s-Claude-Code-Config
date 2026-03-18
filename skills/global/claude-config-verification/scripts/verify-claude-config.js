@@ -5,6 +5,13 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+function resolveHookModule(relativePath) {
+  const candidate = path.resolve(__dirname, '../../../../hooks/scripts/lib/hook-router', relativePath);
+  return fs.existsSync(candidate) ? require(candidate) : null;
+}
+
+const usageTelemetry = resolveHookModule('usage-telemetry.js');
+
 function parseArgs(argv) {
   return {
     json: argv.includes('--json'),
@@ -283,9 +290,22 @@ function main() {
     replayRequested: args.routerReplay,
     replayPassed: summary.replay ? summary.replay.ok : null
   });
+  usageTelemetry?.appendUsageEvent({
+    category: 'skill-script',
+    name: 'claude-config-verification',
+    action: args.routerReplay ? 'verify-config-with-replay' : 'verify-config',
+    sessionId: process.env.CLAUDE_SESSION_ID || null,
+    source: 'skills/global/claude-config-verification/scripts/verify-claude-config.js',
+    detail: {
+      ok: summary.ok,
+      skillCount: summary.skillCount,
+      errorCount: summary.errors.length,
+      warningCount: summary.frontmatterWarnings.length
+    }
+  });
 
   if (args.json) {
-    process.stdout.write(JSON.stringify(summary, null, 2));
+    process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
   } else {
     printHuman(summary);
   }

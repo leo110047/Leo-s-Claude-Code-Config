@@ -1,6 +1,7 @@
 const { detectSecrets, isSecretScanExcluded } = require('./secret-patterns');
 const { isModeActive } = require('./mode-state');
 const { matchCarefulModeRisk } = require('./careful-mode-rules');
+const { matchFreezeModeBashViolation } = require('./freeze-mode-rules');
 
 function shouldBlockDevServer(command) {
   if (!command || process.platform === 'win32') {
@@ -12,6 +13,21 @@ function shouldBlockDevServer(command) {
 
 function resolveSessionId(input) {
   return input.session_id || process.env.CLAUDE_SESSION_ID || 'default';
+}
+
+function buildModeUsageEvent(modeName, sessionId, rule, toolName, command) {
+  return {
+    category: 'mode-enforcement',
+    name: modeName,
+    action: 'block',
+    sessionId: sessionId || process.env.CLAUDE_SESSION_ID || null,
+    source: 'pretool-policy',
+    detail: {
+      rule,
+      toolName,
+      commandPreview: typeof command === 'string' ? command.slice(0, 160) : null
+    }
+  };
 }
 
 function shouldBlockDocFile(filePath) {
@@ -28,10 +44,30 @@ function shouldBlockDocFile(filePath) {
 function evaluatePreToolUse(input) {
   const toolName = input.tool_name || '';
   const toolInput = input.tool_input || {};
+  const sessionId = resolveSessionId(input);
+  const freezeModeActive = isModeActive(sessionId, 'freeze-mode');
 
   if (toolName === 'Bash') {
     const command = toolInput.command || '';
-    const sessionId = resolveSessionId(input);
+    const freezeModeViolation = freezeModeActive
+      ? matchFreezeModeBashViolation(command)
+      : null;
+
+    if (freezeModeViolation) {
+      return {
+        decision: 'block',
+        blockedBy: 'freeze-mode',
+        logs: [
+          '[Hook] BLOCKED: freeze-mode is active for this session',
+          `[Hook] Reason: ${freezeModeViolation.detail}`,
+          `[Hook] Command: ${command}`
+        ],
+        usageEvents: [
+          buildModeUsageEvent('freeze-mode', sessionId, freezeModeViolation.rule, toolName, command)
+        ]
+      };
+    }
+
     const carefulModeRisk = isModeActive(sessionId, 'careful-mode')
       ? matchCarefulModeRisk(command)
       : null;
@@ -45,6 +81,9 @@ function evaluatePreToolUse(input) {
           `[Hook] Risk: ${carefulModeRisk.detail}`,
           `[Hook] Command: ${command}`,
           '[Hook] Disable with the same careful-mode script used to enable this session.'
+        ],
+        usageEvents: [
+          buildModeUsageEvent('careful-mode', sessionId, carefulModeRisk.rule, toolName, command)
         ]
       };
     }
@@ -68,6 +107,21 @@ function evaluatePreToolUse(input) {
         logs: ['[Hook] Reminder: review branch/commits/remote before git push']
       };
     }
+  }
+
+  if (freezeModeActive && (toolName === 'Edit' || toolName === 'Write')) {
+    return {
+      decision: 'block',
+      blockedBy: 'freeze-mode',
+      logs: [
+        '[Hook] BLOCKED: freeze-mode allows inspection only',
+        `[Hook] Tool: ${toolName}`,
+        '[Hook] Disable freeze-mode before making file changes.'
+      ],
+      usageEvents: [
+        buildModeUsageEvent('freeze-mode', sessionId, 'no-file-edits', toolName, null)
+      ]
+    };
   }
 
   if (toolName === 'Write') {

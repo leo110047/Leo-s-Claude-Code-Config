@@ -42,6 +42,14 @@ NO CLAIMS WITHOUT EVIDENCE.
 - All other skills must follow evidence-based approach
 - Never assume, always verify -- no exceptions
 
+## Gotchas
+
+- Do not stop at a grep hit; locating code is not the same as understanding it.
+- Do not reuse stale test output, logs, or screenshots from a previous turn when making a fresh completion claim.
+- Do not treat code that "looks right" as verified behavior; run the relevant command or test.
+- Do not cite file paths, APIs, or line numbers you have not personally checked in the current task.
+- Do not turn uncertainty into hedged language; investigate until you can make a concrete claim or explicitly say it is unknown.
+
 ## The Three Laws of Evidence-Based Coding
 
 ### Law 1: Read Before You Speak

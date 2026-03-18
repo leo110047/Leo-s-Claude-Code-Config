@@ -4,6 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+function resolveHookModule(relativePath) {
+  const candidate = path.resolve(__dirname, '../../../../hooks/scripts/lib/hook-router', relativePath);
+  return fs.existsSync(candidate) ? require(candidate) : null;
+}
+
+const usageTelemetry = resolveHookModule('usage-telemetry.js');
+
 function parseArgs(argv) {
   return {
     json: argv.includes('--json')
@@ -85,8 +92,21 @@ function main() {
   const args = parseArgs(process.argv);
   const result = runProbe();
 
+  usageTelemetry?.appendUsageEvent({
+    category: 'skill-script',
+    name: 'claude-config-verification',
+    action: 'probe-plugin-data',
+    sessionId: process.env.CLAUDE_SESSION_ID || null,
+    source: 'skills/global/claude-config-verification/scripts/probe-plugin-data.js',
+    detail: {
+      ok: result.ok,
+      source: result.source,
+      fallbackUsed: result.fallbackUsed
+    }
+  });
+
   if (args.json) {
-    process.stdout.write(JSON.stringify(result, null, 2));
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   } else {
     printHuman(result);
   }

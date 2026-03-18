@@ -18,6 +18,14 @@ Log a decision when:
 - Making trade-off decisions
 - Changing established patterns
 
+## Gotchas
+
+- Do not log trivial implementation details as ADRs; keep the document for decisions with lasting architectural or process impact.
+- Do not write the ADR after the context is forgotten; capture tradeoffs while the rationale is still fresh.
+- Do not omit rejected alternatives, or the record becomes useless when the same debate returns.
+- Do not rewrite old ADRs to match current opinion; supersede them and preserve history.
+- Do not create `docs/DECISIONS.md` as busywork when no meaningful decision was made.
+
 ## ADR Format
 
 ```markdown
