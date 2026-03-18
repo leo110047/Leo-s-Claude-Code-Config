@@ -396,14 +396,14 @@ cd /path/to/your-unity-project
 **自動觸發**（用對關鍵字即可）：
 
 ```
-「這個 test 一直 fail」   → systematic-debugging
-「API 很慢」             → performance-optimization
-「設計一個 API」          → backend-patterns
-「review 這個 PR」       → code-review-skill
-「Schema 怎麼設計」       → database-patterns
-「設定 GitHub Actions」  → ci-cd-integration
+「這個 test 一直 fail」          → systematic-debugging
+「API 很慢」                    → performance-optimization
+「設計一個 API」                 → backend-patterns
+「review 這個 PR」              → code-review-skill
+「Schema 怎麼設計」              → database-patterns
+「設定 GitHub Actions」         → ci-cd-integration
 「這次要 force-push / destroy」 → careful-mode
-「先只看 prod，不要改任何東西」 → freeze-mode
+「先只看 prod，不要改任何東西」    → freeze-mode
 ```
 
 **強制觸發**（用 `/` 指定 skill 名稱）：
