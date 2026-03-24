@@ -12,8 +12,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# --dev flag: use symlinks instead of copying (useful when actively editing goldband itself)
-LINK_MODE=false
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CLAUDE_DIR="$HOME/.claude"
@@ -91,34 +89,22 @@ link_component() {
         return
     fi
 
-    if $LINK_MODE; then
-        # --dev: symlink mode
-        if [ -L "$dest" ]; then
-            local current_target
-            current_target=$(readlink "$dest")
-            if [ "$current_target" = "$src" ]; then
-                echo -e "  ${GREEN}[已安裝 (dev)] $name${NC}"
-                return
-            fi
-            rm "$dest"
-        elif [ -e "$dest" ]; then
-            echo -e "  ${YELLOW}[備份] $name — 備份現有檔案到 ${dest}.bak${NC}"
-            mv "$dest" "${dest}.bak"
+    if [ -L "$dest" ]; then
+        local current_target
+        current_target=$(readlink "$dest")
+        if [ "$current_target" = "$src" ]; then
+            echo -e "  ${GREEN}[已安裝] $name${NC}"
+            return
         fi
-        mkdir -p "$(dirname "$dest")"
-        ln -s "$src" "$dest"
-        echo -e "  ${GREEN}[安裝 (dev)] $name${NC}"
-    else
-        # default: copy mode
-        if [ -L "$dest" ]; then
-            rm "$dest"
-        elif [ -e "$dest" ]; then
-            rm -rf "$dest"
-        fi
-        mkdir -p "$(dirname "$dest")"
-        cp -r "$src" "$dest"
-        echo -e "  ${GREEN}[安裝] $name${NC}"
+        rm "$dest"
+    elif [ -e "$dest" ]; then
+        echo -e "  ${YELLOW}[備份] $name — 備份現有檔案到 ${dest}.bak${NC}"
+        mv "$dest" "${dest}.bak"
     fi
+
+    mkdir -p "$(dirname "$dest")"
+    ln -s "$src" "$dest"
+    echo -e "  ${GREEN}[安裝] $name${NC}"
 }
 
 timestamp_suffix() {
@@ -253,11 +239,7 @@ link_skill_entry() {
         backup_existing_path "$dest"
     fi
 
-    if $LINK_MODE; then
-        ln -s "$source" "$dest"
-    else
-        cp -r "$source" "$dest"
-    fi
+    ln -s "$source" "$dest"
 }
 
 write_skill_profile_file() {
@@ -438,15 +420,6 @@ show_help() {
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
-    echo ""
-    echo "Flag:"
-    echo "  --dev       使用 symlink 模式（預設為複製）"
-    echo "              適合正在修改 goldband 本身時使用"
-    echo "              注意：repo 路徑移動後 symlink 會失效，需重新安裝"
-    echo ""
-    echo "升級："
-    echo "  重新執行相同的安裝指令即可覆蓋更新（複製模式會直接覆寫）"
-    echo "  例：./install.sh pack-core"
     echo ""
     echo "範例:"
     echo "  ./install.sh              # 安裝 pack-core（預設）"
@@ -723,7 +696,7 @@ show_status() {
         if [ -L "$path" ]; then
             local target
             target=$(readlink "$path")
-            echo -e "  ${GREEN}[OK (dev)]${NC} $name -> $target"
+            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
         elif [ -e "$path" ]; then
             echo -e "  ${GREEN}[OK]${NC} $name"
         else
@@ -760,7 +733,7 @@ show_status() {
         if [ -L "$path" ]; then
             local target
             target=$(readlink "$path")
-            echo -e "  ${GREEN}[OK (dev)]${NC} $name -> $target"
+            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
         elif [ -e "$path" ]; then
             echo -e "  ${GREEN}[OK]${NC} $name"
         else
@@ -884,23 +857,6 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 echo -e "${YELLOW}倉庫位置：${NC}$REPO_DIR"
 echo ""
-
-# Parse --dev flag (symlink mode for active goldband development)
-_filtered_args=()
-for _arg in "$@"; do
-    if [ "$_arg" = "--dev" ]; then
-        LINK_MODE=true
-    else
-        _filtered_args+=("$_arg")
-    fi
-done
-set -- "${_filtered_args[@]}"
-unset _filtered_args _arg
-
-if $LINK_MODE; then
-    echo -e "${CYAN}模式：symlink（--dev）— hooks/scripts 等將以 symlink 指向 repo${NC}"
-    echo ""
-fi
 
 # 無參數 = 安裝核心包
 if [ $# -eq 0 ]; then
