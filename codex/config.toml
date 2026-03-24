@@ -11,6 +11,8 @@ web_search = "cached"
 # Let Codex reuse CLAUDE.md in repositories that already standardize on it.
 project_doc_fallback_filenames = ["CLAUDE.md"]
 project_doc_max_bytes = 65536
+model = "gpt-5.4"
+model_reasoning_effort = "high"
 
 [shell_environment_policy]
 inherit = "core"
@@ -19,6 +21,7 @@ exclude = ["*_SECRET", "*_KEY", "*_TOKEN", "*_PASSWORD", "*_CREDENTIAL"]
 [tui]
 notifications = true
 notification_method = "auto"
+status_line = ["model-with-reasoning", "context-remaining", "current-dir", "project-root", "git-branch", "context-used", "five-hour-limit"]
 
 [history]
 persistence = "save-all"
@@ -40,3 +43,6 @@ approval_policy = "on-request"
 [profiles.full_auto]
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
+
+[notice.model_migrations]
+"gpt-5.3-codex" = "gpt-5.4"

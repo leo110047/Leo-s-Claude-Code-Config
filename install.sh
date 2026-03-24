@@ -12,6 +12,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# --dev flag: use symlinks instead of copying (useful when actively editing goldband itself)
+LINK_MODE=false
+
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CLAUDE_DIR="$HOME/.claude"
 SKILLS_DIR="$CLAUDE_DIR/skills"
@@ -88,22 +91,34 @@ link_component() {
         return
     fi
 
-    if [ -L "$dest" ]; then
-        local current_target
-        current_target=$(readlink "$dest")
-        if [ "$current_target" = "$src" ]; then
-            echo -e "  ${GREEN}[已安裝] $name${NC}"
-            return
+    if $LINK_MODE; then
+        # --dev: symlink mode
+        if [ -L "$dest" ]; then
+            local current_target
+            current_target=$(readlink "$dest")
+            if [ "$current_target" = "$src" ]; then
+                echo -e "  ${GREEN}[已安裝 (dev)] $name${NC}"
+                return
+            fi
+            rm "$dest"
+        elif [ -e "$dest" ]; then
+            echo -e "  ${YELLOW}[備份] $name — 備份現有檔案到 ${dest}.bak${NC}"
+            mv "$dest" "${dest}.bak"
         fi
-        rm "$dest"
-    elif [ -e "$dest" ]; then
-        echo -e "  ${YELLOW}[備份] $name — 備份現有檔案到 ${dest}.bak${NC}"
-        mv "$dest" "${dest}.bak"
+        mkdir -p "$(dirname "$dest")"
+        ln -s "$src" "$dest"
+        echo -e "  ${GREEN}[安裝 (dev)] $name${NC}"
+    else
+        # default: copy mode
+        if [ -L "$dest" ]; then
+            rm "$dest"
+        elif [ -e "$dest" ]; then
+            rm -rf "$dest"
+        fi
+        mkdir -p "$(dirname "$dest")"
+        cp -r "$src" "$dest"
+        echo -e "  ${GREEN}[安裝] $name${NC}"
     fi
-
-    mkdir -p "$(dirname "$dest")"
-    ln -s "$src" "$dest"
-    echo -e "  ${GREEN}[安裝] $name${NC}"
 }
 
 timestamp_suffix() {
@@ -195,21 +210,35 @@ cleanup_managed_skill_links() {
         return
     fi
 
-    local entry
-    for entry in "$SKILLS_DIR"/* "$SKILLS_DIR"/.*; do
-        if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
-            continue
-        fi
-        local name
-        name=$(basename "$entry")
-        if [ "$name" = "." ] || [ "$name" = ".." ] || [ "$name" = ".goldband-profile" ]; then
-            continue
-        fi
-
-        if is_repo_skill_link "$entry"; then
-            rm "$entry"
-        fi
-    done
+    # Use profile file as source of truth (works for both copy and symlink installs)
+    if [ -f "$SKILL_PROFILE_FILE" ]; then
+        local skills_line
+        skills_line=$(grep '^skills=' "$SKILL_PROFILE_FILE" 2>/dev/null || true)
+        local skills_csv="${skills_line#skills=}"
+        local skill
+        IFS=',' read -r -a skill_array <<< "$skills_csv"
+        for skill in "${skill_array[@]}"; do
+            [ -z "$skill" ] && continue
+            rm -rf "${SKILLS_DIR:?}/$skill"
+        done
+        rm -rf "$SKILLS_DIR/README.md" "$SKILLS_DIR/skill-rules.json"
+    else
+        # Fallback: legacy symlink detection
+        local entry
+        for entry in "$SKILLS_DIR"/* "$SKILLS_DIR"/.*; do
+            if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
+                continue
+            fi
+            local name
+            name=$(basename "$entry")
+            if [ "$name" = "." ] || [ "$name" = ".." ] || [ "$name" = ".goldband-profile" ]; then
+                continue
+            fi
+            if is_repo_skill_link "$entry"; then
+                rm "$entry"
+            fi
+        done
+    fi
 
     rm -f "$SKILL_PROFILE_FILE"
 }
@@ -224,7 +253,11 @@ link_skill_entry() {
         backup_existing_path "$dest"
     fi
 
-    ln -s "$source" "$dest"
+    if $LINK_MODE; then
+        ln -s "$source" "$dest"
+    else
+        cp -r "$source" "$dest"
+    fi
 }
 
 write_skill_profile_file() {
@@ -301,21 +334,34 @@ cleanup_managed_codex_skill_links() {
         return
     fi
 
-    local entry
-    for entry in "$CODEX_SKILLS_DIR"/* "$CODEX_SKILLS_DIR"/.*; do
-        if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
-            continue
-        fi
-        local name
-        name=$(basename "$entry")
-        if [ "$name" = "." ] || [ "$name" = ".." ] || [ "$name" = ".goldband-profile" ]; then
-            continue
-        fi
-
-        if is_repo_skill_link "$entry"; then
-            rm "$entry"
-        fi
-    done
+    # Use profile file as source of truth (works for both copy and symlink installs)
+    if [ -f "$CODEX_SKILL_PROFILE_FILE" ]; then
+        local skills_line
+        skills_line=$(grep '^skills=' "$CODEX_SKILL_PROFILE_FILE" 2>/dev/null || true)
+        local skills_csv="${skills_line#skills=}"
+        local skill
+        IFS=',' read -r -a skill_array <<< "$skills_csv"
+        for skill in "${skill_array[@]}"; do
+            [ -z "$skill" ] && continue
+            rm -rf "${CODEX_SKILLS_DIR:?}/$skill"
+        done
+    else
+        # Fallback: legacy symlink detection
+        local entry
+        for entry in "$CODEX_SKILLS_DIR"/* "$CODEX_SKILLS_DIR"/.*; do
+            if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
+                continue
+            fi
+            local name
+            name=$(basename "$entry")
+            if [ "$name" = "." ] || [ "$name" = ".." ] || [ "$name" = ".goldband-profile" ]; then
+                continue
+            fi
+            if is_repo_skill_link "$entry"; then
+                rm "$entry"
+            fi
+        done
+    fi
 
     rm -f "$CODEX_SKILL_PROFILE_FILE"
 }
@@ -392,6 +438,15 @@ show_help() {
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
+    echo ""
+    echo "Flag:"
+    echo "  --dev       使用 symlink 模式（預設為複製）"
+    echo "              適合正在修改 goldband 本身時使用"
+    echo "              注意：repo 路徑移動後 symlink 會失效，需重新安裝"
+    echo ""
+    echo "升級："
+    echo "  重新執行相同的安裝指令即可覆蓋更新（複製模式會直接覆寫）"
+    echo "  例：./install.sh pack-core"
     echo ""
     echo "範例:"
     echo "  ./install.sh              # 安裝 pack-core（預設）"
@@ -668,9 +723,9 @@ show_status() {
         if [ -L "$path" ]; then
             local target
             target=$(readlink "$path")
-            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
+            echo -e "  ${GREEN}[OK (dev)]${NC} $name -> $target"
         elif [ -e "$path" ]; then
-            echo -e "  ${YELLOW}[存在但非 symlink]${NC} $name: $path"
+            echo -e "  ${GREEN}[OK]${NC} $name"
         else
             echo -e "  ${RED}[未安裝]${NC} $name"
         fi
@@ -705,9 +760,9 @@ show_status() {
         if [ -L "$path" ]; then
             local target
             target=$(readlink "$path")
-            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
+            echo -e "  ${GREEN}[OK (dev)]${NC} $name -> $target"
         elif [ -e "$path" ]; then
-            echo -e "  ${YELLOW}[存在但非 symlink]${NC} $name: $path"
+            echo -e "  ${GREEN}[OK]${NC} $name"
         else
             echo -e "  ${RED}[未安裝]${NC} $name"
         fi
@@ -747,21 +802,14 @@ do_uninstall() {
         IFS=',' read -r -a skill_array <<< "$skills_csv"
         for skill in "${skill_array[@]}"; do
             [ -z "$skill" ] && continue
-            if [ -L "$SKILLS_DIR/$skill" ] && is_repo_skill_link "$SKILLS_DIR/$skill"; then
-                rm "$SKILLS_DIR/$skill"
-            fi
+            rm -rf "${SKILLS_DIR:?}/$skill"
         done
-        if [ -L "$SKILLS_DIR/README.md" ] && is_repo_skill_link "$SKILLS_DIR/README.md"; then
-            rm "$SKILLS_DIR/README.md"
-        fi
-        if [ -L "$SKILLS_DIR/skill-rules.json" ] && is_repo_skill_link "$SKILLS_DIR/skill-rules.json"; then
-            rm "$SKILLS_DIR/skill-rules.json"
-        fi
+        rm -rf "$SKILLS_DIR/README.md" "$SKILLS_DIR/skill-rules.json"
         rm -f "$SKILL_PROFILE_FILE"
         if [ -z "$(ls -A "$SKILLS_DIR" 2>/dev/null)" ]; then
             rmdir "$SKILLS_DIR"
         fi
-        echo -e "  ${GREEN}[移除] skills profile links${NC}"
+        echo -e "  ${GREEN}[移除] skills${NC}"
     fi
 
     local paths=("$CLAUDE_DIR/commands" "$CLAUDE_DIR/contexts" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/hooks/scripts")
@@ -770,11 +818,17 @@ do_uninstall() {
         if [ -L "$p" ]; then
             rm "$p"
             echo -e "  ${GREEN}[移除] $p${NC}"
+        elif [ -e "$p" ]; then
+            rm -rf "$p"
+            echo -e "  ${GREEN}[移除] $p${NC}"
         fi
     done
 
-    # Remove statusline script symlink
+    # Remove statusline script (symlink or copy)
     if [ -L "$CLAUDE_DIR/statusline-command.sh" ]; then
+        rm "$CLAUDE_DIR/statusline-command.sh"
+        echo -e "  ${GREEN}[移除] statusline-command.sh${NC}"
+    elif [ -f "$CLAUDE_DIR/statusline-command.sh" ]; then
         rm "$CLAUDE_DIR/statusline-command.sh"
         echo -e "  ${GREEN}[移除] statusline-command.sh${NC}"
     fi
@@ -796,15 +850,13 @@ do_uninstall() {
         IFS=',' read -r -a skill_array <<< "$skills_csv"
         for skill in "${skill_array[@]}"; do
             [ -z "$skill" ] && continue
-            if [ -L "$CODEX_SKILLS_DIR/$skill" ] && is_repo_skill_link "$CODEX_SKILLS_DIR/$skill"; then
-                rm "$CODEX_SKILLS_DIR/$skill"
-            fi
+            rm -rf "${CODEX_SKILLS_DIR:?}/$skill"
         done
         rm -f "$CODEX_SKILL_PROFILE_FILE"
         if [ -z "$(ls -A "$CODEX_SKILLS_DIR" 2>/dev/null)" ]; then
             rmdir "$CODEX_SKILLS_DIR"
         fi
-        echo -e "  ${GREEN}[移除] Codex skills profile links${NC}"
+        echo -e "  ${GREEN}[移除] Codex skills${NC}"
     fi
 
     local codex_paths=("$CODEX_CONFIG_FILE" "$CODEX_AGENTS_FILE" "$CODEX_RULES_DIR")
@@ -812,6 +864,9 @@ do_uninstall() {
     for p in "${codex_paths[@]}"; do
         if [ -L "$p" ]; then
             rm "$p"
+            echo -e "  ${GREEN}[移除] $p${NC}"
+        elif [ -e "$p" ]; then
+            rm -rf "$p"
             echo -e "  ${GREEN}[移除] $p${NC}"
         fi
     done
@@ -829,6 +884,23 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 echo -e "${YELLOW}倉庫位置：${NC}$REPO_DIR"
 echo ""
+
+# Parse --dev flag (symlink mode for active goldband development)
+_filtered_args=()
+for _arg in "$@"; do
+    if [ "$_arg" = "--dev" ]; then
+        LINK_MODE=true
+    else
+        _filtered_args+=("$_arg")
+    fi
+done
+set -- "${_filtered_args[@]}"
+unset _filtered_args _arg
+
+if $LINK_MODE; then
+    echo -e "${CYAN}模式：symlink（--dev）— hooks/scripts 等將以 symlink 指向 repo${NC}"
+    echo ""
+fi
 
 # 無參數 = 安裝核心包
 if [ $# -eq 0 ]; then

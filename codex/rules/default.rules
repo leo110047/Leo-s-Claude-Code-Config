@@ -92,4 +92,4 @@ prefix_rule(
         "helm uninstall demo",
     ],
 )
-prefix_rule(pattern=["rm", "-rf", "/Users/leo/.claude/settings.json.bak", "/Users/leo/.claude/settings.json.bak.1773840983", "/Users/leo/.codex/config.toml.bak", "/Users/leo/.codex/AGENTS.md.bak", "/Users/leo/.codex/rules.bak"], decision="allow")
+prefix_rule(pattern=["npm", "test"], decision="allow")
