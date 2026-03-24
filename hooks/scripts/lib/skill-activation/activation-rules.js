@@ -1,9 +1,15 @@
+const fs = require('fs');
+const path = require('path');
+
 const PRIORITY_ORDER = {
   critical: 0,
   high: 1,
   medium: 2,
   low: 3
 };
+
+const ARCHITECTURE_TERMS_PATTERN = /\b(design|architecture|structure|pattern)\b/i;
+const PERFORMANCE_TERMS_PATTERN = /\b(slow|performance|optimi[sz]e|latency|bottleneck)\b/i;
 
 const RULES = [
   {
@@ -144,6 +150,86 @@ const RULES = [
   }
 ];
 
+const GSTACK_RULES = [
+  {
+    skill: 'gstack/investigate',
+    priority: 'high',
+    hint: 'Use /investigate from gstack for workflow-driven root-cause debugging and scoped edit boundaries.',
+    keywords: ['investigate', 'root cause', 'trace data flow', 'debug workflow'],
+    patterns: [/\b(debug|bug|error|crash|500|failing test)\b/i]
+  },
+  {
+    skill: 'gstack/review',
+    priority: 'high',
+    hint: 'Use /review from gstack for a staff-engineer style PR review pass.',
+    keywords: ['review pr', 'review branch', 'audit this diff', 'staff engineer review'],
+    patterns: [/\b(review|pr|pull request)\b/i]
+  },
+  {
+    skill: 'gstack/qa',
+    priority: 'high',
+    hint: 'Use /qa from gstack for browser-based UI, staging, and E2E verification.',
+    keywords: ['qa', 'browser', 'staging url', 'ui bug', 'e2e', 'playwright'],
+    patterns: [/\b(browser|ui|e2e|staging|qa)\b/i]
+  },
+  {
+    skill: 'gstack/cso',
+    priority: 'high',
+    hint: 'Use /cso from gstack for deeper OWASP + STRIDE security review.',
+    keywords: ['cso', 'owasp', 'stride', 'security audit', 'threat model'],
+    patterns: [/\b(security|owasp|stride|threat model)\b/i]
+  },
+  {
+    skill: 'gstack/ship',
+    priority: 'medium',
+    hint: 'Use /ship from gstack for release workflow, PR creation, and pre-landing checks.',
+    keywords: ['ship', 'release', 'open pr', 'deploy prep'],
+    patterns: [/\b(ship|release|open pr|deployment)\b/i]
+  },
+  {
+    skill: 'gstack/plan-eng-review',
+    priority: 'medium',
+    hint: 'Use /plan-eng-review from gstack for architecture and implementation plan review.',
+    keywords: ['eng review', 'architecture review', 'implementation review'],
+    patterns: [/\b(plan|architecture|design)\b.{0,24}\b(review|feature|implementation)\b/i]
+  },
+  {
+    skill: 'gstack/guard',
+    priority: 'medium',
+    hint: 'Use /guard from gstack for workflow-local safety rails (careful + scoped freeze).',
+    keywords: ['guard mode', 'safety net', 'be careful', 'guardrails'],
+    patterns: [/\b(be careful|guard|safety net|guardrails)\b/i]
+  },
+  {
+    skill: 'gstack/freeze',
+    priority: 'medium',
+    hint: 'Use /freeze from gstack when you want to restrict edits to one directory, not a fully read-only session.',
+    keywords: ['restrict edits', 'only edit this folder', 'scope edits', 'lock edits to directory'],
+    patterns: [/\b(restrict|scope|limit|lock)\b.{0,24}\b(edit|edits|changes)\b/i]
+  }
+];
+
+function findUpward(startDir, relativePath) {
+  let current = startDir;
+  while (current && current !== path.dirname(current)) {
+    const candidate = path.join(current, relativePath);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+    current = path.dirname(current);
+  }
+  return null;
+}
+
+function isGstackAvailable() {
+  const cwd = process.cwd();
+  const home = process.env.HOME || '';
+  return Boolean(
+    findUpward(cwd, path.join('.claude', 'skills', 'gstack', 'SKILL.md'))
+    || (home && fs.existsSync(path.join(home, '.claude', 'skills', 'gstack', 'SKILL.md')))
+  );
+}
+
 function normalizePrompt(prompt) {
   return String(prompt || '')
     .toLowerCase()
@@ -199,8 +285,8 @@ function applyConflictRules(matches, normalizedPrompt) {
   }
 
   if (names.has('performance-optimization') && names.has('backend-patterns')) {
-    const architectureTerms = /\b(design|architecture|structure|pattern)\b/i.test(normalizedPrompt);
-    const performanceTerms = /\b(slow|performance|optimi[sz]e|latency|bottleneck)\b/i.test(normalizedPrompt);
+    const architectureTerms = ARCHITECTURE_TERMS_PATTERN.test(normalizedPrompt);
+    const performanceTerms = PERFORMANCE_TERMS_PATTERN.test(normalizedPrompt);
 
     if (architectureTerms && !performanceTerms) {
       return matches.filter(match => match.skill !== 'performance-optimization');
@@ -219,8 +305,11 @@ function matchPrompt(prompt) {
   const normalizedPrompt = normalizePrompt(originalPrompt);
   if (!normalizedPrompt) return [];
 
+  const activeRules = isGstackAvailable()
+    ? [...RULES, ...GSTACK_RULES]
+    : RULES;
   const matches = [];
-  for (const rule of RULES) {
+  for (const rule of activeRules) {
     const keywordResult = countKeywordHits(normalizedPrompt, rule.keywords);
     const patternResult = countPatternHits(originalPrompt, rule.patterns);
     const score = keywordResult.score + patternResult.score;

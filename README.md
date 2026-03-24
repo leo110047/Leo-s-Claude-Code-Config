@@ -36,7 +36,12 @@ cd goldband
 # 3. 安裝 Codex（可選）
 ./install.sh codex-full
 
-# 4. 重啟 Claude Code / Codex，完成
+# 4. 安裝 gstack workflow pack（可選，需先有 gstack repo）
+GSTACK_REPO_DIR=../gstack ./install.sh gstack
+GSTACK_REPO_DIR=../gstack ./install.sh gstack-codex
+GSTACK_REPO_DIR=../gstack ./install.sh all-with-gstack
+
+# 5. 重啟 Claude Code / Codex，完成
 ```
 
 **升級**：重新執行相同指令即可覆蓋更新。
@@ -157,9 +162,26 @@ full  →  dev + ci-cd-integration、commit-conventions、decision-log、
 ./install.sh codex-core   # 核心設定 + core skills
 ./install.sh codex-full   # 完整設定 + 15 個 portable skills
 ./install.sh all-tools    # Claude Code + Codex 一次全裝
+GSTACK_REPO_DIR=../gstack ./install.sh gstack
+GSTACK_REPO_DIR=../gstack ./install.sh gstack-codex
+GSTACK_REPO_DIR=../gstack ./install.sh all-with-gstack
 ```
 
 Claude runtime 綁定的 skills（`careful-mode`、`freeze-mode` 等）不安裝到 Codex 端。
+
+### 與 gstack 整合
+
+goldband 管全域 guardrails / host adapter，gstack 管高階 workflow skills。
+
+- goldband `careful-mode`: 全域硬阻擋 destructive Bash
+- goldband `freeze-mode`: inspection-only / read-only session
+- gstack `/careful`: workflow-local warning layer
+- gstack `/freeze`: 限制 Edit/Write 到指定目錄
+- gstack `/guard`: `/careful` + `/freeze`
+
+建議：
+- prod、shared env、唯讀調查 → 用 goldband 模式
+- scoped edit、review / QA / ship workflow → 用 gstack skills
 
 ---
 

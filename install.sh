@@ -405,6 +405,69 @@ install_codex_skills_profile() {
     echo -e "  ${GREEN}[安裝] Codex Skills Profile: $profile (${installed} 個)${NC}"
 }
 
+resolve_gstack_repo_dir() {
+    local candidates=()
+
+    if [ -n "${GSTACK_REPO_DIR:-}" ]; then
+        candidates+=("$GSTACK_REPO_DIR")
+    fi
+
+    candidates+=(
+        "$HOME/.claude/skills/gstack"
+        "$HOME/.codex/skills/gstack"
+        "$HOME/gstack"
+        "$REPO_DIR/../gstack"
+    )
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        [ -n "$candidate" ] || continue
+        if [ -f "$candidate/setup" ]; then
+            local resolved
+            resolved="$(cd "$candidate" 2>/dev/null && pwd -P)" || continue
+            echo "$resolved"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+read_gstack_version() {
+    local repo_dir="$1"
+    if [ -f "$repo_dir/VERSION" ]; then
+        tr -d '\n' < "$repo_dir/VERSION"
+        return 0
+    fi
+    return 1
+}
+
+install_gstack_host() {
+    local host="$1"
+    local repo_dir
+
+    if ! repo_dir="$(resolve_gstack_repo_dir)"; then
+        echo -e "${RED}找不到 gstack repo。${NC}"
+        echo -e "  可設定 ${CYAN}GSTACK_REPO_DIR=/path/to/gstack${NC} 後重試"
+        echo -e "  或將 gstack clone 到 ${CYAN}\$HOME/gstack${NC} / ${CYAN}$REPO_DIR/../gstack${NC}"
+        exit 1
+    fi
+
+    local version="unknown"
+    version="$(read_gstack_version "$repo_dir" 2>/dev/null || echo "unknown")"
+    echo -e "${GREEN}安裝 gstack (${host})...${NC}"
+    echo -e "  repo: ${CYAN}$repo_dir${NC}"
+    echo -e "  version: ${CYAN}$version${NC}"
+    echo ""
+    (
+        cd "$repo_dir" || {
+            echo "  [錯誤] 無法進入 gstack repo: $repo_dir"
+            return 1
+        }
+        ./setup --host "$host"
+    )
+}
+
 show_help() {
     echo "用法: ./install.sh [選項]"
     echo ""
@@ -432,7 +495,11 @@ show_help() {
     echo "  codex-agents 只安裝 ~/.codex/AGENTS.md"
     echo "  codex-rules  只安裝 ~/.codex/rules"
     echo "  codex-skills 安裝 Codex portable skills 到 ~/.agents/skills"
+    echo "  gstack      安裝 gstack 到 Claude Code（薄封裝，呼叫 gstack ./setup --host claude）"
+    echo "  gstack-codex 安裝 gstack 到 Codex（薄封裝，呼叫 gstack ./setup --host codex）"
+    echo "  gstack-auto 安裝 gstack 到自動偵測到的 host"
     echo "  all-tools   安裝 Claude all-full + Codex full"
+    echo "  all-with-gstack 安裝 Claude + Codex 全組件，並呼叫 gstack ./setup --host auto"
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
@@ -449,6 +516,9 @@ show_help() {
     echo "  ./install.sh skills-core  # 只裝核心 skills（建議日常）"
     echo "  ./install.sh skills-full  # 全量 skills"
     echo "  ./install.sh codex-full   # Codex 全量設定"
+    echo "  ./install.sh gstack       # 安裝 gstack 到 Claude Code"
+    echo "  ./install.sh gstack-codex # 安裝 gstack 到 Codex"
+    echo "  GSTACK_REPO_DIR=../gstack ./install.sh all-with-gstack"
     echo "  ./install.sh all-tools    # Claude + Codex 全部安裝"
     echo "  ./install.sh unity        # 在 Unity 專案中安裝"
     echo "  ./install.sh status       # 檢查狀態"
@@ -546,6 +616,11 @@ install_all_tools() {
     install_rules
     install_hooks
     install_codex_full
+}
+
+install_all_with_gstack() {
+    install_all_tools
+    install_gstack_host "auto"
 }
 
 install_commands() {
@@ -780,6 +855,33 @@ show_status() {
     else
         echo -e "  ${RED}[未安裝]${NC} codex skills"
     fi
+
+    echo ""
+    echo -e "${BLUE}gstack 狀態${NC}"
+
+    local gstack_claude_dir="$HOME/.claude/skills/gstack"
+    local gstack_codex_dir="$HOME/.codex/skills/gstack"
+    local gstack_version
+
+    if [ -d "$gstack_claude_dir" ]; then
+        gstack_version="$(read_gstack_version "$gstack_claude_dir" 2>/dev/null || echo "unknown")"
+        echo -e "  ${GREEN}[OK]${NC} gstack Claude install (${gstack_version})"
+    else
+        echo -e "  ${YELLOW}[未安裝]${NC} gstack Claude install"
+    fi
+
+    if [ -d "$gstack_codex_dir" ]; then
+        gstack_version="$(read_gstack_version "$gstack_codex_dir" 2>/dev/null || echo "unknown")"
+        echo -e "  ${GREEN}[OK]${NC} gstack Codex runtime (${gstack_version})"
+    else
+        echo -e "  ${YELLOW}[未安裝]${NC} gstack Codex runtime"
+    fi
+
+    if [ -d "$gstack_codex_dir" ]; then
+        local generated_count
+        generated_count=$(find "$HOME/.codex/skills" -maxdepth 1 -type l -name 'gstack-*' 2>/dev/null | wc -l | tr -d ' ')
+        echo -e "  ${GREEN}[OK]${NC} gstack Codex generated skills: ${generated_count:-0}"
+    fi
 }
 
 do_uninstall() {
@@ -992,10 +1094,24 @@ for arg in "$@"; do
         codex-skills)
             install_codex_skills
             ;;
+        gstack)
+            install_gstack_host "claude"
+            ;;
+        gstack-codex)
+            install_gstack_host "codex"
+            ;;
+        gstack-auto)
+            install_gstack_host "auto"
+            ;;
         all-tools)
             echo -e "${GREEN}安裝 Claude + Codex 全組件...${NC}"
             echo ""
             install_all_tools
+            ;;
+        all-with-gstack)
+            echo -e "${GREEN}安裝 Claude + Codex 全組件 + gstack...${NC}"
+            echo ""
+            install_all_with_gstack
             ;;
         unity)
             install_unity

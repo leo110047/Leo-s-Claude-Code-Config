@@ -7,7 +7,15 @@ const { spawnSync } = require('child_process');
 
 function resolveHookModule(relativePath) {
   const candidate = path.resolve(__dirname, '../../../../hooks/scripts/lib/hook-router', relativePath);
-  return fs.existsSync(candidate) ? require(candidate) : null;
+  if (!fs.existsSync(candidate)) {
+    return null;
+  }
+
+  try {
+    return require(candidate);
+  } catch {
+    return null;
+  }
 }
 
 const usageTelemetry = resolveHookModule('usage-telemetry.js');
@@ -236,6 +244,86 @@ function checkHookReferences(rootDir) {
   };
 }
 
+function readProfileFile(profilePath) {
+  if (!fs.existsSync(profilePath)) return null;
+  const raw = fs.readFileSync(profilePath, 'utf8');
+  const fields = {};
+  for (const line of raw.split('\n')) {
+    const idx = line.indexOf('=');
+    if (idx === -1) continue;
+    fields[line.slice(0, idx)] = line.slice(idx + 1);
+  }
+  return fields;
+}
+
+function checkGstackInstall(homeDir) {
+  const claudeDir = path.join(homeDir, '.claude', 'skills', 'gstack');
+  const codexDir = path.join(homeDir, '.codex', 'skills', 'gstack');
+  const result = {
+    claudeInstalled: false,
+    claudeVersion: null,
+    claudeChecks: [],
+    codexInstalled: false,
+    codexVersion: null,
+    codexChecks: [],
+    warnings: []
+  };
+
+  if (fs.existsSync(claudeDir)) {
+    result.claudeInstalled = true;
+    const versionPath = path.join(claudeDir, 'VERSION');
+    result.claudeVersion = fs.existsSync(versionPath)
+      ? fs.readFileSync(versionPath, 'utf8').trim() || 'unknown'
+      : 'unknown';
+
+    const claudeRequired = [
+      'setup',
+      'SKILL.md',
+      path.join('careful', 'SKILL.md'),
+      path.join('freeze', 'SKILL.md'),
+      path.join('review', 'SKILL.md'),
+      path.join('qa', 'SKILL.md')
+    ];
+    result.claudeChecks = claudeRequired.map(relativePath => ({
+      file: relativePath,
+      ok: fs.existsSync(path.join(claudeDir, relativePath))
+    }));
+  }
+
+  if (fs.existsSync(codexDir)) {
+    result.codexInstalled = true;
+    const versionPath = path.join(codexDir, 'VERSION');
+    result.codexVersion = fs.existsSync(versionPath)
+      ? fs.readFileSync(versionPath, 'utf8').trim() || 'unknown'
+      : 'unknown';
+
+    const codexSkillsRoot = path.join(homeDir, '.codex', 'skills');
+    const generatedSkills = fs.existsSync(codexSkillsRoot)
+      ? fs.readdirSync(codexSkillsRoot).filter(name => /^gstack-/.test(name))
+      : [];
+    result.codexChecks.push({
+      file: '~/.codex/skills/gstack-*',
+      ok: generatedSkills.length > 0,
+      detail: `${generatedSkills.length} generated skills`
+    });
+  }
+
+  const goldbandClaudeProfile = readProfileFile(path.join(homeDir, '.claude', 'skills', '.goldband-profile'));
+  if (result.claudeInstalled && goldbandClaudeProfile) {
+    const installedSkills = String(goldbandClaudeProfile.skills || '')
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+    if (installedSkills.includes('careful-mode') || installedSkills.includes('freeze-mode')) {
+      result.warnings.push(
+        'goldband careful-mode/freeze-mode and gstack safety skills are both available; use goldband for hard global guardrails, gstack for workflow-local guardrails.'
+      );
+    }
+  }
+
+  return result;
+}
+
 function runRouterReplay(rootDir) {
   const replayScript = path.join(rootDir, 'hooks', 'scripts', 'tools', 'replay-hook-router.js');
   if (!fs.existsSync(replayScript)) {
@@ -325,6 +413,7 @@ function runCodexExecpolicyCheck(rootDir, args) {
 }
 
 function buildSummary(rootDir, args) {
+  const homeDir = os.homedir();
   const jsonChecks = [
     validateJsonFile(rootDir, path.join('hooks', 'hooks.json')),
     validateJsonFile(rootDir, path.join('skills', 'global', 'skill-rules.json')),
@@ -347,6 +436,7 @@ function buildSummary(rootDir, args) {
   const replay = args.routerReplay ? runRouterReplay(rootDir) : null;
   const codexRuleChecks = [];
   const additionalWarnings = [];
+  const gstackInstall = checkGstackInstall(homeDir);
 
   if (isCodexAvailable()) {
     codexRuleChecks.push(
@@ -386,7 +476,8 @@ function buildSummary(rootDir, args) {
 
   const warnings = [
     ...frontmatterChecks.flatMap(item => item.warnings.map(warning => `${item.file}: ${warning}`)),
-    ...additionalWarnings
+    ...additionalWarnings,
+    ...gstackInstall.warnings
   ];
 
   return {
@@ -396,6 +487,7 @@ function buildSummary(rootDir, args) {
     requiredFileChecks,
     hookCheck,
     codexRuleChecks,
+    gstackInstall,
     skillCount: skillFiles.length,
     warnings,
     replay,
@@ -412,6 +504,9 @@ function printHuman(summary) {
   if (summary.codexRuleChecks.length > 0) {
     const passedCodexChecks = summary.codexRuleChecks.filter(item => item.ok).length;
     console.log(`Codex:   ${passedCodexChecks}/${summary.codexRuleChecks.length} execpolicy checks passed`);
+  }
+  if (summary.gstackInstall.claudeInstalled || summary.gstackInstall.codexInstalled) {
+    console.log(`gstack:  Claude=${summary.gstackInstall.claudeInstalled ? 'yes' : 'no'} Codex=${summary.gstackInstall.codexInstalled ? 'yes' : 'no'}`);
   }
   console.log('');
   console.log('JSON:');
@@ -436,6 +531,29 @@ function printHuman(summary) {
     console.log('Codex Execpolicy:');
     for (const item of summary.codexRuleChecks) {
       console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.label} — ${item.message}`);
+    }
+  }
+
+  if (summary.gstackInstall.claudeInstalled || summary.gstackInstall.codexInstalled) {
+    console.log('');
+    console.log('gstack:');
+    if (summary.gstackInstall.claudeInstalled) {
+      console.log(`  [OK] Claude install — ${summary.gstackInstall.claudeVersion || 'unknown'}`);
+      for (const item of summary.gstackInstall.claudeChecks) {
+        console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file}`);
+      }
+    } else {
+      console.log('  [INFO] Claude install not present');
+    }
+
+    if (summary.gstackInstall.codexInstalled) {
+      console.log(`  [OK] Codex runtime — ${summary.gstackInstall.codexVersion || 'unknown'}`);
+      for (const item of summary.gstackInstall.codexChecks) {
+        const suffix = item.detail ? ` — ${item.detail}` : '';
+        console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file}${suffix}`);
+      }
+    } else {
+      console.log('  [INFO] Codex runtime not present');
     }
   }
 
@@ -473,19 +591,23 @@ function main() {
     replayRequested: args.routerReplay,
     replayPassed: summary.replay ? summary.replay.ok : null
   });
-  usageTelemetry?.appendUsageEvent({
-    category: 'skill-script',
-    name: 'claude-config-verification',
-    action: args.routerReplay ? 'verify-config-with-replay' : 'verify-config',
-    sessionId: process.env.CLAUDE_SESSION_ID || null,
-    source: 'skills/global/claude-config-verification/scripts/verify-claude-config.js',
-    detail: {
-      ok: summary.ok,
-      skillCount: summary.skillCount,
-      errorCount: summary.errors.length,
-      warningCount: summary.warnings.length
-    }
-  });
+  try {
+    usageTelemetry?.appendUsageEvent({
+      category: 'skill-script',
+      name: 'claude-config-verification',
+      action: args.routerReplay ? 'verify-config-with-replay' : 'verify-config',
+      sessionId: process.env.CLAUDE_SESSION_ID || null,
+      source: 'skills/global/claude-config-verification/scripts/verify-claude-config.js',
+      detail: {
+        ok: summary.ok,
+        skillCount: summary.skillCount,
+        errorCount: summary.errors.length,
+        warningCount: summary.warnings.length
+      }
+    });
+  } catch {
+    // Telemetry is best-effort only.
+  }
 
   if (args.json) {
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
