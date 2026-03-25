@@ -473,6 +473,24 @@ write_goldband_wrapper_skill() {
         > "$dest_dir/SKILL.md"
 }
 
+rewrite_goldband_wrapper_runtime_paths() {
+    local skill_file="$1"
+    local tmp_file
+
+    [ -f "$skill_file" ] || return 0
+
+    tmp_file="$(mktemp)"
+    sed \
+        -e 's|~/.claude/skills/gstack|~/.claude/skills/workflow|g' \
+        -e 's|\.claude/skills/gstack|.claude/skills/workflow|g' \
+        -e 's|\$HOME/.codex/skills/gstack|$HOME/.codex/skills/workflow|g' \
+        -e 's|~/.codex/skills/gstack|~/.codex/skills/workflow|g' \
+        -e 's|\.agents/skills/gstack|.agents/skills/workflow|g' \
+        "$skill_file" > "$tmp_file"
+
+    mv "$tmp_file" "$skill_file"
+}
+
 workflow_wrapper_manifest() {
     cat <<'EOF'
 goldband-autoplan|autoplan|workflow-autoplan|自動跑完整計畫審查流程。
@@ -562,6 +580,46 @@ localize_goldband_wrapper_description() {
     rm -f "$temp_file"
 }
 
+hide_workflow_root_skill() {
+    local runtime_root="$1"
+    local source_root
+    local entry
+    local base
+
+    [ -e "$runtime_root" ] || return 0
+
+    if [ -L "$runtime_root" ]; then
+        source_root="$(readlink "$runtime_root")"
+        [ -n "$source_root" ] || return 1
+
+        rm -rf "$runtime_root"
+        mkdir -p "$runtime_root"
+
+        for entry in "$source_root"/.* "$source_root"/*; do
+            [ -e "$entry" ] || continue
+            base="${entry##*/}"
+            [ "$base" = "." ] || [ "$base" = ".." ] && continue
+            [ "$base" = "SKILL.md" ] && continue
+            ln -snf "$entry" "$runtime_root/$base"
+        done
+        return 0
+    fi
+
+    rm -f "$runtime_root/SKILL.md"
+}
+
+hide_workflow_root_skills() {
+    local host="$1"
+
+    if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
+        hide_workflow_root_skill "$HOME/.claude/skills/workflow"
+    fi
+
+    if [ "$host" = "codex" ] || [ "$host" = "auto" ]; then
+        hide_workflow_root_skill "$HOME/.codex/skills/workflow"
+    fi
+}
+
 create_goldband_workflow_aliases() {
     local claude_runtime_root="$HOME/.claude/skills/workflow"
     local codex_skills_root="$HOME/.codex/skills"
@@ -577,6 +635,7 @@ create_goldband_workflow_aliases() {
             if [ -f "$source_skill" ]; then
                 write_goldband_wrapper_skill "$source_skill" "$alias_path" "$claude_target" "$alias_name"
                 localize_goldband_wrapper_description "$alias_path/SKILL.md" "$alias_name"
+                rewrite_goldband_wrapper_runtime_paths "$alias_path/SKILL.md"
             fi
         fi
 
@@ -587,6 +646,7 @@ create_goldband_workflow_aliases() {
             if [ -f "$source_skill" ]; then
                 write_goldband_wrapper_skill "$source_skill" "$alias_path" "$source_name" "$alias_name"
                 localize_goldband_wrapper_description "$alias_path/SKILL.md" "$alias_name"
+                rewrite_goldband_wrapper_runtime_paths "$alias_path/SKILL.md"
             fi
         fi
     done < <(workflow_wrapper_manifest)
@@ -618,6 +678,11 @@ cleanup_workflow_user_entries() {
     for entry in "${codex_cleanup[@]}"; do
         [ -n "$entry" ] || continue
         rm -rf "$codex_skills_dir/$entry"
+    done
+
+    for entry in "$claude_skills_dir"/workflow.bak* "$codex_skills_dir"/workflow.bak*; do
+        [ -e "$entry" ] || continue
+        rm -rf "$entry"
     done
 }
 
@@ -690,6 +755,7 @@ install_workflow_host() {
     normalize_workflow_runtime_install "$host"
     create_goldband_workflow_aliases
     cleanup_workflow_user_entries
+    hide_workflow_root_skills "$host"
 }
 
 show_help() {

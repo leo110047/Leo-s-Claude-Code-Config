@@ -27,8 +27,7 @@ esac
 if [ ! -f "$JSONL_FILE" ]; then
   echo "gstack usage — no data yet"
   echo ""
-  echo "Usage data will appear here after you use gstack skills"
-  echo "with telemetry enabled (gstack-config set telemetry anonymous)."
+  echo "Usage data will appear here after you use gstack skills."
   exit 0
 fi
 

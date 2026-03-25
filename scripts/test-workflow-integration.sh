@@ -33,6 +33,15 @@ for skill in careful freeze investigate review qa ship browse; do
 name: $skill
 description: test fixture
 ---
+$(if [ "$skill" = "investigate" ]; then cat <<'SKILL_BODY'
+```bash
+_UPD=$(~/.claude/skills/gstack/bin/gstack-update-check 2>/dev/null || true)
+source <(~/.claude/skills/gstack/bin/gstack-repo-mode 2>/dev/null) || true
+```
+
+If output shows upgrades, read `~/.claude/skills/gstack/gstack-upgrade/SKILL.md`.
+SKILL_BODY
+fi)
 EOF
 done
 
@@ -70,6 +79,13 @@ install_codex() {
 name: workflow-$skill
 description: generated test fixture
 ---
+$(if [ "$skill" = "investigate" ]; then cat <<'SKILL_BODY'
+```bash
+GSTACK_ROOT="$HOME/.codex/skills/gstack"
+[ -n "$_ROOT" ] && [ -d "$_ROOT/.agents/skills/gstack" ] && GSTACK_ROOT="$_ROOT/.agents/skills/gstack"
+```
+SKILL_BODY
+fi)
 SKILL
   done
   printf '%s\n' "$VERSION" > "$HOME/.codex/skills/workflow/.installed-version"
@@ -114,8 +130,12 @@ HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-workflow-c
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" all-with-workflow >/tmp/goldband-all-with-workflow.log
 
 echo "[3/5] verify symlinks"
-test -L "$TMP_HOME/.claude/skills/workflow"
-test -L "$TMP_HOME/.codex/skills/workflow"
+test -d "$TMP_HOME/.claude/skills/workflow"
+test -d "$TMP_HOME/.codex/skills/workflow"
+test ! -e "$TMP_HOME/.claude/skills/workflow/SKILL.md"
+test ! -e "$TMP_HOME/.codex/skills/workflow/SKILL.md"
+test -e "$TMP_HOME/.claude/skills/workflow/freeze"
+test -e "$TMP_HOME/.codex/skills/workflow/review"
 test -f "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
 test -f "$TMP_HOME/.claude/skills/goldband-review/SKILL.md"
 test -f "$TMP_HOME/.claude/skills/goldband-qa/SKILL.md"
@@ -138,6 +158,18 @@ grep -q '^name: goldband-investigate$' "$TMP_HOME/.codex/skills/goldband-investi
 grep -q '^name: goldband-review$' "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 grep -q '^name: goldband-qa$' "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
 grep -q '^name: goldband-ship$' "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
+grep -q '~/.claude/skills/workflow/bin/gstack-update-check' "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
+grep -q '\$HOME/.codex/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -q '\.agents/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+if grep -q '~/.claude/skills/gstack' "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"; then
+  exit 1
+fi
+if grep -q '\$HOME/.codex/skills/gstack' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"; then
+  exit 1
+fi
+if grep -q '\.agents/skills/gstack' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"; then
+  exit 1
+fi
 
 echo "[4/5] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
