@@ -1,3 +1,7 @@
+---
+description: Comprehensive health check for the goldband installation and repo assets.
+---
+
 Perform a comprehensive health check of the goldband installation and repo assets.
 
 ## Instructions

@@ -38,6 +38,8 @@ description: test fixture
 ---
 $(if [ "$skill" = "investigate" ]; then cat <<'SKILL_BODY'
 ```bash
+WORKFLOW_BIN="$HOME/.codex/skills/workflow/bin"
+_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")
 source <(~/.claude/skills/workflow/bin/workflow-repo-mode 2>/dev/null) || true
 ```
 SKILL_BODY
@@ -57,7 +59,32 @@ chmod +x "$TMP_WORKFLOW/bin/workflow-repo-mode"
 
 cat > "$TMP_WORKFLOW/bin/workflow-config" <<'EOF'
 #!/usr/bin/env bash
-exit 0
+set -euo pipefail
+STATE_DIR="${WORKFLOW_STATE_DIR:-$HOME/.workflow}"
+CONFIG_FILE="$STATE_DIR/config.yaml"
+case "${1:-}" in
+  get)
+    KEY="${2:?missing key}"
+    grep -E "^${KEY}:" "$CONFIG_FILE" 2>/dev/null | tail -1 | awk '{print $2}' | tr -d '[:space:]' || true
+    ;;
+  set)
+    KEY="${2:?missing key}"
+    VALUE="${3:?missing value}"
+    mkdir -p "$STATE_DIR"
+    if grep -qE "^${KEY}:" "$CONFIG_FILE" 2>/dev/null; then
+      sed -i '' "s/^${KEY}:.*/${KEY}: ${VALUE}/" "$CONFIG_FILE"
+    else
+      echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"
+    fi
+    ;;
+  list)
+    cat "$CONFIG_FILE" 2>/dev/null || true
+    ;;
+  *)
+    echo "Usage: workflow-config {get|set|list} [key] [value]" >&2
+    exit 1
+    ;;
+esac
 EOF
 chmod +x "$TMP_WORKFLOW/bin/workflow-config"
 
@@ -100,6 +127,8 @@ $(if [ "$skill" = "investigate" ]; then cat <<'SKILL_BODY'
 ```bash
 WORKFLOW_ROOT="$HOME/.codex/skills/workflow"
 [ -n "$_ROOT" ] && [ -d "$_ROOT/.agents/skills/workflow" ] && WORKFLOW_ROOT="$_ROOT/.agents/skills/workflow"
+WORKFLOW_BIN="$WORKFLOW_ROOT/bin"
+_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")
 ```
 SKILL_BODY
 fi)
@@ -166,6 +195,8 @@ test -f "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
+test -f "$TMP_HOME/.claude/commands/goldband-language.md"
+test -f "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh"
 test ! -e "$TMP_HOME/.claude/skills/review"
 test ! -e "$TMP_HOME/.claude/skills/goldband-upgrade"
 test ! -e "$TMP_HOME/.codex/skills/workflow-review"
@@ -181,6 +212,13 @@ grep -q '^name: goldband-investigate$' "$TMP_HOME/.codex/skills/goldband-investi
 grep -q '^name: goldband-review$' "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 grep -q '^name: goldband-qa$' "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
 grep -q '^name: goldband-ship$' "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
+test "$(sed -n '1p' "$TMP_HOME/.claude/commands/goldband-language.md")" = "---"
+grep -q '^description: 重述需求、評估風險並建立分階段實作計畫；在使用者確認前禁止動 code。$' "$TMP_HOME/.claude/commands/plan.md"
+grep -q '提問、建議、選項、摘要與指令說明語言' "$TMP_HOME/.claude/commands/goldband-language.md"
+grep -q '^  系統化除錯與根因調查。$' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -q 'workflow-config get goldband_language' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -q 'GOLDBAND_LANGUAGE:' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -q '支援 `zh-TW` 與 `en`' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q '\$HOME/.codex/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q '\.agents/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 if grep -q "~/.claude/skills/$LEGACY_RUNTIME_NAME" "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"; then
@@ -193,10 +231,16 @@ if grep -q ".agents/skills/$LEGACY_RUNTIME_NAME" "$TMP_HOME/.codex/skills/goldba
   exit 1
 fi
 
+HOME="$TMP_HOME" "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh" set en >/tmp/goldband-language-sync.log
+grep -q '^description: Restate requirements, assess risks, and create a step-by-step implementation plan. WAIT for user CONFIRM before touching code.$' "$TMP_HOME/.claude/commands/plan.md"
+grep -q '^description: Switch or inspect the language used by goldband workflow wrapper prompts and descriptions.$' "$TMP_HOME/.claude/commands/goldband-language.md"
+grep -q '^  Systematic debugging and root-cause investigation.$' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+
 echo "[4/5] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
 echo "$STATUS_OUTPUT" | grep -q "workflow Claude install"
 echo "$STATUS_OUTPUT" | grep -q "workflow Codex runtime (0.0.0-test)"
+echo "$STATUS_OUTPUT" | grep -q "goldband wrapper language (en)"
 
 echo "[5/5] verifier output"
 VERIFIER_OUTPUT="$(HOME="$TMP_HOME" node "$TMP_ROOT/skills/global/claude-config-verification/scripts/verify-claude-config.js" --json)"

@@ -13,7 +13,7 @@
 | 組件 | 數量 | 說明 |
 |------|------|------|
 | **Skills** | 20 全域 + 10 Unity | 除錯、安全、架構、測試、效能、API、資料庫、CI/CD、規劃、Subagent 等 |
-| **Commands** | 7 | `/plan`、`/verify`、`/checkpoint`、`/code-review`、`/discuss`、`/map-codebase`、`/verify-config` |
+| **Commands** | 8 | `/plan`、`/verify`、`/checkpoint`、`/code-review`、`/discuss`、`/map-codebase`、`/verify-config`、`/goldband-language` |
 | **Rules** | 3 | coding-style、security、git-workflow（每次對話自動載入） |
 | **Contexts** | 4 | dev、review、research、debug |
 | **Hooks** | Router + 6 phases | Skill 建議、careful/freeze 模式阻擋、context 監控、async format/typecheck、桌面通知 |
@@ -143,7 +143,7 @@ full  →  dev + ci-cd-integration、commit-conventions、decision-log、
 | `new-skill-scaffold` | 產生新 skill scaffold | LOW |
 | `skill-developer` | 建立/管理 skills | LOW |
 
-### Commands（7 個）
+### Commands（8 個）
 
 | 命令 | 用途 | 參數 |
 |------|------|------|
@@ -154,6 +154,7 @@ full  →  dev + ci-cd-integration、commit-conventions、decision-log、
 | `/code-review` | 兩階段安全+品質審查 | `--spec`、`--spec <file>` |
 | `/map-codebase` | 產出 codebase 結構分析文件 | `tech`、`arch`、`quality`、`conventions`、`testing` |
 | `/verify-config` | Claude + Codex 配置健康檢查 | `quick` |
+| `/goldband-language` | 切換 goldband wrappers 的提問語言 | `zh-TW`、`en` |
 
 ---
 
@@ -257,6 +258,12 @@ vendored workflow telemetry 目前維持 local-only；若你另外 self-host ven
 
 - 只裝 goldband：`./install.sh all-tools`
 - goldband + 內建 workflow：`./install.sh all-with-workflow`
+
+goldband workflow wrappers 的提問語言可切換：
+- 繁中：`~/.codex/skills/workflow/bin/workflow-config set goldband_language zh-TW`
+- 英文：`~/.codex/skills/workflow/bin/workflow-config set goldband_language en`
+- 未設定時預設 `zh-TW`
+- Claude CLI 可直接用 `/goldband-language` 互動切換；切換時也會同步更新已安裝的 `goldband-*` skill descriptions 與 command descriptions
 - 只補裝 Claude 端 workflow：`./install.sh workflow`
 - 只補裝 Codex 端 workflow：`./install.sh workflow-codex`
 
