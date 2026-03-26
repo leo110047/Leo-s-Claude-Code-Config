@@ -2,7 +2,7 @@
 
 > Shared engineering guardrails for Claude Code and Codex.
 
-[English](README.en.md)
+[English](README.en.md) | 中文
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
