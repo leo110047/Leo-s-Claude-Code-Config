@@ -4,15 +4,11 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-goldband 是一套給 **Claude Code** 和 **Codex** 共用的工程 guardrails。它提供：
-
-- Claude commands / hooks / contexts / rules
-- Codex config / AGENTS / rules / portable skills
-- 可選的內建 `workflow` runtime 與 `goldband-*` 高階流程 wrappers
+goldband 提供 Claude Code 和 Codex 共用的工程 guardrails。
 
 ## 快速開始
 
-一定要用 **`git clone`** 安裝完整 repo：
+一定要用 **`git clone`**：
 
 ```bash
 git clone https://github.com/leo110047/goldband.git
@@ -20,7 +16,8 @@ cd goldband
 ```
 
 不要只複製 `install.sh`，也不要用沒有 `.git` 的下載方式。
-goldband 現在是 **repo-linked install**，而且 `claude` / `codex` 的啟動前自動更新會依賴 git metadata；沒有完整 clone，就沒辦法安全更新。
+
+goldband 是 `repo-linked install`，啟動前自動更新也依賴 git metadata；沒有完整 clone 就不能安全更新。
 
 ### 推薦安裝
 
@@ -41,11 +38,9 @@ goldband 現在是 **repo-linked install**，而且 `claude` / `codex` 的啟動
 ./install.sh uninstall
 ```
 
-> hooks 合併需要 `jq`。macOS 可用 `brew install jq`。
+`hooks` 合併需要 `jq`。macOS 可用 `brew install jq`。
 
 ## 更新方式
-
-更新的正確方式是：
 
 ```bash
 cd /path/to/goldband
@@ -53,7 +48,9 @@ git pull --ff-only
 ./install.sh all-tools
 ```
 
-如果你平常從 terminal 直接輸入 `claude` 或 `codex`，goldband 也會在啟動前做一次安全的 self-update 檢查，但只會在以下條件成立時自動 fast-forward：
+如果你平常直接輸入 `claude` 或 `codex`，goldband 也會先做一次安全的 self-update 檢查。
+
+只有在下列條件成立時才會自動 fast-forward：
 
 - goldband repo 是乾淨工作樹
 - branch 是 `main`
@@ -64,21 +61,17 @@ git pull --ff-only
 
 ## 語言設定
 
-goldband workflow wrappers 的提問與說明語言可切換，支援：
-
-- `zh-TW`：預設
-- `en`
+支援 `zh-TW` 和 `en`，預設 `zh-TW`。
 
 ### Claude Code
-
-在 Claude CLI 裡直接輸入：
 
 ```text
 /goldband-language
 ```
 
 它會先問你要切到哪個語言。
-如果你已經知道目標，也可以直接：
+
+也可以直接指定：
 
 ```text
 /goldband-language zh-TW
@@ -105,13 +98,13 @@ goldband workflow wrappers 的提問與說明語言可切換，支援：
 - 高風險操作保護：`careful-mode`
 - 唯讀調查：`freeze-mode`
 
-如果你有裝 workflow，日常高階流程直接用 `goldband-*` wrappers 就好。
+如果你有裝 workflow，日常高階流程直接用 `goldband-*` wrappers。
 
 ## workflow
 
 goldband 內建 vendored `workflow` runtime，不需要另外保留外部 workflow repo。
 
-常見安裝組合：
+常見安裝：
 
 ```bash
 ./install.sh workflow
@@ -119,14 +112,14 @@ goldband 內建 vendored `workflow` runtime，不需要另外保留外部 workfl
 ./install.sh all-with-workflow
 ```
 
-安裝後的 canonical surfaces 是：
+安裝後的 canonical surfaces：
 
 - Claude runtime: `~/.claude/skills/workflow`
 - Codex runtime: `~/.codex/skills/workflow`
 - Shared state: `~/.workflow/`
 - 對外入口: `goldband-*`
 
-如果你要測試別的 runtime checkout，才需要覆寫：
+只有在你要測試別的 runtime checkout 時，才需要覆寫：
 
 ```bash
 WORKFLOW_REPO_DIR=/path/to/runtime ./install.sh all-with-workflow
