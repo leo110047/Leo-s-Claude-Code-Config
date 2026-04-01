@@ -37,3 +37,4 @@ Output Expectations:
 - Reference specific files and line numbers
 - Clearly distinguish facts (verified) from hypotheses (unverified)
 - Include confidence levels when appropriate
+- When you recommend a direction, include assumptions, failure modes, best alternative, and unknowns to verify

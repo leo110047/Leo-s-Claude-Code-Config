@@ -30,6 +30,23 @@ Backend architecture patterns and best practices for scalable server-side applic
 - Do not recommend microservices, queues, or eventing unless there is a concrete operational reason.
 - Do not add abstractions whose only justification is "clean architecture" without a real seam to protect.
 - Do not move domain logic into controllers/handlers just to keep service files short.
+- Do not recommend an architecture without naming the assumptions, failure modes, early warning signals, and the simpler or safer alternative.
+
+---
+
+## Recommendation Standard
+
+When this skill is used to recommend a direction, the answer must include:
+
+- **Recommendation** — the preferred structure or boundary
+- **Why now** — what current constraints make it the best fit
+- **Assumptions** — what must stay true for the recommendation to hold
+- **Failure modes** — how the recommendation can become unhealthy
+- **Early warning signals** — what to watch for before the architecture starts hurting
+- **Best alternative** — the next-best option and when it becomes better
+- **Unknowns** — what still needs validation before confidence is high
+
+Minimal code delta is not the goal here. Healthy boundaries and explicit failure handling are.
 
 ---
 

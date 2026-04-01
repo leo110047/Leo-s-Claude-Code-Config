@@ -1,380 +1,93 @@
-# Global Claude Code Skills
+# Global Skills
 
-這是你的全域 Claude Code skills 集合，優化過以避免衝突並防止 AI 幻覺。
+goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與 Codex 共用的方法論與專題工作流。
 
-## 📁 安裝方式
+## 這份文件的用途
 
-```bash
-# 將整個 skills 資料夾複製到 .claude 目錄
-cp -r skills ~/.claude/
+這份 README 只做三件事：
 
-# 或者符號連結（推薦，方便更新）
-ln -s $(pwd)/skills ~/.claude/skills
-```
+- 說明這批 global skills 在 repo 裡扮演什麼角色
+- 提供 skill inventory 與選用入口
+- 導到較細的操作、驗證與學習文件
 
-## 🎯 Skills 概覽
+它不是完整操作手冊，也不是測試腳本說明。
 
-### 核心開發 Skills
+## 安裝與來源
 
-| Skill | 用途 | 優先級 |
-|-------|------|--------|
-| **systematic-debugging** | 系統性調試，避免猜測式修復；作為共用 debug doctrine | 🔴 CRITICAL |
-| **evidence-based-coding** | 防止 AI 幻覺，要求證據支持所有聲明 | 🔴 CRITICAL |
-| **code-review-skill** | 代碼審查，多語言支援 | 🟡 Medium |
-| **backend-patterns** | 後端架構模式 | 🟡 Medium |
-| **performance-optimization** | 性能優化（前端+後端） | 🟡 Medium |
-| **claude-config-verification** | Claude Code 配置 repo 驗證、hook replay、plugin data probe | 🟡 Medium |
-| **careful-mode** | 按需啟用高風險操作防呆（force-push、destroy、delete 類命令） | 🟡 Medium |
-| **freeze-mode** | 按需啟用唯讀調查模式，阻擋 Edit/Write 與非唯讀 Bash | 🟡 Medium |
-
-### 專業領域 Skills
-
-| Skill | 用途 |
-|-------|------|
-| **testing-strategy** | 測試策略（Unit/Integration/E2E） |
-| **security-checklist** | 安全最佳實踐（OWASP Top 10） |
-| **commit-conventions** | Git commit 規範（Conventional Commits） |
-| **decision-log** | 架構決策記錄（ADR） |
-| **file-search** | 代碼搜尋（`rg` 優先，`sg` 僅在可用時使用） |
-| **new-skill-scaffold** | 產生符合 repo 慣例的新 skill scaffold |
-
-### 工具 Skills
-
-| Skill | 用途 |
-|-------|------|
-| **new-skill-scaffold** | 產生 skill scaffold、template、config stub |
-| **skill-developer** | 管理和創建 skills |
-
-## ⚙️ 配置文件
-
-### `skill-rules.json`
-
-全域衝突處理和優先級規則：
-
-- **防止衝突**: 當多個 skills 可能同時觸發時，自動選擇最合適的
-- **優先級管理**: `systematic-debugging` 和 `evidence-based-coding` 擁有最高優先級
-- **與 workflow pack 整合**: 若已安裝 workflow pack，`/goldband-investigate` 是主要 debug workflow 入口，`systematic-debugging` 提供底層方法論
-- **反幻覺規則**: 強制要求證據支持所有聲明
-
-## 🔍 Skill 衝突解決
-
-### 已解決的衝突
-
-#### 1. `backend-patterns` vs `performance-optimization`
-
-**衝突場景**: 用戶說「優化資料庫查詢」
-
-**解決方案**:
-- 如果提到「慢」、「優化」→ 使用 `performance-optimization`
-- 如果提到「設計」、「架構」→ 使用 `backend-patterns`
-
-#### 2. `code-review-skill` vs `systematic-debugging`
-
-**衝突場景**: 用戶說「Review 這個 PR，測試一直失敗」
-
-**解決方案**:
-- `systematic-debugging` 優先處理 bug
-- 修復完成後，`code-review-skill` 才接手審查
-
-## 🛡️ AI 幻覺防護機制
-
-### 三層防護
-
-1. **`evidence-based-coding` skill (新增)**
-   - 強制要求每個聲明都有證據
-   - 禁止使用「可能」、「應該」等推測性詞語
-   - 要求使用 Read/Grep/Glob 驗證所有聲明
-
-2. **`systematic-debugging` skill (已有)**
-   - 禁止猜測式修復
-   - 要求完整的根因分析
-   - 第 64 行: "If not reproducible → gather more data, don't guess"
-
-3. **`skill-rules.json` 反幻覺規則**
-   - `verify_before_claim`: 工具操作後驗證結果
-   - `no_assumed_apis`: 禁止假設 API 簽名
-   - `evidence_based_debugging`: 只基於證據做聲明
-
-### 實際效果
-
-**沒有防護時 (❌)**:
-```
-用戶：「getUserById 函數在哪裡？」
-Claude：「getUserById 函數可能在 src/services/user.service.ts，
-        它應該接受一個 ID 參數並返回 User 對象。」
-[完全是猜測！]
-```
-
-**有防護時 (✅)**:
-```
-用戶：「getUserById 函數在哪裡？」
-Claude：[使用 Grep 搜尋 "getUserById"]
-        [找到 src/api/user.ts:45]
-        [使用 Read 讀取實際代碼]
-        「我在 src/api/user.ts:45 找到了 getUserById。
-        它接受 (id: string, includeDeleted?: boolean) 參數，
-        返回 Promise<User | null>。這是實際代碼：
-        [顯示代碼]」
-[基於實際證據！]
-```
-
-## 📋 使用指南
-
-### 調試 Bug 時
-
-1. **自動觸發**: `systematic-debugging` (CRITICAL 優先級)
-2. **流程**:
-   - Phase 1: Root Cause Investigation (不要猜測)
-   - Phase 2: Pattern Analysis
-   - Phase 3: Hypothesis and Testing
-   - Phase 4: Implementation
-
-### Code Review 時
-
-1. **自動觸發**: `code-review-skill`
-2. **如果發現 bug**: 自動轉交給 `systematic-debugging`
-3. **如果發現性能問題**: 標記並建議使用 `performance-optimization`
-
-### 性能優化時
-
-1. **自動觸發**: `performance-optimization` (當提到「慢」、「優化」)
-2. **原則**: Measure First, Optimize Second
-3. **排除**: 架構設計（那是 `backend-patterns` 的職責）
-
-### 寫測試時
-
-1. **手動調用**: `/testing-strategy`
-2. **涵蓋**: Unit/Integration/E2E, TDD, 修復 flaky tests
-3. **不包括**: 調試失敗的測試（用 `systematic-debugging`）
-
-### 安全審查時
-
-1. **手動調用**: `/security-checklist`
-2. **涵蓋**: OWASP Top 10, 輸入驗證, 認證授權
-3. **不包括**: 滲透測試（僅防禦性安全）
-
-### 高風險操作時
-
-1. **手動調用**: `/careful-mode`
-2. **用途**: 暫時阻擋 `rm -rf`、force-push、destroy/delete 類 Bash 操作
-3. **流程**: 先用 `node scripts/careful-mode.js enable`，做完再 `disable`
-
-### 唯讀調查時
-
-1. **手動調用**: `/freeze-mode`
-2. **用途**: 將 session 鎖成 inspection-only，阻擋 Edit/Write 與非唯讀 Bash
-3. **流程**: 先用 `node scripts/freeze-mode.js enable`，調查完再 `disable`
-
-## 🚀 最佳實踐
-
-### DO ✅
-
-- **依賴 `evidence-based-coding`**: 讓它強制你驗證所有聲明
-- **讓 `systematic-debugging` 接管 bug**: 不要猜測式修復
-- **明確指定 skill**: 當自動選擇不對時，用 `/skill-name`
-- **提供上下文**: 詳細描述問題，幫助正確觸發 skill
-
-### DON'T ❌
-
-- **不要跳過證據收集**: 即使看起來「顯而易見」
-- **不要繞過 systematic-debugging**: 即使是「簡單的 bug」
-- **不要同時處理架構和性能**: 分開處理
-- **不要在有 bug 時 review**: 先修 bug
-
-## 📊 Skill 優先級圖
-
-```
-CRITICAL (紅色警報 - 絕對優先)
-├─ systematic-debugging (遇到 bug 時)
-└─ evidence-based-coding (全局強制)
-
-HIGH (高優先級)
-├─ security-checklist (安全問題)
-└─ performance-optimization (性能問題)
-
-MEDIUM (中等優先級)
-├─ code-review-skill
-├─ backend-patterns
-├─ testing-strategy
-├─ careful-mode
-└─ freeze-mode
-```
-
-## 📈 Usage Telemetry
-
-目前會追蹤：
-- prompt-trigger rule match 與 suggestion emission（`UserPromptSubmit`）
-- code-backed skills（例如 `claude-config-verification` scripts）
-- on-demand modes（`careful-mode` / `freeze-mode` 的 enable/disable）
-- mode enforcement block 事件
-
-摘要查看：
+在 goldband repo 內，global skills 通常透過 repo-linked 安裝進使用者目錄，而不是手動 `cp -r`：
 
 ```bash
-node hooks/scripts/tools/report-usage-summary.js --days 30
+./install.sh skills-core
+./install.sh skills-dev
+./install.sh skills-full
+./install.sh status
 ```
 
-限制：
-- 目前 runtime 沒有在 hook payload 直接提供 active skill 名單，所以仍然無法知道建議後的純 markdown skill 是否真的被採用；現有資料是 prompt-trigger telemetry，不是完整 skill usage truth。
+如果你是在維護這個 repo，請以 root README 與 `install.sh` 為準，不要把這個資料夾當成獨立發佈包。
 
-```text
-LOW (低優先級 - 工具性質)
-├─ commit-conventions
-├─ decision-log
-└─ file-search
-```
+## 技能分組
 
-## 🔧 自訂和擴展
+### 核心方法論
 
-### 新增專案級 Skill
+| Skill | 作用 |
+|------|------|
+| `evidence-based-coding` | 所有 claim 都要有文件、命令、測試或 log 證據 |
+| `systematic-debugging` | bug / test failure 的標準除錯流程 |
+| `file-search` | 用 `rg` 建圖與查定位 |
+| `planning-workflow` | 多步實作前的可驗證規劃流程 |
 
-在專案根目錄創建 `.claude/skills/`：
+### 常用工程決策
+
+| Skill | 作用 |
+|------|------|
+| `backend-patterns` | service boundary、architecture、backend shape |
+| `api-design` | endpoint contract、pagination、versioning、error format |
+| `database-patterns` | schema、migration、index、query 結構 |
+| `testing-strategy` | coverage、TDD、integration / E2E test strategy |
+| `performance-optimization` | profiling、bottleneck、latency / throughput |
+| `security-checklist` | auth、input validation、secret handling、OWASP 風險 |
+
+### 交付與維運
+
+| Skill | 作用 |
+|------|------|
+| `code-review-skill` | PR / diff review |
+| `ci-cd-integration` | GitHub Actions、CI/CD、cache、deploy gate |
+| `commit-conventions` | commit message / changelog 規範 |
+| `decision-log` | ADR / 決策記錄 |
+
+### 模式與工具
+
+| Skill | 作用 |
+|------|------|
+| `careful-mode` | 高風險 Bash 操作防呆 |
+| `freeze-mode` | 唯讀調查模式 |
+| `claude-config-verification` | Claude config / hook / plugin 驗證 |
+| `new-skill-scaffold` | 建立新 skill scaffold |
+| `skill-developer` | 維護 skill trigger / structure / references |
+| `subagent-development` | 可切給 subagent 的實作 / 審查流程 |
+
+## 什麼時候看哪份文件
+
+- 日常使用與 mode 操作：[`OPERATIONS.md`](OPERATIONS.md)
+- 測試、驗證與 conflict 檢查：[`VALIDATION.md`](VALIDATION.md)
+- 新人導覽與學習順序：[`LEARNING_PATH.md`](LEARNING_PATH.md)
+
+## 關於 `careful-mode` / `freeze-mode`
+
+這兩個 mode 平常應透過 skill / hook flow 使用，不需要手動找腳本。
+
+如果你真的要從 repo root 直接操作 state，請用完整路徑：
 
 ```bash
-my-project/
-├─ .claude/
-│  └─ skills/
-│     ├─ react-patterns/        # 專案特定的 React 模式
-│     ├─ api-conventions/        # 專案的 API 規範
-│     └─ database-schemas/       # 資料庫 schema 文檔
-└─ src/
+node skills/global/careful-mode/scripts/careful-mode.js status
+node skills/global/freeze-mode/scripts/freeze-mode.js status
 ```
 
-**專案 skill 優先於全域 skill**，可以覆蓋全域設定。
+不要把 `node scripts/careful-mode.js ...` 或 `node scripts/freeze-mode.js ...` 當成 repo root 指令。
 
-### 修改現有 Skill
+## 維護原則
 
-1. 編輯 `skills/{skill-name}/SKILL.md`
-2. 修改 frontmatter (---之間的部分)
-3. 調整內容
-
-### 調整優先級
-
-編輯 `skill-rules.json` 中的 `priority_rules`:
-
-```json
-{
-  "priority_rules": [
-    {
-      "name": "your-custom-rule",
-      "when": { "user_mentions_any": ["keyword"] },
-      "then": { "primary_skill": "your-skill" }
-    }
-  ]
-}
-```
-
-## 🧪 測試場景
-
-### 測試衝突解決
-
-```bash
-# 測試 1: Performance vs Architecture
-"這個 API 查詢很慢，幫我優化"
-→ 應該觸發: performance-optimization
-
-"設計一個 API 架構來處理大量請求"
-→ 應該觸發: backend-patterns
-
-# 測試 2: Review vs Debugging
-"Review 這個 PR"
-→ 應該觸發: code-review-skill
-
-"Review 這個 PR，測試一直失敗"
-→ 應該觸發: systematic-debugging (優先)
-→ 然後: code-review-skill (修復後)
-```
-
-### 測試反幻覺
-
-```bash
-# 測試 3: 禁止假設
-"getUserById 函數在哪裡？"
-→ Claude 應該使用 Grep 搜尋，而不是猜測
-
-# 測試 4: 要求證據
-"這個函數做什麼？"
-→ Claude 應該先 Read 代碼，然後基於實際代碼回答
-
-# 測試 5: 驗證修復
-"修復這個 bug"
-→ Claude 應該修改後運行測試，驗證修復成功
-```
-
-## 📚 參考資料
-
-- **Conventional Commits**: https://www.conventionalcommits.org/
-- **OWASP Top 10**: https://owasp.org/Top10/
-- **Testing Pyramid**: https://martinfowler.com/articles/practical-test-pyramid.html
-- **Systematic Debugging**: `skills/systematic-debugging/SKILL.md`
-
-## 🆘 故障排除
-
-### Skill 沒有觸發
-
-1. 檢查觸發關鍵字是否在 `description` 中
-2. 查看 `skill-rules.json` 是否有衝突規則
-3. 嘗試手動調用: `/skill-name`
-
-### 多個 Skills 同時觸發
-
-1. 這是正常的（如果它們互補）
-2. 如果衝突，檢查 `skill-rules.json` 的 `conflict_resolution`
-3. 可能需要手動指定: `/systematic-debugging` 或 `/code-review`
-
-### AI 仍然在猜測
-
-1. 確認 `evidence-based-coding` skill 已安裝
-2. 檢查 `skill-rules.json` 中的 `anti_hallucination_rules`
-3. 在提示中明確要求：「請先用 Grep 找到實際代碼」
-
-## 🎓 學習路徑
-
-### 新手 (第 1-2 週)
-
-專注使用:
-- `systematic-debugging` - 學習不猜測
-- `evidence-based-coding` - 學習要求證據
-- `commit-conventions` - 學習寫好的 commit message
-
-### 中級 (第 3-4 週)
-
-開始使用:
-- `testing-strategy` - 學習寫測試
-- `code-review-skill` - 學習審查代碼
-- `security-checklist` - 學習安全最佳實踐
-
-### 高級 (第 5+ 週)
-
-精通:
-- `backend-patterns` - 掌握架構模式
-- `performance-optimization` - 掌握優化技巧
-- `new-skill-scaffold` - 用 repo 慣例快速起新 skill
-- `skill-developer` - 創建自己的 skills
-
-## 📝 更新日誌
-
-### 2026-02-09 - v1.0.0
-
-- ✅ 創建完整的全域 skills 集合
-- ✅ 解決 backend-patterns vs performance-optimization 衝突
-- ✅ 解決 code-review-skill vs systematic-debugging 衝突
-- ✅ 新增 `evidence-based-coding` skill 防止 AI 幻覺
-- ✅ 新增 `testing-strategy` skill
-- ✅ 新增 `security-checklist` skill
-- ✅ 新增 `commit-conventions` skill
-- ✅ 創建 `skill-rules.json` 衝突處理配置
-- ✅ 修改現有 skills 的 description 避免衝突
-
-## 💬 反饋和貢獻
-
-遇到問題或有改進建議？
-
-1. 記錄在 `docs/DECISIONS.md` (使用 `/decision-log`)
-2. 或者在專案 repo 提 issue
-
----
-
-**記住**: Skills 是工具，不是規則。如果某個 skill 的建議不適合當前情況，可以選擇忽略。但 `evidence-based-coding` 和 `systematic-debugging` 的原則應該始終遵守。
-
-**Never assume. Always verify. No claims without evidence.** 🎯
+- `SKILL.md` 才是每個 skill 的 source of truth
+- 這份 README 只維持高層導覽，不複製長篇操作細節
+- 衝突規則與 trigger 行為以 `skill-rules.json`、hook logic、實際測試為準

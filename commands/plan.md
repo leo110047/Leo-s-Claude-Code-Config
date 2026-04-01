@@ -1,5 +1,5 @@
 ---
-description: Restate requirements, assess risks, and create step-by-step implementation plan. WAIT for user CONFIRM before touching any code.
+description: Restate requirements, pressure-test the direction, and create a step-by-step implementation plan. WAIT for user CONFIRM before touching any code.
 ---
 
 # Plan Command
@@ -10,10 +10,12 @@ Create a comprehensive implementation plan before writing any code.
 
 1. **Restate Requirements** - Clarify what needs to be built
 2. **Explore Codebase** - Read relevant files to understand current architecture
-3. **Break Down into Phases** - Specific, actionable steps with dependencies
-4. **Assess Risks** - Surface potential issues and blockers
-5. **Estimate Complexity** - High / Medium / Low
-6. **WAIT for Confirmation** - MUST receive user approval before proceeding
+3. **State the Direction** - Name the recommended approach and why it fits now
+4. **Run a Pre-Mortem** - Surface failure modes, early warning signals, fallback path, and the best alternative
+5. **Break Down into Phases** - Specific, actionable steps with dependencies
+6. **Assess Risks** - Surface implementation issues and blockers
+7. **Estimate Complexity** - High / Medium / Low
+8. **WAIT for Confirmation** - MUST receive user approval before proceeding
 
 ## When to Use
 
@@ -30,6 +32,18 @@ Create a comprehensive implementation plan before writing any code.
 
 ## Requirements Restatement
 - [Bullet points restating what needs to be built]
+
+## Decision Check
+- Recommendation: [recommended direction]
+- Why Now: [why this direction fits the current constraints]
+- Assumptions: [what must hold true]
+- Best Alternative: [next-best option] — choose it when [switch criteria]
+
+## Pre-Mortem
+- Failure Mode: [how this plan can fail]
+- Early Warning Signal: [what to watch for]
+- Fallback Path: [what to do if the failure signal appears]
+- Unknown to Verify: [open question that still needs evidence]
 
 ## Implementation Phases
 
@@ -58,6 +72,7 @@ Create a comprehensive implementation plan before writing any code.
 
 - **NEVER** write code until user explicitly confirms with "yes" or "proceed"
 - Always verify assumptions with actual code (Read, Grep, Glob) before planning
+- For architecture or direction-setting work, do not optimize for minimal diff; explain why this is the healthiest option now and when it should be replaced
 - If user says "modify", adjust the plan and present again
 
 ## <HARD-GATE> No Code Without Design

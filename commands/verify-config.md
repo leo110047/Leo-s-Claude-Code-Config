@@ -122,13 +122,22 @@ TOML:
 
 Required files:
 - `AGENTS.md`
+- `ARCHITECTURE.md`
 - `codex/AGENTS.md`
 - `codex/rules/default.rules`
+- `scripts/verify-decision-guidance.sh`
+- `scripts/verify-hook-script-references.py`
 
 Codex execpolicy:
 - `codex execpolicy check --rules codex/rules/default.rules -- git status --short` → should resolve to `allow`
 - `codex execpolicy check --rules codex/rules/default.rules -- git push origin main` → should resolve to `prompt`
 - `codex execpolicy check --rules codex/rules/default.rules -- rm README.md` → should resolve to `prompt`
+
+Decision guidance parity:
+- `bash scripts/verify-decision-guidance.sh` → should report `[OK]` for guidance, architecture boundary docs, commands, skills, docs, and context markers
+
+Hook script references:
+- `python3 scripts/verify-hook-script-references.py` → should report `[OK]` for every hook script path referenced by `hooks/hooks.json`
 
 If the `codex` CLI is unavailable, report a WARNING and skip the execpolicy step.
 
@@ -177,7 +186,10 @@ Rules:
 Repo Validation:
   [OK]      hooks/hooks.json — valid
   [OK]      codex/config.toml — valid
+  [OK]      ARCHITECTURE.md — present and covered by decision guidance parity check
+  [OK]      scripts/verify-hook-script-references.py — passed
   [OK]      codex/rules/default.rules: git status --short — allow
+  [OK]      scripts/verify-decision-guidance.sh — passed
   ...
 
 Summary: X OK, Y WARNING, Z ERROR

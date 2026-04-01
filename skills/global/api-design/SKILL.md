@@ -31,6 +31,19 @@ Best practices for building consistent, predictable, and well-documented REST AP
 - Do not mix different error envelopes, pagination styles, or versioning schemes across the same API surface.
 - Do not introduce breaking response changes without an explicit versioning or migration story.
 - Do not turn an interface-design task into backend implementation details; if the question is handler/service structure, switch to `backend-patterns`.
+- Do not recommend an API contract without naming the assumptions, failure modes, migration risks, and the best alternative when those assumptions stop holding.
+
+## Recommendation Standard
+
+When this skill is used to recommend an API direction, the answer must include:
+
+- **Recommendation** — the preferred contract shape or protocol choice
+- **Why now** — what current client and operational constraints make it the best fit
+- **Assumptions** — what must remain true for the contract to stay healthy
+- **Failure modes** — how the contract can become brittle or expensive to evolve
+- **Early warning signals** — what indicates the contract is drifting out of fit
+- **Best alternative** — the next-best design and when it becomes better
+- **Unknowns** — what still needs validation with clients, traffic, or rollout constraints
 
 ## REST Conventions
 

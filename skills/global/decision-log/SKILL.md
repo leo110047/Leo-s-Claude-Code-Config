@@ -23,6 +23,7 @@ Log a decision when:
 - Do not log trivial implementation details as ADRs; keep the document for decisions with lasting architectural or process impact.
 - Do not write the ADR after the context is forgotten; capture tradeoffs while the rationale is still fresh.
 - Do not omit rejected alternatives, or the record becomes useless when the same debate returns.
+- Do not omit assumptions, failure signals, or revisit triggers, or the ADR will not help when the same decision degrades later.
 - Do not rewrite old ADRs to match current opinion; supersede them and preserve history.
 - Do not create `docs/DECISIONS.md` as busywork when no meaningful decision was made.
 
@@ -39,6 +40,10 @@ Log a decision when:
 
 ### Decision
 {What is the change we're proposing/have agreed to implement?}
+
+### Assumptions
+- {assumption_1}
+- {assumption_2}
 
 ### Consequences
 
@@ -59,6 +64,14 @@ Log a decision when:
 |-------------|--------------|
 | {option_1} | {reason} |
 | {option_2} | {reason} |
+
+### Failure Signals
+- {signal_1}
+- {signal_2}
+
+### Revisit Triggers / Exit Criteria
+- {trigger_1}
+- {trigger_2}
 ```
 
 ## Process
@@ -93,8 +106,11 @@ Required fields:
 - **title**: Short description (e.g., "Use SQLite for storage")
 - **context**: Why this decision is needed
 - **decision**: What was chosen
+- **assumptions**: What must hold for the decision to stay healthy
 - **consequences**: Impact of the decision
 - **alternatives**: What else was considered
+- **failure signals**: What would show the decision is failing
+- **revisit triggers**: When to reconsider or replace the decision
 
 ### 4. Append to File
 

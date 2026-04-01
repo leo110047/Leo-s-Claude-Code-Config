@@ -13,8 +13,19 @@ goldband is a shared set of engineering guardrails for Claude Code and Codex. It
 goldband mainly provides:
 - commands, hooks, rules, and contexts to keep day-to-day planning, verification, review, and debugging flows consistent
 - an always-on claim verification baseline: repo facts must be verified, current external facts need sources, and completion claims need fresh evidence
+- a decision recommendation standard for architecture and direction-setting work: assumptions, failure modes, warning signals, alternatives, and unknowns must be surfaced with the recommendation
 - shared skills such as evidence-based coding, systematic debugging, security review, and testing strategy
 - a vendored `workflow` runtime that goldband exposes through `goldband-*` entry points for higher-level flows like review, QA, investigation, and ship
+
+## goldband vs workflow
+
+This repo contains both goldband itself and a vendored `workflow` runtime source tree, but they are not the same responsibility boundary:
+
+- goldband owns shared policy, installer behavior, Claude/Codex adapters, repo-linked hooks/commands/contexts/rules, and portable skills
+- `vendor/workflow/` is the bundled upstream runtime source, with its own packaging, changelog, architecture, and runtime docs
+- install-time integration happens through [`shell/install/workflow.sh`](shell/install/workflow.sh), which turns workflow runtime content into `goldband-*` user-facing entry points and host-specific install layouts
+
+For the explicit boundary and maintenance rules, read [ARCHITECTURE.md](ARCHITECTURE.md). For runtime-specific product and internals documentation, read [vendor/workflow/README.md](vendor/workflow/README.md) and [vendor/workflow/ARCHITECTURE.md](vendor/workflow/ARCHITECTURE.md).
 
 ## Installation
 
@@ -96,6 +107,17 @@ The most common entry points are `/plan`, `/verify`, `/goldband-investigate`, `/
 `workflow` is the bundled high-level runtime used by goldband. Install it with `./install.sh workflow`, `./install.sh workflow-codex`, or `./install.sh all-with-workflow`.
 
 After installation, the Claude runtime lives at `~/.claude/skills/workflow`, the Codex runtime lives at `~/.codex/skills/workflow`, shared state lives at `~/.workflow/`, and the user-facing entry points are `goldband-*`. If you want to test a different runtime checkout, use `WORKFLOW_REPO_DIR=/path/to/runtime ./install.sh all-with-workflow`.
+
+## When Not to Use goldband
+
+goldband is usually not a good fit when:
+
+- you do not use Claude Code or Codex and just want a generic project template
+- you are doing a one-off solo prototype and do not want the overhead of hooks, wrappers, and repo-linked install management
+- your team does not want custom hooks, repo-linked user config, or `goldband-*` command entry points
+- you only want the bundled runtime itself and do not need goldband's shared policy, adapters, installer, or dual-tool alignment
+
+If you only want the runtime, start with [vendor/workflow/README.md](vendor/workflow/README.md).
 
 ## Troubleshooting
 

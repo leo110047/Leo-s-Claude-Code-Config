@@ -37,6 +37,7 @@ Vague plans produce vague results. Every step must be concrete enough that a fre
 - Do not push verification to the end only; each task needs its own check.
 - Do not plan implementation steps before reading the current code and constraints.
 - Do not present a plan as locked if the user has not approved the tradeoffs or sequencing yet.
+- Do not skip the decision-quality check when the plan depends on an architecture or direction choice; name the assumptions, failure modes, fallback, and best alternative first.
 
 ## Task Granularity
 
@@ -106,6 +107,26 @@ Verify:
   - node -e "require('./src/utils/parser')" → no errors
 ```
 
+## Decision-Quality Block
+
+If the plan depends on choosing an approach, architecture, or major direction, add a short block before the task list:
+
+```
+Decision Check:
+  Recommendation: [chosen direction]
+  Why Now: [current constraints]
+  Assumptions: [what must hold]
+  Best Alternative: [next-best option]
+
+Pre-Mortem:
+  Failure Modes: [how this can fail]
+  Early Warning Signals: [what to watch]
+  Fallback Path: [what to do if it fails]
+  Unknowns to Verify: [what still needs evidence]
+```
+
+The plan is not complete until this block is present for direction-setting work.
+
 ## Precision Requirements
 
 ### File Paths Must Be Complete
@@ -144,6 +165,7 @@ Before presenting a plan to the user, verify:
 - [ ] Every file path is complete and verified with Glob
 - [ ] Every modification specifies what changes and where
 - [ ] Every task has a verification step
+- [ ] Direction-setting plans include assumptions, failure modes, warning signals, and fallback path
 - [ ] Tasks follow TDD order where applicable (test → fail → implement → pass)
 - [ ] Dependencies between tasks are explicit
 - [ ] No task requires information not available at execution time

@@ -1,5 +1,5 @@
 ---
-description: Identify gray areas and capture structured decisions before planning.
+description: Identify gray areas, pressure-test recommendations, and capture structured decisions before planning.
 ---
 
 # Discuss Command
@@ -37,7 +37,7 @@ For each gray area, categorize it:
 
 ### Step 3: Structured Discussion
 
-For each "Must Decide Now" item, present 3-4 focused questions:
+For each "Must Decide Now" item, present 3-4 focused questions and a short pre-mortem:
 
 ```
 GRAY AREA: [topic]
@@ -49,7 +49,18 @@ Options:
   B) [option] — [tradeoff]
   C) [option] — [tradeoff]
 
-Recommendation: [your pick and why]
+Recommendation: [your pick]
+Why Now: [why it fits the current constraints]
+Assumptions:
+  - [assumption that must hold]
+Failure Modes:
+  - [how this recommendation can fail]
+Switch Criteria:
+  - [signal that means another option is now better]
+Best Alternative:
+  - [next-best option and when to choose it]
+Unknowns to Verify:
+  - [open question that still needs evidence]
 ```
 
 Discuss one gray area at a time. Wait for the user's decision before moving to the next.
@@ -68,12 +79,16 @@ After all gray areas are resolved, produce a decision summary:
 ```
 DECISIONS LOCKED
 ================
-1. [decision] — [rationale]
-2. [decision] — [rationale]
+1. [decision] — [rationale] — revisit when [trigger]
+2. [decision] — [rationale] — revisit when [trigger]
 
 DISCRETIONARY (defaults chosen, can adjust later)
 =================================================
 1. [area] — default: [value] — [why]
+
+ASSUMPTIONS TO VERIFY
+=====================
+1. [unknown] — [how to verify]
 
 DEFERRED (out of scope for this task)
 =====================================
@@ -88,6 +103,7 @@ BACKLOG (new ideas surfaced during discussion)
 
 - **One gray area at a time** — do not overwhelm with all questions at once
 - **Always provide a recommendation** — the user can override, but don't force them to think from scratch
+- **Every recommendation needs a short pre-mortem** — include assumptions, failure modes, switch criteria, best alternative, and unknowns to verify
 - **Scope guardrail is mandatory** — new features go to backlog, never to the current task
 - **Decisions are final** — once locked, do not revisit unless the user explicitly asks
 - This command produces **decisions**, not code. Use `/plan` after `/discuss`.

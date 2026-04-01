@@ -6,6 +6,12 @@ This repository manages configuration for both Claude Code and Codex.
 
 Keep shared engineering policy portable across tools while keeping tool-specific adapters explicit.
 
+## Shared Decision Guidance
+
+- When proposing an approach, architecture direction, or technical recommendation, optimize for decision quality, failure containment, migration safety, and long-term maintainability, not minimal code delta.
+- Recommendation-grade answers must include: the recommendation, why it fits now, the assumptions that must hold, the main failure modes, early warning signals, the best alternative and when it becomes better, and the unknowns that still need verification.
+- Use this structure only when making an actual recommendation or directional judgment. Do not force it into every conversation.
+
 ## When Editing This Repo
 
 - Keep Claude assets (`hooks/`, `commands/`, `contexts/`, `rules/`, `.claude-plugin/`) and Codex assets (`codex/`, `.codex/`, `AGENTS.md`) in sync when a shared policy changes.
