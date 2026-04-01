@@ -33,6 +33,17 @@ const HOST: Host = (() => {
   throw new Error(`Unknown host: ${val}. Use claude, codex, or agents.`);
 })();
 
+function cleanupLegacyCodexOutputs(root: string): void {
+  const skillsRoot = path.join(root, '.agents', 'skills');
+  if (!fs.existsSync(skillsRoot)) return;
+
+  for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (!/^gstack(?:-|$)/.test(entry.name) && entry.name !== 'workflow-codex') continue;
+    fs.rmSync(path.join(skillsRoot, entry.name), { recursive: true, force: true });
+  }
+}
+
 // ─── Template Processing ────────────────────────────────────
 
 const GENERATED_HEADER = `<!-- AUTO-GENERATED from {{SOURCE}} — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n`;
@@ -146,6 +157,10 @@ function findTemplates(): string[] {
 
 let hasChanges = false;
 const tokenBudget: Array<{ skill: string; lines: number; tokens: number }> = [];
+
+if (HOST === 'codex' && !DRY_RUN) {
+  cleanupLegacyCodexOutputs(ROOT);
+}
 
 for (const tmplPath of findTemplates()) {
   // Skip /codex skill for codex host (self-referential — it's a Claude wrapper around codex exec)

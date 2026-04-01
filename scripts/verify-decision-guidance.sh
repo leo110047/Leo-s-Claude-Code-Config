@@ -21,6 +21,8 @@ check_contains() {
 check_contains "AGENTS.md" "## Shared Decision Guidance" "repo shared decision guidance section"
 check_contains "AGENTS.md" "failure containment" "repo guidance emphasizes decision quality over minimal delta"
 check_contains "AGENTS.md" "main failure modes" "repo guidance requires failure modes"
+check_contains "AGENTS.md" "prefer the healthiest maintainable path" "repo guidance defaults non-debug direction work to healthiest path"
+check_contains "AGENTS.md" "The \"smallest fix\" mindset is reserved for debugging" "repo guidance narrows smallest-fix thinking to debugging"
 
 if [ -f "$ROOT_DIR/ARCHITECTURE.md" ]; then
   echo "[OK] architecture boundary document exists"
@@ -36,6 +38,8 @@ check_contains "ARCHITECTURE.md" "vendor/workflow owns" "architecture doc explai
 check_contains "codex/AGENTS.md" "## Decision Recommendation Standard" "codex decision recommendation section"
 check_contains "codex/AGENTS.md" "do not optimize for minimal code delta" "codex guidance rejects minimal-delta bias for recommendations"
 check_contains "codex/AGENTS.md" "This \"smallest fix\" rule applies to debugging only" "codex guidance scopes smallest-fix rule to debugging"
+check_contains "codex/AGENTS.md" "default to the healthiest maintainable path" "codex guidance defaults non-debug direction work to healthiest path"
+check_contains "codex/AGENTS.md" "Use the smallest-fix rule only after a specific defect has been reproduced and scoped." "codex guidance narrows smallest-fix trigger to reproduced defects"
 
 check_contains "commands/discuss.md" "Failure Modes:" "discuss command requires failure modes"
 check_contains "commands/discuss.md" "Switch Criteria:" "discuss command requires switch criteria"
@@ -54,8 +58,10 @@ check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exi
 check_contains "contexts/research.md" "When you recommend a direction" "research context recommendation guidance"
 check_contains "README.md" "## goldband 與 workflow 的邊界" "README documents goldband workflow boundary"
 check_contains "README.md" "decision recommendation standard" "README mentions decision recommendation standard"
+check_contains "README.md" "預設優先健康且可維護的路徑" "README documents healthiest-path default"
 check_contains "README.en.md" "## goldband vs workflow" "README.en documents goldband workflow boundary"
 check_contains "README.en.md" "decision recommendation standard" "README.en mentions decision recommendation standard"
+check_contains "README.en.md" "healthiest maintainable path" "README.en documents healthiest-path default"
 check_contains "commands/verify-config.md" "scripts/verify-decision-guidance.sh" "verify-config documents decision guidance check"
 
 if [ "$EXIT_CODE" -eq 0 ]; then

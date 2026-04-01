@@ -230,12 +230,14 @@ async function withInstalledProfile<T>(
   run: () => Promise<T>,
   profile = 'Default',
 ): Promise<T> {
-  const homeDir = os.homedir();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-cookie-home-'));
+  const previousHome = process.env.BROWSE_COOKIE_HOME;
   const profileDir = path.join(homeDir, relativeBrowserDir, profile);
   const cookiesPath = path.join(profileDir, 'Cookies');
   const backupPath = path.join(profileDir, `Cookies.backup-${crypto.randomUUID()}`);
   const hadOriginal = fs.existsSync(cookiesPath);
 
+  process.env.BROWSE_COOKIE_HOME = homeDir;
   fs.mkdirSync(profileDir, { recursive: true });
   if (hadOriginal) fs.copyFileSync(cookiesPath, backupPath);
   fs.copyFileSync(sourceDb, cookiesPath);
@@ -248,8 +250,13 @@ async function withInstalledProfile<T>(
       fs.unlinkSync(backupPath);
     } else {
       try { fs.unlinkSync(cookiesPath); } catch {}
-      try { fs.rmdirSync(profileDir); } catch {}
     }
+    if (previousHome === undefined) {
+      delete process.env.BROWSE_COOKIE_HOME;
+    } else {
+      process.env.BROWSE_COOKIE_HOME = previousHome;
+    }
+    fs.rmSync(homeDir, { recursive: true, force: true });
   }
 }
 

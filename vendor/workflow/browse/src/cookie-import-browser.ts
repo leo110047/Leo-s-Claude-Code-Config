@@ -329,9 +329,10 @@ function getDataDirForPlatform(browser: BrowserInfo, platform: BrowserPlatform):
 }
 
 function getBaseDir(platform: BrowserPlatform): string {
+  const homeDir = process.env.BROWSE_COOKIE_HOME || os.homedir();
   return platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Application Support')
-    : path.join(os.homedir(), '.config');
+    ? path.join(homeDir, 'Library', 'Application Support')
+    : path.join(homeDir, '.config');
 }
 
 function findBrowserMatch(browser: BrowserInfo, profile: string): BrowserMatch | null {

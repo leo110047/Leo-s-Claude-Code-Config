@@ -68,8 +68,16 @@ interface DedupIndex {
   hashes: Record<string, string>; // hash → first-seen runId
 }
 
+function getWorkflowDevDir(): string {
+  const override = process.env.WORKFLOW_DEV_DIR;
+  if (typeof override === 'string' && override.trim().length > 0) {
+    return override.trim();
+  }
+  return path.join(os.homedir(), '.workflow-dev');
+}
+
 function getDedupPath(): string {
-  return path.join(os.homedir(), '.workflow-dev', 'harvests', 'dedup.json');
+  return path.join(getWorkflowDevDir(), 'harvests', 'dedup.json');
 }
 
 function loadDedupIndex(): DedupIndex {
@@ -181,7 +189,7 @@ export class WorktreeManager {
 
       if (!isDuplicate) {
         // Save patch
-        const harvestDir = path.join(os.homedir(), '.workflow-dev', 'harvests', this.runId);
+        const harvestDir = path.join(getWorkflowDevDir(), 'harvests', this.runId);
         fs.mkdirSync(harvestDir, { recursive: true });
         patchPath = path.join(harvestDir, `${testName}.patch`);
         fs.writeFileSync(patchPath, patch);

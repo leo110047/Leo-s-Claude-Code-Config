@@ -9,8 +9,10 @@ Keep shared engineering policy portable across tools while keeping tool-specific
 ## Shared Decision Guidance
 
 - When proposing an approach, architecture direction, or technical recommendation, optimize for decision quality, failure containment, migration safety, and long-term maintainability, not minimal code delta.
+- Treat solution direction, tradeoffs, prioritization, project health, refactoring direction, and maintenance strategy as recommendation work by default. In those cases, prefer the healthiest maintainable path, not the smallest patch.
 - Recommendation-grade answers must include: the recommendation, why it fits now, the assumptions that must hold, the main failure modes, early warning signals, the best alternative and when it becomes better, and the unknowns that still need verification.
 - Use this structure only when making an actual recommendation or directional judgment. Do not force it into every conversation.
+- The "smallest fix" mindset is reserved for debugging a specific reproduced defect. It must not leak into architecture, health, maintenance, or direction-setting guidance.
 
 ## When Editing This Repo
 

@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, afterEach } from 'bun:test';
 import { resolveConfig, ensureStateDir, readVersionHash, getGitRoot, getRemoteSlug } from '../src/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -251,53 +251,48 @@ describe('version mismatch detection', () => {
 
 describe('isServerHealthy', () => {
   const { isServerHealthy } = require('../src/cli');
-  const http = require('http');
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    // @ts-ignore - test restore
+    globalThis.fetch = originalFetch;
+  });
+
+  function mockFetch(impl: typeof fetch) {
+    // @ts-ignore - test override
+    globalThis.fetch = impl;
+  }
 
   test('returns true for a healthy server', async () => {
-    const server = http.createServer((_req: any, res: any) => {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'healthy' }));
-    });
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    const port = server.address().port;
-    try {
-      expect(await isServerHealthy(port)).toBe(true);
-    } finally {
-      server.close();
-    }
+    mockFetch(async () => new Response(JSON.stringify({ status: 'healthy' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    expect(await isServerHealthy(4100)).toBe(true);
   });
 
   test('returns false for an unhealthy server', async () => {
-    const server = http.createServer((_req: any, res: any) => {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'unhealthy' }));
-    });
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    const port = server.address().port;
-    try {
-      expect(await isServerHealthy(port)).toBe(false);
-    } finally {
-      server.close();
-    }
+    mockFetch(async () => new Response(JSON.stringify({ status: 'unhealthy' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    expect(await isServerHealthy(4100)).toBe(false);
   });
 
   test('returns false when server is not running', async () => {
-    // Use a port that's almost certainly not in use
+    mockFetch(async () => {
+      throw new Error('connect ECONNREFUSED');
+    });
+
     expect(await isServerHealthy(59999)).toBe(false);
   });
 
   test('returns false on non-200 response', async () => {
-    const server = http.createServer((_req: any, res: any) => {
-      res.writeHead(500);
-      res.end('Internal Server Error');
-    });
-    await new Promise<void>(resolve => server.listen(0, resolve));
-    const port = server.address().port;
-    try {
-      expect(await isServerHealthy(port)).toBe(false);
-    } finally {
-      server.close();
-    }
+    mockFetch(async () => new Response('Internal Server Error', { status: 500 }));
+
+    expect(await isServerHealthy(4100)).toBe(false);
   });
 });
 
