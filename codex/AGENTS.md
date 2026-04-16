@@ -48,6 +48,13 @@ Only prefer a narrower or temporary fix when the user has explicitly stated that
 - Use Codex profiles for runtime mode changes, not for storing long prose.
 - Use skills for reusable workflows or domain knowledge; keep each skill focused on one job.
 
+## Design Guidance
+
+- For UI, frontend, and visual work in this repo, read `DESIGN.md` before coding.
+- Lock typography, color, spacing, layout, and motion decisions before generating components or pages.
+- Prefer the `frontend-design` skill when producing new UI.
+- Avoid generic AI aesthetics such as gray card grids, default-looking UI with weak hierarchy, trend-driven styling used as a shortcut, and pill-heavy layouts with no clear focal point.
+
 ## Recommended Portable Skills
 
 If goldband portable skills are installed, start with:

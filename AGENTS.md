@@ -23,6 +23,13 @@ Keep shared engineering policy portable across tools while keeping tool-specific
 - When changing Claude hook or installer behavior, run the Claude config verification workflow before claiming the change is safe.
 - When changing Codex rules or global templates, validate rule syntax with `codex execpolicy check` and verify installer output under a temp `HOME`.
 
+## Design Guidance
+
+- For UI, frontend, and visual work in this repo, treat [`DESIGN.md`](DESIGN.md) as the project design source of truth.
+- Before implementing new UI, explicitly decide typography, color, spacing, layout, and motion rather than jumping straight to components.
+- Prefer the `frontend-design` skill for UI generation when available.
+- Do not ship generic AI aesthetics such as gray card mosaics, default-looking UI with weak hierarchy, trend-driven styling used as a shortcut, or pill-heavy layouts with no clear focal point.
+
 ## Preferred Portable Skills
 
 If the portable goldband skills are installed for Codex, prefer:

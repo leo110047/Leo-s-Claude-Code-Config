@@ -61,3 +61,9 @@ trust_level = "trusted"
 
 [projects."/Users/leo/MOGU"]
 trust_level = "trusted"
+
+[projects."/Users/leo/Elemenzy"]
+trust_level = "trusted"
+
+[projects."/Users/leo/discord-bot-repo"]
+trust_level = "trusted"
