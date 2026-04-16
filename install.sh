@@ -27,31 +27,11 @@ CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
 CODEX_SKILLS_DIR="$HOME/.agents/skills"
 CODEX_SKILL_PROFILE_FILE="$CODEX_SKILLS_DIR/.goldband-profile"
+SKILL_CATALOG_FILE="$REPO_DIR/shell/install/skill-catalog.txt"
 LEGACY_DEV_FLAG_USED=false
 
 skill_catalog() {
-    cat <<'EOF'
-evidence-based-coding|core|core
-systematic-debugging|core|core
-file-search|core|core
-planning-workflow|core|core
-security-checklist|core|core
-performance-optimization|core|core
-api-design|dev|full
-backend-patterns|dev|full
-careful-mode|dev|
-freeze-mode|dev|
-claude-config-verification|dev|
-code-review-skill|dev|full
-database-patterns|dev|full
-testing-strategy|dev|full
-ci-cd-integration|full|full
-commit-conventions|full|full
-decision-log|full|full
-new-skill-scaffold|full|
-skill-developer|full|
-subagent-development|full|full
-EOF
+    cat "$SKILL_CATALOG_FILE"
 }
 
 show_help() {

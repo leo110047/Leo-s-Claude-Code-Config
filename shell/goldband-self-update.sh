@@ -26,6 +26,13 @@ resolve_repo_dir() {
   cd "$script_dir/.." && pwd
 }
 
+run_skill_sync() {
+  local repo_dir="$1"
+  local sync_script="$repo_dir/shell/goldband-sync-skills.sh"
+  [ -x "$sync_script" ] || return 0
+  GOLDBAND_SELF_UPDATE_REPO_DIR="$repo_dir" "$sync_script" || true
+}
+
 run_git_with_timeout() {
   local repo_dir="$1"
   shift
@@ -75,6 +82,8 @@ main() {
   local repo_dir
   repo_dir="$(resolve_repo_dir)" || exit 0
 
+  run_skill_sync "$repo_dir"
+
   git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
   local branch upstream dirty_status
@@ -103,6 +112,7 @@ main() {
   new_head="$(git -C "$repo_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 
   if [ "$new_head" != "$old_head" ]; then
+    run_skill_sync "$repo_dir"
     printf '[goldband] updated %s -> %s; new sessions will use the latest config.\n' "$old_head" "$new_head" >&2
   fi
 }

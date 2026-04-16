@@ -172,6 +172,7 @@ cp -R "$ROOT_DIR/.claude-plugin" "$TMP_ROOT/.claude-plugin"
 cp -R "$ROOT_DIR/shell" "$TMP_ROOT/shell"
 cp -R "$TMP_WORKFLOW" "$TMP_ROOT/vendor/workflow"
 chmod +x "$TMP_ROOT/install.sh"
+chmod +x "$TMP_ROOT/shell/goldband-self-update.sh" "$TMP_ROOT/shell/goldband-sync-skills.sh"
 
 echo "[1/5] skill checks"
 "$ROOT_DIR/scripts/check-skills.sh"
@@ -293,19 +294,40 @@ git -C "$TMP_UPDATE_SEED/repo-next" config user.email "goldband@example.com"
 echo "v2" >> "$TMP_UPDATE_SEED/repo-next/README.md"
 git -C "$TMP_UPDATE_SEED/repo-next" commit -am "update" >/dev/null
 git -C "$TMP_UPDATE_SEED/repo-next" push origin main >/dev/null
-GOLDBAND_SELF_UPDATE_REPO_DIR="$TMP_UPDATE_WORK/repo" "$TMP_HOME/.claude/bin/goldband-self-update" >/tmp/goldband-self-update.log 2>&1
+HOME="$TMP_HOME" GOLDBAND_SELF_UPDATE_REPO_DIR="$TMP_UPDATE_WORK/repo" "$TMP_HOME/.claude/bin/goldband-self-update" >/tmp/goldband-self-update.log 2>&1
 NEW_HEAD="$(git -C "$TMP_UPDATE_WORK/repo" rev-parse HEAD)"
 test "$OLD_HEAD" != "$NEW_HEAD"
 grep -q '\[goldband\] updated' /tmp/goldband-self-update.log
 
-echo "[4/6] status output"
+echo "[4/7] managed skill sync"
+mkdir -p "$TMP_ROOT/skills/global/dummy-ui-skill"
+cat > "$TMP_ROOT/skills/global/dummy-ui-skill/SKILL.md" <<'EOF'
+---
+name: dummy-ui-skill
+description: test fixture
+---
+EOF
+printf '%s\n' 'dummy-ui-skill|full|full' >> "$TMP_ROOT/shell/install/skill-catalog.txt"
+test ! -e "$TMP_HOME/.claude/skills/dummy-ui-skill"
+test ! -e "$TMP_HOME/.agents/skills/dummy-ui-skill"
+HOME="$TMP_HOME" GOLDBAND_SELF_UPDATE_REPO_DIR="$TMP_ROOT" "$TMP_HOME/.claude/bin/goldband-self-update" >/tmp/goldband-skill-sync.log 2>&1
+test -L "$TMP_HOME/.claude/skills/dummy-ui-skill"
+test -L "$TMP_HOME/.agents/skills/dummy-ui-skill"
+test "$(readlink "$TMP_HOME/.claude/skills/dummy-ui-skill")" = "$TMP_ROOT/skills/global/dummy-ui-skill"
+test "$(readlink "$TMP_HOME/.agents/skills/dummy-ui-skill")" = "$TMP_ROOT/skills/global/dummy-ui-skill"
+grep -q 'dummy-ui-skill' "$TMP_HOME/.claude/skills/.goldband-profile"
+grep -q 'dummy-ui-skill' "$TMP_HOME/.agents/skills/.goldband-profile"
+grep -q '\[goldband\] synced Claude skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
+grep -q '\[goldband\] synced Codex skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
+
+echo "[5/7] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
 echo "$STATUS_OUTPUT" | grep -q "workflow Claude install"
 echo "$STATUS_OUTPUT" | grep -q "workflow Codex runtime (0.0.0-test)"
 echo "$STATUS_OUTPUT" | grep -q "goldband wrapper language (en)"
 echo "$STATUS_OUTPUT" | grep -q "shell launchers (zsh)"
 
-echo "[5/6] verifier output"
+echo "[6/7] verifier output"
 VERIFIER_OUTPUT="$(HOME="$TMP_HOME" node "$TMP_ROOT/skills/global/claude-config-verification/scripts/verify-claude-config.js" --json)"
 echo "$VERIFIER_OUTPUT" | grep -q '"claudeInstalled": true'
 echo "$VERIFIER_OUTPUT" | grep -q '"codexInstalled": true'
@@ -313,7 +335,7 @@ echo "$VERIFIER_OUTPUT" | grep -q '"stateInstalled": true'
 echo "$VERIFIER_OUTPUT" | grep -q '"codexVersion": "0.0.0-test"'
 echo "$VERIFIER_OUTPUT" | grep -q '~/.codex/skills/goldband-\*'
 
-echo "[6/6] language command flow docs"
+echo "[7/7] language command flow docs"
 grep -q '不要先讀目前設定' "$TMP_ROOT/commands/goldband-language.md"
 grep -q '第一個提問固定用中英雙語短句' "$TMP_ROOT/commands/goldband-language.md"
 
