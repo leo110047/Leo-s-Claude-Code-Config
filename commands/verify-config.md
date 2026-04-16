@@ -33,11 +33,18 @@ Check these paths exist and point to valid targets:
 - `~/.claude/contexts` → should point to this repo's `contexts`
 - `~/.claude/rules` → should point to this repo's `rules`
 - `~/.claude/hooks/scripts` → should point to this repo's `hooks/scripts`
-- `~/.claude/bin/goldband-self-update` → should exist
-- `~/.claude/shell/goldband-launchers.sh` → should exist
-- `~/.zshrc` → should contain the goldband shell launcher source block (`zsh` only)
+- POSIX shell integration:
+  - `~/.claude/bin/goldband-self-update` → should exist
+  - `~/.claude/shell/goldband-launchers.sh` → should exist
+  - `~/.zshrc` → should contain the goldband shell launcher source block (`zsh` only)
+- Windows PowerShell integration:
+  - `~/.claude/bin/goldband-self-update.ps1` → should exist
+  - `~/.claude/shell/goldband-launchers.ps1` → should exist
+  - `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` or `~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`
+    → should contain the goldband PowerShell launcher source block
 
 For each: report OK if target is valid, WARNING if exists but target is ambiguous, ERROR if missing.
+Treat either the POSIX launcher path or the PowerShell launcher path as sufficient, depending on platform.
 
 ### 2. Codex Install Checks
 

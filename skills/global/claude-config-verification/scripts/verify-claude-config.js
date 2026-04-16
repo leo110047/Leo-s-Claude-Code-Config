@@ -270,6 +270,8 @@ function readWorkflowVersion(runtimeDir) {
 function checkShellLaunchers(homeDir) {
   const updateBin = path.join(homeDir, '.claude', 'bin', 'goldband-self-update');
   const launcherFile = path.join(homeDir, '.claude', 'shell', 'goldband-launchers.sh');
+  const powershellUpdateBin = path.join(homeDir, '.claude', 'bin', 'goldband-self-update.ps1');
+  const powershellLauncherFile = path.join(homeDir, '.claude', 'shell', 'goldband-launchers.ps1');
   const result = {
     installed: false,
     checks: []
@@ -277,6 +279,8 @@ function checkShellLaunchers(homeDir) {
 
   const hasUpdateBin = fs.existsSync(updateBin);
   const hasLauncherFile = fs.existsSync(launcherFile);
+  const hasPowerShellUpdateBin = fs.existsSync(powershellUpdateBin);
+  const hasPowerShellLauncherFile = fs.existsSync(powershellLauncherFile);
   const zshCandidates = [];
   const envZdotdir = typeof process.env.ZDOTDIR === 'string' ? process.env.ZDOTDIR.trim() : '';
   if (envZdotdir.length > 0) {
@@ -298,12 +302,40 @@ function checkShellLaunchers(homeDir) {
     ? `${path.join(envZdotdir, '.zshrc')} (ZDOTDIR) or ~/.zshrc goldband shell launchers block (zsh only)`
     : '~/.zshrc goldband shell launchers block (zsh only)';
 
-  result.checks = [
+  const powershellProfiles = [
+    path.join(homeDir, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1'),
+    path.join(homeDir, 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1')
+  ];
+  const powershellSourceBlock = powershellProfiles.some(profilePath => {
+    if (!fs.existsSync(profilePath)) return false;
+    const raw = fs.readFileSync(profilePath, 'utf8');
+    return (
+      raw.includes('# >>> goldband powershell launchers >>>') &&
+      raw.includes('. "$HOME/.claude/shell/goldband-launchers.ps1"')
+    );
+  });
+
+  const shellInstalled = hasUpdateBin && hasLauncherFile && hasZshSourceBlock;
+  const powershellInstalled = hasPowerShellUpdateBin && hasPowerShellLauncherFile && powershellSourceBlock;
+  const shellChecks = [
     { file: '~/.claude/bin/goldband-self-update', ok: hasUpdateBin },
     { file: '~/.claude/shell/goldband-launchers.sh', ok: hasLauncherFile },
     { file: zshLabel, ok: hasZshSourceBlock }
   ];
-  result.installed = result.checks.every(item => item.ok);
+  const powershellChecks = [
+    { file: '~/.claude/bin/goldband-self-update.ps1', ok: hasPowerShellUpdateBin },
+    { file: '~/.claude/shell/goldband-launchers.ps1', ok: hasPowerShellLauncherFile },
+    {
+      file: '~/Documents/{PowerShell,WindowsPowerShell}/Microsoft.PowerShell_profile.ps1 goldband launcher block (PowerShell only)',
+      ok: powershellSourceBlock
+    }
+  ];
+  result.shellInstalled = shellInstalled;
+  result.powershellInstalled = powershellInstalled;
+  result.checks = [...shellChecks, ...powershellChecks];
+  result.shellChecks = shellChecks;
+  result.powershellChecks = powershellChecks;
+  result.installed = shellInstalled || powershellInstalled;
 
   return result;
 }
@@ -563,9 +595,16 @@ function buildSummary(rootDir, args) {
     ...referenceChecks.flatMap(item => item.missing.map(ref => `${item.file}: missing ${ref}`)),
     ...hookCheck.errors,
     ...workflowInstallErrors,
-    ...shellLaunchers.checks.filter(item => !item.ok).map(item => `shell launchers: missing ${item.file}`),
     ...codexRuleChecks.filter(item => !item.ok).map(item => `${item.label}: ${item.message}`)
   ];
+
+  if (!shellLaunchers.installed) {
+    errors.push(
+      ...shellLaunchers.checks
+        .filter(item => !item.ok)
+        .map(item => `shell launchers: missing ${item.file}`)
+    );
+  }
 
   if (replay && !replay.ok) {
     errors.push('router replay failed');
@@ -608,7 +647,7 @@ function printHuman(summary) {
       `workflow:  Claude=${summary.workflowInstall.claudeInstalled ? 'yes' : 'no'} Codex=${summary.workflowInstall.codexInstalled ? 'yes' : 'no'} State=${summary.workflowInstall.stateInstalled ? 'yes' : 'no'}`
     );
   }
-  console.log(`Shell:   ${summary.shellLaunchers.installed ? 'OK' : 'FAIL'}`);
+  console.log(`Shell:   ${summary.shellLaunchers.installed ? 'OK' : 'FAIL'} (POSIX=${summary.shellLaunchers.shellInstalled ? 'yes' : 'no'} PowerShell=${summary.shellLaunchers.powershellInstalled ? 'yes' : 'no'})`);
   console.log('');
   console.log('JSON:');
   for (const item of summary.jsonChecks) {
@@ -660,8 +699,27 @@ function printHuman(summary) {
 
   console.log('');
   console.log('Shell Launchers:');
-  for (const item of summary.shellLaunchers.checks) {
-    console.log(`  [${item.ok ? 'OK' : 'FAIL'}] ${item.file}`);
+  const launcherCheckGroups = [
+    {
+      label: 'POSIX',
+      active: summary.shellLaunchers.shellInstalled,
+      checks: summary.shellLaunchers.shellChecks ?? []
+    },
+    {
+      label: 'PowerShell',
+      active: summary.shellLaunchers.powershellInstalled,
+      checks: summary.shellLaunchers.powershellChecks ?? []
+    }
+  ];
+  for (const group of launcherCheckGroups) {
+    if (group.checks.length === 0) {
+      continue;
+    }
+    console.log(`  ${group.label}:`);
+    for (const item of group.checks) {
+      const status = item.ok ? 'OK' : (summary.shellLaunchers.installed && !group.active ? 'INFO' : 'FAIL');
+      console.log(`    [${status}] ${item.file}`);
+    }
   }
 
   if (summary.warnings.length > 0) {

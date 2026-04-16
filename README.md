@@ -32,6 +32,17 @@ goldband 主要提供：
 
 ## 安裝
 
+### 支援平台
+
+目前正式支援：
+
+- macOS / 其他 POSIX shell 環境：`install.sh`
+- Windows PowerShell：`install.ps1`
+
+Windows 路徑預設使用 PowerShell 啟動整合；workflow 安裝則需要可用的 `bash`（建議 Git for Windows 內建的 Git Bash）。
+
+### 快速開始
+
 要用 `git clone` 抓完整 repo：
 
 ```bash
@@ -41,13 +52,23 @@ cd goldband
 
 不要只複製 `install.sh`，也不要用沒有 `.git` 的下載方式。goldband 是 `repo-linked install`，啟動前自動更新也依賴 git metadata。
 
-最常用的安裝方式是：
+最常用的安裝組合：
 
 ```bash
 ./install.sh pack-quality      # Claude Code 日常推薦
 ./install.sh all-tools         # Claude Code + Codex
 ./install.sh all-with-workflow # Claude Code + Codex + 內建 workflow
 ```
+
+Windows PowerShell 對應用法：
+
+```powershell
+pwsh -File .\install.ps1 all-tools
+pwsh -File .\install.ps1 all-with-workflow
+pwsh -File .\install.ps1 status
+```
+
+### 進階安裝選項
 
 如果你只想補裝特定項目，也可以直接跑：
 
@@ -60,7 +81,10 @@ cd goldband
 ./install.sh uninstall         # 移除安裝
 ```
 
-`hooks` 合併需要 `jq`。macOS 可用 `brew install jq`。
+依賴補充：
+
+- `hooks` 合併需要 `jq`。macOS 可用 `brew install jq`
+- Windows workflow 路徑另外需要 `bash`，建議直接安裝 Git for Windows
 
 ## 更新
 
@@ -73,7 +97,7 @@ git pull --ff-only
 
 更新後，重跑你原本使用的安裝組合即可。例如只裝 Claude Code 就重跑 `./install.sh pack-quality`，有裝 Codex 就重跑 `./install.sh all-tools`，有裝 workflow 就重跑 `./install.sh all-with-workflow`。
 
-如果你平常直接輸入 `claude` 或 `codex`，goldband 也會在啟動前做一次安全的 self-update 檢查。不過它只會在 repo 乾淨、branch 是 `main`、tracking `origin/main`，而且可以安全 `git pull --ff-only` 的情況下才自動 fast-forward；不符合條件時會直接跳過。
+如果你平常直接輸入 `claude` 或 `codex`，goldband 也會在啟動前做一次安全的 self-update 檢查。macOS / POSIX 走 shell launcher，Windows 走 PowerShell launcher。不過它只會在 repo 乾淨、branch 是 `main`、tracking `origin/main`，而且可以安全 `git pull --ff-only` 的情況下才自動 fast-forward；不符合條件時會直接跳過。
 
 ## 語言
 

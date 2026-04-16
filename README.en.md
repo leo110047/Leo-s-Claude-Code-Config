@@ -31,6 +31,17 @@ For the explicit boundary and maintenance rules, read [ARCHITECTURE.md](ARCHITEC
 
 ## Installation
 
+### Supported platforms
+
+Officially supported today:
+
+- macOS / other POSIX shell environments: `install.sh`
+- Windows PowerShell: `install.ps1`
+
+The Windows path uses PowerShell launcher integration by default. Workflow installation additionally requires a working `bash` (Git for Windows / Git Bash is the recommended setup).
+
+### Quick start
+
 Clone the full repo with `git clone`:
 
 ```bash
@@ -40,13 +51,23 @@ cd goldband
 
 Do not copy `install.sh` by itself, and do not use a download method that strips `.git`. goldband uses a repo-linked install model, and startup self-update also depends on git metadata.
 
-The most common install options are:
+The most common install combinations are:
 
 ```bash
 ./install.sh pack-quality      # Recommended for Claude Code
 ./install.sh all-tools         # Claude Code + Codex
 ./install.sh all-with-workflow # Claude Code + Codex + bundled workflow
 ```
+
+Windows PowerShell equivalents:
+
+```powershell
+pwsh -File .\install.ps1 all-tools
+pwsh -File .\install.ps1 all-with-workflow
+pwsh -File .\install.ps1 status
+```
+
+### Advanced install options
 
 If you only want to install specific parts, you can also run:
 
@@ -59,7 +80,10 @@ If you only want to install specific parts, you can also run:
 ./install.sh uninstall      # Remove install
 ```
 
-`hooks` merging requires `jq`. On macOS, you can install it with `brew install jq`.
+Dependency notes:
+
+- `hooks` merging requires `jq`. On macOS, install it with `brew install jq`
+- On Windows, the workflow path additionally requires `bash`; Git for Windows is the intended setup
 
 ## Updates
 
@@ -72,7 +96,7 @@ git pull --ff-only
 
 After that, rerun the same install combination you originally used. For example, rerun `./install.sh pack-quality` if you only installed Claude Code, `./install.sh all-tools` if you installed Codex too, and `./install.sh all-with-workflow` if you also installed workflow.
 
-If you normally launch with `claude` or `codex`, goldband will also do a safe self-update check before startup. It only auto-fast-forwards when the repo is clean, the branch is `main`, the repo tracks `origin/main`, and `git pull --ff-only` is safe. Otherwise it skips the update.
+If you normally launch with `claude` or `codex`, goldband will also do a safe self-update check before startup. macOS / POSIX uses the shell launcher path; Windows uses the PowerShell launcher path. It only auto-fast-forwards when the repo is clean, the branch is `main`, the repo tracks `origin/main`, and `git pull --ff-only` is safe. Otherwise it skips the update.
 
 ## Language
 
