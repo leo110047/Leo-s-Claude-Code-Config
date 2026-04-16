@@ -15,6 +15,7 @@ goldband 主要扮演三個角色：
 - 管 shared policy：commands、hooks、rules、contexts、portable skills
 - 管安裝與更新：把 Claude Code / Codex 的本地設定接到這個 repo，並在啟動前做安全的 self-update / skill sync
 - bundle `workflow` runtime：安裝後對外提供 `goldband-*` 入口
+- 方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數；方向判斷預設優先健康且可維護的路徑
 
 ## goldband 與 workflow 的邊界
 

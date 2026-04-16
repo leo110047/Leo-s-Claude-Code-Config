@@ -18,6 +18,24 @@ check_contains() {
   fi
 }
 
+check_contains_any() {
+  local rel="$1"
+  local label="$2"
+  shift 2
+  local file="$ROOT_DIR/$rel"
+  local pattern
+
+  for pattern in "$@"; do
+    if grep -Fq "$pattern" "$file"; then
+      echo "[OK] $label"
+      return 0
+    fi
+  done
+
+  echo "[FAIL] $label missing in $rel"
+  EXIT_CODE=1
+}
+
 check_contains "AGENTS.md" "## Shared Decision Guidance" "repo shared decision guidance section"
 check_contains "AGENTS.md" "failure containment" "repo guidance emphasizes decision quality over minimal delta"
 check_contains "AGENTS.md" "main failure modes" "repo guidance requires failure modes"
@@ -74,11 +92,19 @@ check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exi
 
 check_contains "contexts/research.md" "When you recommend a direction" "research context recommendation guidance"
 check_contains "README.md" "## goldband 與 workflow 的邊界" "README documents goldband workflow boundary"
-check_contains "README.md" "decision recommendation standard" "README mentions decision recommendation standard"
-check_contains "README.md" "預設優先健康且可維護的路徑" "README documents healthiest-path default"
+check_contains_any "README.md" "README mentions decision recommendation guidance" \
+  "decision recommendation standard" \
+  "方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數"
+check_contains_any "README.md" "README documents healthiest-path default" \
+  "預設優先健康且可維護的路徑" \
+  "方向判斷預設優先健康且可維護的路徑"
 check_contains "README.en.md" "## goldband vs workflow" "README.en documents goldband workflow boundary"
-check_contains "README.en.md" "decision recommendation standard" "README.en mentions decision recommendation standard"
-check_contains "README.en.md" "healthiest maintainable path" "README.en documents healthiest-path default"
+check_contains_any "README.en.md" "README.en mentions decision recommendation guidance" \
+  "decision recommendation standard" \
+  "directional recommendations are expected to surface assumptions, failure modes, alternatives, and unknowns"
+check_contains_any "README.en.md" "README.en documents healthiest-path default" \
+  "healthiest maintainable path" \
+  "directional work defaults to the healthiest maintainable path"
 check_contains "commands/verify-config.md" "scripts/verify-decision-guidance.sh" "verify-config documents decision guidance check"
 
 if [ "$EXIT_CODE" -eq 0 ]; then

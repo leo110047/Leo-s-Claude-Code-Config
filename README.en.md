@@ -15,6 +15,7 @@ goldband plays three main roles:
 - owns the shared policy surface: commands, hooks, rules, contexts, and portable skills
 - owns install and update behavior: it connects local Claude Code / Codex config back to this repo, then runs safe self-update and skill sync before startup
 - bundles the `workflow` runtime and exposes it through `goldband-*` entry points
+- directional recommendations are expected to surface assumptions, failure modes, alternatives, and unknowns, and directional work defaults to the healthiest maintainable path
 
 ## goldband vs workflow
 
