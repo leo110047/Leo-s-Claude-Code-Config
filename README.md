@@ -10,7 +10,7 @@
 
 goldband 是一套給 Claude Code 和 Codex 共用的 engineering guardrails，目標是把 AI coding agent 的工作方式收斂成比較穩定、可驗證、可維護的流程。
 
-這個 repo 主要做三件事：
+goldband 主要扮演三個角色：
 
 - 管 shared policy：commands、hooks、rules、contexts、portable skills
 - 管安裝與更新：把 Claude Code / Codex 的本地設定接到這個 repo，並在啟動前做安全的 self-update / skill sync

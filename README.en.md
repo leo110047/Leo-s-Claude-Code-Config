@@ -10,7 +10,7 @@ English | [中文](README.md)
 
 goldband is a shared set of engineering guardrails for Claude Code and Codex. Its goal is to make AI coding workflows more stable, verifiable, and maintainable.
 
-This repo does three main things:
+goldband plays three main roles:
 
 - owns the shared policy surface: commands, hooks, rules, contexts, and portable skills
 - owns install and update behavior: it connects local Claude Code / Codex config back to this repo, then runs safe self-update and skill sync before startup
