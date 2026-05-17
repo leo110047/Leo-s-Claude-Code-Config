@@ -36,6 +36,18 @@ check_skill_file() {
     echo "[FAIL] $rel missing description:"
     EXIT_CODE=1
   fi
+
+  local skill_dir
+  skill_dir="$(dirname "$skill_file")"
+
+  local ref
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    if [ ! -f "$skill_dir/$ref" ]; then
+      echo "[FAIL] $rel references missing $ref"
+      EXIT_CODE=1
+    fi
+  done < <(grep -Eo 'reference/[[:alnum:]_-]+\.md' "$skill_file" 2>/dev/null | sort -u || true)
 }
 
 while IFS= read -r skill_file; do

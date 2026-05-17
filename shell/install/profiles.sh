@@ -62,7 +62,7 @@ install_codex_skills_core() {
 }
 
 install_codex_config() {
-    link_component "$REPO_DIR/codex/config.toml" "$CODEX_CONFIG_FILE" "Codex config.toml"
+    install_generated_codex_config
 }
 
 install_codex_agents() {
@@ -70,7 +70,7 @@ install_codex_agents() {
 }
 
 install_codex_rules() {
-    link_component "$REPO_DIR/codex/rules" "$CODEX_RULES_DIR" "Codex Rules"
+    install_codex_rules_dir
 }
 
 install_codex_core() {

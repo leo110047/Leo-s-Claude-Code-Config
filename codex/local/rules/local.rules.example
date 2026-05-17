@@ -1,0 +1,4 @@
+# Example machine-local execpolicy rules.
+# Copy to codex/local/rules/local.rules and keep the copy untracked.
+
+# prefix_rule(pattern=["npm", "run", "dev"], decision="allow")

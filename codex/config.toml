@@ -14,12 +14,6 @@ project_doc_max_bytes = 65536
 model = "gpt-5.5"
 model_reasoning_effort = "high"
 
-
-
-
-
-notify = ["/Users/leo/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient", "turn-ended"]
-
 [shell_environment_policy]
 inherit = "core"
 exclude = ["*_SECRET", "*_KEY", "*_TOKEN", "*_PASSWORD", "*_CREDENTIAL"]
@@ -55,85 +49,6 @@ approval_policy = "on-request"
 
 [notice.model_migrations]
 "gpt-5.3-codex" = "gpt-5.4"
-
-[projects."/Users/leo/Unity/secondartybox"]
-trust_level = "trusted"
-
-[projects."/Users/leo/goldband"]
-trust_level = "trusted"
-
-[projects."/Users/leo"]
-trust_level = "trusted"
-
-[projects."/Users/leo/MOGU unity"]
-trust_level = "trusted"
-
-[projects."/Users/leo/MOGU"]
-trust_level = "trusted"
-
-[projects."/Users/leo/Elemenzy"]
-trust_level = "trusted"
-
-[projects."/Users/leo/discord-bot-repo"]
-trust_level = "trusted"
-
-[projects."/Users/leo/news-briefing-agent"]
-trust_level = "trusted"
-
-[projects."/Users/leo/solopreneur"]
-trust_level = "trusted"
-
-[projects."/Users/leo/hermes-agent"]
-trust_level = "trusted"
-
-[projects."/Users/leo/manshi_math_share_work"]
-trust_level = "trusted"
-
-[projects."/Users/leo/Documents/New project"]
-trust_level = "trusted"
-
-[projects."/Users/leo/nltk_data"]
-trust_level = "trusted"
-
-[projects."/Users/leo/meeting-copilot"]
-trust_level = "trusted"
-
-[projects."/Users/leo/MOGU 3D"]
-trust_level = "trusted"
-
-[projects."/Users/leo/openfang"]
-trust_level = "trusted"
-
-[projects."/Users/leo/Documents/Codex/2026-05-12/codex"]
-trust_level = "trusted"
-
-[marketplaces.openai-bundled]
-last_updated = "2026-05-15T17:51:36Z"
-source_type = "local"
-source = "/Users/leo/.codex/.tmp/bundled-marketplaces/openai-bundled"
-
-[marketplaces.openai-primary-runtime]
-last_updated = "2026-05-15T18:38:42Z"
-source_type = "local"
-source = "/Users/leo/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
-
-[plugins."computer-use@openai-bundled"]
-enabled = true
-
-[plugins."documents@openai-primary-runtime"]
-enabled = true
-
-[plugins."spreadsheets@openai-primary-runtime"]
-enabled = true
-
-[plugins."presentations@openai-primary-runtime"]
-enabled = true
-
-[plugins."browser@openai-bundled"]
-enabled = true
-
-[plugins."chrome@openai-bundled"]
-enabled = true
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"

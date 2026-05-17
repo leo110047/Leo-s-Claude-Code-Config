@@ -35,72 +35,16 @@ jobs:
             exit 1
           fi
 
-      - name: Check SKILL.md frontmatter
-        run: |
-          echo "=== Checking SKILL.md frontmatter ==="
-          errors=0
-          warnings=0
+      - name: Check skills
+        run: bash scripts/check-skills.sh
 
-          find skills -name "SKILL.md" | sort | while read -r f; do
-            # Check frontmatter exists (starts with ---)
-            if ! head -1 "$f" | grep -q "^---"; then
-              echo "  [ERROR] $f — missing YAML frontmatter"
-              errors=$((errors + 1))
-              continue
-            fi
-
-            # Check for name field
-            if ! sed -n '/^---$/,/^---$/p' "$f" | grep -q "^name:"; then
-              echo "  [ERROR] $f — missing 'name' in frontmatter"
-              errors=$((errors + 1))
-            fi
-
-            # Check for description field
-            if ! sed -n '/^---$/,/^---$/p' "$f" | grep -q "^description"; then
-              echo "  [ERROR] $f — missing 'description' in frontmatter"
-              errors=$((errors + 1))
-            fi
-
-            # Check line count
-            lines=$(wc -l < "$f")
-            if [ "$lines" -gt 500 ]; then
-              echo "  [WARNING] $f — $lines lines (>500)"
-              warnings=$((warnings + 1))
-            else
-              echo "  [OK] $f — $lines lines"
-            fi
-          done
-
-          echo ""
-          echo "Frontmatter check complete"
+      - name: Check Codex portable baseline
+        run: bash scripts/check-codex-portability.sh
 
       - name: Verify hook script references
         run: |
           echo "=== Verifying hook script references ==="
           python3 scripts/verify-hook-script-references.py
-
-      - name: Verify reference file links
-        run: |
-          echo "=== Verifying reference/ links in SKILL.md files ==="
-          errors=0
-
-          find skills -name "SKILL.md" | sort | while read -r f; do
-            dir=$(dirname "$f")
-
-            # Find reference links like (reference/xxx.md) or reference/xxx.md
-            grep -oP 'reference/[a-zA-Z0-9_-]+\.md' "$f" | sort -u | while read -r ref; do
-              refpath="$dir/$ref"
-              if [ -f "$refpath" ]; then
-                echo "  [OK] $f → $ref"
-              else
-                echo "  [ERROR] $f → $ref — file not found at $refpath"
-                errors=$((errors + 1))
-              fi
-            done
-          done
-
-          echo ""
-          echo "Reference link check complete"
 
       - name: Verify decision guidance parity
         run: |

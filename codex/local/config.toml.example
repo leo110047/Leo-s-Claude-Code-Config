@@ -1,0 +1,10 @@
+# Example machine-local Codex config overlay.
+# Copy to codex/local/config.toml and keep the copy untracked.
+
+# notify = ["/path/to/local/notifier", "turn-ended"]
+
+# [projects."/path/to/project"]
+# trust_level = "trusted"
+
+# [plugins."browser@openai-bundled"]
+# enabled = true

@@ -72,22 +72,49 @@ show_status() {
     echo ""
     echo -e "${BLUE}Codex 狀態${NC}"
 
-    local codex_components=("codex-config:$CODEX_CONFIG_FILE" "codex-agents:$CODEX_AGENTS_FILE" "codex-rules:$CODEX_RULES_DIR")
-
-    for item in "${codex_components[@]}"; do
-        local name="${item%%:*}"
-        local path="${item##*:}"
-
-        if [ -L "$path" ]; then
-            local target
-            target=$(readlink "$path")
-            echo -e "  ${GREEN}[OK]${NC} $name -> $target"
-        elif [ -e "$path" ]; then
-            echo -e "  ${YELLOW}[legacy copy]${NC} $name — 建議重跑 ./install.sh 轉成 repo-linked"
+    if is_generated_codex_config "$CODEX_CONFIG_FILE"; then
+        if grep -q '^# Local overlay: none$' "$CODEX_CONFIG_FILE" 2>/dev/null; then
+            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base only)"
         else
-            echo -e "  ${RED}[未安裝]${NC} $name"
+            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base + local overlay)"
         fi
-    done
+    elif [ -L "$CODEX_CONFIG_FILE" ]; then
+        local target
+        target=$(readlink "$CODEX_CONFIG_FILE")
+        echo -e "  ${YELLOW}[legacy symlink]${NC} codex-config -> $target — 建議重跑 ./install.sh codex-config"
+    elif [ -e "$CODEX_CONFIG_FILE" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex-config — 建議重跑 ./install.sh codex-config"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex-config"
+    fi
+
+    if [ -L "$CODEX_AGENTS_FILE" ]; then
+        local target
+        target=$(readlink "$CODEX_AGENTS_FILE")
+        echo -e "  ${GREEN}[OK]${NC} codex-agents -> $target"
+    elif [ -e "$CODEX_AGENTS_FILE" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex-agents — 建議重跑 ./install.sh codex-agents"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex-agents"
+    fi
+
+    if [ -L "$CODEX_RULES_DIR" ]; then
+        local target
+        target=$(readlink "$CODEX_RULES_DIR")
+        echo -e "  ${YELLOW}[legacy symlink]${NC} codex-rules -> $target — 建議重跑 ./install.sh codex-rules"
+    elif [ -d "$CODEX_RULES_DIR" ]; then
+        if [ -L "$CODEX_RULES_DIR/default.rules" ]; then
+            local rule_count
+            rule_count=$(find "$CODEX_RULES_DIR" -name '*.rules' 2>/dev/null | wc -l | tr -d ' ')
+            echo -e "  ${GREEN}[OK]${NC} codex-rules (${rule_count} 個 rule file)"
+        else
+            echo -e "  ${YELLOW}[存在]${NC} codex-rules 目錄存在，但缺少 default.rules link"
+        fi
+    elif [ -e "$CODEX_RULES_DIR" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex-rules — 建議重跑 ./install.sh codex-rules"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex-rules"
+    fi
 
     if [ -d "$CODEX_SKILLS_DIR" ]; then
         if [ -f "$CODEX_SKILL_PROFILE_FILE" ]; then

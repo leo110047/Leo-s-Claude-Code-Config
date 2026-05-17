@@ -6,6 +6,14 @@
 # Claude Code
 .claude/
 
+# Machine-local Codex overlays
+codex/local/*
+!codex/local/README.md
+!codex/local/*.example
+!codex/local/rules/
+codex/local/rules/*
+!codex/local/rules/*.example
+
 # Temporary files
 *.tmp
 *.bak

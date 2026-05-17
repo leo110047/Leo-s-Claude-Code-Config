@@ -84,6 +84,13 @@ pwsh -File .\install.ps1 status            # 檢查安裝狀態
 - `hooks` 合併需要 `jq`。macOS 可用 `brew install jq`
 - Windows workflow 路徑另外需要 `bash`，建議直接安裝 Git for Windows
 
+Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted projects、plugin runtime state、一次性 command approvals 放在 ignored overlay：
+
+- `codex/local/config.toml`
+- `codex/local/rules/*.rules`
+
+`./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
+
 ## 更新
 
 手動更新方式很簡單：
