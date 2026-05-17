@@ -22,11 +22,13 @@
 - `planning-workflow`
 - `testing-strategy`
 - `code-review-skill`
+- `prompt-hygiene`
 
 目標：
 - 寫得出可執行 plan
 - 知道怎麼設計 coverage 與 regression test
 - 知道 review 要先看 correctness、risk、missing tests
+- 寫 prompt 時能分清目標、背景、硬邊界與成果標準，不用模板或無根據禁令取代判斷
 
 ## 第 3 階段：學會做方向判斷
 

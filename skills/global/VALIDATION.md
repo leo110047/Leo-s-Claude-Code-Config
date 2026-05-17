@@ -46,10 +46,24 @@ getUserById 函數在哪裡？
 → 應改完後跑驗證，而不是只說應該修好了
 ```
 
+### prompt hygiene 行為
+
+```text
+幫我寫一個每日新聞 briefing prompt
+→ 應先做成該類 briefing 的 authoring prompt，保留目標、可見背景、硬邊界與成果標準
+
+幫我寫交給另一個 coding agent 的 prompt
+→ 應明確 source of truth、實作範圍、測試、驗證與回報要求；這類執行型 prompt 可以有必要步驟
+
+幫我改 Discord cron 報告 prompt
+→ 應寫清楚讀者、可見輸入、訊息用途與必要邊界，並用可觀察標準描述訊息品質
+```
+
 ## 什麼算異常
 
 - 明顯該進 debug 卻被帶去 review
 - recommendation 沒有 assumptions / failure modes / alternatives
+- prompt 任務沒有觸發 `prompt-hygiene`，或輸出含無根據的「不要怎樣」規則
 - mode state 說法與 `status` 不一致
 - 直接對 repo 內容做未驗證 claim
 

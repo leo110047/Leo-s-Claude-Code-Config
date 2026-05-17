@@ -47,6 +47,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 | `performance-optimization` | profiling、bottleneck、latency / throughput |
 | `security-checklist` | auth、input validation、secret handling、OWASP 風險 |
 | `frontend-design` | 高品質前端畫面設計與避免 generic AI aesthetics |
+| `prompt-hygiene` | 撰寫 prompt / system prompt / agent handoff 時，只保留必要目標、背景、硬邊界與成果標準 |
 
 ### 交付與維運
 

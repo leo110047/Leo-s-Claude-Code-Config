@@ -21,6 +21,12 @@
 - 效能：`performance-optimization`
 - 測試設計：`testing-strategy`
 
+### Prompt / agent instruction authoring
+
+- 寫 prompt、system prompt、cron prompt、Discord/report prompt、design-tool prompt 或交給另一個 AI agent 的 handoff prompt 時，用 `prompt-hygiene`
+- 這是產出前的 authoring skill；重點是先用正確工作模式寫出 prompt
+- prompt 應優先寫正向目標、可見背景、硬邊界與成果標準；不要補沒有根據的 negative rules 或固定 SOP
+
 ## On-Demand Modes
 
 ### `careful-mode`

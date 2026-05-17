@@ -7,6 +7,7 @@ performance-optimization|core|core
 api-design|dev|full
 backend-patterns|dev|full
 frontend-design|dev|full
+prompt-hygiene|dev|full
 careful-mode|dev|
 freeze-mode|dev|
 claude-config-verification|dev|
