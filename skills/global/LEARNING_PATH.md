@@ -7,11 +7,13 @@
 先熟悉：
 
 - `evidence-based-coding`
+- `implementation-contracts`
 - `systematic-debugging`
 - `file-search`
 
 目標：
 - 不憑印象回答
+- 實作 contract 壞掉時要明確失敗，不用猜測或非必要降級補洞
 - 知道 bug 要先重現、收證據、再修
 - 習慣先建 codebase map
 

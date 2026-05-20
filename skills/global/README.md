@@ -32,6 +32,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 | Skill | 作用 |
 |------|------|
 | `evidence-based-coding` | 所有 claim 都要有文件、命令、測試或 log 證據 |
+| `implementation-contracts` | 實作 contract 變更時明確失敗、不猜資料、不做未授權副作用或假泛化 |
 | `systematic-debugging` | bug / test failure 的標準除錯流程 |
 | `file-search` | 用 `rg` 建圖與查定位 |
 | `planning-workflow` | 多步實作前的可驗證規劃流程 |
