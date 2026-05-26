@@ -31,6 +31,21 @@ Database design patterns, query optimization, and data management best practices
 - Do not run schema changes without considering rollback, lock time, and backfill strategy.
 - Do not claim a query fix without `EXPLAIN`/`EXPLAIN ANALYZE` or equivalent plan evidence.
 
+## Entry Point Boundary
+
+Use this `SKILL.md` to choose schema, query, index, migration, or transaction
+direction. Use `reference/` for detailed examples after the current data shape,
+traffic pattern, and operational risk are known.
+
+## Completion Check
+
+Before considering database design work complete, confirm:
+
+- The schema, index, migration, transaction, or query outcome is named explicitly.
+- Query or migration recommendations include plan evidence, lock/backfill risk, or a clear unknown.
+- Rollback, data consistency, and operational blast radius are accounted for.
+- Any unverified production data shape, traffic pattern, or database version is reported.
+
 ## Schema Design Principles
 
 ### Normalization vs Denormalization Decision Tree

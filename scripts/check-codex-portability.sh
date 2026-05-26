@@ -23,9 +23,14 @@ for pattern in "${patterns[@]}"; do
   fi
 done
 
+if rg -n 'prefix_rule\(.*decision[[:space:]]*=[[:space:]]*"allow".*\)' "$ROOT_DIR/codex/rules"; then
+  failed=1
+fi
+
 if [ "$failed" -ne 0 ]; then
   echo "[FAIL] tracked Codex baseline contains machine-local or credential-shaped state"
   echo "Move local paths, trusted projects, plugin runtime state, and one-off approvals to codex/local/."
+  echo "For one-off approvals, run: ./install.sh repair-codex-rules"
   exit 1
 fi
 

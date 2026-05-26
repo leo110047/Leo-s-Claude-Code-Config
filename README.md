@@ -75,6 +75,7 @@ pwsh -File .\install.ps1 status            # 檢查安裝狀態
 ./install.sh workflow          # 只安裝 Claude 端 workflow
 ./install.sh workflow-codex    # 只安裝 Codex 端 workflow
 ./install.sh launchers         # 重裝 claude/codex 啟動入口
+./install.sh repair-codex-rules # 修復誤寫進 tracked rules 的本機 approvals
 ./install.sh status            # 檢查安裝狀態
 ./install.sh uninstall         # 移除安裝
 ```
@@ -90,6 +91,14 @@ Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted
 - `codex/local/rules/*.rules`
 
 `./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
+
+如果你的舊 checkout 曾經把 Codex approvals 寫進 `codex/rules/default.rules`，請跑：
+
+```bash
+./install.sh repair-codex-rules
+```
+
+這會把一行式本機 approvals 搬到 `codex/local/rules/default.rules`，保留本機授權，同時讓 tracked baseline 回到可自動更新的狀態。之後 installer 會把 portable rules 裝成 `goldband.rules`，把 ignored local overlay 裝成 writable `default.rules`，避免新的 approvals 再寫回 tracked 檔。
 
 ## 更新
 
@@ -160,6 +169,7 @@ goldband wrapper 支援 `zh-TW` 和 `en`，預設是 `zh-TW`。
 | `/verify-config` 報錯 | 重跑 `./install.sh all-tools` 或 `./install.sh all-with-workflow` |
 | 語言切換後說明沒變 | 重開 Claude Code 或 Codex 一次 |
 | 啟動時沒有自動更新 | 確認這是用 `git clone` 抓下來的 repo，而且目前在 `main`、工作樹乾淨，並且 tracking `origin/main` |
+| `codex/rules/default.rules` 因 approvals 變髒 | 跑 `./install.sh repair-codex-rules`，把本機 approvals 搬到 ignored local overlay |
 
 ## 授權
 

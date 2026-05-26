@@ -14,6 +14,13 @@ description: |
 
 Backend architecture patterns and best practices for scalable server-side applications.
 
+## When to Use
+
+- Designing service boundaries, repository/service layers, or server-side module shape
+- Choosing authentication, authorization, error handling, background job, or caching structure
+- Reviewing whether a backend abstraction protects a real seam or adds avoidable complexity
+- Planning a backend refactor before implementation
+
 ## Priority and Conflict Rules
 
 - **Scope**: Architectural decisions and design patterns

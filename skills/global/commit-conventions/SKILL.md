@@ -184,3 +184,12 @@ Before committing, verify:
 - **Use conventional format** - Enables automation (changelogs, versioning)
 - **Commit often** - Small, focused commits are easier to review and revert
 - **Think before you commit** - Good commits = good git history
+
+## Completion Check
+
+Before finalizing a commit message, confirm:
+
+- The type and optional scope match the actual diff.
+- The subject describes the user-visible or maintainer-visible change.
+- Breaking changes, issue references, or migration notes are included when relevant.
+- The message does not claim tests, fixes, or release impact that was not verified.

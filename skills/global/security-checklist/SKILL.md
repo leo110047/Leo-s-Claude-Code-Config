@@ -282,3 +282,12 @@ See `reference/environment-secrets.md` for code examples, `.env.example` templat
 - **Use security headers** - helmet is your friend
 - **Log security events** - But don't log secrets
 - **Test security** - Include security tests in your test suite
+
+## Completion Check
+
+Before considering security work complete, confirm:
+
+- The real attack surface and trust boundaries were identified.
+- Authentication, authorization, input validation, secret handling, and sensitive data paths were checked where relevant.
+- Any recommended control maps to a concrete risk rather than a generic checklist item.
+- Unverified dependencies, deployment settings, credentials, or production policy are reported.

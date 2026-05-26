@@ -150,6 +150,21 @@ link_codex_rule_file() {
     echo -e "  ${GREEN}[安裝 (repo-linked)] $label${NC}"
 }
 
+ensure_codex_local_default_rules() {
+    local local_default="$REPO_DIR/codex/local/rules/default.rules"
+
+    if [ -f "$local_default" ]; then
+        return
+    fi
+
+    mkdir -p "$(dirname "$local_default")"
+    {
+        echo "# Machine-local Codex execpolicy rules."
+        echo "# This ignored file is the writable default target for one-off approvals."
+        echo ""
+    } > "$local_default"
+}
+
 prune_stale_codex_rule_links() {
     local entry
     for entry in "$CODEX_RULES_DIR"/*.rules; do
@@ -182,12 +197,18 @@ install_codex_rules_dir() {
     fi
 
     mkdir -p "$CODEX_RULES_DIR"
+    ensure_codex_local_default_rules
     prune_stale_codex_rule_links
 
     local rule_file
     for rule_file in "$base_rules"/*.rules; do
         [ -f "$rule_file" ] || continue
-        link_codex_rule_file "$rule_file" "$CODEX_RULES_DIR/$(basename "$rule_file")" "Codex rule $(basename "$rule_file")"
+        local dest_name
+        dest_name="$(basename "$rule_file")"
+        if [ "$dest_name" = "default.rules" ]; then
+            dest_name="goldband.rules"
+        fi
+        link_codex_rule_file "$rule_file" "$CODEX_RULES_DIR/$dest_name" "Codex rule $dest_name"
     done
 
     if [ -d "$local_rules" ]; then
@@ -196,6 +217,45 @@ install_codex_rules_dir() {
             link_codex_rule_file "$rule_file" "$CODEX_RULES_DIR/$(basename "$rule_file")" "Codex local rule $(basename "$rule_file")"
         done
     fi
+}
+
+codex_portable_rules_have_local_state() {
+    local base_rules="$REPO_DIR/codex/rules"
+    [ -d "$base_rules" ] || return 1
+    grep -R -q -F '/Users/' "$base_rules" ||
+        grep -R -q -F '/private/tmp' "$base_rules" ||
+        grep -R -q -F '.studio_os_write_token' "$base_rules" ||
+        grep -R -q -F 'LaunchAgents' "$base_rules"
+}
+
+warn_codex_portable_rules_local_state() {
+    if ! codex_portable_rules_have_local_state; then
+        return 0
+    fi
+
+    echo -e "  ${YELLOW}[警告] Codex portable rules 含有本機 approvals，會阻止 self-update${NC}"
+    echo -e "  ${CYAN}  建議執行:${NC} ./install.sh repair-codex-rules"
+    echo -e "  ${CYAN}  這會把本機 approvals 從 codex/rules/default.rules 移到 ignored overlay:${NC}"
+    echo -e "  ${CYAN}  codex/local/rules/default.rules${NC}"
+}
+
+repair_codex_local_rules() {
+    local migrator="$REPO_DIR/scripts/migrate-codex-local-rules.py"
+    local base_rules="$REPO_DIR/codex/rules/default.rules"
+    local local_rules="$REPO_DIR/codex/local/rules/default.rules"
+
+    if [ ! -f "$migrator" ]; then
+        echo -e "  ${RED}[錯誤] 找不到 repair script: $migrator${NC}"
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo -e "  ${RED}[錯誤] repair-codex-rules 需要 python3${NC}"
+        return 1
+    fi
+
+    python3 "$migrator" --base-rules "$base_rules" --local-rules "$local_rules"
+    bash "$REPO_DIR/scripts/check-codex-portability.sh"
+    install_codex_rules_dir
 }
 
 timestamp_suffix() {

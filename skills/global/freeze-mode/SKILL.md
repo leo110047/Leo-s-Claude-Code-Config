@@ -56,3 +56,13 @@ While active, the `PreToolUse` router:
 3. Perform the investigation window with read-only tools
 4. Run `node scripts/freeze-mode.js disable`
 5. Confirm the mode is off before starting any edits or deploy actions
+
+## Completion Check
+
+Before claiming the session stayed read-only, report:
+
+- The command used to enable the mode.
+- The `status` evidence before the investigation.
+- The read-only evidence gathered.
+- Any blocked tool or shell attempt.
+- The `status` evidence after disabling the mode.

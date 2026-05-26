@@ -41,9 +41,11 @@ Before writing UI code, lock these five items:
 
 If these are still vague, stop generating components and decide them first.
 
-## Anti-Slop Rules
+## Low-Originality Signals
 
-Do not ship these unless the existing product already uses them:
+Treat these as low-originality signals unless the existing product already uses
+them, the product context justifies them, or the execution is strong enough to
+make them feel deliberate:
 - generic gray card-grid SaaS layouts
 - default-looking system-font or Inter-first aesthetics
 - trend-driven styling used as a shortcut instead of a real hierarchy or point of view
@@ -102,10 +104,11 @@ Do not ship these unless the existing product already uses them:
 ## Review Standard
 
 Before considering UI work complete, check:
-- Does this have a clear visual point of view?
-- Would a human designer recognize deliberate choices here?
-- Is there a memorable focal point?
-- Did typography, color, spacing, layout, and motion all get explicit decisions?
-- Does any part still look like generic AI boilerplate?
+- Design quality: does the screen have a coherent goldband mood?
+- Originality: are there product-specific visual decisions rather than template defaults?
+- Craft: do typography, spacing, color, states, and responsive behavior hold up?
+- Functionality: can the user understand the screen, find the primary action, and complete the task?
+- Verification: were browser, screenshot, responsive, or interaction checks run when applicable?
 
-If the answer to the last question is yes, the work is not done.
+If the work fails one of these dimensions, revise the design or report what
+remains unverified.

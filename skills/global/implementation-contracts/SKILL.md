@@ -12,6 +12,13 @@ description: |
 
 Hard rules for production contract changes. Follow stricter repo rules when present.
 
+## When to Use
+
+- Before changing required configuration, credentials, permissions, states, or shared constants
+- Before adding external side effects such as sending messages, spending money, mutating third-party state, or exposing sensitive data
+- Before generalizing a workflow that may hide a platform-specific or customer-specific contract
+- When missing data, permissions, or runtime state could otherwise be guessed or silently downgraded
+
 ## Broken Contracts Must Fail Clearly
 
 - Missing config, credentials, permissions, required data, or invalid state must become a clear error, blocked state, or failed state.
@@ -33,3 +40,12 @@ Hard rules for production contract changes. Follow stricter repo rules when pres
 
 - Do not hardcode one case inside a generic workflow.
 - Do not scatter magic strings for statuses, costs, capabilities, or protocol values.
+
+## Completion Check
+
+Before considering the contract change safe, confirm:
+
+- Required inputs, permissions, states, and side effects are named explicitly.
+- Missing or invalid contract data produces a clear blocked or failed state.
+- External side effects require explicit authorization and durable result state where applicable.
+- Generic workflow behavior is backed by a real shared contract, not one hardcoded case.

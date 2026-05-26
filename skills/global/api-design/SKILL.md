@@ -45,6 +45,21 @@ When this skill is used to recommend an API direction, the answer must include:
 - **Best alternative** — the next-best design and when it becomes better
 - **Unknowns** — what still needs validation with clients, traffic, or rollout constraints
 
+## Entry Point Boundary
+
+Use this `SKILL.md` to choose contract shape, failure modes, and migration
+strategy. Use `reference/` only when the task needs concrete examples for error
+formats, pagination, OpenAPI details, or implementation-specific patterns.
+
+## Completion Check
+
+Before considering API design work complete, confirm:
+
+- The request and response outcome is explicit.
+- Validation, authorization, pagination, errors, and versioning are accounted for where relevant.
+- Breaking-change and migration risks are named.
+- OpenAPI or client-contract verification is run or reported as unverified.
+
 ## REST Conventions
 
 ### Resource Naming Rules

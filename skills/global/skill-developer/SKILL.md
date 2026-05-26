@@ -96,3 +96,12 @@ Use supporting folders only when they increase signal:
 - [SKILL_RULES_REFERENCE.md](SKILL_RULES_REFERENCE.md) — meaning of `skill-rules.json`
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — debugging guide for activation and install issues
 - [ADVANCED.md](ADVANCED.md) — future-facing ideas that are not wired today
+
+## Completion Check
+
+Before claiming a skill is ready, confirm:
+
+- The trigger description names the task surface and exclusions clearly.
+- The entrypoint is short enough to guide first action without duplicating reference material.
+- Outcome, verification, constraints, iteration policy, and error handling are present where the skill needs them.
+- Scripts, references, templates, and installer/catalog wiring are documented or explicitly out of scope.

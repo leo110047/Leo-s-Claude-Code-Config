@@ -31,6 +31,21 @@ Pipeline design patterns and deployment strategies for modern applications using
 - Do not add aggressive caching before the pipeline is deterministic; stale cache wins create the worst kind of flaky CI.
 - Do not design deployment stages without a promotion and rollback story.
 
+## Entry Point Boundary
+
+Use this `SKILL.md` to choose CI/CD stage shape, gates, evidence, and failure
+containment. Use `reference/` for concrete GitHub Actions recipes only after the
+pipeline outcome, runtime, secrets model, and deploy target are known.
+
+## Completion Check
+
+Before considering CI/CD work complete, confirm:
+
+- The pipeline change has an explicit build, test, deploy, or release outcome.
+- Verification ran in a clean or CI-equivalent environment when feasible.
+- Secrets, permissions, caches, artifacts, and rollback behavior are accounted for.
+- Any unverified remote CI result, environment gate, or deployment step is reported.
+
 ## GitHub Actions Workflow Patterns
 
 ### Workflow Structure

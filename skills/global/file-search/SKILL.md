@@ -128,3 +128,12 @@ rg -n "schema|migration|feature_flag|ENV_NAME" .
 - Use `rg` when you care about filenames, strings, imports, comments, or rough usage mapping.
 - Use `sg` when regex overmatches and the task depends on code shape.
 - If `sg` is unavailable, say so and continue with `rg` plus file reads instead of pretending syntax-aware search happened.
+
+## Completion Check
+
+Before answering from a search, confirm:
+
+- The search scope and pattern were specific enough for the claim.
+- Important matches were read, not only listed.
+- Ignored files, generated files, or unavailable AST tooling are noted when they affect confidence.
+- The final answer cites concrete files or says when the evidence is inconclusive.

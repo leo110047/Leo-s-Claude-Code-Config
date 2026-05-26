@@ -209,3 +209,12 @@ Logged: ADR-{number} "{title}"
 View: docs/DECISIONS.md
 Query: /why {topic}
 ```
+
+## Completion Check
+
+Before claiming a decision was logged, confirm:
+
+- The decision, status, context, consequences, and assumptions are recorded.
+- The ADR location follows the repo convention or the deviation is explained.
+- Open questions and revisit triggers are captured when confidence depends on future evidence.
+- No implementation detail is presented as an approved decision unless it was actually decided.

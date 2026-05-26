@@ -59,3 +59,13 @@ If `config.json` is missing or incomplete, ask the user for the missing defaults
 3. Rewrite the generated `SKILL.md` so the description is trigger-first.
 4. Move detailed docs into `reference/` and scripts into `scripts/`.
 5. Update installer/catalog docs if the new skill should ship by default.
+
+## Completion Check
+
+Before claiming a new skill is ready, confirm:
+
+- The trigger description names when to use the skill and when not to use it.
+- The entrypoint contains only the minimum workflow needed to start correctly.
+- Detailed examples, APIs, and background live in `reference/`, `scripts/`, or templates.
+- Scripts or config files are documented in the entrypoint.
+- Installer/catalog docs are updated when the skill should ship by default.

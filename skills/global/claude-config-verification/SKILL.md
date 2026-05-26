@@ -68,3 +68,12 @@ allowed-tools:
 2. Run `node scripts/verify-claude-config.js`
 3. If hooks/router changed, run `node scripts/verify-claude-config.js --router-replay`
 4. Summarize results using `assets/verification-report-template.md`
+
+## Completion Check
+
+Before claiming config verification is complete, report:
+
+- Which script was run and with what target surface.
+- Whether the report file or history entry was produced.
+- Any missing binary, plugin data path, runtime state, or install surface.
+- Whether the evidence proves full parity or only partial verification.

@@ -60,3 +60,12 @@ While active, the `PreToolUse` router blocks these Bash patterns:
 3. Perform the risky operation window
 4. Run `node scripts/careful-mode.js disable`
 5. Confirm the mode is off before resuming normal work
+
+## Completion Check
+
+Before claiming the risky window was guarded, report:
+
+- The command used to enable the mode.
+- The `status` evidence before the risky operation.
+- Whether any guarded command was blocked or allowed.
+- The `status` evidence after disabling the mode.

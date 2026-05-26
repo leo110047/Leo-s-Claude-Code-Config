@@ -18,8 +18,26 @@ produce the prompt deliverable.
 Write the minimum prompt that gives the model the right target, context, hard
 boundaries, and success criteria.
 
-Every sentence should serve the current prompt surface: goal, visible context,
-hard boundary, or success criterion.
+Every sentence should serve the current prompt surface: outcome, visible
+context, hard boundary, or success criterion.
+
+## Prompt Contract
+
+Good prompts define the work contract, not just the task. For any prompt that
+will be reused, installed, handed off, or used by another agent, include these
+five elements:
+
+- Outcome: the finished state the model is responsible for producing.
+- Verification: the executable test, check, review method, or evidence the
+  target model, reviewer, or runtime can use to prove the outcome was reached.
+- Constraints: forbidden actions, source-of-truth boundaries, permission gates,
+  files or systems that must not be touched, and delivery limits.
+- Iteration policy: what the model should record while working. Match the
+  recordkeeping to the prompt surface: coding-agent prompts may need step-level
+  evidence and files touched; editorial or report prompts may only need
+  assumptions, sources used, and skipped scope.
+- Error handling: when the model must stop, ask, or report instead of guessing;
+  include what information it should return when blocked.
 
 ## When to Use
 
@@ -52,13 +70,9 @@ hard boundary, or success criterion.
    - Discord / report prompt
    - Cron / scheduled prompt
 
-2. Write only the prompt material this surface needs:
-   - Goal: what outcome the model must produce
-   - Context: the inputs and audience the model can actually see
-   - Hard boundaries: source of truth, permissions, language, forbidden files,
-     verification requirements, or delivery constraints
-   - Success criteria: what makes the output useful
-   - Output shape: only as much structure as the reader or downstream system needs
+2. Write only the prompt material this surface needs. Use the Prompt Contract as
+   the checklist, but omit any element that is already enforced by schema,
+   surrounding code, or runtime policy.
 
 3. Prefer positive criteria.
    - Say what good output does.
@@ -109,6 +123,8 @@ trigger, available tools, and delivery path.
 
 Before delivering or installing the prompt, confirm:
 
+- The Prompt Contract is present where the prompt surface needs it, without
+  duplicating rules already enforced elsewhere.
 - The prompt can stand alone with the context the target model will actually get.
 - Every negative rule is justified by user request, hard boundary, or observed
   failure.

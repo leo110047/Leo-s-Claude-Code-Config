@@ -74,6 +74,7 @@ If you only want to install specific parts, you can also run:
 ./install.sh workflow       # Install Claude-side workflow only
 ./install.sh workflow-codex # Install Codex-side workflow only
 ./install.sh launchers      # Reinstall claude/codex launchers
+./install.sh repair-codex-rules # Move accidental local Codex approvals out of tracked rules
 ./install.sh status         # Check install status
 ./install.sh uninstall      # Remove install
 ```
@@ -82,6 +83,28 @@ Dependency notes:
 
 - `hooks` merging requires `jq`. On macOS, install it with `brew install jq`
 - On Windows, the workflow path additionally requires `bash`; Git for Windows is the intended setup
+
+Codex tracked config/rules are the portable baseline only. Put machine-local
+paths, trusted projects, plugin runtime state, and one-off command approvals in
+the ignored overlay:
+
+- `codex/local/config.toml`
+- `codex/local/rules/*.rules`
+
+`./install.sh codex-full` combines the portable baseline and local overlay into
+`~/.codex/`.
+
+If an older checkout wrote Codex approvals into `codex/rules/default.rules`, run:
+
+```bash
+./install.sh repair-codex-rules
+```
+
+This moves one-line local approvals into `codex/local/rules/default.rules`, keeps
+the local authorization behavior, and restores the tracked baseline so startup
+self-update can run again. After that, the installer links portable rules as
+`goldband.rules` and the ignored local overlay as the writable `default.rules`,
+so new approvals do not write back into tracked files.
 
 ## Updates
 
@@ -152,6 +175,7 @@ If you only want the runtime, start with [vendor/workflow/README.md](vendor/work
 | `/verify-config` reports errors | Rerun `./install.sh all-tools` or `./install.sh all-with-workflow` |
 | Language changes do not show up | Restart Claude Code or Codex once |
 | Startup self-update does not run | Verify that this repo was cloned with `git clone`, that it is on `main`, that the working tree is clean, and that it tracks `origin/main` |
+| `codex/rules/default.rules` is dirty because of approvals | Run `./install.sh repair-codex-rules` to move local approvals into the ignored local overlay |
 
 ## License
 

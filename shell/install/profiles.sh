@@ -70,6 +70,7 @@ install_codex_agents() {
 }
 
 install_codex_rules() {
+    warn_codex_portable_rules_local_state
     install_codex_rules_dir
 }
 

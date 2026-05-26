@@ -12,6 +12,20 @@ Supported local files:
 Keep personal paths, trusted projects, local marketplace caches, plugin runtime
 state, and one-off command approvals here.
 
+`rules/default.rules` is the preferred writable overlay. The installer links the
+portable baseline as `~/.codex/rules/goldband.rules` and this ignored overlay as
+`~/.codex/rules/default.rules`, so future one-off approvals stay local.
+
+If `codex/rules/default.rules` becomes dirty because Codex stored one-off
+approvals there, run:
+
+```bash
+./install.sh repair-codex-rules
+```
+
+The repair command moves those approvals into `rules/default.rules` and links them
+alongside the portable baseline.
+
 The installer emits root-level TOML keys before any table and then emits table
 sections. Do not duplicate keys or table names that already exist in the
 portable baseline.

@@ -61,6 +61,7 @@ show_help() {
     echo "  codex-config 只安裝 ~/.codex/config.toml"
     echo "  codex-agents 只安裝 ~/.codex/AGENTS.md"
     echo "  codex-rules  只安裝 ~/.codex/rules"
+    echo "  repair-codex-rules 將本機 approvals 從 tracked rules 移到 ignored local overlay"
     echo "  codex-skills 安裝 Codex portable skills 到 ~/.agents/skills"
     echo "  workflow      安裝內建 workflow 到 Claude Code"
     echo "  workflow-codex 安裝內建 workflow 到 Codex"
@@ -237,6 +238,11 @@ for arg in "$@"; do
             ;;
         codex-rules)
             install_codex_rules
+            ;;
+        repair-codex-rules|codex-repair)
+            echo -e "${GREEN}修復 Codex local rules overlay...${NC}"
+            echo ""
+            repair_codex_local_rules
             ;;
         codex-skills)
             install_codex_skills
