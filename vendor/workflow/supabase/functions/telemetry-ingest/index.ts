@@ -1,6 +1,6 @@
-// workflow telemetry-ingest edge function
+// gstack telemetry-ingest edge function
 // Validates and inserts a batch of telemetry events.
-// Called by bin/workflow-telemetry-sync.
+// Called by bin/gstack-telemetry-sync.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -10,7 +10,7 @@ interface TelemetryEvent {
   event_type: string;
   skill: string;
   session_id?: string;
-  workflow_version: string;
+  gstack_version: string;
   os: string;
   arch?: string;
   duration_s?: number;
@@ -43,9 +43,15 @@ Deno.serve(async (req) => {
       return new Response(`Batch too large (max ${MAX_BATCH_SIZE})`, { status: 400 });
     }
 
+    // Use the anon key, not the service role key.
+    // The service role key bypasses Row Level Security (RLS) and grants full
+    // unrestricted database access — wildly over-privileged for a public
+    // telemetry endpoint that only needs INSERT on two tables.
+    // The anon key + properly configured RLS INSERT policies is correct.
+    // See: https://supabase.com/docs/guides/database/postgres/row-level-security
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
     );
 
     // Validate and transform events
@@ -54,7 +60,7 @@ Deno.serve(async (req) => {
 
     for (const event of events) {
       // Required fields
-      if (!event.ts || !event.workflow_version || !event.os || !event.outcome) {
+      if (!event.ts || !event.gstack_version || !event.os || !event.outcome) {
         continue; // skip malformed
       }
 
@@ -68,7 +74,7 @@ Deno.serve(async (req) => {
       rows.push({
         schema_version: event.v,
         event_type: event.event_type,
-        workflow_version: String(event.workflow_version).slice(0, 20),
+        gstack_version: String(event.gstack_version).slice(0, 20),
         os: String(event.os).slice(0, 20),
         arch: event.arch ? String(event.arch).slice(0, 20) : null,
         event_timestamp: event.ts,
@@ -85,7 +91,7 @@ Deno.serve(async (req) => {
       // Track installations for upsert
       if (event.installation_id) {
         installationUpserts.set(event.installation_id, {
-          version: event.workflow_version,
+          version: event.gstack_version,
           os: event.os,
         });
       }
@@ -118,7 +124,7 @@ Deno.serve(async (req) => {
           {
             installation_id: id,
             last_seen: new Date().toISOString(),
-            workflow_version: data.version,
+            gstack_version: data.version,
             os: data.os,
           },
           { onConflict: "installation_id" }

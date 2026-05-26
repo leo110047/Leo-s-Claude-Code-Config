@@ -124,8 +124,8 @@ describeIfSelected('Ship workflow E2E', ['ship-local-workflow'], () => {
   let shipRemoteDir: string;
 
   beforeAll(() => {
-    shipRemoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-ship-remote-'));
-    shipWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-ship-work-'));
+    shipRemoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gstack-ship-remote-'));
+    shipWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gstack-ship-work-'));
 
     // Create bare remote
     spawnSync('git', ['init', '--bare'], { cwd: shipRemoteDir, stdio: 'pipe' });
@@ -175,75 +175,143 @@ describeIfSelected('Ship workflow E2E', ['ship-local-workflow'], () => {
 
     logCost('/ship local workflow', result);
 
-    // Check push succeeded
-    const remoteLog = spawnSync('git', ['log', '--oneline'], { cwd: shipRemoteDir, stdio: 'pipe' });
-    const remoteCommits = remoteLog.stdout.toString().trim().split('\n').length;
+    // Check push succeeded — verify the feature branch exists on the bare remote
+    const branchCheck = spawnSync('git', ['branch', '--list', 'feature/ship-test'], { cwd: shipRemoteDir, stdio: 'pipe' });
+    const branchExists = branchCheck.stdout.toString().trim().length > 0;
 
-    // Check VERSION was bumped
+    // Check VERSION was bumped locally (even if push failed, this shows the LLM did the work)
     const versionContent = fs.existsSync(path.join(shipWorkDir, 'VERSION'))
       ? fs.readFileSync(path.join(shipWorkDir, 'VERSION'), 'utf-8').trim() : '';
     const versionBumped = versionContent !== '0.1.0.0';
 
     recordE2E(evalCollector, '/ship local workflow', 'Ship workflow E2E', result, {
-      passed: remoteCommits > 1 && ['success', 'error_max_turns'].includes(result.exitReason),
+      passed: branchExists && versionBumped && ['success', 'error_max_turns'].includes(result.exitReason),
     });
 
     expect(['success', 'error_max_turns']).toContain(result.exitReason);
-    expect(remoteCommits).toBeGreaterThan(1);
-    console.log(`Remote commits: ${remoteCommits}, VERSION: ${versionContent}, bumped: ${versionBumped}`);
+    expect(branchExists).toBe(true);
+    expect(versionBumped).toBe(true);
+    console.log(`Branch pushed: ${branchExists}, VERSION: ${versionContent}, bumped: ${versionBumped}`);
   }, 150_000);
 });
 
-// --- Browser cookie detection smoke test ---
+// setup-cookies-detect REMOVED: The cookie-import-browser module has 30+ thorough
+// unit tests in browse/test/cookie-import-browser.test.ts (decryption, profile
+// detection, error handling, path traversal). The E2E just tested LLM instruction-
+// following ("write a file saying no browsers") on a CI box with no browsers.
 
-describeIfSelected('Setup Browser Cookies E2E', ['setup-cookies-detect'], () => {
-  let cookieDir: string;
+// --- gstack-upgrade E2E ---
+
+describeIfSelected('gstack-upgrade E2E', ['gstack-upgrade-happy-path'], () => {
+  let upgradeDir: string;
+  let remoteDir: string;
 
   beforeAll(() => {
-    cookieDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-cookies-'));
-    // Copy skill files
-    fs.mkdirSync(path.join(cookieDir, 'setup-browser-cookies'), { recursive: true });
+    upgradeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-upgrade-'));
+    remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gstack-remote-'));
+
+    const run = (cmd: string, args: string[], cwd: string) =>
+      spawnSync(cmd, args, { cwd, stdio: 'pipe', timeout: 5000 });
+
+    // Init the "project" repo
+    run('git', ['init'], upgradeDir);
+    run('git', ['config', 'user.email', 'test@test.com'], upgradeDir);
+    run('git', ['config', 'user.name', 'Test'], upgradeDir);
+
+    // Create mock gstack install directory (local-git type)
+    const mockGstack = path.join(upgradeDir, '.claude', 'skills', 'gstack');
+    fs.mkdirSync(mockGstack, { recursive: true });
+
+    // Init as a git repo
+    run('git', ['init'], mockGstack);
+    run('git', ['config', 'user.email', 'test@test.com'], mockGstack);
+    run('git', ['config', 'user.name', 'Test'], mockGstack);
+
+    // Create bare remote
+    run('git', ['init', '--bare'], remoteDir);
+    run('git', ['remote', 'add', 'origin', remoteDir], mockGstack);
+
+    // Write old version files
+    fs.writeFileSync(path.join(mockGstack, 'VERSION'), '0.5.0\n');
+    fs.writeFileSync(path.join(mockGstack, 'CHANGELOG.md'),
+      '# Changelog\n\n## 0.5.0 — 2026-03-01\n\n- Initial release\n');
+    fs.writeFileSync(path.join(mockGstack, 'setup'),
+      '#!/bin/bash\necho "Setup completed"\n', { mode: 0o755 });
+
+    // Initial commit + push
+    run('git', ['add', '.'], mockGstack);
+    run('git', ['commit', '-m', 'initial'], mockGstack);
+    run('git', ['push', '-u', 'origin', 'HEAD:main'], mockGstack);
+
+    // Create new version (simulate upstream release)
+    fs.writeFileSync(path.join(mockGstack, 'VERSION'), '0.6.0\n');
+    fs.writeFileSync(path.join(mockGstack, 'CHANGELOG.md'),
+      '# Changelog\n\n## 0.6.0 — 2026-03-15\n\n- New feature: interactive design review\n- Fix: snapshot flag validation\n\n## 0.5.0 — 2026-03-01\n\n- Initial release\n');
+    run('git', ['add', '.'], mockGstack);
+    run('git', ['commit', '-m', 'release 0.6.0'], mockGstack);
+    run('git', ['push', 'origin', 'HEAD:main'], mockGstack);
+
+    // Reset working copy back to old version
+    run('git', ['reset', '--hard', 'HEAD~1'], mockGstack);
+
+    // Copy gstack-upgrade skill
+    fs.mkdirSync(path.join(upgradeDir, 'gstack-upgrade'), { recursive: true });
     fs.copyFileSync(
-      path.join(ROOT, 'setup-browser-cookies', 'SKILL.md'),
-      path.join(cookieDir, 'setup-browser-cookies', 'SKILL.md'),
+      path.join(ROOT, 'gstack-upgrade', 'SKILL.md'),
+      path.join(upgradeDir, 'gstack-upgrade', 'SKILL.md'),
     );
+
+    // Commit so git repo is clean
+    run('git', ['add', '.'], upgradeDir);
+    run('git', ['commit', '-m', 'initial project'], upgradeDir);
   });
 
   afterAll(() => {
-    try { fs.rmSync(cookieDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(upgradeDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(remoteDir, { recursive: true, force: true }); } catch {}
   });
 
-  testConcurrentIfSelected('setup-cookies-detect', async () => {
+  testConcurrentIfSelected('gstack-upgrade-happy-path', async () => {
+    const mockGstack = path.join(upgradeDir, '.claude', 'skills', 'gstack');
     const result = await runSkillTest({
-      prompt: `Read setup-browser-cookies/SKILL.md for the cookie import workflow.
+      prompt: `Read gstack-upgrade/SKILL.md for the upgrade workflow.
 
-This is a test environment. List which browsers you can detect on this system by checking for their cookie database files.
-Write the detected browsers to ${cookieDir}/detected-browsers.md.
-Do NOT launch the cookie picker UI — just detect and report.`,
-      workingDirectory: cookieDir,
-      maxTurns: 5,
-      timeout: 45_000,
-      testName: 'setup-cookies-detect',
+You are running /gstack-upgrade standalone. The gstack installation is at ./.claude/skills/gstack (local-git type — it has a .git directory with an origin remote).
+
+Current version: 0.5.0. A new version 0.6.0 is available on origin/main.
+
+Follow the standalone upgrade flow:
+1. Detect install type (local-git)
+2. Run git fetch origin && git reset --hard origin/main in the install directory
+3. Run the setup script
+4. Show what's new from CHANGELOG
+
+Skip any AskUserQuestion calls — auto-approve the upgrade. Write a summary of what you did to stdout.
+
+IMPORTANT: The install directory is at ./.claude/skills/gstack — use that exact path.`,
+      workingDirectory: upgradeDir,
+      maxTurns: 20,
+      timeout: 180_000,
+      testName: 'gstack-upgrade-happy-path',
       runId,
     });
 
-    logCost('/setup-browser-cookies detect', result);
+    logCost('/gstack-upgrade happy path', result);
 
-    const detectPath = path.join(cookieDir, 'detected-browsers.md');
-    const detectExists = fs.existsSync(detectPath);
-    const detectContent = detectExists ? fs.readFileSync(detectPath, 'utf-8') : '';
-    const hasBrowserName = /chrome|arc|brave|edge|comet|safari|firefox/i.test(detectContent);
+    // Check that the version was updated
+    const versionAfter = fs.readFileSync(path.join(mockGstack, 'VERSION'), 'utf-8').trim();
+    const output = result.output || '';
+    const mentionsUpgrade = output.toLowerCase().includes('0.6.0') ||
+      output.toLowerCase().includes('upgrade') ||
+      output.toLowerCase().includes('updated');
 
-    recordE2E(evalCollector, '/setup-browser-cookies detect', 'Setup Browser Cookies E2E', result, {
-      passed: detectExists && hasBrowserName && ['success', 'error_max_turns'].includes(result.exitReason),
+    recordE2E(evalCollector, '/gstack-upgrade happy path', 'gstack-upgrade E2E', result, {
+      passed: versionAfter === '0.6.0' && ['success', 'error_max_turns'].includes(result.exitReason),
     });
 
     expect(['success', 'error_max_turns']).toContain(result.exitReason);
-    expect(detectExists).toBe(true);
-    if (detectExists) {
-      expect(hasBrowserName).toBe(true);
-    }
-  }, 60_000);
+    expect(versionAfter).toBe('0.6.0');
+  }, 240_000);
 });
 
 // --- Test Coverage Audit E2E ---
@@ -399,8 +467,18 @@ describeIfSelected('Codex skill E2E', ['codex-review'], () => {
     run('git', ['add', 'user_controller.rb']);
     run('git', ['commit', '-m', 'add vulnerable controller']);
 
-    // Copy the codex skill file
-    fs.copyFileSync(path.join(ROOT, 'codex', 'SKILL.md'), path.join(codexDir, 'codex-SKILL.md'));
+    // Extract only the review-relevant section from codex SKILL.md (~120 lines vs 1075).
+    // Full SKILL.md is 55KB / ~14K tokens — takes 8 Read calls to consume, exhausting turns.
+    const full = fs.readFileSync(path.join(ROOT, 'codex', 'SKILL.md'), 'utf-8');
+    const startMarker = '# /codex — Multi-AI Second Opinion';
+    const endMarker = '## Plan File Review Report';
+    const start = full.indexOf(startMarker);
+    const end = full.indexOf(endMarker, start);
+    const reviewSection = full.slice(
+      start >= 0 ? start : 0,
+      end > start ? end : undefined,
+    );
+    fs.writeFileSync(path.join(codexDir, 'codex-SKILL.md'), reviewSection);
   });
 
   afterAll(() => {
@@ -417,15 +495,15 @@ describeIfSelected('Codex skill E2E', ['codex-review'], () => {
 
     const result = await runSkillTest({
       prompt: `You are in a git repo on branch feature/add-vuln with changes against main.
-Read codex-SKILL.md for the /codex skill instructions.
-Run /codex review to review the current diff against main.
+Read codex-SKILL.md for the /codex review instructions (it's short — ~120 lines).
+Follow those instructions to run codex review against the diff on this branch.
 Write the full output (including the GATE verdict) to ${codexDir}/codex-output.md`,
       workingDirectory: codexDir,
-      maxTurns: 15,
+      maxTurns: 25,
       timeout: 300_000,
       testName: 'codex-review',
       runId,
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
     });
 
     logCost('/codex review', result);

@@ -6,6 +6,7 @@ export function generateTestBootstrap(_ctx: TemplateContext): string {
 **Detect existing test framework and project runtime:**
 
 \`\`\`bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
 # Detect project runtime
 [ -f Gemfile ] && echo "RUNTIME:ruby"
 [ -f package.json ] && echo "RUNTIME:node"
@@ -21,20 +22,20 @@ export function generateTestBootstrap(_ctx: TemplateContext): string {
 ls jest.config.* vitest.config.* playwright.config.* .rspec pytest.ini pyproject.toml phpunit.xml 2>/dev/null
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 # Check opt-out marker
-[ -f .workflow/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
+[ -f .gstack/no-test-bootstrap ] && echo "BOOTSTRAP_DECLINED"
 \`\`\`
 
 **If test framework detected** (config files or test directories found):
 Print "Test framework detected: {name} ({N} existing tests). Skipping bootstrap."
 Read 2-3 existing test files to learn conventions (naming, imports, assertion style, setup patterns).
-Store conventions as prose context for use in Phase 8e.5 or Step 3.4. **Skip the rest of bootstrap.**
+Store conventions as prose context for use in Phase 8e.5 or Step 7. **Skip the rest of bootstrap.**
 
 **If BOOTSTRAP_DECLINED** appears: Print "Test bootstrap previously declined — skipping." **Skip the rest of bootstrap.**
 
 **If NO runtime detected** (no config files found): Use AskUserQuestion:
 "I couldn't detect your project's language. What runtime are you using?"
 Options: A) Node.js/TypeScript B) Ruby/Rails C) Python D) Go E) Rust F) PHP G) Elixir H) This project doesn't need tests.
-If user picks H → write \`.workflow/no-test-bootstrap\` and continue without tests.
+If user picks H → write \`.gstack/no-test-bootstrap\` and continue without tests.
 
 **If runtime detected but no test framework — bootstrap:**
 
@@ -66,7 +67,7 @@ B) [Alternative] — [rationale]. Includes: [packages]
 C) Skip — don't set up testing right now
 RECOMMENDATION: Choose A because [reason based on project context]"
 
-If user picks C → write \`.workflow/no-test-bootstrap\`. Tell user: "If you change your mind later, delete \`.workflow/no-test-bootstrap\` and re-run." Continue without tests.
+If user picks C → write \`.gstack/no-test-bootstrap\`. Tell user: "If you change your mind later, delete \`.gstack/no-test-bootstrap\` and re-run." Continue without tests.
 
 If multiple runtimes detected (monorepo) → ask which runtime to set up first, with option to do both sequentially.
 
@@ -200,6 +201,7 @@ Before analyzing coverage, detect the project's test framework:
 2. **If CLAUDE.md has no testing section, auto-detect:**
 
 \`\`\`bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
 # Detect project runtime
 [ -f Gemfile ] && echo "RUNTIME:ruby"
 [ -f package.json ] && echo "RUNTIME:node"
@@ -211,7 +213,7 @@ ls jest.config.* vitest.config.* playwright.config.* cypress.config.* .rspec pyt
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 \`\`\`
 
-3. **If no framework detected:**${mode === 'ship' ? ' falls through to the Test Framework Bootstrap step (Step 2.5) which handles full setup.' : ' still produce the coverage diagram, but skip test generation.'}`);
+3. **If no framework detected:**${mode === 'ship' ? ' falls through to the Test Framework Bootstrap step (Step 4) which handles full setup.' : ' still produce the coverage diagram, but skip test generation.'}`);
 
   // ── Before/after count (ship only) ──
   if (mode === 'ship') {
@@ -336,48 +338,26 @@ When uncertain whether a change is a regression, err on the side of writing the 
 Include BOTH code paths and user flows in the same diagram. Mark E2E-worthy and eval-worthy paths:
 
 \`\`\`
-CODE PATH COVERAGE
-===========================
-[+] src/services/billing.ts
-    │
-    ├── processPayment()
-    │   ├── [★★★ TESTED] Happy path + card declined + timeout — billing.test.ts:42
-    │   ├── [GAP]         Network timeout — NO TEST
-    │   └── [GAP]         Invalid currency — NO TEST
-    │
-    └── refundPayment()
-        ├── [★★  TESTED] Full refund — billing.test.ts:89
-        └── [★   TESTED] Partial refund (checks non-throw only) — billing.test.ts:101
+CODE PATHS                                            USER FLOWS
+[+] src/services/billing.ts                           [+] Payment checkout
+  ├── processPayment()                                  ├── [★★★ TESTED] Complete purchase — checkout.e2e.ts:15
+  │   ├── [★★★ TESTED] happy + declined + timeout      ├── [GAP] [→E2E] Double-click submit
+  │   ├── [GAP]         Network timeout                 └── [GAP]        Navigate away mid-payment
+  │   └── [GAP]         Invalid currency
+  └── refundPayment()                                 [+] Error states
+      ├── [★★  TESTED] Full refund — :89                ├── [★★  TESTED] Card declined message
+      └── [★   TESTED] Partial (non-throw only) — :101  └── [GAP]        Network timeout UX
 
-USER FLOW COVERAGE
-===========================
-[+] Payment checkout flow
-    │
-    ├── [★★★ TESTED] Complete purchase — checkout.e2e.ts:15
-    ├── [GAP] [→E2E] Double-click submit — needs E2E, not just unit
-    ├── [GAP]         Navigate away during payment — unit test sufficient
-    └── [★   TESTED]  Form validation errors (checks render only) — checkout.test.ts:40
+LLM integration: [GAP] [→EVAL] Prompt template change — needs eval test
 
-[+] Error states
-    │
-    ├── [★★  TESTED] Card declined message — billing.test.ts:58
-    ├── [GAP]         Network timeout UX (what does user see?) — NO TEST
-    └── [GAP]         Empty cart submission — NO TEST
-
-[+] LLM integration
-    │
-    └── [GAP] [→EVAL] Prompt template change — needs eval test
-
-─────────────────────────────────
-COVERAGE: 5/13 paths tested (38%)
-  Code paths: 3/5 (60%)
-  User flows: 2/8 (25%)
-QUALITY:  ★★★: 2  ★★: 2  ★: 1
-GAPS: 8 paths need tests (2 need E2E, 1 needs eval)
-─────────────────────────────────
+COVERAGE: 5/13 paths tested (38%)  |  Code paths: 3/5 (60%)  |  User flows: 2/8 (25%)
+QUALITY: ★★★:2 ★★:2 ★:1  |  GAPS: 8 (2 E2E, 1 eval)
 \`\`\`
 
-**Fast path:** All paths covered → "${mode === 'ship' ? 'Step 3.4' : mode === 'review' ? 'Step 4.75' : 'Test review'}: All new code paths have test coverage ✓" Continue.`);
+Legend: ★★★ behavior + edge + error  |  ★★ happy path  |  ★ smoke check
+[→E2E] = needs integration test  |  [→EVAL] = needs LLM eval
+
+**Fast path:** All paths covered → "${mode === 'ship' ? 'Step 7' : mode === 'review' ? 'Step 4.75' : 'Test review'}: All new code paths have test coverage ✓" Continue.`);
 
   // ── Mode-specific action section ──
   if (mode === 'plan') {
@@ -399,12 +379,12 @@ The plan should be complete enough that when implementation begins, every test i
 After producing the coverage diagram, write a test plan artifact to the project directory so \`/qa\` and \`/qa-only\` can consume it as primary test input:
 
 \`\`\`bash
-eval "$(~/.claude/skills/workflow/bin/workflow-slug 2>/dev/null)" && mkdir -p ~/.workflow/projects/$SLUG
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" && mkdir -p ~/.gstack/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 \`\`\`
 
-Write to \`~/.workflow/projects/{slug}/{user}-{branch}-eng-review-test-plan-{datetime}.md\`:
+Write to \`~/.gstack/projects/{slug}/{user}-{branch}-eng-review-test-plan-{datetime}.md\`:
 
 \`\`\`markdown
 # Test Plan
@@ -430,7 +410,7 @@ This file is consumed by \`/qa\` and \`/qa-only\` as primary test input. Include
     sections.push(`
 **5. Generate tests for uncovered paths:**
 
-If test framework detected (or bootstrapped in Step 2.5):
+If test framework detected (or bootstrapped in Step 4):
 - Prioritize error handlers and edge cases first (happy paths are more likely already tested)
 - Read 2-3 existing test files to match conventions exactly
 - Generate unit tests. Mock all external dependencies (DB, API, Redis).
@@ -444,7 +424,7 @@ Caps: 30 code paths max, 20 tests generated max (code + user flow combined), 2-m
 
 If no test framework AND user declined bootstrap → diagram only, no generation. Note: "Test generation skipped — no test framework configured."
 
-**Diff is test-only changes:** Skip Step 3.4 entirely: "No new application code paths to audit."
+**Diff is test-only changes:** Skip Step 7 entirely: "No new application code paths to audit."
 
 **6. After-count and coverage summary:**
 
@@ -454,7 +434,40 @@ find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec
 \`\`\`
 
 For PR body: \`Tests: {before} → {after} (+{delta} new)\`
-Coverage line: \`Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.\``);
+Coverage line: \`Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.\`
+
+**7. Coverage gate:**
+
+Before proceeding, check CLAUDE.md for a \`## Test Coverage\` section with \`Minimum:\` and \`Target:\` fields. If found, use those percentages. Otherwise use defaults: Minimum = 60%, Target = 80%.
+
+Using the coverage percentage from the diagram in substep 4 (the \`COVERAGE: X/Y (Z%)\` line):
+
+- **>= target:** Pass. "Coverage gate: PASS ({X}%)." Continue.
+- **>= minimum, < target:** Use AskUserQuestion:
+  - "AI-assessed coverage is {X}%. {N} code paths are untested. Target is {target}%."
+  - RECOMMENDATION: Choose A because untested code paths are where production bugs hide.
+  - Options:
+    A) Generate more tests for remaining gaps (recommended)
+    B) Ship anyway — I accept the coverage risk
+    C) These paths don't need tests — mark as intentionally uncovered
+  - If A: Loop back to substep 5 (generate tests) targeting the remaining gaps. After second pass, if still below target, present AskUserQuestion again with updated numbers. Maximum 2 generation passes total.
+  - If B: Continue. Include in PR body: "Coverage gate: {X}% — user accepted risk."
+  - If C: Continue. Include in PR body: "Coverage gate: {X}% — {N} paths intentionally uncovered."
+
+- **< minimum:** Use AskUserQuestion:
+  - "AI-assessed coverage is critically low ({X}%). {N} of {M} code paths have no tests. Minimum threshold is {minimum}%."
+  - RECOMMENDATION: Choose A because less than {minimum}% means more code is untested than tested.
+  - Options:
+    A) Generate tests for remaining gaps (recommended)
+    B) Override — ship with low coverage (I understand the risk)
+  - If A: Loop back to substep 5. Maximum 2 passes. If still below minimum after 2 passes, present the override choice again.
+  - If B: Continue. Include in PR body: "Coverage gate: OVERRIDDEN at {X}%."
+
+**Coverage percentage undetermined:** If the coverage diagram doesn't produce a clear numeric percentage (ambiguous output, parse error), **skip the gate** with: "Coverage gate: could not determine percentage — skipping." Do not default to 0% or block.
+
+**Test-only diffs:** Skip the gate (same as the existing fast-path).
+
+**100% coverage:** "Coverage gate: PASS (100%)." Continue.`);
 
     // ── Test plan artifact (ship mode) ──
     sections.push(`
@@ -463,12 +476,12 @@ Coverage line: \`Test Coverage Audit: N new code paths. M covered (X%). K tests 
 After producing the coverage diagram, write a test plan artifact so \`/qa\` and \`/qa-only\` can consume it:
 
 \`\`\`bash
-eval "$(~/.claude/skills/workflow/bin/workflow-slug 2>/dev/null)" && mkdir -p ~/.workflow/projects/$SLUG
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" && mkdir -p ~/.gstack/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 \`\`\`
 
-Write to \`~/.workflow/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md\`:
+Write to \`~/.gstack/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md\`:
 
 \`\`\`markdown
 # Test Plan
@@ -504,7 +517,22 @@ If test framework is detected and gaps were identified:
 
 If no test framework detected → include gaps as INFORMATIONAL findings only, no generation.
 
-**Diff is test-only changes:** Skip Step 4.75 entirely: "No new application code paths to audit."`);
+**Diff is test-only changes:** Skip Step 4.75 entirely: "No new application code paths to audit."
+
+### Coverage Warning
+
+After producing the coverage diagram, check the coverage percentage. Read CLAUDE.md for a \`## Test Coverage\` section with a \`Minimum:\` field. If not found, use default: 60%.
+
+If coverage is below the minimum threshold, output a prominent warning **before** the regular review findings:
+
+\`\`\`
+⚠️ COVERAGE WARNING: AI-assessed coverage is {X}%. {N} code paths untested.
+Consider writing tests before running /ship.
+\`\`\`
+
+This is INFORMATIONAL — does not block /review. But it makes low coverage visible early so the developer can address it before reaching the /ship coverage gate.
+
+If coverage percentage cannot be determined, skip the warning silently.`);
   }
 
   return sections.join('\n');

@@ -5,11 +5,13 @@
  * tests across multiple files by category.
  */
 
-import { describe, test, beforeAll, afterAll } from 'bun:test';
+import '../../lib/conductor-env-shim';
+import { describe, test, beforeAll, afterAll, expect } from 'bun:test';
 import type { SkillTestResult } from './session-runner';
 import { EvalCollector, judgePassed } from './eval-store';
 import type { EvalTestEntry } from './eval-store';
-import { selectTests, detectBaseBranch, getChangedFiles, E2E_TOUCHFILES, GLOBAL_TOUCHFILES } from './touchfiles';
+import { judgeRecommendation, type RecommendationScore } from './llm-judge';
+import { selectTests, detectBaseBranch, getChangedFiles, E2E_TOUCHFILES, E2E_TIERS, GLOBAL_TOUCHFILES } from './touchfiles';
 import { WorktreeManager } from '../../lib/worktree';
 import type { HarvestResult } from '../../lib/worktree';
 import { spawnSync } from 'child_process';
@@ -32,13 +34,6 @@ export const evalsEnabled = !!process.env.EVALS;
 // Set EVALS_ALL=1 to force all tests. Set EVALS_BASE to override base branch.
 export let selectedTests: string[] | null = null; // null = run all
 
-// EVALS_FAST: skip the 8 slowest tests (all Opus quality tests) for quick feedback
-const FAST_EXCLUDED_TESTS = [
-  'plan-ceo-review-selective', 'plan-ceo-review', 'retro', 'retro-base-branch',
-  'design-consultation-core', 'design-consultation-existing',
-  'qa-fix-loop', 'design-review-fix',
-];
-
 if (evalsEnabled && !process.env.EVALS_ALL) {
   const baseBranch = process.env.EVALS_BASE
     || detectBaseBranch(ROOT)
@@ -57,15 +52,22 @@ if (evalsEnabled && !process.env.EVALS_ALL) {
   // If changedFiles is empty (e.g., on main branch), selectedTests stays null → run all
 }
 
-// Apply EVALS_FAST filter after diff-based selection
-if (evalsEnabled && process.env.EVALS_FAST) {
+// EVALS_TIER: filter tests by tier after diff-based selection.
+// 'gate' = gate tests only (CI default — blocks merge)
+// 'periodic' = periodic tests only (weekly cron / manual)
+// not set = run all selected tests (local dev default, backward compat)
+if (evalsEnabled && process.env.EVALS_TIER) {
+  const tier = process.env.EVALS_TIER as 'gate' | 'periodic';
+  const tierTests = Object.entries(E2E_TIERS)
+    .filter(([, t]) => t === tier)
+    .map(([name]) => name);
+
   if (selectedTests === null) {
-    // Run all minus excluded
-    selectedTests = Object.keys(E2E_TOUCHFILES).filter(t => !FAST_EXCLUDED_TESTS.includes(t));
+    selectedTests = tierTests;
   } else {
-    selectedTests = selectedTests.filter(t => !FAST_EXCLUDED_TESTS.includes(t));
+    selectedTests = selectedTests.filter(t => tierTests.includes(t));
   }
-  process.stderr.write(`EVALS_FAST: excluded ${FAST_EXCLUDED_TESTS.length} slow tests, running ${selectedTests.length}\n\n`);
+  process.stderr.write(`EVALS_TIER=${tier}: ${selectedTests.length} tests\n\n`);
 }
 
 export const describeE2E = evalsEnabled ? describe : describe.skip;
@@ -142,7 +144,7 @@ export function logCost(label: string, result: { costEstimate: { turnsUsed: numb
  */
 export function dumpOutcomeDiagnostic(dir: string, label: string, report: string, judgeResult: any) {
   try {
-    const transcriptDir = path.join(dir, '.workflow', 'test-transcripts');
+    const transcriptDir = path.join(dir, '.gstack', 'test-transcripts');
     fs.mkdirSync(transcriptDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     fs.writeFileSync(
@@ -191,6 +193,51 @@ export function recordE2E(
   });
 }
 
+/**
+ * Threshold for `reason_substance` (1-5 rubric) above which a recommendation
+ * is considered substantive enough to ship. 4 = "concrete and option-specific";
+ * 3 = generic ("because it's faster"). We want to catch generic. If Haiku
+ * flakes at this bar in practice, lower the threshold rather than weakening
+ * the gate (per design plan).
+ */
+export const RECOMMENDATION_SUBSTANCE_THRESHOLD = 4;
+
+/**
+ * Run judgeRecommendation on a captured AskUserQuestion text, record the score
+ * into the eval collector, and assert all four quality dimensions. Replaces a
+ * 22-line block previously duplicated across every E2E test that captures an
+ * AskUserQuestion. Returns the score for tests that want to inspect it
+ * further.
+ */
+export async function assertRecommendationQuality(opts: {
+  captured: string;
+  evalCollector: EvalCollector | null;
+  evalId: string;
+  evalTitle: string;
+  result: SkillTestResult;
+  passed: boolean;
+}): Promise<RecommendationScore> {
+  const recScore = await judgeRecommendation(opts.captured);
+  recordE2E(opts.evalCollector, opts.evalId, opts.evalTitle, opts.result, {
+    passed: opts.passed,
+    judge_scores: {
+      rec_present: recScore.present ? 1 : 0,
+      rec_commits: recScore.commits ? 1 : 0,
+      rec_has_because: recScore.has_because ? 1 : 0,
+      rec_substance: recScore.reason_substance,
+    },
+    judge_reasoning: `${recScore.reasoning} | reason: "${recScore.reason_text}"`,
+  });
+  expect(recScore.present, recScore.reasoning).toBe(true);
+  expect(recScore.commits, recScore.reasoning).toBe(true);
+  expect(recScore.has_because, recScore.reasoning).toBe(true);
+  expect(
+    recScore.reason_substance,
+    `${recScore.reasoning}\n  reason: "${recScore.reason_text}"`,
+  ).toBeGreaterThanOrEqual(RECOMMENDATION_SUBSTANCE_THRESHOLD);
+  return recScore;
+}
+
 /** Finalize an eval collector (write results). */
 export async function finalizeEvalCollector(evalCollector: EvalCollector | null) {
   if (evalCollector) {
@@ -202,13 +249,13 @@ export async function finalizeEvalCollector(evalCollector: EvalCollector | null)
   }
 }
 
-// Pre-seed preamble state files so E2E tests don't waste turns on lake intro.
-// This is a one-time interactive prompt that burns extra turns per test if not pre-seeded.
+// Pre-seed preamble state files so E2E tests don't waste turns on lake intro + telemetry prompts.
+// These are one-time interactive prompts that burn 3-7 turns per test if not pre-seeded.
 if (evalsEnabled) {
-  const workflowStateDir = path.join(os.homedir(), '.workflow');
-  fs.mkdirSync(workflowStateDir, { recursive: true });
-  for (const f of ['.completeness-intro-seen']) {
-    const p = path.join(workflowStateDir, f);
+  const gstackDir = path.join(os.homedir(), '.gstack');
+  fs.mkdirSync(gstackDir, { recursive: true });
+  for (const f of ['.completeness-intro-seen', '.telemetry-prompted', '.proactive-prompted']) {
+    const p = path.join(gstackDir, f);
     if (!fs.existsSync(p)) fs.writeFileSync(p, '');
   }
 }

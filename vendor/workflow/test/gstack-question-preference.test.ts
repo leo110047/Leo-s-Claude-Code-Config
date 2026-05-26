@@ -1,5 +1,5 @@
 /**
- * bin/workflow-question-preference — preference storage + user-origin gate.
+ * bin/gstack-question-preference — preference storage + user-origin gate.
  *
  * The user-origin gate (profile-poisoning defense from
  * docs/designs/PLAN_TUNING_V0.md §Security model) is THE critical safety
@@ -14,7 +14,7 @@ import * as os from 'os';
 import { spawnSync } from 'child_process';
 
 const ROOT = path.resolve(import.meta.dir, '..');
-const BIN = path.join(ROOT, 'bin', 'workflow-question-preference');
+const BIN = path.join(ROOT, 'bin', 'gstack-question-preference');
 
 let tmpHome: string;
 
@@ -28,7 +28,7 @@ afterEach(() => {
 
 function run(...args: string[]): { stdout: string; stderr: string; status: number } {
   const res = spawnSync(BIN, args, {
-    env: { ...process.env, WORKFLOW_HOME: tmpHome },
+    env: { ...process.env, GSTACK_HOME: tmpHome },
     encoding: 'utf-8',
     cwd: ROOT,
   });

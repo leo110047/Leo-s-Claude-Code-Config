@@ -1,5 +1,5 @@
 /**
- * bin/workflow-developer-profile — subcommand behavior tests.
+ * bin/gstack-developer-profile — subcommand behavior tests.
  *
  * Covers:
  * - --read (legacy /office-hours KEY: VALUE format, with defaults when no profile)
@@ -18,8 +18,8 @@ import * as os from 'os';
 import { spawnSync } from 'child_process';
 
 const ROOT = path.resolve(import.meta.dir, '..');
-const BIN_DEV = path.join(ROOT, 'bin', 'workflow-developer-profile');
-const BIN_LOG = path.join(ROOT, 'bin', 'workflow-question-log');
+const BIN_DEV = path.join(ROOT, 'bin', 'gstack-developer-profile');
+const BIN_LOG = path.join(ROOT, 'bin', 'gstack-question-log');
 
 let tmpHome: string;
 
@@ -33,7 +33,7 @@ afterEach(() => {
 
 function runDev(...args: string[]): { stdout: string; stderr: string; status: number } {
   const res = spawnSync(BIN_DEV, args, {
-    env: { ...process.env, WORKFLOW_HOME: tmpHome },
+    env: { ...process.env, GSTACK_HOME: tmpHome },
     encoding: 'utf-8',
     cwd: ROOT,
   });
@@ -46,7 +46,7 @@ function runDev(...args: string[]): { stdout: string; stderr: string; status: nu
 
 function logQuestion(payload: Record<string, unknown>): number {
   const res = spawnSync(BIN_LOG, [JSON.stringify(payload)], {
-    env: { ...process.env, WORKFLOW_HOME: tmpHome },
+    env: { ...process.env, GSTACK_HOME: tmpHome },
     encoding: 'utf-8',
     cwd: ROOT,
   });
@@ -67,7 +67,7 @@ function readProfile(): Record<string, unknown> {
 // --read (defaults + compat)
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --read', () => {
+describe('gstack-developer-profile --read', () => {
   test('emits defaults when no profile exists (creates stub)', () => {
     const r = runDev('--read');
     expect(r.status).toBe(0);
@@ -90,12 +90,11 @@ describe('workflow-developer-profile --read', () => {
     expect(r.stdout).toContain('TIER:');
   });
 });
-
 // -----------------------------------------------------------------------
 // --migrate (legacy jsonl → unified profile)
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --migrate', () => {
+describe('gstack-developer-profile --migrate', () => {
   test('migrates 3 sessions with signals, resources, topics', () => {
     writeLegacyProfile([
       {
@@ -184,7 +183,7 @@ describe('workflow-developer-profile --migrate', () => {
 // --read tier calculation
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile tier calculation', () => {
+describe('gstack-developer-profile tier calculation', () => {
   test('1-3 sessions → welcome_back', () => {
     writeLegacyProfile([
       { date: 'x', mode: 'builder', project_slug: 'a', signals: [] },
@@ -227,7 +226,7 @@ describe('workflow-developer-profile tier calculation', () => {
 // --derive: inferred dimensions from question-log events
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --derive', () => {
+describe('gstack-developer-profile --derive', () => {
   test('derive with no events yields neutral (0.5) dimensions', () => {
     runDev('--derive');
     const p = readProfile() as {
@@ -312,7 +311,7 @@ describe('workflow-developer-profile --derive', () => {
 // --trace
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --trace <dim>', () => {
+describe('gstack-developer-profile --trace <dim>', () => {
   test('shows contributing events with delta values', () => {
     for (let i = 0; i < 3; i++) {
       logQuestion({
@@ -352,7 +351,7 @@ describe('workflow-developer-profile --trace <dim>', () => {
 // --gap
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --gap', () => {
+describe('gstack-developer-profile --gap', () => {
   test('gap is empty when nothing is declared', () => {
     runDev('--read');
     const r = runDev('--gap');
@@ -378,7 +377,7 @@ describe('workflow-developer-profile --gap', () => {
 // --vibe (archetype match)
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --vibe', () => {
+describe('gstack-developer-profile --vibe', () => {
   test('returns archetype name and description', () => {
     runDev('--read');
     const r = runDev('--vibe');
@@ -394,7 +393,7 @@ describe('workflow-developer-profile --vibe', () => {
 // --check-mismatch
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile --check-mismatch', () => {
+describe('gstack-developer-profile --check-mismatch', () => {
   test('reports insufficient data when < 10 events', () => {
     runDev('--read');
     const r = runDev('--check-mismatch');
@@ -432,10 +431,126 @@ describe('workflow-developer-profile --check-mismatch', () => {
 // Error handling
 // -----------------------------------------------------------------------
 
-describe('workflow-developer-profile errors', () => {
+describe('gstack-developer-profile errors', () => {
   test('unknown subcommand exits non-zero', () => {
     const r = runDev('--not-a-real-subcommand');
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain('unknown subcommand');
+  });
+});
+
+// -----------------------------------------------------------------------
+// --log-session — the #1671 fix: writer that matches the reader.
+// -----------------------------------------------------------------------
+
+describe('gstack-developer-profile --log-session (#1671 fix)', () => {
+  test('regression: read-write-read sequence on fresh $HOME promotes to welcome_back', () => {
+    // First --read creates an empty stub (this is the bug-shape on current main).
+    const r1 = runDev('--read');
+    expect(r1.stdout).toContain('SESSION_COUNT: 0');
+    expect(r1.stdout).toContain('TIER: introduction');
+
+    // Office-hours writes a session via the new subcommand.
+    const r2 = runDev('--log-session', JSON.stringify({
+      date: '2026-05-23T00:00:00Z',
+      mode: 'startup',
+      project_slug: 'test',
+      signal_count: 2,
+      signals: ['s1', 's2'],
+    }));
+    expect(r2.status).toBe(0);
+
+    // Second --read sees the session — this is what was broken.
+    const r3 = runDev('--read');
+    expect(r3.stdout).toContain('SESSION_COUNT: 1');
+    expect(r3.stdout).toContain('TIER: welcome_back');
+    expect(r3.stdout).toContain('LAST_PROJECT: test');
+    expect(r3.stdout).toContain('TOTAL_SIGNAL_COUNT: 2');
+  });
+
+  test('aggregates signals across multiple sessions', () => {
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-20T00:00:00Z', mode: 'startup', project_slug: 'p', signals: ['a', 'b'],
+    }));
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-21T00:00:00Z', mode: 'startup', project_slug: 'p', signals: ['a', 'c'],
+    }));
+    const p = readProfile() as { sessions: unknown[]; signals_accumulated: Record<string, number> };
+    expect(p.sessions.length).toBe(2);
+    expect(p.signals_accumulated).toEqual({ a: 2, b: 1, c: 1 });
+  });
+
+  test('aggregates resources_shown and topics as deduped unions', () => {
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-20T00:00:00Z', mode: 'resources', project_slug: 'p',
+      resources_shown: ['url1', 'url2'], topics: ['ai'],
+    }));
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-21T00:00:00Z', mode: 'resources', project_slug: 'p',
+      resources_shown: ['url2', 'url3'], topics: ['ai', 'eng'],
+    }));
+    const p = readProfile() as { resources_shown: string[]; topics: string[] };
+    expect(p.resources_shown.sort()).toEqual(['url1', 'url2', 'url3']);
+    expect(p.topics.sort()).toEqual(['ai', 'eng']);
+  });
+
+  test('silently skips invalid JSON input (matches gstack-timeline-log pattern)', () => {
+    const r = runDev('--log-session', 'not-json');
+    expect(r.status).toBe(0); // silent skip, not error
+    const file = path.join(tmpHome, 'developer-profile.json');
+    expect(fs.existsSync(file)).toBe(false); // no stub created either
+  });
+
+  test('silently skips JSON missing required fields', () => {
+    const r = runDev('--log-session', JSON.stringify({ foo: 'bar' }));
+    expect(r.status).toBe(0);
+    const file = path.join(tmpHome, 'developer-profile.json');
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test('injects ts field if missing', () => {
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-23T00:00:00Z', mode: 'startup', project_slug: 'p',
+    }));
+    const p = readProfile() as { sessions: Array<{ ts: string }> };
+    expect(p.sessions[0].ts).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  test('preserves user-set ts field if provided', () => {
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-23T00:00:00Z', mode: 'startup', project_slug: 'p',
+      ts: '2026-05-23T12:34:56Z',
+    }));
+    const p = readProfile() as { sessions: Array<{ ts: string }> };
+    expect(p.sessions[0].ts).toBe('2026-05-23T12:34:56Z');
+  });
+
+  test('do_read picks LAST_* from real sessions, not from a trailing mode:resources entry', () => {
+    // The Phase 6 resources auto-append happens AFTER the real session in the
+    // same /office-hours invocation. Without the mode filter, that resources
+    // entry would clobber LAST_PROJECT/LAST_ASSIGNMENT/LAST_DESIGN_TITLE for
+    // the next session.
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-20T00:00:00Z',
+      mode: 'startup',
+      project_slug: 'realproj',
+      assignment: 'real assignment text',
+      design_doc: 'plans/real.md',
+    }));
+    runDev('--log-session', JSON.stringify({
+      date: '2026-05-20T01:00:00Z',
+      mode: 'resources',
+      project_slug: 'realproj',
+      assignment: '',
+      design_doc: '',
+      resources_shown: ['url1'],
+    }));
+
+    const r = runDev('--read');
+    expect(r.stdout).toContain('LAST_PROJECT: realproj');
+    expect(r.stdout).toContain('LAST_ASSIGNMENT: real assignment text');
+    expect(r.stdout).toContain('LAST_DESIGN_TITLE: plans/real.md');
+    // Resources still aggregate into RESOURCES_SHOWN.
+    expect(r.stdout).toContain('RESOURCES_SHOWN: url1');
   });
 });

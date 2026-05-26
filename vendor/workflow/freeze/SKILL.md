@@ -2,12 +2,15 @@
 name: freeze
 version: 0.1.0
 description: |
-  MANUAL TRIGGER ONLY: invoke only when user types /freeze.
   Restrict file edits to a specific directory for the session. Blocks Edit and
   Write outside the allowed path. Use when debugging to prevent accidentally
   "fixing" unrelated code, or when you want to scope changes to one module.
   Use when asked to "freeze", "restrict edits", "only edit this folder",
-  or "lock down edits".
+  or "lock down edits". (gstack)
+triggers:
+  - freeze edits to directory
+  - lock editing scope
+  - restrict file changes
 allowed-tools:
   - Bash
   - Read
@@ -34,8 +37,8 @@ Lock file edits to a specific directory. Any Edit or Write operation targeting
 a file outside the allowed path will be **blocked** (not just warned).
 
 ```bash
-mkdir -p ~/.workflow/analytics
-echo '{"skill":"freeze","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.workflow/analytics/skill-usage.jsonl 2>/dev/null || true
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"freeze","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
 ## Setup
@@ -56,7 +59,8 @@ echo "$FREEZE_DIR"
 2. Ensure trailing slash and save to the freeze state file:
 ```bash
 FREEZE_DIR="${FREEZE_DIR%/}/"
-STATE_DIR="${CLAUDE_PLUGIN_DATA:-$HOME/.workflow}"
+eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+STATE_DIR="$GSTACK_STATE_ROOT"
 mkdir -p "$STATE_DIR"
 echo "$FREEZE_DIR" > "$STATE_DIR/freeze-dir.txt"
 echo "Freeze boundary set: $FREEZE_DIR"

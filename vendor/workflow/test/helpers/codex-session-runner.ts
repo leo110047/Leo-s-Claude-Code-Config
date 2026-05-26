@@ -154,7 +154,7 @@ export async function runCodexSkill(opts: {
   } = opts;
 
   const startTime = Date.now();
-  const name = skillName || path.basename(skillDir) || 'workflow';
+  const name = skillName || path.basename(skillDir) || 'gstack';
 
   // Check if codex binary exists
   const whichResult = Bun.spawnSync(['which', 'codex']);

@@ -46,16 +46,15 @@ afterEach(async () => {
   serverProc = null;
 });
 
-function spawnServer(env: Record<string, string>, port?: number): Subprocess {
+function spawnServer(env: Record<string, string>, port: number): Subprocess {
   const stateFile = path.join(tmpDir, 'browse-state.json');
-  const mergedEnv: Record<string, string> = {
-    ...process.env,
-    BROWSE_STATE_FILE: stateFile,
-    ...env,
-  };
-  if (port !== undefined) mergedEnv.BROWSE_PORT = String(port);
   return spawn(['bun', 'run', SERVER_SCRIPT], {
-    env: mergedEnv,
+    env: {
+      ...process.env,
+      BROWSE_STATE_FILE: stateFile,
+      BROWSE_PORT: String(port),
+      ...env,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -98,7 +97,7 @@ async function readStdoutUntil(
 describe('parent-process watchdog (v0.18.1.0)', () => {
   test('BROWSE_PARENT_PID=0 disables the watchdog', async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'watchdog-pid0-'));
-    serverProc = spawnServer({ BROWSE_PARENT_PID: '0' });
+    serverProc = spawnServer({ BROWSE_PARENT_PID: '0' }, 34901);
 
     const out = await readStdoutUntil(
       serverProc,
@@ -118,7 +117,7 @@ describe('parent-process watchdog (v0.18.1.0)', () => {
     // this PID and eventually fire on the "dead parent."
     serverProc = spawnServer(
       { BROWSE_HEADED: '1', BROWSE_PARENT_PID: '999999' },
-      undefined,
+      34902,
     );
 
     const out = await readStdoutUntil(
@@ -138,7 +137,7 @@ describe('parent-process watchdog (v0.18.1.0)', () => {
     const parentPid = parentProc.pid!;
 
     // Default headless: no BROWSE_HEADED, real parent PID — watchdog active.
-    serverProc = spawnServer({ BROWSE_PARENT_PID: String(parentPid) });
+    serverProc = spawnServer({ BROWSE_PARENT_PID: String(parentPid) }, 34903);
     const serverPid = serverProc.pid!;
 
     // Give the server a moment to start and register the watchdog interval.

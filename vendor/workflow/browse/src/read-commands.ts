@@ -14,6 +14,7 @@ import * as path from 'path';
 import { TEMP_DIR } from './platform';
 import { inspectElement, formatInspectorResult, getModificationHistory } from './cdp-inspector';
 import { validateReadPath } from './path-security';
+import { stripLoneSurrogates } from './sanitize';
 // Re-export for backward compatibility (tests import from read-commands)
 export { validateReadPath } from './path-security';
 
@@ -50,7 +51,7 @@ function wrapForEvaluate(code: string): string {
  * Exported for DRY reuse in meta-commands (diff).
  */
 export async function getCleanText(page: Page | Frame): Promise<string> {
-  return page.evaluate(() => {
+  const raw = await page.evaluate(() => {
     const body = document.body;
     if (!body) return '';
     const clone = body.cloneNode(true) as HTMLElement;
@@ -61,6 +62,7 @@ export async function getCleanText(page: Page | Frame): Promise<string> {
       .filter(line => line.length > 0)
       .join('\n');
   });
+  return stripLoneSurrogates(raw);
 }
 
 /**
@@ -98,16 +100,9 @@ function assertJsOriginAllowed(bm: BrowserManager, pageUrl: string): void {
 export async function handleReadCommand(
   command: string,
   args: string[],
-  sessionOrBm: TabSession | BrowserManager,
+  session: TabSession,
   bm?: BrowserManager,
 ): Promise<string> {
-  const session = typeof (sessionOrBm as BrowserManager).getActiveSession === 'function'
-    ? (sessionOrBm as BrowserManager).getActiveSession()
-    : (sessionOrBm as TabSession);
-  const browserManager = bm
-    ?? (typeof (sessionOrBm as BrowserManager).getActiveSession === 'function'
-      ? (sessionOrBm as BrowserManager)
-      : undefined);
   const page = session.getPage();
   // Frame-aware target for content extraction
   const target = session.getActiveFrameOrPage();
@@ -122,9 +117,9 @@ export async function handleReadCommand(
       if (selector) {
         const resolved = await session.resolveRef(selector);
         if ('locator' in resolved) {
-          return resolved.locator.innerHTML({ timeout: 5000 });
+          return stripLoneSurrogates(await resolved.locator.innerHTML({ timeout: 5000 }));
         }
-        return target.locator(resolved.selector).innerHTML({ timeout: 5000 });
+        return stripLoneSurrogates(await target.locator(resolved.selector).innerHTML({ timeout: 5000 }));
       }
       // page.content() is page-only; use evaluate for frame compat
       const doctype = await target.evaluate(() => {
@@ -132,7 +127,7 @@ export async function handleReadCommand(
         return dt ? `<!DOCTYPE ${dt.name}>` : '';
       });
       const html = await target.evaluate(() => document.documentElement.outerHTML);
-      return doctype ? `${doctype}\n${html}` : html;
+      return stripLoneSurrogates(doctype ? `${doctype}\n${html}` : html);
     }
 
     case 'links': {
@@ -180,13 +175,13 @@ export async function handleReadCommand(
 
     case 'accessibility': {
       const snapshot = await target.locator("body").ariaSnapshot();
-      return snapshot;
+      return stripLoneSurrogates(snapshot);
     }
 
     case 'js': {
       const expr = args[0];
       if (!expr) throw new Error('Usage: browse js <expression>');
-      if (browserManager) assertJsOriginAllowed(browserManager, page.url());
+      if (bm) assertJsOriginAllowed(bm, page.url());
       const wrapped = wrapForEvaluate(expr);
       const result = await target.evaluate(wrapped);
       return typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result ?? '');
@@ -195,7 +190,7 @@ export async function handleReadCommand(
     case 'eval': {
       const filePath = args[0];
       if (!filePath) throw new Error('Usage: browse eval <js-file>');
-      if (browserManager) assertJsOriginAllowed(browserManager, page.url());
+      if (bm) assertJsOriginAllowed(bm, page.url());
       validateReadPath(filePath);
       if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
       const code = fs.readFileSync(filePath, 'utf-8');

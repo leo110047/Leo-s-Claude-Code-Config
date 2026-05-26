@@ -8,7 +8,11 @@ description: |
   production URL, health check endpoints, and deploy status commands. Writes
   the configuration to CLAUDE.md so all future deploys are automatic.
   Use when: "setup deploy", "configure deployment", "set up land-and-deploy",
-  "how do I deploy with workflow", "add deploy config".
+  "how do I deploy with gstack", "add deploy config".
+triggers:
+  - configure deploy
+  - setup deployment
+  - set deploy platform
 allowed-tools:
   - Bash
   - Read
@@ -21,7 +25,7 @@ allowed-tools:
 
 {{PREAMBLE}}
 
-# /setup-deploy — Configure Deployment for workflow
+# /setup-deploy — Configure Deployment for gstack
 
 You are helping the user configure their deployment so `/land-and-deploy` works
 automatically. Your job is to detect the deploy platform, production URL, health
@@ -64,13 +68,13 @@ Run the platform detection from the deploy bootstrap:
 [ -f railway.json ] || [ -f railway.toml ] && echo "PLATFORM:railway"
 
 # GitHub Actions deploy workflows
-for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+for f in $(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
   [ -f "$f" ] && grep -qiE "deploy|release|production|staging|cd" "$f" 2>/dev/null && echo "DEPLOY_WORKFLOW:$f"
 done
 
 # Project type
 [ -f package.json ] && grep -q '"bin"' package.json 2>/dev/null && echo "PROJECT_TYPE:cli"
-ls *.gemspec 2>/dev/null && echo "PROJECT_TYPE:library"
+find . -maxdepth 1 -name '*.gemspec' 2>/dev/null | grep -q . && echo "PROJECT_TYPE:library"
 ```
 
 ### Step 3: Platform-specific setup
@@ -144,7 +148,7 @@ Use AskUserQuestion to gather the information:
 
 2. **What's the production URL?** (Free text — the URL where the app runs)
 
-3. **How can workflow check if a deploy succeeded?**
+3. **How can gstack check if a deploy succeeded?**
    - A) HTTP health check at a specific URL (e.g., /health, /api/status)
    - B) CLI command (e.g., `fly status`, `kubectl rollout status`)
    - C) Check the GitHub Actions workflow status

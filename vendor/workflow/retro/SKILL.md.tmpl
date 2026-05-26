@@ -7,26 +7,41 @@ description: |
   and code quality metrics with persistent history and trend tracking.
   Team-aware: breaks down per-person contributions with praise and growth areas.
   Use when asked to "weekly retro", "what did we ship", or "engineering retrospective".
-  Proactively suggest at the end of a work week or sprint.
+  Proactively suggest at the end of a work week or sprint. (gstack)
 allowed-tools:
   - Bash
   - Read
   - Write
   - Glob
   - AskUserQuestion
+triggers:
+  - weekly retro
+  - what did we ship
+  - engineering retrospective
+gbrain:
+  schema: 1
+  context_queries:
+    - id: prior-retros
+      kind: filesystem
+      glob: "~/.gstack/projects/{repo_slug}/retros/*.md"
+      sort: mtime_desc
+      limit: 5
+      render_as: "## Prior retros for this project"
+    - id: recent-timeline
+      kind: filesystem
+      glob: "~/.gstack/projects/{repo_slug}/timeline.jsonl"
+      tail: 30
+      render_as: "## Recent timeline events"
+    - id: recent-learnings
+      kind: filesystem
+      glob: "~/.gstack/projects/{repo_slug}/learnings.jsonl"
+      tail: 10
+      render_as: "## Recent learnings"
 ---
 
 {{PREAMBLE}}
 
-## Detect default branch
-
-Before gathering data, detect the repo's default branch name:
-`gh repo view --json defaultBranchRef -q .defaultBranchRef.name`
-
-If this fails, fall back to `main`. Use the detected name wherever the instructions
-say `origin/<default>` below.
-
----
+{{BASE_BRANCH_DETECT}}
 
 # /retro — Weekly Engineering Retrospective
 
@@ -44,6 +59,8 @@ When the user types `/retro`, run this skill.
 - `/retro compare 14d` — compare with explicit window
 - `/retro global` — cross-project retro across all AI coding tools (7d default)
 - `/retro global 14d` — cross-project retro with explicit window
+
+{{GBRAIN_CONTEXT_LOAD}}
 
 ## Instructions
 
@@ -65,6 +82,75 @@ Usage: /retro [window | compare | global]
 ```
 
 **If the first argument is `global`:** Skip the normal repo-scoped retro (Steps 1-14). Instead, follow the **Global Retrospective** flow at the end of this document. The optional second argument is the time window (default 7d). This mode does NOT require being inside a git repo.
+
+{{LEARNINGS_SEARCH}}
+
+### Non-git context (optional)
+
+Check for non-git context that should be included in the retro:
+
+```bash
+[ -f ~/.gstack/retro-context.md ] && echo "RETRO_CONTEXT_FOUND" || echo "NO_RETRO_CONTEXT"
+```
+
+If `RETRO_CONTEXT_FOUND`: read `~/.gstack/retro-context.md`. This file is user-authored and may contain meeting notes, calendar events, decisions, and other context that doesn't appear in git history. Incorporate this context into the retro narrative where relevant.
+
+### Step 0.5: Stale-base + bad-today-anchor pre-flight guard
+
+The retro skill computes a window from "today" and queries `git log --since=<window> origin/<default>`. If "today" drifts (model session-context error) or the local worktree's `origin/<default>` is materially behind the actual remote, the window can return zero or near-zero commits and the retro will fabricate a coherent-looking narrative from nothing. This guard prevents silent confidently-wrong output.
+
+Run the pre-flight in this exact order. The first branch that matches wins:
+
+```bash
+# Pre-check A: no remote configured?
+_RETRO_HAS_REMOTE=$(git remote 2>/dev/null | grep -c '^origin$' || echo 0)
+if [ "$_RETRO_HAS_REMOTE" = "0" ]; then
+  echo "RETRO_GUARD: no 'origin' remote, base freshness not verified — proceeding"
+  _RETRO_GUARD_VERDICT="skip-no-remote"
+fi
+
+# Pre-check B: detached HEAD or no current base?
+if [ -z "$_RETRO_GUARD_VERDICT" ]; then
+  _RETRO_HEAD_REF=$(git symbolic-ref --quiet HEAD 2>/dev/null || echo "")
+  if [ -z "$_RETRO_HEAD_REF" ]; then
+    echo "RETRO_GUARD: detached HEAD, base freshness not verified — proceeding"
+    _RETRO_GUARD_VERDICT="skip-detached"
+  fi
+fi
+
+# Pre-check C: fetch origin <default>; if it fails, warn but proceed.
+if [ -z "$_RETRO_GUARD_VERDICT" ]; then
+  if ! git fetch origin <default> --quiet 2>/dev/null; then
+    echo "RETRO_GUARD: 'git fetch origin <default>' failed (offline?) — proceeding against last-known origin/<default>"
+    _RETRO_GUARD_VERDICT="warn-fetch-failed"
+  fi
+fi
+
+# Pre-check D: BLOCK only when fetch succeeded AND the latest origin/<default>
+# commit predates the retro window. Today's date should be loaded from the
+# user-visible "## currentDate" tag in the session reminder; if the gap between
+# origin/<default>'s newest commit and today exceeds the window, the model's
+# "today" is almost certainly stale (or the worktree is wildly behind).
+if [ -z "$_RETRO_GUARD_VERDICT" ]; then
+  _RETRO_LATEST_ISO=$(git log -1 --format=%ci origin/<default> 2>/dev/null | awk '{print $1}')
+  if [ -n "$_RETRO_LATEST_ISO" ]; then
+    # The model computes today from the session reminder (NEVER from `date` —
+    # the system clock can be hours off in containerized harnesses).
+    # Compute window in DAYS (default 7): if today - latest-commit-date > window-days,
+    # BLOCK. If the model cannot reliably compute "today", it MUST stop here and
+    # ask the user via AskUserQuestion rather than proceeding.
+    echo "RETRO_GUARD: latest origin/<default> commit on $_RETRO_LATEST_ISO"
+    _RETRO_GUARD_VERDICT="check-gap"
+  fi
+fi
+```
+
+After running the bash block, the model evaluates `RETRO_GUARD: latest origin/<default> commit on <DATE>` against today and the window:
+
+- If the **latest-commit date is older than (today − window-days)**, BLOCK with: "Retro window is stale. Latest commit on `origin/<default>` was `<DATE>`, but the window covers `<since>` to `<today>`. This usually means either (a) today's date is wrong in this session or (b) `origin/<default>` is materially behind the remote. Confirm today's date via the session reminder; if today is correct, run `git fetch origin <default>` manually and re-run /retro." Stop the skill until the user resolves.
+- Otherwise, write: "RETRO_GUARD: latest commit `<DATE>` within window — proceeding."
+
+Skip paths (`skip-no-remote`, `skip-detached`, `warn-fetch-failed`) all proceed to Step 1 with the cited reason on a single stderr line so the retro narrative carries the disclosure ("offline run, window not freshness-verified") rather than silently misreporting.
 
 ### Step 1: Gather Raw Data
 
@@ -95,8 +181,8 @@ git log origin/<default> --since="<window>" --format="%at|%aN|%ai|%s" | sort -n
 # 4. Files most frequently changed (hotspot analysis)
 git log origin/<default> --since="<window>" --format="" --name-only | grep -v '^$' | sort | uniq -c | sort -rn
 
-# 5. PR numbers from commit messages (extract #NNN patterns)
-git log origin/<default> --since="<window>" --format="%s" | grep -oE '#[0-9]+' | sed 's/^#//' | sort -n | uniq | sed 's/^/#/'
+# 5. PR/MR numbers from commit messages (GitHub #NNN, GitLab !NNN)
+git log origin/<default> --since="<window>" --format="%s" | grep -oE '[#!][0-9]+' | sort -t'#' -k1 | uniq
 
 # 6. Per-author file hotspots (who touches what)
 git log origin/<default> --since="<window>" --format="AUTHOR:%aN" --name-only
@@ -105,7 +191,7 @@ git log origin/<default> --since="<window>" --format="AUTHOR:%aN" --name-only
 git shortlog origin/<default> --since="<window>" -sn --no-merges
 
 # 8. Greptile triage history (if available)
-cat ~/.workflow/greptile-history.md 2>/dev/null || true
+cat ~/.gstack/greptile-history.md 2>/dev/null || true
 
 # 9. TODOS.md backlog (if available)
 cat TODOS.md 2>/dev/null || true
@@ -116,8 +202,8 @@ find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec
 # 11. Regression test commits in window
 git log origin/<default> --since="<window>" --oneline --grep="test(qa):" --grep="test(design):" --grep="test: coverage"
 
-# 12. workflow skill usage telemetry (if available)
-cat ~/.workflow/analytics/skill-usage.jsonl 2>/dev/null || true
+# 12. gstack skill usage telemetry (if available)
+cat ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 
 # 12. Test files changed in window
 git log origin/<default> --since="<window>" --format="" --name-only | grep -E '\.(test|spec)\.' | sort -u | wc -l
@@ -129,20 +215,29 @@ Calculate and present these metrics in a summary table:
 
 | Metric | Value |
 |--------|-------|
+| **Features shipped** (from CHANGELOG + merged PR titles) | N |
 | Commits to main | N |
+| Weighted commits (commits × avg files-touched, capped at 20 per commit) | N |
 | Contributors | N |
 | PRs merged | N |
-| Total insertions | N |
-| Total deletions | N |
-| Net LOC added | N |
+| **Logical SLOC added** (non-blank, non-comment — primary code-volume metric) | N |
+| Raw LOC: insertions | N |
+| Raw LOC: deletions | N |
+| Raw LOC: net | N |
 | Test LOC (insertions) | N |
 | Test LOC ratio | N% |
 | Version range | vX.Y.Z.W → vX.Y.Z.W |
 | Active days | N |
 | Detected sessions | N |
-| Avg LOC/session-hour | N |
+| Avg raw LOC/session-hour | N |
 | Greptile signal | N% (Y catches, Z FPs) |
 | Test Health | N total tests · M added this period · K regression tests |
+
+**Metric order rationale (V1):** features shipped leads — what users got. Commits
+and weighted commits reflect intent-to-ship. Logical SLOC added reflects real
+new functionality. Raw LOC is demoted to context because AI inflates it; ten
+lines of a good fix is not less shipping than ten thousand lines of scaffold.
+See docs/designs/PLAN_TUNING_V1.md §Workstream C.
 
 Then show a **per-author leaderboard** immediately below:
 
@@ -155,7 +250,7 @@ bob                       3   +120/-40     tests/
 
 Sort by commits descending. The current user (from `git config user.name`) always appears first, labeled "You (name)".
 
-**Greptile signal (if history exists):** Read `~/.workflow/greptile-history.md` (fetched in Step 1, command 8). Filter entries within the retro time window by date. Count entries by type: `fix`, `fp`, `already-fixed`. Compute signal ratio: `(fix + already-fixed) / (fix + already-fixed + fp)`. If no entries exist in the window or the file doesn't exist, skip the Greptile metric row. Skip unparseable lines silently.
+**Greptile signal (if history exists):** Read `~/.gstack/greptile-history.md` (fetched in Step 1, command 8). Filter entries within the retro time window by date. Count entries by type: `fix`, `fp`, `already-fixed`. Compute signal ratio: `(fix + already-fixed) / (fix + already-fixed + fp)`. If no entries exist in the window or the file doesn't exist, skip the Greptile metric row. Skip unparseable lines silently.
 
 **Backlog Health (if TODOS.md exists):** Read `TODOS.md` (fetched in Step 1, command 9). Compute:
 - Total open TODOs (exclude items in `## Completed` section)
@@ -171,7 +266,7 @@ Include in the metrics table:
 
 If TODOS.md doesn't exist, skip the Backlog Health row.
 
-**Skill Usage (if analytics exist):** Read `~/.workflow/analytics/skill-usage.jsonl` if it exists. Filter entries within the retro time window by `ts` field. Separate skill activations (no `event` field) from hook fires (`event: "hook_fire"`). Aggregate by skill name. Present as:
+**Skill Usage (if analytics exist):** Read `~/.gstack/analytics/skill-usage.jsonl` if it exists. Filter entries within the retro time window by `ts` field. Separate skill activations (no `event` field) from hook fires (`event: "hook_fire"`). Aggregate by skill name. Present as:
 
 ```
 | Skill Usage | /ship(12) /qa(8) /review(5) · 3 safety hook fires |
@@ -179,7 +274,7 @@ If TODOS.md doesn't exist, skip the Backlog Health row.
 
 If the JSONL file doesn't exist or has no entries in the window, skip the Skill Usage row.
 
-**Eureka Moments (if logged):** Read `~/.workflow/analytics/eureka.jsonl` if it exists. Filter entries within the retro time window by `ts` field. For each eureka moment, show the skill that flagged it, the branch, and a one-line summary of the insight. Present as:
+**Eureka Moments (if logged):** Read `~/.gstack/analytics/eureka.jsonl` if it exists. Filter entries within the retro time window by `ts` field. For each eureka moment, show the skill that flagged it, the branch, and a one-line summary of the insight. Present as:
 
 ```
 | Eureka Moments | 2 this period |
@@ -285,6 +380,10 @@ For each contributor (including the current user), compute:
 
 **If there are Co-Authored-By trailers:** Parse `Co-Authored-By:` lines in commit messages. Credit those authors for the commit alongside the primary author. Note AI co-authors (e.g., `noreply@anthropic.com`) but do not include them as team members — instead, track "AI-assisted commits" as a separate metric.
 
+{{LEARNINGS_LOG}}
+
+{{GBRAIN_SAVE_RESULTS}}
+
 ### Step 10: Week-over-Week Trends (if window >= 14d)
 
 If the time window is 14 days or more, split into weekly buckets and show trends:
@@ -315,6 +414,7 @@ Count backward from today — how many consecutive days have at least one commit
 Before saving the new snapshot, check for prior retro history:
 
 ```bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
 ls -t .context/retros/*.json 2>/dev/null
 ```
 
@@ -341,6 +441,7 @@ mkdir -p .context/retros
 
 Determine the next sequence number for today (substitute the actual date for `$(date +%Y-%m-%d)`):
 ```bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
 # Count existing retros for today to get next sequence number
 today=$(date +%Y-%m-%d)
 existing=$(ls .context/retros/${today}-*.json 2>/dev/null | wc -l | tr -d ' ')
@@ -388,7 +489,7 @@ Use the Write tool to save the JSON file with this schema:
 }
 ```
 
-**Note:** Only include the `greptile` field if `~/.workflow/greptile-history.md` exists and has entries within the time window. Only include the `backlog` field if `TODOS.md` exists. Only include the `test_health` field if test files were found (command 10 returns > 0). If any has no data, omit the field entirely.
+**Note:** Only include the `greptile` field if `~/.gstack/greptile-history.md` exists and has entries within the time window. Only include the `backlog` field if `TODOS.md` exists. Only include the `test_health` field if test files were found (command 10 returns > 0). If any has no data, omit the field entirely.
 
 Include test health data in the JSON when test files exist:
 ```json
@@ -460,6 +561,29 @@ Narrative covering:
 - If prior retro exists and has `test_health`: show delta "Test count: {last} → {now} (+{delta})"
 - If test ratio < 20%: flag as growth area — "100% test coverage is the goal. Tests make vibe coding safe."
 
+### Plan Completion
+Check review JSONL logs for plan completion data from /ship runs this period:
+
+```bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)"
+cat ~/.gstack/projects/$SLUG/*-reviews.jsonl 2>/dev/null | grep '"skill":"ship"' | grep '"plan_items_total"' || echo "NO_PLAN_DATA"
+```
+
+If plan completion data exists within the retro time window:
+- Count branches shipped with plans (entries that have `plan_items_total` > 0)
+- Compute average completion: sum of `plan_items_done` / sum of `plan_items_total`
+- Identify most-skipped item category if data supports it
+
+Output:
+```
+Plan Completion This Period:
+  {N} branches shipped with plans
+  Average completion: {X}% ({done}/{total} items)
+```
+
+If no plan data exists, skip this section silently.
+
 ### Focus & Highlights
 (from Step 8)
 - Focus score with interpretation
@@ -525,21 +649,21 @@ Locate and run the discovery script using this fallback chain:
 
 ```bash
 DISCOVER_BIN=""
-[ -x ~/.claude/skills/workflow/bin/workflow-global-discover ] && DISCOVER_BIN=~/.claude/skills/workflow/bin/workflow-global-discover
-[ -z "$DISCOVER_BIN" ] && [ -x .claude/skills/workflow/bin/workflow-global-discover ] && DISCOVER_BIN=.claude/skills/workflow/bin/workflow-global-discover
-[ -z "$DISCOVER_BIN" ] && which workflow-global-discover >/dev/null 2>&1 && DISCOVER_BIN=$(which workflow-global-discover)
-[ -z "$DISCOVER_BIN" ] && [ -f bin/workflow-global-discover.ts ] && DISCOVER_BIN="bun run bin/workflow-global-discover.ts"
+[ -x ~/.claude/skills/gstack/bin/gstack-global-discover ] && DISCOVER_BIN=~/.claude/skills/gstack/bin/gstack-global-discover
+[ -z "$DISCOVER_BIN" ] && [ -x .claude/skills/gstack/bin/gstack-global-discover ] && DISCOVER_BIN=.claude/skills/gstack/bin/gstack-global-discover
+[ -z "$DISCOVER_BIN" ] && which gstack-global-discover >/dev/null 2>&1 && DISCOVER_BIN=$(which gstack-global-discover)
+[ -z "$DISCOVER_BIN" ] && [ -f bin/gstack-global-discover.ts ] && DISCOVER_BIN="bun run bin/gstack-global-discover.ts"
 echo "DISCOVER_BIN: $DISCOVER_BIN"
 ```
 
-If no binary is found, tell the user: "Discovery script not found. Run `bun run build` in the workflow directory to compile it." and stop.
+If no binary is found, tell the user: "Discovery script not found. Run `bun run build` in the gstack directory to compile it." and stop.
 
 Run the discovery:
 ```bash
-$DISCOVER_BIN --since "<window>" --format json 2>/tmp/workflow-discover-stderr
+$DISCOVER_BIN --since "<window>" --format json 2>/tmp/gstack-discover-stderr
 ```
 
-Read the stderr output from `/tmp/workflow-discover-stderr` for diagnostic info. Parse the JSON output from stdout.
+Read the stderr output from `/tmp/gstack-discover-stderr` for diagnostic info. Parse the JSON output from stdout.
 
 If `total_sessions` is 0, say: "No AI coding sessions found in the last <window>. Try a longer window: `/retro global 30d`" and stop.
 
@@ -567,8 +691,8 @@ git -C <path> log origin/$DEFAULT --since="<start_date>T00:00:00" --format="%at|
 # Per-author commit counts
 git -C <path> shortlog origin/$DEFAULT --since="<start_date>T00:00:00" -sn --no-merges
 
-# PR numbers from commit messages
-git -C <path> log origin/$DEFAULT --since="<start_date>T00:00:00" --format="%s" | grep -oE '#[0-9]+' | sort -n | uniq
+# PR/MR numbers from commit messages (GitHub #NNN, GitLab !NNN)
+git -C <path> log origin/$DEFAULT --since="<start_date>T00:00:00" --format="%s" | grep -oE '[#!][0-9]+' | sort -t'#' -k1 | uniq
 ```
 
 For repos that fail (deleted paths, network errors): skip and note "N repos could not be reached."
@@ -646,7 +770,7 @@ align cleanly. Never truncate project names.
 ║  • [1-line description of second theme]
 ║  • [1-line description of third theme]
 ║
-║  Powered by workflow · github.com/garrytan/workflow
+║  Powered by gstack
 ╚═══════════════════════════════════════════════════════════════
 ```
 
@@ -662,7 +786,7 @@ align cleanly. Never truncate project names.
 - Top Work: 3 bullet points summarizing the user's major themes, inferred from
   commit messages. Not individual commits — synthesize into themes.
   E.g., "Built /retro global — cross-project retrospective with AI session discovery"
-  not "feat: workflow-global-discover" + "feat: /retro global template".
+  not "feat: gstack-global-discover" + "feat: /retro global template".
 - The card must be self-contained. Someone seeing ONLY this block should understand
   the user's week without any surrounding context.
 - Do NOT include team members, project totals, or context switching data here.
@@ -743,7 +867,8 @@ Considering the full cross-project picture.
 ### Global Step 8: Load history & compare
 
 ```bash
-ls -t ~/.workflow/retros/global-*.json 2>/dev/null | head -5
+setopt +o nomatch 2>/dev/null || true  # zsh compat
+ls -t ~/.gstack/retros/global-*.json 2>/dev/null | head -5
 ```
 
 **Only compare against a prior retro with the same `window` value** (e.g., 7d vs 7d). If the most recent prior retro has a different window, skip comparison and note: "Prior global retro used a different window — skipping comparison."
@@ -755,17 +880,18 @@ If no prior global retros exist, append: "First global retro recorded — run ag
 ### Global Step 9: Save snapshot
 
 ```bash
-mkdir -p ~/.workflow/retros
+mkdir -p ~/.gstack/retros
 ```
 
 Determine the next sequence number for today:
 ```bash
+setopt +o nomatch 2>/dev/null || true  # zsh compat
 today=$(date +%Y-%m-%d)
-existing=$(ls ~/.workflow/retros/global-${today}-*.json 2>/dev/null | wc -l | tr -d ' ')
+existing=$(ls ~/.gstack/retros/global-${today}-*.json 2>/dev/null | wc -l | tr -d ' ')
 next=$((existing + 1))
 ```
 
-Use the Write tool to save JSON to `~/.workflow/retros/global-${today}-${next}.json`:
+Use the Write tool to save JSON to `~/.gstack/retros/global-${today}-${next}.json`:
 
 ```json
 {
@@ -774,8 +900,8 @@ Use the Write tool to save JSON to `~/.workflow/retros/global-${today}-${next}.j
   "window": "7d",
   "projects": [
     {
-      "name": "workflow",
-      "remote": "https://github.com/garrytan/workflow",
+      "name": "gstack",
+      "remote": "<detected from git remote get-url origin, normalized to HTTPS>",
       "commits": 47,
       "insertions": 3200,
       "deletions": 800,
@@ -792,7 +918,7 @@ Use the Write tool to save JSON to `~/.workflow/retros/global-${today}-${next}.j
     "global_streak_days": 52,
     "avg_context_switches_per_day": 2.1
   },
-  "tweetable": "Week of Mar 14: 5 projects, 182 commits, 15.3k LOC | CC: 48, Codex: 8, Gemini: 3 | Focus: workflow (58%) | Streak: 52d"
+  "tweetable": "Week of Mar 14: 5 projects, 182 commits, 15.3k LOC | CC: 48, Codex: 8, Gemini: 3 | Focus: gstack (58%) | Streak: 52d"
 }
 ```
 
@@ -831,4 +957,4 @@ When the user runs `/retro compare` (or `/retro compare 14d`):
 - Treat merge commits as PR boundaries
 - Do not read CLAUDE.md or other docs — this skill is self-contained
 - On first run (no prior retros), skip comparison sections gracefully
-- **Global mode:** Does NOT require being inside a git repo. Saves snapshots to `~/.workflow/retros/` (not `.context/retros/`). Gracefully skip AI tools that aren't installed. Only compare against prior global retros with the same window value. If streak hits 365d cap, display as "365+ days".
+- **Global mode:** Does NOT require being inside a git repo. Saves snapshots to `~/.gstack/retros/` (not `.context/retros/`). Gracefully skip AI tools that aren't installed. Only compare against prior global retros with the same window value. If streak hits 365d cap, display as "365+ days".

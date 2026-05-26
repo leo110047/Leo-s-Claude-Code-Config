@@ -34,3 +34,5 @@ codex/local/rules/*
 
 # Node
 node_modules/
+.gstack/
+.workflow/

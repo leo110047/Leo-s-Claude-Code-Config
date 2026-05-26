@@ -2,12 +2,15 @@
 name: careful
 version: 0.1.0
 description: |
-  MANUAL TRIGGER ONLY: invoke only when user types /careful.
   Safety guardrails for destructive commands. Warns before rm -rf, DROP TABLE,
   force-push, git reset --hard, kubectl delete, and similar destructive operations.
   User can override each warning. Use when touching prod, debugging live systems,
   or working in a shared environment. Use when asked to "be careful", "safety mode",
-  "prod mode", or "careful mode".
+  "prod mode", or "careful mode". (gstack)
+triggers:
+  - be careful
+  - warn before destructive
+  - safety mode
 allowed-tools:
   - Bash
   - Read
@@ -29,8 +32,8 @@ patterns before running. If a destructive command is detected, you'll be warned
 and can choose to proceed or cancel.
 
 ```bash
-mkdir -p ~/.workflow/analytics
-echo '{"skill":"careful","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.workflow/analytics/skill-usage.jsonl 2>/dev/null || true
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"careful","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
 ## What's protected

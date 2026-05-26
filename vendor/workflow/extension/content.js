@@ -1,5 +1,5 @@
 /**
- * workflow browse — content script
+ * gstack browse — content script
  *
  * Receives ref data from background worker via chrome.runtime.onMessage.
  * Renders @ref overlay badges on the page (CDP mode only — positions are accurate).
@@ -33,7 +33,7 @@ function showStatusPill(connected, refs) {
   }
 
   const refText = refCount > 0 ? ` · ${refCount} refs` : '';
-  statusPill.innerHTML = `<span class="gstack-pill-dot"></span> workflow${refText}`;
+  statusPill.innerHTML = `<span class="gstack-pill-dot"></span> gstack${refText}`;
   statusPill.style.display = 'flex';
   statusPill.style.opacity = '1';
 
@@ -94,7 +94,7 @@ function renderRefPanel(refs) {
 
   const header = document.createElement('div');
   header.className = 'gstack-ref-panel-header';
-  header.textContent = `workflow refs (${refs.length})`;
+  header.textContent = `gstack refs (${refs.length})`;
   header.style.cssText = 'pointer-events: auto; cursor: move;';
   panel.appendChild(header);
 

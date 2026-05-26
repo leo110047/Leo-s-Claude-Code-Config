@@ -3,17 +3,17 @@ name: plan-tune
 preamble-tier: 2
 version: 1.0.0
 description: |
-  Self-tuning question sensitivity + developer psychographic for workflow (v1: observational).
-  Review which AskUserQuestion prompts fire across workflow skills, set per-question preferences
+  Self-tuning question sensitivity + developer psychographic for gstack (v1: observational).
+  Review which AskUserQuestion prompts fire across gstack skills, set per-question preferences
   (never-ask / always-ask / ask-only-for-one-way), inspect the dual-track
   profile (what you declared vs what your behavior suggests), and enable/disable
   question tuning. Conversational interface — no CLI syntax required.
 
   Use when asked to "tune questions", "stop asking me that", "too many questions",
   "show my profile", "what questions have I been asked", "show my vibe",
-  "developer profile", or "turn off question tuning". (workflow)
+  "developer profile", or "turn off question tuning". (gstack)
 
-  Proactively suggest when the user says the same workflow question has come up before,
+  Proactively suggest when the user says the same gstack question has come up before,
   or when they explicitly override a recommendation for the Nth time.
 triggers:
   - tune questions
@@ -65,8 +65,8 @@ Read the user's message. Route based on plain-English intent, not keywords:
 5. **"Update my profile" / "I'm more boil-the-ocean than that" / "I've changed
    my mind"** → run `Edit declared profile` (confirm before writing).
 6. **"Show the gap" / "how far off is my profile"** → run `Show gap`.
-7. **"Turn it off" / "disable"** → `~/.claude/skills/workflow/bin/workflow-config set question_tuning false`
-8. **"Turn it on" / "enable"** → `~/.claude/skills/workflow/bin/workflow-config set question_tuning true`
+7. **"Turn it off" / "disable"** → `~/.claude/skills/gstack/bin/gstack-config set question_tuning false`
+8. **"Turn it on" / "enable"** → `~/.claude/skills/gstack/bin/gstack-config set question_tuning true`
 9. **Clear ambiguity** — if you can't tell what the user wants, ask plainly:
    "Do you want to (a) see your profile, (b) review recent questions, (c) set
    a preference, (d) update your declared profile, or (e) turn it off?"
@@ -85,16 +85,16 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
 1. Read the current state:
    ```bash
-   _QT=$(~/.claude/skills/workflow/bin/workflow-config get question_tuning 2>/dev/null || echo "false")
+   _QT=$(~/.claude/skills/gstack/bin/gstack-config get question_tuning 2>/dev/null || echo "false")
    echo "QUESTION_TUNING: $_QT"
    ```
 
 2. If `false`, use AskUserQuestion:
 
-   > Question tuning is off. workflow can learn which of its prompts you find
-   > valuable vs noisy — so over time, workflow stops asking questions you've
+   > Question tuning is off. gstack can learn which of its prompts you find
+   > valuable vs noisy — so over time, gstack stops asking questions you've
    > already answered the same way. It takes about 2 minutes to set up your
-   > initial profile. v1 is observational: workflow tracks your preferences
+   > initial profile. v1 is observational: gstack tracks your preferences
    > and shows you a profile, but doesn't silently change skill behavior yet.
    >
    > RECOMMENDATION: Enable and set up your profile. Completeness: A=9/10.
@@ -105,7 +105,7 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
 3. If A or B: enable:
    ```bash
-   ~/.claude/skills/workflow/bin/workflow-config set question_tuning true
+   ~/.claude/skills/gstack/bin/gstack-config set question_tuning true
    ```
 
 4. If A (full setup), ask FIVE one-per-dimension declaration questions via
@@ -138,13 +138,14 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
    After each answer, map A/B/C to the numeric value and save the declared
    dimension. Write each declaration directly into
-   `~/.workflow/developer-profile.json` under `declared.{dimension}`:
+   `~/.gstack/developer-profile.json` under `declared.{dimension}`:
 
    ```bash
    # Ensure profile exists
-   ~/.claude/skills/workflow/bin/workflow-developer-profile --read >/dev/null
+   ~/.claude/skills/gstack/bin/gstack-developer-profile --read >/dev/null
    # Update declared dimensions atomically
-   _PROFILE="${WORKFLOW_HOME:-$HOME/.workflow}/developer-profile.json"
+   eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+   _PROFILE="$GSTACK_STATE_ROOT/developer-profile.json"
    bun -e "
      const fs = require('fs');
      const p = JSON.parse(fs.readFileSync('$_PROFILE','utf-8'));
@@ -171,7 +172,7 @@ Power-user shortcuts (one-word invocations) — handle these too:
 ## Inspect profile
 
 ```bash
-~/.claude/skills/workflow/bin/workflow-developer-profile --profile
+~/.claude/skills/gstack/bin/gstack-developer-profile --profile
 ```
 
 Parse the JSON. Present in **plain English**, not raw floats:
@@ -195,7 +196,7 @@ Parse the JSON. Present in **plain English**, not raw floats:
   need N more events across M more skills before we can show your observed
   profile."
 
-- Show the vibe (archetype) from `workflow-developer-profile --vibe` — the
+- Show the vibe (archetype) from `gstack-developer-profile --vibe` — the
   one-word label + one-line description. Only if calibration gate met OR
   if declared is filled (so there's something to match against).
 
@@ -204,8 +205,9 @@ Parse the JSON. Present in **plain English**, not raw floats:
 ## Review question log
 
 ```bash
-eval "$(~/.claude/skills/workflow/bin/workflow-slug 2>/dev/null)"
-_LOG="${WORKFLOW_HOME:-$HOME/.workflow}/projects/$SLUG/question-log.jsonl"
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)"
+eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+_LOG="$GSTACK_STATE_ROOT/projects/$SLUG/question-log.jsonl"
 if [ ! -f "$_LOG" ]; then
   echo "NO_LOG"
 else
@@ -230,8 +232,8 @@ else
 fi
 ```
 
-If `NO_LOG`, tell the user: "No questions logged yet. As you use workflow skills,
-workflow will log them here."
+If `NO_LOG`, tell the user: "No questions logged yet. As you use gstack skills,
+gstack will log them here."
 
 Otherwise, present in plain English with counts and follow-rate. Highlight
 questions the user overrode frequently — those are candidates for setting a
@@ -263,7 +265,7 @@ scope expansion comes up", etc).
 
 4. Write:
    ```bash
-   ~/.claude/skills/workflow/bin/workflow-question-preference --write '{"question_id":"<id>","preference":"<never-ask|always-ask|ask-only-for-one-way>","source":"plan-tune","free_text":"<original phrase>"}'
+   ~/.claude/skills/gstack/bin/gstack-question-preference --write '{"question_id":"<id>","preference":"<never-ask|always-ask|ask-only-for-one-way>","source":"plan-tune","free_text":"<original phrase>"}'
    ```
 
 5. Confirm: "Set `<id>` → `<preference>`. Active immediately. One-way doors
@@ -298,7 +300,8 @@ is a trust boundary (Codex #15 in the design doc).
 
 3. After Y, write:
    ```bash
-   _PROFILE="${WORKFLOW_HOME:-$HOME/.workflow}/developer-profile.json"
+   eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+   _PROFILE="$GSTACK_STATE_ROOT/developer-profile.json"
    bun -e "
      const fs = require('fs');
      const p = JSON.parse(fs.readFileSync('$_PROFILE','utf-8'));
@@ -318,7 +321,7 @@ is a trust boundary (Codex #15 in the design doc).
 ## Show gap
 
 ```bash
-~/.claude/skills/workflow/bin/workflow-developer-profile --gap
+~/.claude/skills/gstack/bin/gstack-developer-profile --gap
 ```
 
 Parse the JSON. For each dimension where both declared and inferred exist:
@@ -337,11 +340,12 @@ the user decides whether declared is wrong or behavior is wrong.
 ## Stats
 
 ```bash
-~/.claude/skills/workflow/bin/workflow-question-preference --stats
-eval "$(~/.claude/skills/workflow/bin/workflow-slug 2>/dev/null)"
-_LOG="${WORKFLOW_HOME:-$HOME/.workflow}/projects/$SLUG/question-log.jsonl"
+~/.claude/skills/gstack/bin/gstack-question-preference --stats
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)"
+eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+_LOG="$GSTACK_STATE_ROOT/projects/$SLUG/question-log.jsonl"
 [ -f "$_LOG" ] && echo "TOTAL_LOGGED: $(wc -l < "$_LOG" | tr -d ' ')" || echo "TOTAL_LOGGED: 0"
-~/.claude/skills/workflow/bin/workflow-developer-profile --profile | bun -e "
+~/.claude/skills/gstack/bin/gstack-developer-profile --profile | bun -e "
   const p = JSON.parse(await Bun.stdin.text());
   const d = p.inferred?.diversity || {};
   console.log('SKILLS_COVERED: ' + (d.skills_covered ?? 0));

@@ -2,7 +2,7 @@
  * Eval result persistence and comparison.
  *
  * EvalCollector accumulates test results, writes them to
- * ~/.workflow/projects/$SLUG/evals/{version}-{branch}-{tier}-{timestamp}.json,
+ * ~/.gstack/projects/$SLUG/evals/{version}-{branch}-{tier}-{timestamp}.json,
  * prints a summary table, and auto-compares with the previous run.
  *
  * Comparison functions are exported for reuse by the eval:compare CLI.
@@ -14,23 +14,23 @@ import * as os from 'os';
 import { spawnSync } from 'child_process';
 
 const SCHEMA_VERSION = 1;
-const LEGACY_EVAL_DIR = path.join(os.homedir(), '.workflow-dev', 'evals');
+const LEGACY_EVAL_DIR = path.join(os.homedir(), '.gstack-dev', 'evals');
 
 /**
- * Detect project-scoped eval dir via workflow-slug.
- * Falls back to legacy ~/.workflow-dev/evals/ if slug detection fails.
+ * Detect project-scoped eval dir via gstack-slug.
+ * Falls back to legacy ~/.gstack-dev/evals/ if slug detection fails.
  */
 export function getProjectEvalDir(): string {
   try {
-    // Try repo-local workflow-slug first, then global install
-    const localSlug = spawnSync('bash', ['-c', '.claude/skills/workflow/bin/workflow-slug 2>/dev/null || ~/.claude/skills/workflow/bin/workflow-slug 2>/dev/null'], {
+    // Try repo-local gstack-slug first, then global install
+    const localSlug = spawnSync('bash', ['-c', '.claude/skills/gstack/bin/gstack-slug 2>/dev/null || ~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null'], {
       stdio: 'pipe', timeout: 3000,
     });
     const output = localSlug.stdout?.toString().trim();
     if (output) {
       const slugMatch = output.match(/^SLUG=(.+)$/m);
       if (slugMatch && slugMatch[1]) {
-        const dir = path.join(os.homedir(), '.workflow', 'projects', slugMatch[1], 'evals');
+        const dir = path.join(os.homedir(), '.gstack', 'projects', slugMatch[1], 'evals');
         fs.mkdirSync(dir, { recursive: true });
         return dir;
       }
@@ -68,7 +68,7 @@ export interface EvalTestEntry {
   last_tool_call?: string;    // e.g. "Write(review-output.md)"
 
   // Model + timing diagnostics (added for Sonnet/Opus split)
-  model?: string;                // e.g. 'claude-sonnet-4-6' or 'claude-opus-4-6'
+  model?: string;                // e.g. 'claude-sonnet-4-6' or 'claude-opus-4-7'
   first_response_ms?: number;    // time from spawn to first NDJSON line
   max_inter_turn_ms?: number;    // peak latency between consecutive tool calls
 
@@ -552,6 +552,71 @@ export function generateCommentary(c: ComparisonResult): string[] {
   }
 
   return notes;
+}
+
+// --- Budget regression assertion ---
+
+export interface BudgetRegression {
+  testName: string;
+  metric: 'tools' | 'turns';
+  before: number;
+  after: number;
+  ratio: number;
+}
+
+/**
+ * Compute budget regressions: tests where tool calls or turns grew by more
+ * than `ratioCap` between two runs. Pure function — caller decides how to
+ * surface the result. Used by test/skill-budget-regression.test.ts and any
+ * future ship gate.
+ *
+ * `ratioCap` defaults to 2.0 (>2× growth is a regression). Override via
+ * `GSTACK_BUDGET_RATIO` env var. New tests with no prior data are skipped.
+ */
+export function findBudgetRegressions(
+  comparison: ComparisonResult,
+  opts?: { ratioCap?: number; minPriorTools?: number; minPriorTurns?: number },
+): BudgetRegression[] {
+  const envRatio = Number(process.env.GSTACK_BUDGET_RATIO);
+  const cap = opts?.ratioCap ?? (Number.isFinite(envRatio) && envRatio > 0 ? envRatio : 2.0);
+  // Floors avoid noise on tiny numbers (1 → 3 tools is 3× but meaningless).
+  const minPriorTools = opts?.minPriorTools ?? 5;
+  const minPriorTurns = opts?.minPriorTurns ?? 3;
+  const out: BudgetRegression[] = [];
+  for (const d of comparison.deltas) {
+    const beforeTools = Object.values(d.before.tool_summary ?? {}).reduce((a, b) => a + b, 0);
+    const afterTools  = Object.values(d.after.tool_summary  ?? {}).reduce((a, b) => a + b, 0);
+    const beforeTurns = d.before.turns_used ?? 0;
+    const afterTurns  = d.after.turns_used  ?? 0;
+    if (beforeTools >= minPriorTools && afterTools / beforeTools > cap) {
+      out.push({ testName: d.name, metric: 'tools', before: beforeTools, after: afterTools, ratio: afterTools / beforeTools });
+    }
+    if (beforeTurns >= minPriorTurns && afterTurns / beforeTurns > cap) {
+      out.push({ testName: d.name, metric: 'turns', before: beforeTurns, after: afterTurns, ratio: afterTurns / beforeTurns });
+    }
+  }
+  return out;
+}
+
+/**
+ * Throw if any test in the comparison exceeds the budget cap. Convenience
+ * wrapper around findBudgetRegressions for use in test assertions.
+ */
+export function assertNoBudgetRegression(
+  comparison: ComparisonResult,
+  opts?: { ratioCap?: number; minPriorTools?: number; minPriorTurns?: number },
+): void {
+  const regressions = findBudgetRegressions(comparison, opts);
+  if (regressions.length === 0) return;
+  const cap = opts?.ratioCap ?? (Number(process.env.GSTACK_BUDGET_RATIO) || 2.0);
+  const lines = regressions.map(
+    r => `  "${r.testName}" ${r.metric}: ${r.before} → ${r.after} (${r.ratio.toFixed(2)}× > ${cap.toFixed(2)}× cap)`,
+  );
+  throw new Error(
+    `Budget regression: ${regressions.length} test(s) exceeded ${cap.toFixed(2)}× prior usage:\n` +
+    lines.join('\n') +
+    `\n(Override per run: GSTACK_BUDGET_RATIO=<n>. ${comparison.before_file} vs ${comparison.after_file})`,
+  );
 }
 
 // --- EvalCollector ---

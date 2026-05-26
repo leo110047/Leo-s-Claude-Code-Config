@@ -28,7 +28,7 @@ CMD_LOWER=$(printf '%s' "$CMD" | tr '[:upper:]' '[:lower:]')
 # --- Check for safe exceptions (rm -rf of build artifacts) ---
 if printf '%s' "$CMD" | grep -qE 'rm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+|--recursive\s+)' 2>/dev/null; then
   SAFE_ONLY=true
-  RM_ARGS=$(printf '%s' "$CMD" | sed -E 's/.*rm\s+(-[a-zA-Z]+\s+)*//;s/--recursive\s*//')
+  RM_ARGS=$(printf '%s' "$CMD" | sed -E 's/.*rm[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*//;s/--recursive[[:space:]]*//')
   for target in $RM_ARGS; do
     case "$target" in
       */node_modules|node_modules|*/\.next|\.next|*/dist|dist|*/__pycache__|__pycache__|*/\.cache|\.cache|*/build|build|*/\.turbo|\.turbo|*/coverage|coverage)
@@ -102,8 +102,8 @@ fi
 # --- Output ---
 if [ -n "$WARN" ]; then
   # Log hook fire event (pattern name only, never command content)
-  mkdir -p ~/.workflow/analytics 2>/dev/null || true
-  echo '{"event":"hook_fire","skill":"careful","pattern":"'"$PATTERN"'","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}' >> ~/.workflow/analytics/skill-usage.jsonl 2>/dev/null || true
+  mkdir -p ~/.gstack/analytics 2>/dev/null || true
+  echo '{"event":"hook_fire","skill":"careful","pattern":"'"$PATTERN"'","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}' >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 
   WARN_ESCAPED=$(printf '%s' "$WARN" | sed 's/"/\\"/g')
   printf '{"permissionDecision":"ask","message":"[careful] %s"}\n' "$WARN_ESCAPED"

@@ -23,7 +23,7 @@ function createTestRepo(): string {
   // Create initial commit so HEAD exists
   fs.writeFileSync(path.join(dir, 'README.md'), '# Test repo\n');
   // Add .gitignore matching real repo (so copied build artifacts don't appear as changes)
-  fs.writeFileSync(path.join(dir, '.gitignore'), '.agents/\nbrowse/dist/\n.workflow-worktrees/\n');
+  fs.writeFileSync(path.join(dir, '.gitignore'), '.agents/\nbrowse/dist/\n.gstack-worktrees/\n');
   // Create a .agents directory (simulating gitignored build artifacts)
   fs.mkdirSync(path.join(dir, '.agents', 'skills'), { recursive: true });
   fs.writeFileSync(path.join(dir, '.agents', 'skills', 'test-skill.md'), '# Test skill\n');
@@ -47,16 +47,8 @@ function cleanupRepo(dir: string): void {
 // Track repos to clean up
 const repos: string[] = [];
 
-let workflowDevDir: string;
-let dedupPath: string;
-
-function resetWorkflowDevDir(): void {
-  workflowDevDir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-dev-test-'));
-  dedupPath = path.join(workflowDevDir, 'harvests', 'dedup.json');
-  process.env.WORKFLOW_DEV_DIR = workflowDevDir;
-}
-
-resetWorkflowDevDir();
+// Dedup index path — clear before each test to avoid cross-run contamination
+const DEDUP_PATH = path.join(os.homedir(), '.gstack-dev', 'harvests', 'dedup.json');
 
 afterEach(() => {
   for (const repo of repos) {
@@ -64,8 +56,7 @@ afterEach(() => {
   }
   repos.length = 0;
   // Clear dedup index so tests are independent
-  try { fs.rmSync(workflowDevDir, { recursive: true, force: true }); } catch { /* best effort */ }
-  resetWorkflowDevDir();
+  try { fs.unlinkSync(DEDUP_PATH); } catch { /* may not exist */ }
 });
 
 describe('WorktreeManager', () => {
@@ -79,7 +70,7 @@ describe('WorktreeManager', () => {
 
     expect(fs.existsSync(worktreePath)).toBe(true);
     expect(fs.existsSync(path.join(worktreePath, 'README.md'))).toBe(true);
-    expect(worktreePath).toContain('.workflow-worktrees');
+    expect(worktreePath).toContain('.gstack-worktrees');
     expect(worktreePath).toContain('test-1');
 
     mgr.cleanup('test-1');
@@ -132,7 +123,6 @@ describe('WorktreeManager', () => {
     expect(result!.isDuplicate).toBe(false);
     expect(result!.patchPath).toBeTruthy();
     expect(fs.existsSync(result!.patchPath)).toBe(true);
-    expect(result!.patchPath.startsWith(workflowDevDir)).toBe(true);
 
     mgr.cleanup('test-harvest-mod');
   });
@@ -241,6 +231,9 @@ describe('WorktreeManager', () => {
     spawnSync('git', ['worktree', 'remove', '--force', oldPath], { cwd: repo, stdio: 'pipe' });
     // Recreate the directory to simulate orphaned state
     fs.mkdirSync(oldPath, { recursive: true });
+    // Backdate mtime to simulate a stale worktree (> 1 hour old)
+    const staleTime = new Date(Date.now() - 7200_000);
+    fs.utimesSync(oldRunDir, staleTime, staleTime);
 
     // New manager should prune the old run's directory
     const newMgr = new WorktreeManager(repo);

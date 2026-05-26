@@ -1,18 +1,20 @@
-# Contributing to workflow
+# Contributing to gstack
 
-Thanks for wanting to make workflow better. Whether you're fixing a typo in a skill prompt or building an entirely new workflow, this guide will get you up and running fast.
+Thanks for wanting to make gstack better. Whether you're fixing a typo in a skill prompt or building an entirely new workflow, this guide will get you up and running fast.
 
 ## Quick start
 
-workflow skills are Markdown files that Claude Code discovers from a `skills/` directory. Normally they live at `~/.claude/skills/workflow/` (your global install). But when you're developing workflow itself, you want Claude Code to use the skills *in your working tree* — so edits take effect instantly without copying or deploying anything.
+gstack skills are Markdown files that Claude Code discovers from a `skills/` directory. Normally they live at `~/.claude/skills/gstack/` (your global install). But when you're developing gstack itself, you want Claude Code to use the skills *in your working tree* — so edits take effect instantly without copying or deploying anything.
 
 That's what dev mode does. It symlinks your repo into the local `.claude/skills/` directory so Claude Code reads skills straight from your checkout.
 
 ```bash
-git clone <repo> && cd workflow
+git clone https://github.com/garrytan/gstack.git && cd gstack
 bun install                    # install dependencies
 bin/dev-setup                  # activate dev mode
 ```
+
+> **Full clone vs shallow.** The README's user-facing install uses `--depth 1` for speed. As a contributor, use a full clone (no `--depth` flag) — you'll need history for `git log`, `git blame`, `git bisect`, and reviewing PRs against earlier versions. If you already have a `--depth 1` clone from following the README, promote it to a full clone with `git fetch --unshallow`.
 
 Now edit any `SKILL.md`, invoke it in Claude Code (e.g. `/review`), and see your changes live. When you're done developing:
 
@@ -20,58 +22,55 @@ Now edit any `SKILL.md`, invoke it in Claude Code (e.g. `/review`), and see your
 bin/dev-teardown               # deactivate — back to your global install
 ```
 
-## Contributor mode
+## Operational self-improvement
 
-Contributor mode turns workflow into a self-improving tool. Enable it and Claude Code
-will periodically reflect on its workflow experience — rating it 0-10 at the end of
-each major workflow step. When something isn't a 10, it thinks about why and files
-a report to `~/.workflow/contributor-logs/` with what happened, repro steps, and what
-would make it better.
+gstack automatically learns from failures. At the end of every skill session, the agent
+reflects on what went wrong (CLI errors, wrong approaches, project quirks) and logs
+operational learnings to `~/.gstack/projects/{slug}/learnings.jsonl`. Future sessions
+surface these learnings automatically, so gstack gets smarter on your codebase over time.
 
-```bash
-~/.claude/skills/workflow/bin/workflow-config set workflow_contributor true
-```
-
-The logs are for **you**. When something bugs you enough to fix, the report is
-already written. Fork workflow, symlink your fork into the project where you hit
-the issue, fix it, and open a PR.
+No setup needed. Learnings are logged automatically. View them with `/learn`.
 
 ### The contributor workflow
 
-1. **Use workflow normally** — contributor mode reflects and logs issues automatically
-2. **Check your logs:** `ls ~/.workflow/contributor-logs/`
-3. **Fork and clone workflow** (if you haven't already)
+1. **Use gstack normally** — operational learnings are captured automatically
+2. **Check your learnings:** `/learn` or `ls ~/.gstack/projects/*/learnings.jsonl`
+3. **Fork and clone gstack** (if you haven't already)
 4. **Symlink your fork into the project where you hit the bug:**
    ```bash
-   # In your core project (the one where workflow annoyed you)
-   ln -sfn /path/to/your/workflow-fork .claude/skills/workflow
-   cd .claude/skills/workflow && bun install && bun run build
+   # In your core project (the one where gstack annoyed you)
+   ln -sfn /path/to/your/gstack-fork .claude/skills/gstack
+   cd .claude/skills/gstack && bun install && bun run build && ./setup
    ```
+   Setup creates per-skill directories with SKILL.md symlinks inside (`qa/SKILL.md -> gstack/qa/SKILL.md`)
+   and asks your prefix preference. Pass `--no-prefix` to skip the prompt and use short names.
 5. **Fix the issue** — your changes are live immediately in this project
-6. **Test by actually using workflow** — do the thing that annoyed you, verify it's fixed
+6. **Test by actually using gstack** — do the thing that annoyed you, verify it's fixed
 7. **Open a PR from your fork**
 
-This is the best way to contribute: fix workflow while doing your real work, in the
+This is the best way to contribute: fix gstack while doing your real work, in the
 project where you actually felt the pain.
 
 ### Session awareness
 
-When you have 3+ workflow sessions open simultaneously, every question tells you which project, which branch, and what's happening. No more staring at a question thinking "wait, which window is this?" The format is consistent across all skills.
+When you have 3+ gstack sessions open simultaneously, every question tells you which project, which branch, and what's happening. No more staring at a question thinking "wait, which window is this?" The format is consistent across all skills.
 
-## Working on workflow inside the workflow repo
+## Working on gstack inside the gstack repo
 
-When you're editing workflow skills and want to test them by actually using workflow
+When you're editing gstack skills and want to test them by actually using gstack
 in the same repo, `bin/dev-setup` wires this up. It creates `.claude/skills/`
 symlinks (gitignored) pointing back to your working tree, so Claude Code uses
 your local edits instead of the global install.
 
 ```
-workflow/                          <- your working tree
+gstack/                          <- your working tree
 ├── .claude/skills/              <- created by dev-setup (gitignored)
-│   ├── workflow -> ../../         <- symlink back to repo root
-│   ├── review -> workflow/review
-│   ├── ship -> workflow/ship
-│   └── ...                      <- one symlink per skill
+│   ├── gstack -> ../../         <- symlink back to repo root
+│   ├── review/                  <- real directory (short name, default)
+│   │   └── SKILL.md -> gstack/review/SKILL.md
+│   ├── ship/                    <- or gstack-review/, gstack-ship/ if --prefix
+│   │   └── SKILL.md -> gstack/ship/SKILL.md
+│   └── ...                      <- one directory per skill
 ├── review/
 │   └── SKILL.md                 <- edit this, test with /review
 ├── ship/
@@ -81,6 +80,12 @@ workflow/                          <- your working tree
 │   └── dist/                    <- compiled binary (gitignored)
 └── ...
 ```
+
+Setup creates real directories (not symlinks) at the top level with a SKILL.md
+symlink inside. This ensures Claude discovers them as top-level skills, not nested
+under `gstack/`. Names depend on your prefix setting (`~/.gstack/config.yaml`).
+Short names (`/review`, `/ship`) are the default. Run `./setup --prefix` if you
+prefer namespaced names (`/gstack-review`, `/gstack-ship`).
 
 ## Day-to-day workflow
 
@@ -157,7 +162,7 @@ EVALS=1 bun test test/skill-e2e-*.test.ts
 
 ### E2E observability
 
-When E2E tests run, they produce machine-readable artifacts in `~/.workflow-dev/`:
+When E2E tests run, they produce machine-readable artifacts in `~/.gstack-dev/`:
 
 | Artifact | Path | Purpose |
 |----------|------|---------|
@@ -179,7 +184,7 @@ bun run eval:summary         # aggregate stats + per-test efficiency averages ac
 
 **Eval comparison commentary:** `eval:compare` generates natural-language Takeaway sections interpreting what changed between runs — flagging regressions, noting improvements, calling out efficiency gains (fewer turns, faster, cheaper), and producing an overall summary. This is driven by `generateCommentary()` in `eval-store.ts`.
 
-Artifacts are never cleaned up — they accumulate in `~/.workflow-dev/` for post-mortem debugging and trend analysis.
+Artifacts are never cleaned up — they accumulate in `~/.gstack-dev/` for post-mortem debugging and trend analysis.
 
 ### Tier 3: LLM-as-judge (~$0.15/run)
 
@@ -213,11 +218,10 @@ SKILL.md files are **generated** from `.tmpl` templates. Don't edit the `.md` di
 # 1. Edit the template
 vim SKILL.md.tmpl              # or browse/SKILL.md.tmpl
 
-# 2. Regenerate for both hosts
-bun run gen:skill-docs
-bun run gen:skill-docs --host codex
+# 2. Regenerate for all hosts
+bun run gen:skill-docs --host all
 
-# 3. Check health (reports both Claude and Codex)
+# 3. Check health (reports all hosts)
 bun run skill:check
 
 # Or use watch mode — auto-regenerates on save
@@ -228,59 +232,93 @@ For template authoring best practices (natural language over bash-isms, dynamic 
 
 To add a browse command, add it to `browse/src/commands.ts`. To add a snapshot flag, add it to `SNAPSHOT_FLAGS` in `browse/src/snapshot.ts`. Then rebuild.
 
-## Dual-host development (Claude + Codex)
+## Jargon list (V1 writing style)
 
-workflow generates SKILL.md files for two hosts: **Claude** (`.claude/skills/`) and **Codex** (`.agents/skills/`). Every template change needs to be generated for both.
+gstack's Writing Style section (injected into every tier-≥2 skill's preamble)
+glosses technical terms on first use per skill invocation. The list of terms
+that qualify for glossing lives at `scripts/jargon-list.json` — ~50 curated
+high-frequency terms (idempotent, race condition, N+1, backpressure, etc.).
+Terms not on the list are assumed plain-English enough.
 
-### Generating for both hosts
+**Adding or removing a term:** open a PR editing `scripts/jargon-list.json`.
+Run `bun run gen:skill-docs` after the edit — terms are baked into every
+generated SKILL.md at gen time, so changes take effect only after regeneration.
+No runtime loading; no user-side override. The repo list is the source of truth.
+
+Good candidates for addition: high-frequency terms that non-technical users
+encounter in review output without context (common database/concurrency
+terminology, security jargon, frontend framework concepts). Don't add terms
+that only appear in one or two niche skills — the cost-to-value trade isn't
+worth the review overhead.
+
+## Multi-host development
+
+gstack generates SKILL.md files for 8 hosts from one set of `.tmpl` templates.
+Each host is a typed config in `hosts/*.ts`. The generator reads these configs
+to produce host-appropriate output (different frontmatter, paths, tool names).
+
+**Supported hosts:** Claude (primary), Codex, Factory, Kiro, OpenCode, Slate, Cursor, OpenClaw.
+
+### Generating for all hosts
 
 ```bash
-# Generate Claude output (default)
-bun run gen:skill-docs
+# Generate for a specific host
+bun run gen:skill-docs                    # Claude (default)
+bun run gen:skill-docs --host codex       # Codex
+bun run gen:skill-docs --host opencode    # OpenCode
+bun run gen:skill-docs --host all         # All 8 hosts
 
-# Generate Codex output
-bun run gen:skill-docs --host codex
-# --host agents is an alias for --host codex
-
-# Or use build, which does both + compiles binaries
+# Or use build, which does all hosts + compiles binaries
 bun run build
 ```
 
 ### What changes between hosts
 
-| Aspect | Claude | Codex |
-|--------|--------|-------|
-| Output directory | `{skill}/SKILL.md` | `.agents/skills/workflow-{skill}/SKILL.md` (generated at setup, gitignored) |
-| Frontmatter | Full (name, description, allowed-tools, hooks, version) | Minimal (name + description only) |
-| Paths | `~/.claude/skills/workflow` | `$WORKFLOW_ROOT` (`.agents/skills/workflow` in a repo, otherwise `~/.codex/skills/workflow`) |
-| Hook skills | `hooks:` frontmatter (enforced by Claude) | Inline safety advisory prose (advisory only) |
-| `/codex` skill | Included (Claude wraps codex exec) | Excluded (self-referential) |
+Each host config (`hosts/*.ts`) controls:
 
-### Testing Codex output
+| Aspect | Example (Claude vs Codex) |
+|--------|---------------------------|
+| Output directory | `{skill}/SKILL.md` vs `.agents/skills/gstack-{skill}/SKILL.md` |
+| Frontmatter | Full (name, description, hooks, version) vs minimal (name + description) |
+| Paths | `~/.claude/skills/gstack` vs `$GSTACK_ROOT` |
+| Tool names | "use the Bash tool" vs same (Factory rewrites to "run this command") |
+| Hook skills | `hooks:` frontmatter vs inline safety advisory prose |
+| Suppressed sections | None vs Codex self-invocation sections stripped |
+
+See `scripts/host-config.ts` for the full `HostConfig` interface.
+
+### Testing host output
 
 ```bash
-# Run all static tests (includes Codex validation)
+# Run all static tests (includes parameterized smoke tests for all hosts)
 bun test
 
-# Check freshness for both hosts
-bun run gen:skill-docs --dry-run
-bun run gen:skill-docs --host codex --dry-run
+# Check freshness for all hosts
+bun run gen:skill-docs --host all --dry-run
 
-# Health dashboard covers both hosts
+# Health dashboard covers all hosts
 bun run skill:check
 ```
 
-### Dev setup for .agents/
+### Adding a new host
 
-When you run `bin/dev-setup`, it creates symlinks in both `.claude/skills/` and `.agents/skills/` (if applicable), so Codex-compatible agents can discover your dev skills too. The `.agents/` directory is generated at setup time from `.tmpl` templates — it is gitignored and not committed.
+See [docs/ADDING_A_HOST.md](docs/ADDING_A_HOST.md) for the full guide. Short version:
+
+1. Create `hosts/myhost.ts` (copy from `hosts/opencode.ts`)
+2. Add to `hosts/index.ts`
+3. Add `.myhost/` to `.gitignore`
+4. Run `bun run gen:skill-docs --host myhost`
+5. Run `bun test` (parameterized tests auto-cover it)
+
+Zero generator, setup, or tooling code changes needed.
 
 ### Adding a new skill
 
-When you add a new skill template, both hosts get it automatically:
+When you add a new skill template, all hosts get it automatically:
 1. Create `{skill}/SKILL.md.tmpl`
-2. Run `bun run gen:skill-docs` (Claude output) and `bun run gen:skill-docs --host codex` (Codex output)
-3. The dynamic template discovery picks it up — no static list to update
-4. Commit `{skill}/SKILL.md` — `.agents/` is generated at setup time and gitignored
+2. Run `bun run gen:skill-docs --host all`
+3. The dynamic template discovery picks it up, no static list to update
+4. Commit `{skill}/SKILL.md`, external host output is generated at setup time and gitignored
 
 ## Conductor workspaces
 
@@ -295,52 +333,85 @@ When Conductor creates a new workspace, `bin/dev-setup` runs automatically. It d
 
 **First-time setup:** Put your `ANTHROPIC_API_KEY` in `.env` in the main repo (see `.env.example`). Every Conductor workspace inherits it automatically.
 
+**`GSTACK_*` env prefix (Conductor-injected keys).** Conductor explicitly strips `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from every workspace's process env. The `.env` copy path doesn't restore them either — the strip happens after env inheritance. Users who want paid evals, `/sync-gbrain` embeddings, or `claude-agent-sdk` calls to work in a Conductor workspace must set `GSTACK_ANTHROPIC_API_KEY` and `GSTACK_OPENAI_API_KEY` in Conductor's workspace env config; Conductor passes those through untouched. On the gstack side, TS entry points import `lib/conductor-env-shim.ts` as a side effect, which promotes `GSTACK_FOO_API_KEY` to `FOO_API_KEY` when the canonical name is empty. If you add a new TS entry point that hits a paid API, add `import "../lib/conductor-env-shim";` to the top of the file. Today the shim is imported from `bin/gstack-gbrain-sync.ts`, `bin/gstack-model-benchmark`, `scripts/preflight-agent-sdk.ts`, and `test/helpers/e2e-helpers.ts`.
+
 ## Things to know
 
 - **SKILL.md files are generated.** Edit the `.tmpl` template, not the `.md`. Run `bun run gen:skill-docs` to regenerate.
 - **TODOS.md is the unified backlog.** Organized by skill/component with P0-P4 priorities. `/ship` auto-detects completed items. All planning/review/retro skills read it for context.
 - **Browse source changes need a rebuild.** If you touch `browse/src/*.ts`, run `bun run build`.
-- **Dev mode shadows your global install.** Project-local skills take priority over `~/.claude/skills/workflow`. `bin/dev-teardown` restores the global one.
+- **Dev mode shadows your global install.** Project-local skills take priority over `~/.claude/skills/gstack`. `bin/dev-teardown` restores the global one.
 - **Conductor workspaces are independent.** Each workspace is its own git worktree. `bin/dev-setup` runs automatically via `conductor.json`.
 - **`.env` propagates across worktrees.** Set it once in the main repo, all Conductor workspaces get it.
 - **`.claude/skills/` is gitignored.** The symlinks never get committed.
+- **Never write raw `ln -snf` in `setup`.** Every link site in `setup` MUST route through the `_link_or_copy SRC DST` helper near the `IS_WINDOWS` detection. The helper preserves `ln -snf` on Unix and switches to `cp -R` / `cp -f` on Windows without Developer Mode, where plain `ln -snf` produces frozen file copies that don't refresh on `git pull`. `test/setup-windows-fallback.test.ts` enforces this with a static invariant — a single raw `ln` call outside the helper body fails CI.
 
 ## Testing your changes in a real project
 
-**This is the recommended way to develop workflow.** Symlink your workflow checkout
+**This is the recommended way to develop gstack.** Symlink your gstack checkout
 into the project where you actually use it, so your changes are live while you
-do real work:
+do real work.
+
+### Step 1: Symlink your checkout
 
 ```bash
-# In your core project
-ln -sfn /path/to/your/workflow-checkout .claude/skills/workflow
-cd .claude/skills/workflow && bun install && bun run build
+# In your core project (not the gstack repo)
+ln -sfn /path/to/your/gstack-checkout .claude/skills/gstack
 ```
 
-Now every workflow skill invocation in this project uses your working tree. Edit a
-template, run `bun run gen:skill-docs`, and the next `/review` or `/qa` call picks
-it up immediately.
+### Step 2: Run setup to create per-skill symlinks
 
-**To go back to the stable global install**, just remove the symlink:
+The `gstack` symlink alone isn't enough. Claude Code discovers skills through
+individual top-level directories (`qa/SKILL.md`, `ship/SKILL.md`, etc.), not through
+the `gstack/` directory itself. Run `./setup` to create them:
 
 ```bash
-rm .claude/skills/workflow
+cd .claude/skills/gstack && bun install && bun run build && ./setup
 ```
 
-Claude Code falls back to `~/.claude/skills/workflow/` automatically.
+Setup will ask whether you want short names (`/qa`) or namespaced (`/gstack-qa`).
+Your choice is saved to `~/.gstack/config.yaml` and remembered for future runs.
+To skip the prompt, pass `--no-prefix` (short names) or `--prefix` (namespaced).
+
+### Step 3: Develop
+
+Edit a template, run `bun run gen:skill-docs`, and the next `/review` or `/qa`
+call picks it up immediately. No restart needed.
+
+### Going back to the stable global install
+
+Remove the project-local symlink. Claude Code falls back to `~/.claude/skills/gstack/`:
+
+```bash
+rm .claude/skills/gstack
+```
+
+The per-skill directories (`qa/`, `ship/`, etc.) contain SKILL.md symlinks that point
+to `gstack/...`, so they'll resolve to the global install automatically.
+
+### Switching prefix mode
+
+If you installed gstack with one prefix setting and want to switch:
+
+```bash
+cd .claude/skills/gstack && ./setup --no-prefix   # switch to /qa, /ship
+cd .claude/skills/gstack && ./setup --prefix       # switch to /gstack-qa, /gstack-ship
+```
+
+Setup cleans up the old symlinks automatically. No manual cleanup needed.
 
 ### Alternative: point your global install at a branch
 
 If you don't want per-project symlinks, you can switch the global install:
 
 ```bash
-cd ~/.claude/skills/workflow
+cd ~/.claude/skills/gstack
 git fetch origin
 git checkout origin/<branch>
-bun install && bun run build
+bun install && bun run build && ./setup
 ```
 
-This affects all projects. To revert: `git checkout main && git pull && bun run build`.
+This affects all projects. To revert: `git checkout main && git pull && bun run build && ./setup`.
 
 ## Community PR triage (wave process)
 
@@ -358,6 +429,56 @@ When community PRs accumulate, batch them into themed waves:
    in merge commits. Include a summary table of what merged and what closed.
 
 See [PR #205](../../pull/205) (v0.8.3) for the first wave as an example.
+
+## Upgrade migrations
+
+When a release changes on-disk state (directory structure, config format, stale
+files) in ways that `./setup` alone can't fix, add a migration script so existing
+users get a clean upgrade.
+
+### When to add a migration
+
+- Changed how skill directories are created (symlinks vs real dirs)
+- Renamed or moved config keys in `~/.gstack/config.yaml`
+- Need to delete orphaned files from a previous version
+- Changed the format of `~/.gstack/` state files
+
+Don't add a migration for: new features (users get them automatically), new
+skills (setup discovers them), or code-only changes (no on-disk state).
+
+### How to add one
+
+1. Create `gstack-upgrade/migrations/v{VERSION}.sh` where `{VERSION}` matches
+   the VERSION file for the release that needs the fix.
+2. Make it executable: `chmod +x gstack-upgrade/migrations/v{VERSION}.sh`
+3. The script must be **idempotent** (safe to run multiple times) and
+   **non-fatal** (failures are logged but don't block the upgrade).
+4. Include a comment block at the top explaining what changed, why the
+   migration is needed, and which users are affected.
+
+Example:
+
+```bash
+#!/usr/bin/env bash
+# Migration: v0.15.2.0 — Fix skill directory structure
+# Affected: users who installed with --no-prefix before v0.15.2.0
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+"$SCRIPT_DIR/bin/gstack-relink" 2>/dev/null || true
+```
+
+### How it runs
+
+During `/gstack-upgrade`, after `./setup` completes (Step 4.75), the upgrade
+skill scans `gstack-upgrade/migrations/` and runs every `v*.sh` script whose
+version is newer than the user's old version. Scripts run in version order.
+Failures are logged but never block the upgrade.
+
+### Testing migrations
+
+Migrations are tested as part of `bun test` (tier 1, free). The test suite
+verifies that all migration scripts in `gstack-upgrade/migrations/` are
+executable and parse without syntax errors.
 
 ## Shipping your changes
 

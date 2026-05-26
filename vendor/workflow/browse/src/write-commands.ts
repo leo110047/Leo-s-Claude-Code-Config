@@ -11,6 +11,7 @@ import { findInstalledBrowsers, importCookies, importCookiesViaCdp, hasV20Cookie
 import { generatePickerCode } from './cookie-picker-routes';
 import { validateNavigationUrl } from './url-validation';
 import { validateOutputPath, validateReadPath } from './path-security';
+import { guardScreenshotPath } from './screenshot-size-guard';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { SetContentWaitUntil } from './tab-session';
@@ -130,19 +131,9 @@ const CLEANUP_SELECTORS = {
 export async function handleWriteCommand(
   command: string,
   args: string[],
-  sessionOrBm: TabSession | BrowserManager,
-  bm?: BrowserManager
+  session: TabSession,
+  bm: BrowserManager
 ): Promise<string> {
-  const session = typeof (sessionOrBm as BrowserManager).getActiveSession === 'function'
-    ? (sessionOrBm as BrowserManager).getActiveSession()
-    : (sessionOrBm as TabSession);
-  const browserManager = bm
-    ?? (typeof (sessionOrBm as BrowserManager).getActiveSession === 'function'
-      ? (sessionOrBm as BrowserManager)
-      : undefined);
-  if (!browserManager) {
-    throw new Error('BrowserManager is required for write commands');
-  }
   const page = session.getPage();
   // Frame-aware target for locator-based operations (click, fill, etc.)
   const target = session.getActiveFrameOrPage();
@@ -185,13 +176,45 @@ export async function handleWriteCommand(
 
     case 'load-html': {
       if (inFrame) throw new Error('Cannot use load-html inside a frame. Run \'frame main\' first.');
-      const filePath = args[0];
-      if (!filePath) throw new Error('Usage: browse load-html <file> [--wait-until load|domcontentloaded|networkidle]');
 
-      // Parse --wait-until flag
+      // --from-file <path.json>: read inline HTML from a JSON payload. Used by
+      // make-pdf to dodge Windows argv size limits on large rendered HTML.
+      // The JSON shape is { html: string, waitUntil?: "load"|"domcontentloaded"|"networkidle" }.
+      // The safe-dirs + magic-byte + size-cap checks below still apply to the
+      // INLINE HTML content, not to the payload file path itself.
+      let fromFilePayload: { html: string; waitUntil?: SetContentWaitUntil } | null = null;
+      let filePath: string | undefined;
       let waitUntil: SetContentWaitUntil = 'domcontentloaded';
-      for (let i = 1; i < args.length; i++) {
-        if (args[i] === '--wait-until') {
+      for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--from-file') {
+          const payloadPath = args[++i];
+          if (!payloadPath) throw new Error('load-html: --from-file requires a path');
+          // Parity with the sibling `load-html <file>` path below (line 249):
+          // that branch runs every `file://` target through validateReadPath
+          // so the safe-dirs policy can't be side-stepped. Same policy must
+          // apply here — otherwise --from-file becomes a read-anywhere escape
+          // hatch for any caller that can pick the payload path (e.g., an
+          // MCP caller issuing load-html with an attacker-influenced path).
+          try {
+            validateReadPath(path.resolve(payloadPath));
+          } catch {
+            throw new Error(
+              `load-html: --from-file ${payloadPath} must be under ${SAFE_DIRECTORIES.join(' or ')} (security policy). Copy the payload into the project tree or /tmp first.`
+            );
+          }
+          const raw = fs.readFileSync(payloadPath, 'utf8');
+          let json: any;
+          try { json = JSON.parse(raw); }
+          catch (e: any) { throw new Error(`load-html: --from-file JSON parse failed: ${e.message}`); }
+          if (typeof json.html !== 'string') {
+            throw new Error('load-html: --from-file JSON must have a "html" string field');
+          }
+          if (json.waitUntil && json.waitUntil !== 'load'
+              && json.waitUntil !== 'domcontentloaded' && json.waitUntil !== 'networkidle') {
+            throw new Error(`load-html: --from-file waitUntil '${json.waitUntil}' invalid`);
+          }
+          fromFilePayload = { html: json.html, waitUntil: json.waitUntil };
+        } else if (args[i] === '--wait-until') {
           const val = args[++i];
           if (val !== 'load' && val !== 'domcontentloaded' && val !== 'networkidle') {
             throw new Error(`Invalid --wait-until '${val}'. Must be one of: load, domcontentloaded, networkidle.`);
@@ -199,8 +222,30 @@ export async function handleWriteCommand(
           waitUntil = val;
         } else if (args[i].startsWith('--')) {
           throw new Error(`Unknown flag: ${args[i]}`);
+        } else if (!filePath) {
+          filePath = args[i];
         }
       }
+
+      // Inline HTML path: validate size + magic byte, then setContent directly.
+      if (fromFilePayload) {
+        const MAX_BYTES = parseInt(process.env.GSTACK_BROWSE_MAX_HTML_BYTES || '', 10) || (50 * 1024 * 1024);
+        if (Buffer.byteLength(fromFilePayload.html, 'utf8') > MAX_BYTES) {
+          throw new Error(
+            `load-html: --from-file html too large (> ${MAX_BYTES} bytes). ` +
+            'Raise with GSTACK_BROWSE_MAX_HTML_BYTES=<N>.'
+          );
+        }
+        const peek = fromFilePayload.html.trimStart();
+        if (!/^<[a-zA-Z!?]/.test(peek)) {
+          throw new Error('load-html: --from-file html does not start with a valid markup opener');
+        }
+        const finalWaitUntil = fromFilePayload.waitUntil ?? waitUntil;
+        await session.setTabContent(fromFilePayload.html, { waitUntil: finalWaitUntil });
+        return `Loaded HTML: (inline from --from-file, ${fromFilePayload.html.length} chars)`;
+      }
+
+      if (!filePath) throw new Error('Usage: browse load-html <file> [--wait-until load|domcontentloaded|networkidle] [--tab-id <N>]  |  load-html --from-file <payload.json> [--tab-id <N>]');
 
       // Extension allowlist
       const ALLOWED_EXT = ['.html', '.htm', '.xhtml', '.svg'];
@@ -242,10 +287,10 @@ export async function handleWriteCommand(
       }
 
       // Size cap
-      const MAX_BYTES = parseInt(process.env.WORKFLOW_BROWSE_MAX_HTML_BYTES || '', 10) || (50 * 1024 * 1024);
+      const MAX_BYTES = parseInt(process.env.GSTACK_BROWSE_MAX_HTML_BYTES || '', 10) || (50 * 1024 * 1024);
       if (stat.size > MAX_BYTES) {
         throw new Error(
-          `load-html: file too large (${stat.size} bytes > ${MAX_BYTES} cap). Raise with WORKFLOW_BROWSE_MAX_HTML_BYTES=<N> or split the HTML.`
+          `load-html: file too large (${stat.size} bytes > ${MAX_BYTES} cap). Raise with GSTACK_BROWSE_MAX_HTML_BYTES=<N> or split the HTML.`
         );
       }
 
@@ -394,7 +439,7 @@ export async function handleWriteCommand(
         // Repeated scroll mode
         for (let i = 0; i < times; i++) {
           if (selector) {
-            const resolved = await browserManager.resolveRef(selector);
+            const resolved = await bm.resolveRef(selector);
             if ('locator' in resolved) {
               await resolved.locator.scrollIntoViewIfNeeded({ timeout: 5000 });
             } else {
@@ -491,18 +536,18 @@ export async function handleWriteCommand(
         // --scale without WxH → use BrowserManager's tracked viewport (source of truth
         // since setViewport + launchContext keep it in sync). Falls back reliably on
         // headed → headless transitions or contexts with viewport:null.
-        const current = browserManager.getCurrentViewport();
+        const current = bm.getCurrentViewport();
         w = current.width;
         h = current.height;
       }
 
       if (scaleArg !== undefined) {
-        const err = await browserManager.setDeviceScaleFactor(scaleArg, w, h);
+        const err = await bm.setDeviceScaleFactor(scaleArg, w, h);
         if (err) return `Viewport partially set: ${err}`;
         return `Viewport set to ${w}x${h} @ ${scaleArg}x (context recreated; refs and load-html content replayed)`;
       }
 
-      await browserManager.setViewport(w, h);
+      await bm.setViewport(w, h);
       return `Viewport set to ${w}x${h}`;
     }
 
@@ -528,7 +573,7 @@ export async function handleWriteCommand(
       const sep = headerStr.indexOf(':');
       const name = headerStr.slice(0, sep).trim();
       const value = headerStr.slice(sep + 1).trim();
-      await browserManager.setExtraHeader(name, value);
+      await bm.setExtraHeader(name, value);
       const sensitiveHeaders = ['authorization', 'cookie', 'set-cookie', 'x-api-key', 'x-auth-token'];
       const redactedValue = sensitiveHeaders.includes(name.toLowerCase()) ? '****' : value;
       return `Header set: ${name}: ${redactedValue}`;
@@ -537,8 +582,8 @@ export async function handleWriteCommand(
     case 'useragent': {
       const ua = args.join(' ');
       if (!ua) throw new Error('Usage: browse useragent <string>');
-      browserManager.setUserAgent(ua);
-      const error = await browserManager.recreateContext();
+      bm.setUserAgent(ua);
+      const error = await bm.recreateContext();
       if (error) {
         return `User agent set to "${ua}" but: ${error}`;
       }
@@ -580,16 +625,16 @@ export async function handleWriteCommand(
 
     case 'dialog-accept': {
       const text = args.length > 0 ? args.join(' ') : null;
-      browserManager.setDialogAutoAccept(true);
-      browserManager.setDialogPromptText(text);
+      bm.setDialogAutoAccept(true);
+      bm.setDialogPromptText(text);
       return text
         ? `Dialogs will be accepted with text: "${text}"`
         : 'Dialogs will be accepted';
     }
 
     case 'dialog-dismiss': {
-      browserManager.setDialogAutoAccept(false);
-      browserManager.setDialogPromptText(null);
+      bm.setDialogAutoAccept(false);
+      bm.setDialogPromptText(null);
       return 'Dialogs will be dismissed';
     }
 
@@ -633,7 +678,7 @@ export async function handleWriteCommand(
 
       await page.context().addCookies(cookies);
       const importedDomains = [...new Set(cookies.map((c: any) => c.domain).filter(Boolean))];
-      if (importedDomains.length > 0) browserManager.trackCookieImportDomains(importedDomains);
+      if (importedDomains.length > 0) bm.trackCookieImportDomains(importedDomains);
       return `Loaded ${cookies.length} cookies from ${filePath}`;
     }
 
@@ -665,7 +710,7 @@ export async function handleWriteCommand(
         }
         if (result.cookies.length > 0) {
           await page.context().addCookies(result.cookies);
-        browserManager.trackCookieImportDomains([domain]);
+          bm.trackCookieImportDomains([domain]);
         }
         const msg = [`Imported ${result.count} cookies for ${domain} from ${browser}`];
         if (result.failed > 0) msg.push(`(${result.failed} failed to decrypt)`);
@@ -685,7 +730,7 @@ export async function handleWriteCommand(
         const result = await importCookies(browser, allDomainNames, profile);
         if (result.cookies.length > 0) {
           await page.context().addCookies(result.cookies);
-          browserManager.trackCookieImportDomains(allDomainNames);
+          bm.trackCookieImportDomains(allDomainNames);
         }
         const msg = [`Imported ${result.count} cookies across ${Object.keys(result.domainCounts).length} domains from ${browser}`];
         msg.push('(used --all: all browser cookies imported, consider --domain for tighter scoping)');
@@ -694,7 +739,7 @@ export async function handleWriteCommand(
       }
 
       // Picker UI mode — open in user's browser for interactive domain selection
-      const port = browserManager.serverPort;
+      const port = bm.serverPort;
       if (!port) throw new Error('Server port not available');
 
       const browsers = findInstalledBrowsers();
@@ -1079,6 +1124,10 @@ export async function handleWriteCommand(
 
       // Take screenshot
       await page.screenshot({ path: outputPath, fullPage: !scrollTo });
+      // Guard against Anthropic vision API >2000px brick (#1214). Only
+      // applies to fullPage captures; scrollTo viewport-bound shots are
+      // already capped by the viewport size.
+      if (!scrollTo) await guardScreenshotPath(outputPath);
 
       // Restore viewport
       if (viewportWidth && originalViewport) {
@@ -1093,15 +1142,16 @@ export async function handleWriteCommand(
     }
 
     case 'download': {
-      if (args.length === 0) throw new Error('Usage: download <url|@ref> [path] [--base64]');
+      if (args.length === 0) throw new Error('Usage: download <url|@ref> [path] [--base64] [--navigate]');
       const isBase64 = args.includes('--base64');
-      const filteredArgs = args.filter(a => a !== '--base64');
+      const useNavigate = args.includes('--navigate');
+      const filteredArgs = args.filter(a => a !== '--base64' && a !== '--navigate');
       let url = filteredArgs[0];
       const outputPath = filteredArgs[1];
 
       // Resolve @ref to element src
       if (url.startsWith('@')) {
-        const resolved = await browserManager.resolveRef(url);
+        const resolved = await bm.resolveRef(url);
         if (!('locator' in resolved)) throw new Error(`Expected @ref, got CSS selector: ${url}`);
         const locator = resolved.locator;
         const tagName = await locator.evaluate(el => el.tagName.toLowerCase());
@@ -1127,7 +1177,7 @@ export async function handleWriteCommand(
       }
 
       // Determine output path and extension
-      const page = browserManager.getPage();
+      const page = bm.getPage();
       let contentType = 'application/octet-stream';
       let buffer: Buffer;
 
@@ -1156,8 +1206,71 @@ export async function handleWriteCommand(
         if (!match) throw new Error('Failed to decode blob data');
         contentType = match[1];
         buffer = Buffer.from(match[2], 'base64');
+      } else if (useNavigate) {
+        // Strategy 2: Navigate to URL and capture browser-triggered download.
+        // Handles URLs that trigger file downloads via redirects,
+        // Content-Disposition headers, or anti-bot CDN chains where
+        // page.request.fetch() can't follow the auth/redirect chain.
+        await validateNavigationUrl(url);
+        const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+        // Use goto with 'commit' wait — the page may redirect to trigger
+        // the download, so 'domcontentloaded' may never fire.
+        page.goto(url, { waitUntil: 'commit', timeout: 30000 }).catch(() => {
+          // Navigation may "fail" because the response is a download,
+          // not a page. The download event handles it.
+        });
+        const download = await downloadPromise;
+        const failure = await download.failure();
+        if (failure) {
+          throw new Error(`Download failed: ${failure}`);
+        }
+        // Save to temp location first, then read into buffer
+        const tempPath = path.join(TEMP_DIR, `browse-nav-download-${Date.now()}`);
+        await download.saveAs(tempPath);
+        buffer = fs.readFileSync(tempPath);
+        // Try to infer content type from suggested filename
+        const suggested = download.suggestedFilename();
+        if (suggested) {
+          const extMatch = suggested.match(/\.([a-z0-9]+)$/i);
+          if (extMatch) {
+            const extLower = extMatch[1].toLowerCase();
+            const mimeMap: Record<string, string> = {
+              epub: 'application/epub+zip', pdf: 'application/pdf',
+              zip: 'application/zip', gz: 'application/gzip',
+              mp3: 'audio/mpeg', mp4: 'video/mp4',
+              jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+              txt: 'text/plain', html: 'text/html', json: 'application/json',
+            };
+            contentType = mimeMap[extLower] || 'application/octet-stream';
+          }
+        }
+        // Clean up temp file if we're going to write elsewhere
+        if (outputPath || isBase64) {
+          try { fs.unlinkSync(tempPath); } catch { /* ignore */ }
+        } else {
+          // No explicit output path — rename temp file with inferred extension.
+          const ext = contentType.split(';')[0].includes('/')
+            ? mimeToExt(contentType.split(';')[0].trim())
+            : '.bin';
+          const finalPath = path.join(TEMP_DIR, `browse-download-${Date.now()}${ext}`);
+          fs.renameSync(tempPath, finalPath);
+          const sizeKB = Math.round(buffer.length / 1024);
+          return `Downloaded: ${finalPath} (${sizeKB}KB, ${contentType.split(';')[0].trim()})${suggested ? ` [${suggested}]` : ''}`;
+        }
+        if (buffer.length > 200 * 1024 * 1024) {
+          throw new Error('File too large (>200MB).');
+        }
       } else {
-        // Strategy 1: Direct URL via page.request.fetch()
+        // Strategy 1: Direct URL via page.request.fetch().
+        // Gate the URL through the same validator `goto` uses. Without
+        // this check, download + scrape bypass the navigation
+        // blocklist and a caller with write scope can read
+        // http://169.254.169.254/latest/meta-data/ (AWS IMDSv1), the
+        // GCP/Azure metadata equivalents, or any internal IPv4/IPv6
+        // the server happens to route to. The response body is then
+        // returned to the caller (base64) or written to disk where
+        // GET /file serves it back.
+        await validateNavigationUrl(url);
         const response = await page.request.fetch(url, { timeout: 30000 });
         const status = response.status();
         if (status >= 400) {
@@ -1209,7 +1322,7 @@ export async function handleWriteCommand(
       fs.mkdirSync(dir, { recursive: true });
 
       const { extractMedia } = await import('./media-extract');
-      const target = browserManager.getActiveFrameOrPage();
+      const target = bm.getActiveFrameOrPage();
       const filter = mediaType === 'images' ? 'images' as const
         : mediaType === 'videos' ? 'videos' as const
         : undefined;
@@ -1241,7 +1354,7 @@ export async function handleWriteCommand(
       }
 
       const toDownload = urls.slice(0, limit);
-      const page = browserManager.getPage();
+      const page = bm.getPage();
       const manifest: any = {
         url: page.url(),
         scraped_at: new Date().toISOString(),
@@ -1255,6 +1368,10 @@ export async function handleWriteCommand(
       for (let i = 0; i < toDownload.length; i++) {
         const { url, type } = toDownload[i];
         try {
+          // Same gate as the download command — page.request.fetch
+          // must not reach cloud metadata, ULA ranges, or the rest of
+          // the blocklist. See url-validation.ts for the full list.
+          await validateNavigationUrl(url);
           const response = await page.request.fetch(url, { timeout: 30000 });
           if (response.status() >= 400) throw new Error(`HTTP ${response.status()}`);
           const ct = response.headers()['content-type'] || 'application/octet-stream';
@@ -1287,7 +1404,7 @@ export async function handleWriteCommand(
     }
 
     case 'archive': {
-      const page = browserManager.getPage();
+      const page = bm.getPage();
       const outputPath = args[0] || path.join(TEMP_DIR, `browse-archive-${Date.now()}.mhtml`);
       validateOutputPath(outputPath);
 

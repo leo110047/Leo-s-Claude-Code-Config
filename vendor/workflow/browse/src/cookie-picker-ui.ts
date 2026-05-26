@@ -15,7 +15,7 @@ export function getCookiePickerHTML(serverPort: number): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cookie Import — workflow browse</title>
+<title>Cookie Import — gstack browse</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -44,6 +44,15 @@ export function getCookiePickerHTML(serverPort: number): string {
     font-size: 12px;
     color: #666;
     font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .subtitle {
+    padding: 10px 24px 12px;
+    font-size: 13px;
+    color: #999;
+    line-height: 1.5;
+    border-bottom: 1px solid #222;
+    background: #0f0f0f;
   }
 
   /* ─── Layout ──────────────────────────── */
@@ -300,6 +309,8 @@ export function getCookiePickerHTML(serverPort: number): string {
   <span class="port">localhost:${serverPort}</span>
 </div>
 
+<p class="subtitle">Select the domains of cookies you want to import to GStack Browser. You'll be able to browse those sites with the same login as your other browser.</p>
+
 <div id="banner" class="banner"></div>
 
 <div class="container">
@@ -372,7 +383,7 @@ export function getCookiePickerHTML(serverPort: number): string {
 
   // ─── API ────────────────────────────────
   async function api(path, opts) {
-    const res = await fetch(BASE + '/cookie-picker' + path, opts);
+    const res = await fetch(BASE + '/cookie-picker' + path, { ...opts, credentials: 'same-origin' });
     const data = await res.json();
     if (!res.ok) {
       const err = new Error(data.error || 'Request failed');

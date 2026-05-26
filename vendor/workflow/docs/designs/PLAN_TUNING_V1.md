@@ -23,7 +23,7 @@ V1 addresses #3 and #4 directly: jargon-glossing + outcome-framed writing that r
 
 ## The feature, in one paragraph
 
-gstack skill output is the product. If the prose doesn't read well for a non-technical founder, they check out of the review and click "yes yes yes." V1 adds a writing-style standard that applies to every tier ≥ 2 skill: jargon glossed on first use (from a curated ~50-term list), questions framed in outcome terms ("what breaks for your users if...") not implementation terms, short sentences, concrete nouns. Power users who want the tighter V0 prose can set `workflow-config set explain_level terse`. Binary switch, no partial modes. Plus: the README's "600,000+ lines of production code" framing — rightly called out as LOC vanity by Louise — gets replaced with a real computed 2013-vs-2026 pro-rata multiple from an `scc`-backed script, with honest caveats about public-vs-private repo visibility.
+gstack skill output is the product. If the prose doesn't read well for a non-technical founder, they check out of the review and click "yes yes yes." V1 adds a writing-style standard that applies to every tier ≥ 2 skill: jargon glossed on first use (from a curated ~50-term list), questions framed in outcome terms ("what breaks for your users if...") not implementation terms, short sentences, concrete nouns. Power users who want the tighter V0 prose can set `gstack-config set explain_level terse`. Binary switch, no partial modes. Plus: the README's "600,000+ lines of production code" framing — rightly called out as LOC vanity by Louise — gets replaced with a real computed 2013-vs-2026 pro-rata multiple from an `scc`-backed script, with honest caveats about public-vs-private repo visibility.
 
 ## Why we're building the smaller version
 
@@ -43,9 +43,9 @@ The through-line: every review pass correctly narrowed the ambition until the re
 
 1. **Writing Style section in preamble** (`scripts/resolvers/preamble.ts`). Six rules: jargon-gloss on first use per skill invocation, outcome framing, short sentences / concrete nouns / active voice, decisions close with user impact, gloss-on-first-use-unconditional (even if user pasted the term), user-turn override (user says "be terse" → skip for that response).
 2. **Jargon boundary via repo-owned list** (`scripts/jargon-list.json`). ~50 curated high-frequency technical terms. Terms not on the list are assumed plain-English enough. Terms inlined into generated SKILL.md prose at `gen-skill-docs` time (zero runtime cost).
-3. **Terse opt-out** (`workflow-config set explain_level terse`). Binary: `default` vs `terse`. Terse skips the Writing Style block entirely and uses V0 prose style.
-4. **Host-aware preamble echo.** `_EXPLAIN_LEVEL=$(${binDir}/workflow-config get explain_level 2>/dev/null || echo "default")`. Host-portable via existing V0 `ctx.paths.binDir` pattern.
-5. **workflow-config validation.** Document `explain_level: default|terse` in header. Whitelist values. Warn on unknown with specific message + default to `default`.
+3. **Terse opt-out** (`gstack-config set explain_level terse`). Binary: `default` vs `terse`. Terse skips the Writing Style block entirely and uses V0 prose style.
+4. **Host-aware preamble echo.** `_EXPLAIN_LEVEL=$(${binDir}/gstack-config get explain_level 2>/dev/null || echo "default")`. Host-portable via existing V0 `ctx.paths.binDir` pattern.
+5. **gstack-config validation.** Document `explain_level: default|terse` in header. Whitelist values. Warn on unknown with specific message + default to `default`.
 6. **LOC reframe in README.** Remove "600,000+ lines of production code" hero framing. Insert `<!-- GSTACK-THROUGHPUT-PLACEHOLDER -->` anchor. Build-time script replaces anchor with computed multiple + caveat.
 7. **`scc`-backed throughput script** (`scripts/garry-output-comparison.ts`). For each of 2013 + 2026, enumerate Garry-authored public commits, extract added lines from `git diff`, classify via `scc --stdin` (or regex fallback). Output `docs/throughput-2013-vs-2026.json` with per-language breakdown + caveats.
 8. **`scc` as standalone install script** (`scripts/setup-scc.sh`). Not a `package.json` dependency (truly optional — 95% of users never run throughput). OS-detects and runs `brew install scc` / `apt install scc` / prints GitHub releases link.
@@ -77,7 +77,7 @@ The through-line: every review pass correctly narrowed the ambition until the re
 - **ELI10 as a new resolver file (`scripts/resolvers/eli10-writing.ts`).** Codex Pass 1 caught the conflict with existing "smart 16-year-old" framing in preamble's AskUserQuestion Format section. Fold into existing preamble instead.
 - **Runtime suppression of the Writing Style block.** Codex Pass 1 caught that `gen-skill-docs` produces static Markdown — runtime `EXPLAIN_LEVEL=terse` can't hide content already baked in. Solution: conditional prose gate (prose convention, same category as V0's `QUESTION_TUNING` gate).
 - **Middle writing mode between default and terse.** Revision 3 proposed "terse = no glosses but keep outcome framing." Codex Pass 2 caught the contradiction with migration messaging. Binary wins: terse = V0 prose, full stop.
-- **User-editable jargon list at runtime.** Revision 3 proposed `~/.workflow/jargon-list.json` as user override. Codex Pass 2 caught the contradiction with gen-time inlining. Resolved: repo-owned only, PRs to add/remove, regenerate to take effect.
+- **User-editable jargon list at runtime.** Revision 3 proposed `~/.gstack/jargon-list.json` as user override. Codex Pass 2 caught the contradiction with gen-time inlining. Resolved: repo-owned only, PRs to add/remove, regenerate to take effect.
 - **`devDependencies.optional` field in package.json.** Not a real npm/bun field. Eng review Pass 2 caught. Standalone install script instead.
 - **Using the same string as replacement anchor AND CI-reject marker in README.** Eng review Pass 2 / Codex Pass 2 caught that this makes the pipeline destroy its own update path. Two-string solution: `GSTACK-THROUGHPUT-PLACEHOLDER` (anchor, stays across runs) vs `GSTACK-THROUGHPUT-PENDING` (explicit "build didn't run" marker that CI rejects).
 - **"Every technical term gets a gloss" as acceptance criterion.** Codex Pass 2 caught the contradiction with the curated-list rule. Acceptance rewritten to match rule: "every term on `scripts/jargon-list.json` that appears gets a gloss."
@@ -86,7 +86,7 @@ The through-line: every review pass correctly narrowed the ambition until the re
 ## Architecture
 
 ```
-~/.workflow/
+~/.gstack/
   developer-profile.json           # unchanged from V0
   config.yaml                       # + explain_level key (default | terse)
 
@@ -102,8 +102,8 @@ docs/
   designs/PACING_UPDATES_V0.md      # NEW: V1.1 plan (extracted)
   throughput-2013-vs-2026.json      # NEW: computed, committed
 
-~/.claude/skills/workflow/bin/
-  workflow-config                     # MODIFIED: explain_level header + validation
+~/.claude/skills/gstack/bin/
+  gstack-config                     # MODIFIED: explain_level header + validation
 
 gstack-upgrade/migrations/
   v<VERSION>.sh                     # NEW: V0 → V1 interactive prompt
@@ -116,7 +116,7 @@ User runs tier-≥2 skill
        │
        ▼
 Preamble bash (per-invocation):
-  _EXPLAIN_LEVEL=$(${binDir}/workflow-config get explain_level 2>/dev/null || "default")
+  _EXPLAIN_LEVEL=$(${binDir}/gstack-config get explain_level 2>/dev/null || "default")
   echo "EXPLAIN_LEVEL: $_EXPLAIN_LEVEL"
        │
        ▼
@@ -197,7 +197,7 @@ bun run scripts/garry-output-comparison.ts
 
 ### Decision D: Jargon list location — runtime-user-editable vs. repo-owned gen-time — ANSWER: REPO-OWNED GEN-TIME
 
-**User-editable at runtime (rejected):** `~/.workflow/jargon-list.json` overrides `scripts/jargon-list.json`.
+**User-editable at runtime (rejected):** `~/.gstack/jargon-list.json` overrides `scripts/jargon-list.json`.
 - Pros: User can add terms specific to their domain.
 - Cons (Codex #4, Pass 2): Gen-time inlining means user edits require regeneration. Contradiction.
 
@@ -234,4 +234,4 @@ bun run scripts/garry-output-comparison.ts
 | Eng Review | 3 | CLEAR (SCOPE_REDUCED) | Pass 1: critical gaps + 3 decisions (all A). Pass 2: scoring-formula bug, path contradiction, fake `devDependencies.optional` field. Pass 3: identified pacing structural gaps, drove extraction. |
 | DX Review | 1 | CLEAR (TRIAGE) | 3 critical (docs plan, upgrade migration, hero moment). 9 auto-accepted as Silent DX Decisions. |
 
-Review report persisted in `~/.workflow/` via `workflow-review-log`. Plan file retained with full history at `~/.claude/plans/system-instruction-you-are-working-transient-sunbeam.md`.
+Review report persisted in `~/.gstack/` via `gstack-review-log`. Plan file retained with full history at `~/.claude/plans/system-instruction-you-are-working-transient-sunbeam.md`.

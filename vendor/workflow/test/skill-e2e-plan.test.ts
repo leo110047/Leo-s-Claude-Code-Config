@@ -6,6 +6,7 @@ import {
   copyDirSync, setupBrowseShims, logCost, recordE2E,
   createEvalCollector, finalizeEvalCollector,
 } from './helpers/e2e-helpers';
+import { judgePosture } from './helpers/llm-judge';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -81,7 +82,7 @@ Focus on reviewing the plan content: architecture, error handling, security, and
       timeout: 360_000,
       testName: 'plan-ceo-review',
       runId,
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
     });
 
     logCost('/plan-ceo-review', result);
@@ -166,7 +167,7 @@ Focus on reviewing the plan content: architecture, error handling, security, and
       timeout: 360_000,
       testName: 'plan-ceo-review-selective',
       runId,
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
     });
 
     logCost('/plan-ceo-review (SELECTIVE)', result);
@@ -181,6 +182,86 @@ Focus on reviewing the plan content: architecture, error handling, security, and
       expect(review.length).toBeGreaterThan(200);
     }
   }, 420_000);
+});
+
+// --- Plan CEO Review SCOPE EXPANSION energy (V1.1 mode-posture regression gate) ---
+
+describeIfSelected('Plan CEO Review Expansion Energy E2E', ['plan-ceo-review-expansion-energy'], () => {
+  let planDir: string;
+
+  beforeAll(() => {
+    planDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-plan-ceo-exp-'));
+    const run = (cmd: string, args: string[]) =>
+      spawnSync(cmd, args, { cwd: planDir, stdio: 'pipe', timeout: 5000 });
+
+    run('git', ['init', '-b', 'main']);
+    run('git', ['config', 'user.email', 'test@test.com']);
+    run('git', ['config', 'user.name', 'Test']);
+
+    // Use the shared fixture so expansion-energy regressions are reproducible.
+    const fixture = fs.readFileSync(
+      path.join(ROOT, 'test', 'fixtures', 'mode-posture', 'expansion-plan.md'),
+      'utf-8',
+    );
+    fs.writeFileSync(path.join(planDir, 'plan.md'), fixture);
+
+    run('git', ['add', '.']);
+    run('git', ['commit', '-m', 'add plan']);
+
+    fs.mkdirSync(path.join(planDir, 'plan-ceo-review'), { recursive: true });
+    fs.copyFileSync(
+      path.join(ROOT, 'plan-ceo-review', 'SKILL.md'),
+      path.join(planDir, 'plan-ceo-review', 'SKILL.md'),
+    );
+  });
+
+  afterAll(() => {
+    try { fs.rmSync(planDir, { recursive: true, force: true }); } catch {}
+  });
+
+  testConcurrentIfSelected('plan-ceo-review-expansion-energy', async () => {
+    const result = await runSkillTest({
+      prompt: `Read plan-ceo-review/SKILL.md for the review workflow.
+
+Read plan.md — that's the plan to review. This is a standalone plan document, not a codebase — skip any codebase exploration or system audit steps.
+
+Choose SCOPE EXPANSION mode. Skip any AskUserQuestion calls — this is non-interactive. Auto-approve the ideal-architecture approach in 0C-bis. For 0D, run all three analyses (10x check, platonic ideal, delight opportunities), then emit exactly 2 concrete expansion proposals in the opt-in ceremony.
+
+Write your expansion proposals to ${planDir}/proposals.md with ONLY the proposal text — no conversational wrapper, no review summary, no mode analysis. Each proposal separated by "---".`,
+      workingDirectory: planDir,
+      maxTurns: 15,
+      timeout: 360_000,
+      testName: 'plan-ceo-review-expansion-energy',
+      runId,
+      model: 'claude-opus-4-7',
+    });
+
+    logCost('/plan-ceo-review (EXPANSION ENERGY)', result);
+    recordE2E(evalCollector, '/plan-ceo-review-expansion-energy', 'Plan CEO Review Expansion Energy E2E', result, {
+      passed: ['success', 'error_max_turns'].includes(result.exitReason),
+    });
+    // Transient API failure escape hatch — see /plan-review-report for the
+    // full rationale. Same shape: error_api with 0 turns means the API call
+    // never reached the model, so nothing the test verifies could have run.
+    if (result.exitReason === 'error_api' && result.costEstimate?.turnsUsed === 0) {
+      console.warn('[transient] /plan-ceo-review-expansion-energy: error_api with 0 turns — treating as inconclusive');
+      return;
+    }
+    expect(['success', 'error_max_turns']).toContain(result.exitReason);
+
+    const proposalsPath = path.join(planDir, 'proposals.md');
+    if (!fs.existsSync(proposalsPath)) {
+      throw new Error('Agent did not emit proposals.md — expansion energy eval requires proposal output');
+    }
+    const proposalText = fs.readFileSync(proposalsPath, 'utf-8');
+    expect(proposalText.length).toBeGreaterThan(200);
+
+    const scores = await judgePosture('expansion', proposalText);
+    console.log('Expansion energy scores:', JSON.stringify(scores, null, 2));
+    // Pass threshold: 4/5 on both axes (good — matches posture with minor weakness).
+    expect(scores.axis_a).toBeGreaterThanOrEqual(4);  // surface_framing
+    expect(scores.axis_b).toBeGreaterThanOrEqual(4);  // decision_preservation
+  }, 600_000);
 });
 
 // --- Plan Eng Review E2E ---
@@ -259,7 +340,7 @@ Focus on architecture, code quality, tests, and performance sections.`,
       timeout: 360_000,
       testName: 'plan-eng-review',
       runId,
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
     });
 
     logCost('/plan-eng-review', result);
@@ -339,7 +420,7 @@ export function main() { return Dashboard(); }
     setupBrowseShims(planDir);
 
     // Create project directory for artifacts
-    projectDir = path.join(os.homedir(), '.workflow', 'projects', 'test-project');
+    projectDir = path.join(os.homedir(), '.gstack', 'projects', 'test-project');
     fs.mkdirSync(projectDir, { recursive: true });
 
     // Clean up stale test-plan files from previous runs
@@ -385,7 +466,7 @@ Write your review to ${planDir}/review-output.md`,
       timeout: 360_000,
       testName: 'plan-eng-review-artifact',
       runId,
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
     });
 
     logCost('/plan-eng-review artifact', result);
@@ -532,6 +613,211 @@ Write your summary to ${benefitsDir}/benefits-summary.md`,
       expect(summary).toMatch(/office.hours/);
       expect(summary).toMatch(/design doc|no design/i);
     }
+  }, 180_000);
+});
+
+// --- Plan Review Report E2E ---
+// Verifies that plan-eng-review writes a "## GSTACK REVIEW REPORT" section
+// to the bottom of the plan file (the living review status footer).
+
+describeIfSelected('Plan Review Report E2E', ['plan-review-report'], () => {
+  let planDir: string;
+
+  beforeAll(() => {
+    planDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-review-report-'));
+    const run = (cmd: string, args: string[]) =>
+      spawnSync(cmd, args, { cwd: planDir, stdio: 'pipe', timeout: 5000 });
+
+    run('git', ['init', '-b', 'main']);
+    run('git', ['config', 'user.email', 'test@test.com']);
+    run('git', ['config', 'user.name', 'Test']);
+
+    fs.writeFileSync(path.join(planDir, 'plan.md'), `# Plan: Add Notifications System
+
+## Context
+We're building a real-time notification system for our SaaS app.
+
+## Changes
+1. WebSocket server for push notifications
+2. Notification preferences API
+3. Email digest fallback for offline users
+4. PostgreSQL table for notification storage
+
+## Architecture
+- WebSocket: Socket.io on Express
+- Queue: Bull + Redis for email digests
+- Storage: PostgreSQL notifications table
+- Frontend: React toast component
+
+## Open questions
+- Retry policy for failed WebSocket delivery?
+- Max notifications stored per user?
+`);
+
+    run('git', ['add', '.']);
+    run('git', ['commit', '-m', 'add plan']);
+
+    // Copy plan-eng-review skill
+    fs.mkdirSync(path.join(planDir, 'plan-eng-review'), { recursive: true });
+    fs.copyFileSync(
+      path.join(ROOT, 'plan-eng-review', 'SKILL.md'),
+      path.join(planDir, 'plan-eng-review', 'SKILL.md'),
+    );
+  });
+
+  afterAll(() => {
+    try { fs.rmSync(planDir, { recursive: true, force: true }); } catch {}
+  });
+
+  test('/plan-eng-review writes GSTACK REVIEW REPORT to plan file', async () => {
+    const result = await runSkillTest({
+      prompt: `Read plan-eng-review/SKILL.md for the review workflow.
+
+Read plan.md — that's the plan to review. This is a standalone plan document, not a codebase — skip any codebase exploration steps.
+
+Proceed directly to the full review. Skip any AskUserQuestion calls — this is non-interactive.
+Skip the preamble bash block, lake intro, telemetry, and contributor mode sections.
+
+CRITICAL REQUIREMENT: plan.md IS the plan file for this review session. After completing your review, you MUST write a "## GSTACK REVIEW REPORT" section to the END of plan.md, exactly as described in the "Plan File Review Report" section of SKILL.md. If gstack-review-read is not available or returns NO_REVIEWS, write the placeholder table with all four review rows (CEO, Codex, Eng, Design). Use the Edit tool to append to plan.md — do NOT overwrite the existing plan content.
+
+This review report at the bottom of the plan is the MOST IMPORTANT deliverable of this test.`,
+      workingDirectory: planDir,
+      maxTurns: 20,
+      timeout: 360_000,
+      testName: 'plan-review-report',
+      runId,
+      model: 'claude-opus-4-7',
+    });
+
+    logCost('/plan-eng-review report', result);
+    recordE2E(evalCollector, '/plan-review-report', 'Plan Review Report E2E', result, {
+      passed: ['success', 'error_max_turns'].includes(result.exitReason),
+    });
+
+    // Transient API failure escape hatch: when the SDK returns error_api with
+    // zero turns / zero tokens, the API call died before the model ever ran —
+    // no skill code executed, no file was written. Bun retries the test up to
+    // 3x; if every attempt hits the same API hiccup, surface a warning and
+    // treat as inconclusive rather than gating the build on Anthropic
+    // availability. Logic regressions still surface as success/error_max_turns
+    // with a missing artifact, which the downstream assertions catch.
+    if (result.exitReason === 'error_api' && result.costEstimate?.turnsUsed === 0) {
+      console.warn('[transient] /plan-review-report: error_api with 0 turns — treating as inconclusive (likely Anthropic API hiccup, see CLAUDE.md eval-blame protocol)');
+      return;
+    }
+    expect(['success', 'error_max_turns']).toContain(result.exitReason);
+
+    // Verify the review report was written to the plan file
+    const planContent = fs.readFileSync(path.join(planDir, 'plan.md'), 'utf-8');
+
+    // Original plan content should still be present
+    expect(planContent).toContain('# Plan: Add Notifications System');
+    expect(planContent).toContain('WebSocket');
+
+    // Review report section must exist
+    expect(planContent).toContain('## GSTACK REVIEW REPORT');
+
+    // Report should be at the bottom of the file
+    const reportIndex = planContent.lastIndexOf('## GSTACK REVIEW REPORT');
+    const afterReport = planContent.slice(reportIndex);
+
+    // Should contain the review table with standard rows
+    expect(afterReport).toMatch(/\|\s*Review\s*\|/);
+    expect(afterReport).toContain('CEO Review');
+    expect(afterReport).toContain('Eng Review');
+    expect(afterReport).toContain('Design Review');
+
+    console.log('Plan review report found at bottom of plan.md');
+  }, 420_000);
+});
+
+// --- Codex Offering E2E ---
+// Verifies that Codex is properly offered (with availability check, user prompt,
+// and fallback) in office-hours, plan-ceo-review, plan-design-review, plan-eng-review.
+
+describeIfSelected('Codex Offering E2E', [
+  'codex-offered-office-hours', 'codex-offered-ceo-review',
+  'codex-offered-design-review', 'codex-offered-eng-review',
+], () => {
+  let testDir: string;
+
+  beforeAll(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-codex-offer-'));
+    const run = (cmd: string, args: string[]) =>
+      spawnSync(cmd, args, { cwd: testDir, stdio: 'pipe', timeout: 5000 });
+
+    run('git', ['init', '-b', 'main']);
+    run('git', ['config', 'user.email', 'test@test.com']);
+    run('git', ['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test Project\n');
+    run('git', ['add', '.']);
+    run('git', ['commit', '-m', 'init']);
+
+    // Copy all 4 SKILL.md files
+    for (const skill of ['office-hours', 'plan-ceo-review', 'plan-design-review', 'plan-eng-review']) {
+      fs.mkdirSync(path.join(testDir, skill), { recursive: true });
+      fs.copyFileSync(
+        path.join(ROOT, skill, 'SKILL.md'),
+        path.join(testDir, skill, 'SKILL.md'),
+      );
+    }
+  });
+
+  afterAll(() => {
+    try { fs.rmSync(testDir, { recursive: true, force: true }); } catch {}
+  });
+
+  async function checkCodexOffering(skill: string, testName: string, featureName: string) {
+    const result = await runSkillTest({
+      prompt: `Read ${skill}/SKILL.md. Search for ALL sections related to "codex", "outside voice", or "second opinion".
+
+Summarize the Codex/${featureName} integration — answer these specific questions:
+1. How is Codex availability checked? (what exact bash command?)
+2. How is the user prompted? (via AskUserQuestion? what are the options?)
+3. What happens when Codex is NOT available? (fallback to subagent? skip entirely?)
+4. Is this step blocking (gates the workflow) or optional (can be skipped)?
+5. What prompt/context is sent to Codex?
+
+Write your summary to ${testDir}/${testName}-summary.md`,
+      workingDirectory: testDir,
+      maxTurns: 8,
+      timeout: 120_000,
+      testName,
+      runId,
+    });
+
+    logCost(`/${skill} codex offering`, result);
+    recordE2E(evalCollector, `/${testName}`, 'Codex Offering E2E', result);
+    expect(result.exitReason).toBe('success');
+
+    const summaryPath = path.join(testDir, `${testName}-summary.md`);
+    expect(fs.existsSync(summaryPath)).toBe(true);
+
+    const summary = fs.readFileSync(summaryPath, 'utf-8').toLowerCase();
+    // All skills should have codex availability check (command -v per #1197)
+    expect(summary).toMatch(/command -v codex/);
+    // All skills should have fallback behavior
+    expect(summary).toMatch(/fallback|subagent|unavailable|not available|skip/);
+    // All skills should show it's optional/non-blocking
+    expect(summary).toMatch(/optional|non.?blocking|skip|not.*required/);
+
+    console.log(`${skill}: Codex offering verified`);
+  }
+
+  testConcurrentIfSelected('codex-offered-office-hours', async () => {
+    await checkCodexOffering('office-hours', 'codex-offered-office-hours', 'second opinion');
+  }, 180_000);
+
+  testConcurrentIfSelected('codex-offered-ceo-review', async () => {
+    await checkCodexOffering('plan-ceo-review', 'codex-offered-ceo-review', 'outside voice');
+  }, 180_000);
+
+  testConcurrentIfSelected('codex-offered-design-review', async () => {
+    await checkCodexOffering('plan-design-review', 'codex-offered-design-review', 'design outside voices');
+  }, 180_000);
+
+  testConcurrentIfSelected('codex-offered-eng-review', async () => {
+    await checkCodexOffering('plan-eng-review', 'codex-offered-eng-review', 'outside voice');
   }, 180_000);
 });
 

@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from 'bun:test';
-import { resolveConfig, ensureStateDir, readVersionHash, getGitRoot, getRemoteSlug } from '../src/config';
+import { describe, test, expect } from 'bun:test';
+import { resolveConfig, ensureStateDir, readVersionHash, getGitRoot, getRemoteSlug, resolveGstackHome, resolveChromiumProfile, cleanSingletonLocks } from '../src/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -19,15 +19,15 @@ describe('config', () => {
       const gitRoot = getGitRoot();
       expect(gitRoot).not.toBeNull();
       expect(config.projectDir).toBe(gitRoot);
-      expect(config.stateDir).toBe(path.join(gitRoot!, '.workflow'));
-      expect(config.stateFile).toBe(path.join(gitRoot!, '.workflow', 'browse.json'));
+      expect(config.stateDir).toBe(path.join(gitRoot!, '.gstack'));
+      expect(config.stateFile).toBe(path.join(gitRoot!, '.gstack', 'browse.json'));
     });
 
     test('derives paths from BROWSE_STATE_FILE when set', () => {
-      const stateFile = '/tmp/test-config/.workflow/browse.json';
+      const stateFile = '/tmp/test-config/.gstack/browse.json';
       const config = resolveConfig({ BROWSE_STATE_FILE: stateFile });
       expect(config.stateFile).toBe(stateFile);
-      expect(config.stateDir).toBe('/tmp/test-config/.workflow');
+      expect(config.stateDir).toBe('/tmp/test-config/.gstack');
       expect(config.projectDir).toBe('/tmp/test-config');
     });
 
@@ -42,7 +42,7 @@ describe('config', () => {
   describe('ensureStateDir', () => {
     test('creates directory if it does not exist', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-config-test-${Date.now()}`);
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       expect(fs.existsSync(config.stateDir)).toBe(false);
       ensureStateDir(config);
       expect(fs.existsSync(config.stateDir)).toBe(true);
@@ -52,7 +52,7 @@ describe('config', () => {
 
     test('is a no-op if directory already exists', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-config-test-${Date.now()}`);
-      const stateDir = path.join(tmpDir, '.workflow');
+      const stateDir = path.join(tmpDir, '.gstack');
       fs.mkdirSync(stateDir, { recursive: true });
       const config = resolveConfig({ BROWSE_STATE_FILE: path.join(stateDir, 'browse.json') });
       ensureStateDir(config); // should not throw
@@ -61,26 +61,26 @@ describe('config', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    test('adds .workflow/ to .gitignore if not present', () => {
+    test('adds .gstack/ to .gitignore if not present', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-gitignore-test-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
       fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules/\n');
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       ensureStateDir(config);
       const content = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
-      expect(content).toContain('.workflow/');
-      expect(content).toBe('node_modules/\n.workflow/\n');
+      expect(content).toContain('.gstack/');
+      expect(content).toBe('node_modules/\n.gstack/\n');
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    test('does not duplicate .workflow/ in .gitignore', () => {
+    test('does not duplicate .gstack/ in .gitignore', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-gitignore-test-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
-      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules/\n.workflow/\n');
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules/\n.gstack/\n');
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       ensureStateDir(config);
       const content = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
-      expect(content).toBe('node_modules/\n.workflow/\n');
+      expect(content).toBe('node_modules/\n.gstack/\n');
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
@@ -88,20 +88,20 @@ describe('config', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-gitignore-test-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
       fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules');
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       ensureStateDir(config);
       const content = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
-      expect(content).toBe('node_modules\n.workflow/\n');
+      expect(content).toBe('node_modules\n.gstack/\n');
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     test('logs warning to browse-server.log on non-ENOENT gitignore error', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-gitignore-test-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
-      // Create a read-only .gitignore (no .workflow/ entry → would try to append)
+      // Create a read-only .gitignore (no .gstack/ entry → would try to append)
       fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules/\n');
       fs.chmodSync(path.join(tmpDir, '.gitignore'), 0o444);
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       ensureStateDir(config); // should not throw
       // Verify warning was written to server log
       const logPath = path.join(config.stateDir, 'browse-server.log');
@@ -119,7 +119,7 @@ describe('config', () => {
     test('skips if no .gitignore exists', () => {
       const tmpDir = path.join(os.tmpdir(), `browse-gitignore-test-${Date.now()}`);
       fs.mkdirSync(tmpDir, { recursive: true });
-      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.workflow', 'browse.json') });
+      const config = resolveConfig({ BROWSE_STATE_FILE: path.join(tmpDir, '.gstack', 'browse.json') });
       ensureStateDir(config);
       expect(fs.existsSync(path.join(tmpDir, '.gitignore'))).toBe(false);
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -136,24 +136,24 @@ describe('config', () => {
 
     test('parses SSH remote URLs', () => {
       // Test the regex directly since we can't mock Bun.spawnSync easily
-      const url = 'git@github.com:garrytan/workflow.git';
+      const url = 'git@github.com:garrytan/gstack.git';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-workflow');
+      expect(`${match![1]}-${match![2]}`).toBe('garrytan-gstack');
     });
 
     test('parses HTTPS remote URLs', () => {
-      const url = 'https://github.com/garrytan/workflow.git';
+      const url = 'https://github.com/garrytan/gstack.git';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-workflow');
+      expect(`${match![1]}-${match![2]}`).toBe('garrytan-gstack');
     });
 
     test('parses HTTPS remote URLs without .git suffix', () => {
-      const url = 'https://github.com/garrytan/workflow';
+      const url = 'https://github.com/garrytan/gstack';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-workflow');
+      expect(`${match![1]}-${match![2]}`).toBe('garrytan-gstack');
     });
   });
 
@@ -251,48 +251,53 @@ describe('version mismatch detection', () => {
 
 describe('isServerHealthy', () => {
   const { isServerHealthy } = require('../src/cli');
-  const originalFetch = globalThis.fetch;
-
-  afterEach(() => {
-    // @ts-ignore - test restore
-    globalThis.fetch = originalFetch;
-  });
-
-  function mockFetch(impl: typeof fetch) {
-    // @ts-ignore - test override
-    globalThis.fetch = impl;
-  }
+  const http = require('http');
 
   test('returns true for a healthy server', async () => {
-    mockFetch(async () => new Response(JSON.stringify({ status: 'healthy' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
-
-    expect(await isServerHealthy(4100)).toBe(true);
+    const server = http.createServer((_req: any, res: any) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'healthy' }));
+    });
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = server.address().port;
+    try {
+      expect(await isServerHealthy(port)).toBe(true);
+    } finally {
+      server.close();
+    }
   });
 
   test('returns false for an unhealthy server', async () => {
-    mockFetch(async () => new Response(JSON.stringify({ status: 'unhealthy' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
-
-    expect(await isServerHealthy(4100)).toBe(false);
+    const server = http.createServer((_req: any, res: any) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'unhealthy' }));
+    });
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = server.address().port;
+    try {
+      expect(await isServerHealthy(port)).toBe(false);
+    } finally {
+      server.close();
+    }
   });
 
   test('returns false when server is not running', async () => {
-    mockFetch(async () => {
-      throw new Error('connect ECONNREFUSED');
-    });
-
+    // Use a port that's almost certainly not in use
     expect(await isServerHealthy(59999)).toBe(false);
   });
 
   test('returns false on non-200 response', async () => {
-    mockFetch(async () => new Response('Internal Server Error', { status: 500 }));
-
-    expect(await isServerHealthy(4100)).toBe(false);
+    const server = http.createServer((_req: any, res: any) => {
+      res.writeHead(500);
+      res.end('Internal Server Error');
+    });
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const port = server.address().port;
+    try {
+      expect(await isServerHealthy(port)).toBe(false);
+    } finally {
+      server.close();
+    }
   });
 });
 
@@ -307,5 +312,134 @@ describe('startup error log', () => {
     expect(content).toContain(errorMsg);
     expect(content).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO timestamp prefix
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe('resolveGstackHome', () => {
+  test('honors GSTACK_HOME env var when set', () => {
+    const orig = process.env.GSTACK_HOME;
+    process.env.GSTACK_HOME = '/tmp/custom-gstack-home';
+    try {
+      expect(resolveGstackHome()).toBe('/tmp/custom-gstack-home');
+    } finally {
+      if (orig === undefined) delete process.env.GSTACK_HOME;
+      else process.env.GSTACK_HOME = orig;
+    }
+  });
+
+  test('falls back to os.homedir() + /.gstack when env unset', () => {
+    const orig = process.env.GSTACK_HOME;
+    delete process.env.GSTACK_HOME;
+    try {
+      expect(resolveGstackHome()).toBe(path.join(os.homedir(), '.gstack'));
+    } finally {
+      if (orig !== undefined) process.env.GSTACK_HOME = orig;
+    }
+  });
+});
+
+describe('resolveChromiumProfile', () => {
+  test('explicit arg wins over env and default', () => {
+    const orig = process.env.CHROMIUM_PROFILE;
+    process.env.CHROMIUM_PROFILE = '/tmp/env-profile';
+    try {
+      expect(resolveChromiumProfile('/tmp/explicit-profile')).toBe('/tmp/explicit-profile');
+    } finally {
+      if (orig === undefined) delete process.env.CHROMIUM_PROFILE;
+      else process.env.CHROMIUM_PROFILE = orig;
+    }
+  });
+
+  test('CHROMIUM_PROFILE env honored when no explicit arg', () => {
+    const orig = process.env.CHROMIUM_PROFILE;
+    process.env.CHROMIUM_PROFILE = '/tmp/env-profile';
+    try {
+      expect(resolveChromiumProfile()).toBe('/tmp/env-profile');
+    } finally {
+      if (orig === undefined) delete process.env.CHROMIUM_PROFILE;
+      else process.env.CHROMIUM_PROFILE = orig;
+    }
+  });
+
+  test('falls back to resolveGstackHome()/chromium-profile when nothing set', () => {
+    const origEnv = process.env.CHROMIUM_PROFILE;
+    const origHome = process.env.GSTACK_HOME;
+    delete process.env.CHROMIUM_PROFILE;
+    process.env.GSTACK_HOME = '/tmp/fallback-gstack';
+    try {
+      expect(resolveChromiumProfile()).toBe('/tmp/fallback-gstack/chromium-profile');
+    } finally {
+      if (origEnv !== undefined) process.env.CHROMIUM_PROFILE = origEnv;
+      if (origHome === undefined) delete process.env.GSTACK_HOME;
+      else process.env.GSTACK_HOME = origHome;
+    }
+  });
+
+  test('ignores empty-string explicit arg, falls through to env/default', () => {
+    const orig = process.env.CHROMIUM_PROFILE;
+    process.env.CHROMIUM_PROFILE = '/tmp/env-profile';
+    try {
+      expect(resolveChromiumProfile('')).toBe('/tmp/env-profile');
+    } finally {
+      if (orig === undefined) delete process.env.CHROMIUM_PROFILE;
+      else process.env.CHROMIUM_PROFILE = orig;
+    }
+  });
+});
+
+describe('cleanSingletonLocks', () => {
+  test('removes SingletonLock/Socket/Cookie when basename is chromium-profile', () => {
+    const tmpDir = path.join(os.tmpdir(), `clean-locks-${Date.now()}`, 'chromium-profile');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      fs.writeFileSync(path.join(tmpDir, f), 'stale');
+    }
+    cleanSingletonLocks(tmpDir);
+    for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      expect(fs.existsSync(path.join(tmpDir, f))).toBe(false);
+    }
+    fs.rmSync(path.dirname(tmpDir), { recursive: true, force: true });
+  });
+
+  test('refuses to clean unrecognized profile dir basename', () => {
+    const tmpDir = path.join(os.tmpdir(), `unrelated-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const lockFile = path.join(tmpDir, 'SingletonLock');
+    fs.writeFileSync(lockFile, 'should-survive');
+    const origWarn = console.warn;
+    let warned = '';
+    console.warn = (msg: string) => { warned = msg; };
+    try {
+      cleanSingletonLocks(tmpDir);
+      expect(warned).toContain('refusing to clean unrecognized profile dir');
+      expect(fs.existsSync(lockFile)).toBe(true); // not deleted
+    } finally {
+      console.warn = origWarn;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('respects explicit CHROMIUM_PROFILE env even with non-standard basename', () => {
+    const tmpDir = path.join(os.tmpdir(), `custom-name-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'SingletonLock'), 'stale');
+    const orig = process.env.CHROMIUM_PROFILE;
+    process.env.CHROMIUM_PROFILE = tmpDir;
+    try {
+      cleanSingletonLocks(tmpDir);
+      expect(fs.existsSync(path.join(tmpDir, 'SingletonLock'))).toBe(false);
+    } finally {
+      if (orig === undefined) delete process.env.CHROMIUM_PROFILE;
+      else process.env.CHROMIUM_PROFILE = orig;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('second call on empty dir does not throw (ENOENT swallowed)', () => {
+    const tmpDir = path.join(os.tmpdir(), `empty-locks-${Date.now()}`, 'chromium-profile');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    expect(() => cleanSingletonLocks(tmpDir)).not.toThrow();
+    expect(() => cleanSingletonLocks(tmpDir)).not.toThrow();
+    fs.rmSync(path.dirname(tmpDir), { recursive: true, force: true });
   });
 });

@@ -51,6 +51,9 @@ jobs:
           echo "=== Verifying decision guidance parity ==="
           bash scripts/verify-decision-guidance.sh
 
+      - name: Check workflow vendor integration
+        run: bash scripts/check-workflow-vendor-integration.sh
+
       - name: Test workflow installer integration
         run: bash scripts/test-workflow-integration.sh
 

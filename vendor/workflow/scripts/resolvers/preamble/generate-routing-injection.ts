@@ -7,8 +7,6 @@ Check if a CLAUDE.md file exists in the project root. If it does not exist, crea
 Use AskUserQuestion:
 
 > gstack works best when your project's CLAUDE.md includes skill routing rules.
-> This tells Claude to use specialized workflows (like /ship, /investigate, /qa)
-> instead of answering directly. It's a one-time addition, about 15 lines.
 
 Options:
 - A) Add routing rules to CLAUDE.md (recommended)
@@ -20,30 +18,26 @@ If A: Append this section to the end of CLAUDE.md:
 
 ## Skill routing
 
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-The skill has specialized workflows that produce better results than ad-hoc answers.
+When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
 
 Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke office-hours
-- Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
-- QA, test the site, find bugs → invoke qa
-- Code review, check my diff → invoke review
-- Update docs after shipping → invoke document-release
-- Weekly retro → invoke retro
-- Design system, brand → invoke design-consultation
-- Visual audit, design polish → invoke design-review
-- Architecture review → invoke plan-eng-review
-- Save progress, checkpoint, resume → invoke checkpoint
-- Code quality, health check → invoke health
+- Product ideas/brainstorming → invoke /office-hours
+- Strategy/scope → invoke /plan-ceo-review
+- Architecture → invoke /plan-eng-review
+- Design system/plan review → invoke /design-consultation or /plan-design-review
+- Full review pipeline → invoke /autoplan
+- Bugs/errors → invoke /investigate
+- QA/testing site behavior → invoke /qa or /qa-only
+- Code review/diff check → invoke /review
+- Visual polish → invoke /design-review
+- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Save progress → invoke /context-save
+- Resume context → invoke /context-restore
 \`\`\`
 
 Then commit the change: \`git add CLAUDE.md && git commit -m "chore: add gstack skill routing rules to CLAUDE.md"\`
 
-If B: run \`${ctx.paths.binDir}/workflow-config set routing_declined true\`
-Say "No problem. You can add routing rules later by running \`workflow-config set routing_declined false\` and re-running any skill."
+If B: run \`${ctx.paths.binDir}/gstack-config set routing_declined true\` and say they can re-enable with \`gstack-config set routing_declined false\`.
 
-This only happens once per project. If \`HAS_ROUTING\` is \`yes\` or \`ROUTING_DECLINED\` is \`true\`, skip this entirely.`;
+This only happens once per project. Skip if \`HAS_ROUTING\` is \`yes\` or \`ROUTING_DECLINED\` is \`true\`.`;
 }
-

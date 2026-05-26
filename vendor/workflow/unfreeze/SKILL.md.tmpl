@@ -5,10 +5,15 @@ description: |
   Clear the freeze boundary set by /freeze, allowing edits to all directories
   again. Use when you want to widen edit scope without ending the session.
   Use when asked to "unfreeze", "unlock edits", "remove freeze", or
-  "allow all edits".
+  "allow all edits". (gstack)
+triggers:
+  - unfreeze edits
+  - unlock all directories
+  - remove edit restrictions
 allowed-tools:
   - Bash
   - Read
+sensitive: true
 ---
 
 # /unfreeze — Clear Freeze Boundary
@@ -16,14 +21,15 @@ allowed-tools:
 Remove the edit restriction set by `/freeze`, allowing edits to all directories.
 
 ```bash
-mkdir -p ~/.workflow/analytics
-echo '{"skill":"unfreeze","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.workflow/analytics/skill-usage.jsonl 2>/dev/null || true
+mkdir -p ~/.gstack/analytics
+echo '{"skill":"unfreeze","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 ```
 
 ## Clear the boundary
 
 ```bash
-STATE_DIR="${CLAUDE_PLUGIN_DATA:-$HOME/.workflow}"
+eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+STATE_DIR="$GSTACK_STATE_ROOT"
 if [ -f "$STATE_DIR/freeze-dir.txt" ]; then
   PREV=$(cat "$STATE_DIR/freeze-dir.txt")
   rm -f "$STATE_DIR/freeze-dir.txt"

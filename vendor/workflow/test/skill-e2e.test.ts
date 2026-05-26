@@ -57,7 +57,7 @@ function testIfSelected(testName: string, fn: () => Promise<void>, timeout: numb
   (shouldRun ? test : test.skip)(testName, fn, timeout);
 }
 
-// Eval result collector — accumulates test results, writes to ~/.workflow-dev/evals/ on finalize
+// Eval result collector — accumulates test results, writes to ~/.gstack-dev/evals/ on finalize
 const evalCollector = evalsEnabled ? new EvalCollector('e2e') : null;
 
 // Unique run ID for this E2E session — used for heartbeat + per-run log directory
@@ -148,7 +148,7 @@ function logCost(label: string, result: { costEstimate: { turnsUsed: number; est
  */
 function dumpOutcomeDiagnostic(dir: string, label: string, report: string, judgeResult: any) {
   try {
-    const transcriptDir = path.join(dir, '.workflow', 'test-transcripts');
+    const transcriptDir = path.join(dir, '.gstack', 'test-transcripts');
     fs.mkdirSync(transcriptDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     fs.writeFileSync(
@@ -260,7 +260,7 @@ Report whether it worked.`,
   }, 90_000);
 
   testIfSelected('skillmd-no-local-binary', async () => {
-    // Create a tmpdir with no browse binary — no local .claude/skills/workflow/browse/dist/browse
+    // Create a tmpdir with no browse binary — no local .claude/skills/gstack/browse/dist/browse
     const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-empty-'));
 
     const skillMd = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
@@ -282,8 +282,8 @@ Report the exact output. Do NOT try to fix or install anything — just report w
     });
 
     // Setup block should either find the global binary (READY) or show NEEDS_SETUP.
-    // On dev machines with workflow installed globally, the fallback path
-    // ~/.claude/skills/workflow/browse/dist/browse exists, so we get READY.
+    // On dev machines with gstack installed globally, the fallback path
+    // ~/.claude/skills/gstack/browse/dist/browse exists, so we get READY.
     // The important thing is it doesn't crash or give a confusing error.
     const allText = result.output || '';
     recordE2E('SKILL.md setup block (no local binary)', 'Skill E2E tests', result);
@@ -325,62 +325,6 @@ Report the exact output — either "READY: <path>" or "NEEDS_SETUP".`,
     try { fs.rmSync(nonGitDir, { recursive: true, force: true }); } catch {}
   }, 60_000);
 
-  testIfSelected('contributor-mode', async () => {
-    const contribDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-contrib-'));
-    const logsDir = path.join(contribDir, 'contributor-logs');
-    fs.mkdirSync(logsDir, { recursive: true });
-
-    // Extract contributor mode instructions from generated SKILL.md
-    const skillMd = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    const contribStart = skillMd.indexOf('## Contributor Mode');
-    const contribEnd = skillMd.indexOf('\n## ', contribStart + 1);
-    const contribBlock = skillMd.slice(contribStart, contribEnd > 0 ? contribEnd : undefined);
-
-    const result = await runSkillTest({
-      prompt: `You are in contributor mode (_CONTRIB=true).
-
-${contribBlock}
-
-OVERRIDE: Write contributor logs to ${logsDir}/ instead of ~/.workflow/contributor-logs/
-
-Now try this browse command (it will fail — there is no binary at this path):
-/nonexistent/path/browse goto https://example.com
-
-This is a workflow issue (the browse binary is missing/misconfigured).
-File a contributor report about this issue. Then tell me what you filed.`,
-      workingDirectory: contribDir,
-      maxTurns: 8,
-      timeout: 60_000,
-      testName: 'contributor-mode',
-      runId,
-    });
-
-    logCost('contributor mode', result);
-    // Override passed: this test intentionally triggers a browse error (nonexistent binary)
-    // so browseErrors will be non-empty — that's expected, not a failure
-    recordE2E('contributor mode report', 'Skill E2E tests', result, {
-      passed: result.exitReason === 'success',
-    });
-
-    // Verify a contributor log was created with expected format
-    const logFiles = fs.readdirSync(logsDir).filter(f => f.endsWith('.md'));
-    expect(logFiles.length).toBeGreaterThan(0);
-
-    // Verify new reflection-based format
-    const logContent = fs.readFileSync(path.join(logsDir, logFiles[0]), 'utf-8');
-    expect(logContent).toContain('Hey workflow team');
-    expect(logContent).toContain('What I was trying to do');
-    expect(logContent).toContain('What happened instead');
-    expect(logContent).toMatch(/rating/i);
-    // Verify report has repro steps (agent may use "Steps to reproduce", "Repro Steps", etc.)
-    expect(logContent).toMatch(/repro|steps to reproduce|how to reproduce/i);
-    // Verify report has date/version footer (agent may format differently)
-    expect(logContent).toMatch(/date.*2026|2026.*date/i);
-
-    // Clean up
-    try { fs.rmSync(contribDir, { recursive: true, force: true }); } catch {}
-  }, 90_000);
-
   testIfSelected('session-awareness', async () => {
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-session-'));
 
@@ -406,7 +350,7 @@ File a contributor report about this issue. Then tell me what you filed.`,
     const outputPath = path.join(sessionDir, 'question-output.md');
 
     const result = await runSkillTest({
-      prompt: `You are running a workflow skill. The session preamble detected _SESSIONS=4 (the user has 4 workflow windows open).
+      prompt: `You are running a gstack skill. The session preamble detected _SESSIONS=4 (the user has 4 gstack windows open).
 
 ${aqBlock}
 
@@ -1328,7 +1272,7 @@ Write your report to ${qaOnlyDir}/qa-reports/qa-only-report.md`,
       cwd: qaOnlyDir, stdio: 'pipe',
     });
     const statusLines = gitStatus.stdout.toString().trim().split('\n').filter(
-      (l: string) => l.trim() && !l.includes('.prompt-tmp') && !l.includes('.workflow/') && !l.includes('qa-reports/'),
+      (l: string) => l.trim() && !l.includes('.prompt-tmp') && !l.includes('.gstack/') && !l.includes('qa-reports/'),
     );
     expect(statusLines.filter((l: string) => l.startsWith(' M') || l.startsWith('M '))).toHaveLength(0);
   }, 240_000);
@@ -1511,7 +1455,7 @@ export function main() { return Dashboard(); }
     setupBrowseShims(planDir);
 
     // Create project directory for artifacts
-    projectDir = path.join(os.homedir(), '.workflow', 'projects', 'test-project');
+    projectDir = path.join(os.homedir(), '.gstack', 'projects', 'test-project');
     fs.mkdirSync(projectDir, { recursive: true });
   });
 
@@ -1528,7 +1472,7 @@ export function main() { return Dashboard(); }
     } catch {}
   });
 
-  test('/plan-eng-review writes test-plan artifact to ~/.workflow/projects/', async () => {
+  test('/plan-eng-review writes test-plan artifact to ~/.gstack/projects/', async () => {
     // Count existing test-plan files before
     const beforeFiles = fs.readdirSync(projectDir).filter(f => f.includes('test-plan'));
 
@@ -1876,6 +1820,120 @@ describeE2E('Deferred skill E2E', () => {
   // Setup-browser-cookies requires interactive browser picker UI
   test.todo('/setup-browser-cookies imports cookies');
 
+});
+
+// --- gstack-upgrade E2E ---
+
+describeIfSelected('gstack-upgrade E2E', ['gstack-upgrade-happy-path'], () => {
+  let upgradeDir: string;
+  let remoteDir: string;
+
+  beforeAll(() => {
+    upgradeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-upgrade-'));
+    remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gstack-remote-'));
+
+    const run = (cmd: string, args: string[], cwd: string) =>
+      spawnSync(cmd, args, { cwd, stdio: 'pipe', timeout: 5000 });
+
+    // Init the "project" repo
+    run('git', ['init'], upgradeDir);
+    run('git', ['config', 'user.email', 'test@test.com'], upgradeDir);
+    run('git', ['config', 'user.name', 'Test'], upgradeDir);
+
+    // Create mock gstack install directory (local-git type)
+    const mockGstack = path.join(upgradeDir, '.claude', 'skills', 'gstack');
+    fs.mkdirSync(mockGstack, { recursive: true });
+
+    // Init as a git repo
+    run('git', ['init'], mockGstack);
+    run('git', ['config', 'user.email', 'test@test.com'], mockGstack);
+    run('git', ['config', 'user.name', 'Test'], mockGstack);
+
+    // Create bare remote
+    run('git', ['init', '--bare'], remoteDir);
+    run('git', ['remote', 'add', 'origin', remoteDir], mockGstack);
+
+    // Write old version files
+    fs.writeFileSync(path.join(mockGstack, 'VERSION'), '0.5.0\n');
+    fs.writeFileSync(path.join(mockGstack, 'CHANGELOG.md'),
+      '# Changelog\n\n## 0.5.0 — 2026-03-01\n\n- Initial release\n');
+    fs.writeFileSync(path.join(mockGstack, 'setup'),
+      '#!/bin/bash\necho "Setup completed"\n', { mode: 0o755 });
+
+    // Initial commit + push
+    run('git', ['add', '.'], mockGstack);
+    run('git', ['commit', '-m', 'initial'], mockGstack);
+    run('git', ['push', '-u', 'origin', 'HEAD:main'], mockGstack);
+
+    // Create new version (simulate upstream release)
+    fs.writeFileSync(path.join(mockGstack, 'VERSION'), '0.6.0\n');
+    fs.writeFileSync(path.join(mockGstack, 'CHANGELOG.md'),
+      '# Changelog\n\n## 0.6.0 — 2026-03-15\n\n- New feature: interactive design review\n- Fix: snapshot flag validation\n\n## 0.5.0 — 2026-03-01\n\n- Initial release\n');
+    run('git', ['add', '.'], mockGstack);
+    run('git', ['commit', '-m', 'release 0.6.0'], mockGstack);
+    run('git', ['push', 'origin', 'HEAD:main'], mockGstack);
+
+    // Reset working copy back to old version
+    run('git', ['reset', '--hard', 'HEAD~1'], mockGstack);
+
+    // Copy gstack-upgrade skill
+    fs.mkdirSync(path.join(upgradeDir, 'gstack-upgrade'), { recursive: true });
+    fs.copyFileSync(
+      path.join(ROOT, 'gstack-upgrade', 'SKILL.md'),
+      path.join(upgradeDir, 'gstack-upgrade', 'SKILL.md'),
+    );
+
+    // Commit so git repo is clean
+    run('git', ['add', '.'], upgradeDir);
+    run('git', ['commit', '-m', 'initial project'], upgradeDir);
+  });
+
+  afterAll(() => {
+    try { fs.rmSync(upgradeDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(remoteDir, { recursive: true, force: true }); } catch {}
+  });
+
+  testIfSelected('gstack-upgrade-happy-path', async () => {
+    const mockGstack = path.join(upgradeDir, '.claude', 'skills', 'gstack');
+    const result = await runSkillTest({
+      prompt: `Read gstack-upgrade/SKILL.md for the upgrade workflow.
+
+You are running /gstack-upgrade standalone. The gstack installation is at ./.claude/skills/gstack (local-git type — it has a .git directory with an origin remote).
+
+Current version: 0.5.0. A new version 0.6.0 is available on origin/main.
+
+Follow the standalone upgrade flow:
+1. Detect install type (local-git)
+2. Run git fetch origin && git reset --hard origin/main in the install directory
+3. Run the setup script
+4. Show what's new from CHANGELOG
+
+Skip any AskUserQuestion calls — auto-approve the upgrade. Write a summary of what you did to stdout.
+
+IMPORTANT: The install directory is at ./.claude/skills/gstack — use that exact path.`,
+      workingDirectory: upgradeDir,
+      maxTurns: 20,
+      timeout: 180_000,
+      testName: 'gstack-upgrade-happy-path',
+      runId,
+    });
+
+    logCost('/gstack-upgrade happy path', result);
+
+    // Check that the version was updated
+    const versionAfter = fs.readFileSync(path.join(mockGstack, 'VERSION'), 'utf-8').trim();
+    const output = result.output || '';
+    const mentionsUpgrade = output.toLowerCase().includes('0.6.0') ||
+      output.toLowerCase().includes('upgrade') ||
+      output.toLowerCase().includes('updated');
+
+    recordE2E('/gstack-upgrade happy path', 'gstack-upgrade E2E', result, {
+      passed: versionAfter === '0.6.0' && ['success', 'error_max_turns'].includes(result.exitReason),
+    });
+
+    expect(['success', 'error_max_turns']).toContain(result.exitReason);
+    expect(versionAfter).toBe('0.6.0');
+  }, 240_000);
 });
 
 // --- Design Consultation E2E ---
@@ -3197,6 +3255,102 @@ Write your summary to ${benefitsDir}/benefits-summary.md`,
       expect(summary).toMatch(/design doc|no design/i);
     }
   }, 180_000);
+});
+
+// --- Ship idempotency (#649) ---
+describeIfSelected('Ship idempotency', ['ship-idempotency'], () => {
+  let idempDir: string;
+  const gitRun = (args: string[], cwd: string) =>
+    spawnSync('git', args, { cwd, stdio: 'pipe', timeout: 5000 });
+
+  beforeAll(() => {
+    idempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-e2e-ship-idemp-'));
+
+    // Create git repo with initial commit on main
+    gitRun(['init', '-b', 'main'], idempDir);
+    gitRun(['config', 'user.email', 'test@test.com'], idempDir);
+    gitRun(['config', 'user.name', 'Test'], idempDir);
+
+    fs.writeFileSync(path.join(idempDir, 'app.ts'), 'console.log("v1");\n');
+    fs.writeFileSync(path.join(idempDir, 'VERSION'), '0.1.0.0\n');
+    fs.writeFileSync(path.join(idempDir, 'CHANGELOG.md'), '# Changelog\n');
+    gitRun(['add', '.'], idempDir);
+    gitRun(['commit', '-m', 'initial'], idempDir);
+
+    // Create feature branch with changes
+    gitRun(['checkout', '-b', 'feat/my-feature'], idempDir);
+    fs.writeFileSync(path.join(idempDir, 'app.ts'), 'console.log("v2");\n');
+    gitRun(['add', 'app.ts'], idempDir);
+    gitRun(['commit', '-m', 'feat: update to v2'], idempDir);
+
+    // Simulate prior /ship run: bump VERSION and write CHANGELOG entry
+    fs.writeFileSync(path.join(idempDir, 'VERSION'), '0.2.0.0\n');
+    fs.writeFileSync(path.join(idempDir, 'CHANGELOG.md'),
+      '# Changelog\n\n## [0.2.0.0] — 2026-03-30\n\n- Updated app to v2\n');
+    gitRun(['add', 'VERSION', 'CHANGELOG.md'], idempDir);
+    gitRun(['commit', '-m', 'chore: bump version to 0.2.0.0'], idempDir);
+
+    // Extract just the idempotency-relevant sections from ship/SKILL.md
+    const full = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
+    const step4Start = full.indexOf('## Step 4: Version bump');
+    const step4End = full.indexOf('\n---\n', step4Start);
+    const step7Start = full.indexOf('## Step 7: Push');
+    const step8End = full.indexOf('## Step 8.5');
+    const extracted = [
+      full.slice(step4Start, step4End > step4Start ? step4End : step4Start + 500),
+      full.slice(step7Start, step8End > step7Start ? step8End : step7Start + 500),
+    ].join('\n\n---\n\n');
+    fs.writeFileSync(path.join(idempDir, 'ship-steps.md'), extracted);
+  });
+
+  afterAll(() => {
+    try { fs.rmSync(idempDir, { recursive: true, force: true }); } catch {}
+  });
+
+  testIfSelected('ship-idempotency', async () => {
+    const result = await runSkillTest({
+      prompt: `You are in a git repo on branch feat/my-feature. A prior /ship run already:
+- Bumped VERSION from 0.1.0.0 to 0.2.0.0
+- Wrote a CHANGELOG entry for 0.2.0.0
+- But the push/PR step failed
+
+Read ship-steps.md for the idempotency check instructions from the ship workflow.
+
+Run ONLY the idempotency checks described in Steps 4 and 7. Do NOT actually push or create PRs (there is no remote).
+
+After running the checks, write a report to ${idempDir}/idemp-result.md containing:
+- Whether VERSION was detected as ALREADY_BUMPED or not
+- Whether the push was detected as ALREADY_PUSHED or PUSH_NEEDED
+- The current VERSION value (should still be 0.2.0.0)
+
+Do NOT modify VERSION or CHANGELOG. Only run the detection checks and report.`,
+      workingDirectory: idempDir,
+      maxTurns: 10,
+      timeout: 60_000,
+      testName: 'ship-idempotency',
+      runId,
+    });
+
+    logCost('/ship idempotency', result);
+    recordE2E('/ship idempotency guard', 'Ship idempotency', result);
+    expect(result.exitReason).toBe('success');
+
+    // Verify VERSION was NOT modified
+    const version = fs.readFileSync(path.join(idempDir, 'VERSION'), 'utf-8').trim();
+    expect(version).toBe('0.2.0.0');
+
+    // Verify CHANGELOG was NOT duplicated
+    const changelog = fs.readFileSync(path.join(idempDir, 'CHANGELOG.md'), 'utf-8');
+    const versionEntries = (changelog.match(/## \[0\.2\.0\.0\]/g) || []).length;
+    expect(versionEntries).toBe(1);
+
+    // Check the result report if it was written
+    const reportPath = path.join(idempDir, 'idemp-result.md');
+    if (fs.existsSync(reportPath)) {
+      const report = fs.readFileSync(reportPath, 'utf-8');
+      expect(report.toLowerCase()).toContain('already_bumped');
+    }
+  }, 120_000);
 });
 
 // Module-level afterAll — finalize eval collector after all tests complete

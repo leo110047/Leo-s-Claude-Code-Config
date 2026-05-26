@@ -1,8 +1,5 @@
--- workflow telemetry schema
--- Tables for tracking usage and installations.
--- Fresh installs use workflow_version as the canonical column name.
--- Databases created before the rename rely on
--- 002_telemetry_workflow_schema_compat.sql for in-place compatibility.
+-- gstack telemetry schema
+-- Tables for tracking usage, installations, and update checks.
 
 -- Main telemetry events (skill runs, upgrades)
 CREATE TABLE telemetry_events (
@@ -10,7 +7,7 @@ CREATE TABLE telemetry_events (
   received_at TIMESTAMPTZ DEFAULT now(),
   schema_version INTEGER NOT NULL DEFAULT 1,
   event_type TEXT NOT NULL DEFAULT 'skill_run',
-  workflow_version TEXT NOT NULL,
+  gstack_version TEXT NOT NULL,
   os TEXT NOT NULL,
   arch TEXT,
   event_timestamp TIMESTAMPTZ NOT NULL,
@@ -27,15 +24,23 @@ CREATE TABLE telemetry_events (
 -- Index for skill_sequences view performance
 CREATE INDEX idx_telemetry_session_ts ON telemetry_events (session_id, event_timestamp);
 -- Index for crash clustering
-CREATE INDEX idx_telemetry_error ON telemetry_events (error_class, workflow_version) WHERE outcome = 'error';
+CREATE INDEX idx_telemetry_error ON telemetry_events (error_class, gstack_version) WHERE outcome = 'error';
 
 -- Retention tracking per installation
 CREATE TABLE installations (
   installation_id TEXT PRIMARY KEY,
   first_seen TIMESTAMPTZ DEFAULT now(),
   last_seen TIMESTAMPTZ DEFAULT now(),
-  workflow_version TEXT,
+  gstack_version TEXT,
   os TEXT
+);
+
+-- Install pings from update checks
+CREATE TABLE update_checks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  checked_at TIMESTAMPTZ DEFAULT now(),
+  gstack_version TEXT NOT NULL,
+  os TEXT NOT NULL
 );
 
 -- RLS: anon key can INSERT and SELECT (all telemetry data is anonymous)
@@ -49,11 +54,15 @@ CREATE POLICY "anon_select" ON installations FOR SELECT USING (true);
 -- Allow upsert (update last_seen)
 CREATE POLICY "anon_update_last_seen" ON installations FOR UPDATE USING (true) WITH CHECK (true);
 
+ALTER TABLE update_checks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_insert_only" ON update_checks FOR INSERT WITH CHECK (true);
+CREATE POLICY "anon_select" ON update_checks FOR SELECT USING (true);
+
 -- Crash clustering view
 CREATE VIEW crash_clusters AS
 SELECT
   error_class,
-  workflow_version,
+  gstack_version,
   COUNT(*) as total_occurrences,
   COUNT(DISTINCT installation_id) as identified_users,  -- community tier only
   COUNT(*) - COUNT(installation_id) as anonymous_occurrences,  -- events without installation_id
@@ -61,7 +70,7 @@ SELECT
   MAX(event_timestamp) as last_seen
 FROM telemetry_events
 WHERE outcome = 'error' AND error_class IS NOT NULL
-GROUP BY error_class, workflow_version
+GROUP BY error_class, gstack_version
 ORDER BY total_occurrences DESC;
 
 -- Skill sequence co-occurrence view

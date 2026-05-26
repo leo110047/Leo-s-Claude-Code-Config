@@ -466,19 +466,19 @@ describe('preamble — QUESTION_TUNING injection', () => {
       tmplPath: 'test.tmpl',
       host: 'claude' as const,
       paths: {
-        skillRoot: '~/.claude/skills/workflow',
-        localSkillRoot: '.claude/skills/workflow',
-        binDir: '~/.claude/skills/workflow/bin',
-        browseDir: '~/.claude/skills/workflow/browse/dist',
-        designDir: '~/.claude/skills/workflow/design/dist',
+        skillRoot: '~/.claude/skills/gstack',
+        localSkillRoot: '.claude/skills/gstack',
+        binDir: '~/.claude/skills/gstack/bin',
+        browseDir: '~/.claude/skills/gstack/browse/dist',
+        designDir: '~/.claude/skills/gstack/design/dist',
       },
       preambleTier: 2,
     };
     const out = generatePreamble(ctx);
     expect(out).toContain('QUESTION_TUNING: $_QUESTION_TUNING');
     expect(out).toContain('## Question Tuning');
-    expect(out).toContain('workflow-question-preference --check');
-    expect(out).toContain('workflow-question-log');
+    expect(out).toContain('gstack-question-preference --check');
+    expect(out).toContain('gstack-question-log');
     expect(out).toContain('profile-poisoning defense');
     expect(out).toContain('inline-user');
   });
@@ -490,11 +490,11 @@ describe('preamble — QUESTION_TUNING injection', () => {
       tmplPath: 'test.tmpl',
       host: 'claude' as const,
       paths: {
-        skillRoot: '~/.claude/skills/workflow',
-        localSkillRoot: '.claude/skills/workflow',
-        binDir: '~/.claude/skills/workflow/bin',
-        browseDir: '~/.claude/skills/workflow/browse/dist',
-        designDir: '~/.claude/skills/workflow/design/dist',
+        skillRoot: '~/.claude/skills/gstack',
+        localSkillRoot: '.claude/skills/gstack',
+        binDir: '~/.claude/skills/gstack/bin',
+        browseDir: '~/.claude/skills/gstack/browse/dist',
+        designDir: '~/.claude/skills/gstack/design/dist',
       },
       preambleTier: 1,
     };
@@ -511,16 +511,16 @@ describe('preamble — QUESTION_TUNING injection', () => {
       tmplPath: 'x',
       host: 'codex' as const,
       paths: {
-        skillRoot: '$WORKFLOW_ROOT',
-        localSkillRoot: '.agents/skills/workflow',
-        binDir: '$WORKFLOW_BIN',
-        browseDir: '$WORKFLOW_BROWSE',
-        designDir: '$WORKFLOW_DESIGN',
+        skillRoot: '$GSTACK_ROOT',
+        localSkillRoot: '.agents/skills/gstack',
+        binDir: '$GSTACK_BIN',
+        browseDir: '$GSTACK_BROWSE',
+        designDir: '$GSTACK_DESIGN',
       },
     };
     const out = generateQuestionTuning(codexCtx);
-    expect(out).toContain('$WORKFLOW_BIN/workflow-question-preference');
-    expect(out).toContain('$WORKFLOW_BIN/workflow-question-log');
+    expect(out).toContain('$GSTACK_BIN/gstack-question-preference');
+    expect(out).toContain('$GSTACK_BIN/gstack-question-log');
   });
 });
 
@@ -535,10 +535,10 @@ describe('end-to-end pipeline (binaries working together)', () => {
   test('log many expand choices → derive pushes scope_appetite up', () => {
     const tmpHome = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gstack-e2e-'));
     try {
-      const env = { ...process.env, WORKFLOW_HOME: tmpHome };
+      const env = { ...process.env, GSTACK_HOME: tmpHome };
       const { spawnSync } = require('child_process');
-      const logBin = path.join(ROOT, 'bin', 'workflow-question-log');
-      const devBin = path.join(ROOT, 'bin', 'workflow-developer-profile');
+      const logBin = path.join(ROOT, 'bin', 'gstack-question-log');
+      const devBin = path.join(ROOT, 'bin', 'gstack-developer-profile');
 
       for (let i = 0; i < 5; i++) {
         const r = spawnSync(
@@ -573,9 +573,9 @@ describe('end-to-end pipeline (binaries working together)', () => {
   test('preference blocks tune: write from inline-tool-output in full pipeline', () => {
     const tmpHome = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gstack-e2e-'));
     try {
-      const env = { ...process.env, WORKFLOW_HOME: tmpHome };
+      const env = { ...process.env, GSTACK_HOME: tmpHome };
       const { spawnSync } = require('child_process');
-      const prefBin = path.join(ROOT, 'bin', 'workflow-question-preference');
+      const prefBin = path.join(ROOT, 'bin', 'gstack-question-preference');
 
       const r = spawnSync(
         prefBin,
@@ -600,10 +600,10 @@ describe('end-to-end pipeline (binaries working together)', () => {
   test('migration preserves sessions, builder-profile shim still works', () => {
     const tmpHome = fs.mkdtempSync(path.join(require('os').tmpdir(), 'gstack-e2e-'));
     try {
-      const env = { ...process.env, WORKFLOW_HOME: tmpHome };
+      const env = { ...process.env, GSTACK_HOME: tmpHome };
       const { spawnSync } = require('child_process');
-      const devBin = path.join(ROOT, 'bin', 'workflow-developer-profile');
-      const shimBin = path.join(ROOT, 'bin', 'workflow-builder-profile');
+      const devBin = path.join(ROOT, 'bin', 'gstack-developer-profile');
+      const shimBin = path.join(ROOT, 'bin', 'gstack-builder-profile');
 
       // Seed a legacy file
       fs.writeFileSync(

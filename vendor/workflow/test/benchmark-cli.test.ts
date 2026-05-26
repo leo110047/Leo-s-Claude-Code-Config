@@ -1,5 +1,5 @@
 /**
- * workflow-model-benchmark CLI tests (offline).
+ * gstack-model-benchmark CLI tests (offline).
  *
  * Covers CLI wiring that unit tests against benchmark-runner.ts can't see:
  *   - --dry-run auth/provider-list resolution
@@ -18,7 +18,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 const ROOT = path.resolve(import.meta.dir, '..');
-const BIN = path.join(ROOT, 'bin', 'workflow-model-benchmark');
+const BIN = path.join(ROOT, 'bin', 'gstack-model-benchmark');
 
 function run(args: string[], opts: { env?: Record<string, string> } = {}): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync('bun', ['run', BIN, ...args], {
@@ -34,11 +34,11 @@ function run(args: string[], opts: { env?: Record<string, string> } = {}): { sta
   };
 }
 
-describe('workflow-model-benchmark --dry-run', () => {
+describe('gstack-model-benchmark --dry-run', () => {
   test('prints provider availability report and exits 0', () => {
     const r = run(['--prompt', 'hi', '--models', 'claude,gpt,gemini', '--dry-run']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain('workflow-model-benchmark --dry-run');
+    expect(r.stdout).toContain('gstack-model-benchmark --dry-run');
     expect(r.stdout).toContain('claude');
     expect(r.stdout).toContain('gpt');
     expect(r.stdout).toContain('gemini');
@@ -149,7 +149,7 @@ describe('workflow-model-benchmark --dry-run', () => {
   });
 });
 
-describe('workflow-model-benchmark prompt resolution', () => {
+describe('gstack-model-benchmark prompt resolution', () => {
   test('positional file path is read and passed as prompt', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-prompt-'));
     const promptFile = path.join(tmp, 'prompt.txt');
@@ -158,6 +158,33 @@ describe('workflow-model-benchmark prompt resolution', () => {
       const r = run([promptFile, '--dry-run']);
       expect(r.status).toBe(0);
       expect(r.stdout).toContain('hello from file');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('positional file still works when value flags come first', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-prompt-'));
+    const promptFile = path.join(tmp, 'prompt.txt');
+    fs.writeFileSync(promptFile, 'hello after flags');
+    try {
+      const r = run(['--models', 'claude', '--output', 'json', promptFile, '--dry-run']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('hello after flags');
+      expect(r.stdout).not.toContain('EISDIR');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('positional file still works after equals-form value flags', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-prompt-'));
+    const promptFile = path.join(tmp, 'prompt.txt');
+    fs.writeFileSync(promptFile, 'hello after equals flags');
+    try {
+      const r = run(['--models=claude', '--output=markdown', promptFile, '--dry-run']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('hello after equals flags');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

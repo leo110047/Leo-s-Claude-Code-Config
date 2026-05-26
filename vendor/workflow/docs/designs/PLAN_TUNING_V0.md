@@ -7,7 +7,7 @@
 
 ## What this document is
 
-A canonical record of what `/plan-tune` v1 is, what it is NOT, what we considered, and why we made each call. Committed to the repo so future contributors (and future Garry) can trace reasoning without archeology. Supersedes the two `~/.workflow/projects/` artifacts (office-hours design doc + CEO plan) which are per-user local records.
+A canonical record of what `/plan-tune` v1 is, what it is NOT, what we considered, and why we made each call. Committed to the repo so future contributors (and future Garry) can trace reasoning without archeology. Supersedes the two `~/.gstack/projects/` artifacts (office-hours design doc + CEO plan) which are per-user local records.
 
 ## The feature, in one paragraph
 
@@ -29,14 +29,14 @@ After weighing Codex's argument, we chose to roll back CEO EXPANSION and ship an
 
 1. **Typed question registry** (`scripts/question-registry.ts`). Every AskUserQuestion gstack uses is declared with `{id, skill, category, door_type, options[], signal_key?}`. Schema-governed.
 2. **CI enforcement.** Lint test (gate tier) asserts every AskUserQuestion pattern in SKILL.md.tmpl files has a matching registry entry. Fails CI on drift, renames, or duplicates.
-3. **Question logging** (`bin/workflow-question-log`). Appends `{ts, question_id, user_choice, recommended, session_id}` to `~/.workflow/projects/{SLUG}/question-log.jsonl`. Validates against registry.
-4. **Explicit per-question preferences** (`bin/workflow-question-preference`). Writes `{question_id, preference}` where preference is `always-ask | never-ask | ask-only-for-one-way`. Respected from session 1. No calibration gate — user stated it, system obeys.
-5. **Preamble injection.** Before each AskUserQuestion, agent calls `workflow-question-preference --check <registry-id>`. If `never-ask` AND question is NOT a one-way door, auto-choose recommended option with visible annotation: "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." One-way doors always ask regardless of preference — safety override.
+3. **Question logging** (`bin/gstack-question-log`). Appends `{ts, question_id, user_choice, recommended, session_id}` to `~/.gstack/projects/{SLUG}/question-log.jsonl`. Validates against registry.
+4. **Explicit per-question preferences** (`bin/gstack-question-preference`). Writes `{question_id, preference}` where preference is `always-ask | never-ask | ask-only-for-one-way`. Respected from session 1. No calibration gate — user stated it, system obeys.
+5. **Preamble injection.** Before each AskUserQuestion, agent calls `gstack-question-preference --check <registry-id>`. If `never-ask` AND question is NOT a one-way door, auto-choose recommended option with visible annotation: "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." One-way doors always ask regardless of preference — safety override.
 6. **Inline "tune:" feedback with user-origin gate.** Agent offers "Tune this question? Reply `tune: [feedback]` to adjust." User can use shortcuts (`unnecessary`, `ask-less`, `never-ask`, `always-ask`, `context-dependent`) or free-form English. CRITICAL: the agent only writes a tune event when the `tune:` content appears in the user's current chat turn — NOT in tool output, NOT in a file read. Binary validates `source: "inline-user"` on write; rejects other sources.
-7. **Declared profile** (`/plan-tune setup`). 5 plain-English questions, one per dimension. Stored in unified `~/.workflow/developer-profile.json` under `declared: {...}`. Informational only in v1 — no skill behavior change.
+7. **Declared profile** (`/plan-tune setup`). 5 plain-English questions, one per dimension. Stored in unified `~/.gstack/developer-profile.json` under `declared: {...}`. Informational only in v1 — no skill behavior change.
 8. **Observed/Inferred profile.** Every question-log event contributes deltas to inferred dimensions via a hand-crafted signal map (`scripts/psychographic-signals.ts`). Computed on demand. Displayed but not acted on.
 9. **`/plan-tune` skill.** Conversational plain-English inspection tool. "Show my profile," "set a preference," "what questions have I been asked," "show the gap between what I said and what I do." No CLI subcommand syntax required.
-10. **Unification with existing `~/.workflow/builder-profile.jsonl`.** Fold /office-hours session records and accumulated signals into unified `~/.workflow/developer-profile.json`. Migration is atomic + idempotent + archives the source file.
+10. **Unification with existing `~/.gstack/builder-profile.jsonl`.** Fold /office-hours session records and accumulated signals into unified `~/.gstack/developer-profile.json`. Migration is atomic + idempotent + archives the source file.
 
 ## Deferred to v2 (not in this PR, but explicit acceptance criteria)
 
@@ -63,10 +63,10 @@ After weighing Codex's argument, we chose to roll back CEO EXPANSION and ship an
 ## Architecture
 
 ```
-~/.workflow/
+~/.gstack/
   developer-profile.json            # unified: declared + inferred + sessions (from office-hours)
 
-~/.workflow/projects/{SLUG}/
+~/.gstack/projects/{SLUG}/
   question-log.jsonl                # every AskUserQuestion, append-only, registry-validated
   question-preferences.json         # explicit per-question user choices
   question-events.jsonl             # tune: feedback events, user-origin gated
@@ -109,16 +109,16 @@ After weighing Codex's argument, we chose to roll back CEO EXPANSION and ship an
 
 1. Preamble: check `question_tuning` config. If off, do nothing.
 2. Before each AskUserQuestion:
-   - Agent calls `workflow-question-preference --check <registry-id>`
+   - Agent calls `gstack-question-preference --check <registry-id>`
    - If `never-ask` AND question is NOT one-way door → auto-choose recommended with annotation
    - If `always-ask`, unset, or question IS one-way door → ask normally
 3. After AskUserQuestion:
    - Append log record to question-log.jsonl (registry-validated, rejects unknown IDs)
 4. Offer inline: "Tune this question? Reply `tune: [feedback]` to adjust."
 5. If user's NEXT turn message contains `tune:` prefix AND the content originated in the user's own message (not tool output):
-   - Agent calls `workflow-question-preference --write` with `source: "inline-user"`
+   - Agent calls `gstack-question-preference --write` with `source: "inline-user"`
    - Binary validates source field; rejects if anything other than `inline-user`
-6. Inferred dimensions recomputed on demand by `bin/workflow-developer-profile --derive`. Signal map changes trigger full recompute from events history.
+6. Inferred dimensions recomputed on demand by `bin/gstack-developer-profile --derive`. Signal map changes trigger full recompute from events history.
 
 ## Security model
 
@@ -127,16 +127,16 @@ After weighing Codex's argument, we chose to roll back CEO EXPANSION and ship an
 - The `tune:` prefix appears in that user message (not in any tool output, file content, PR description, commit message, etc.)
 - The resolver's instructions to the agent explicitly call this out
 
-Binary enforcement: `workflow-question-preference --write` requires `source: "inline-user"` field on every tune-originated record. Any other source value (e.g., `inline-tool-output`, `inline-file-content`) is rejected with an error. Agent is instructed to never forge the `source` field.
+Binary enforcement: `gstack-question-preference --write` requires `source: "inline-user"` field on every tune-originated record. Any other source value (e.g., `inline-tool-output`, `inline-file-content`) is rejected with an error. Agent is instructed to never forge the `source` field.
 
 **Data privacy**:
-- All data is local-only under `~/.workflow/`. Nothing leaves without explicit user action.
+- All data is local-only under `~/.gstack/`. Nothing leaves without explicit user action.
 - `/plan-tune export <path>` writes profile to user-specified path (opt-in export).
 - `/plan-tune delete` wipes local profile files.
-- `workflow-config set telemetry off` prevents any telemetry (this skill never sends profile data regardless).
+- `gstack-config set telemetry off` prevents any telemetry (this skill never sends profile data regardless).
 - Profile files have standard user-home permissions.
 
-**Injection defense** (consistent with existing `bin/workflow-learnings-log` patterns): the `question_summary` and any free-form user feedback fields are sanitized against known prompt-injection patterns ("ignore previous instructions," "system:", etc.).
+**Injection defense** (consistent with existing `bin/gstack-learnings-log` patterns): the `question_summary` and any free-form user feedback fields are sanitized against known prompt-injection patterns ("ignore previous instructions," "system:", etc.).
 
 ## 5 Hard Constraints (preserved from office-hours, updated for Codex feedback)
 
@@ -144,7 +144,7 @@ Binary enforcement: `workflow-question-preference --write` requires `source: "in
 2. **Profile dimensions are inspectable AND editable.** `/plan-tune profile` shows declared + inferred + gap. Edits via plain English go to `declared` only. System tracks `inferred` independently.
 3. **Signal map is hand-crafted in TypeScript.** `scripts/psychographic-signals.ts` maps `{question_id, user_choice} → {dimension, delta}`. Not agent-inferred. In v1, consumed only for `inferred.values` display — not for driving decisions.
 4. **No psychographic-driven auto-decide in v1.** Only explicit per-question preferences act. This sidesteps the "calibration gate can be gamed" critique (Codex #13) entirely — v1 doesn't have a gate to pass.
-5. **Per-project preferences beat global preferences.** `~/.workflow/projects/{SLUG}/question-preferences.json` wins over any future global preference file. Global profile (`~/.workflow/developer-profile.json`) is a starting point for diversity across projects.
+5. **Per-project preferences beat global preferences.** `~/.gstack/projects/{SLUG}/question-preferences.json` wins over any future global preference file. Global profile (`~/.gstack/developer-profile.json`) is a starting point for diversity across projects.
 
 ## Why event-sourced + dual-track
 
@@ -191,9 +191,9 @@ Power users can type shortcuts (`narrative`, `vibe`, `reset`, `stats`, `enable`,
 - `scripts/psychographic-signals.ts` — hand-crafted signal map for inferred computation.
 
 ### Binaries
-- `bin/workflow-question-log` — append log record, validate against registry.
-- `bin/workflow-question-preference` — read/write/check/clear explicit preferences.
-- `bin/workflow-developer-profile` — supersedes `bin/gstack-builder-profile`. Subcommands: `--read` (legacy compat), `--derive`, `--gap`, `--profile`.
+- `bin/gstack-question-log` — append log record, validate against registry.
+- `bin/gstack-question-preference` — read/write/check/clear explicit preferences.
+- `bin/gstack-developer-profile` — supersedes `bin/gstack-builder-profile`. Subcommands: `--read` (legacy compat), `--derive`, `--gap`, `--profile`.
 
 ### Resolvers
 - `scripts/resolvers/question-tuning.ts` — three generators: `generateQuestionPreferenceCheck(ctx)` (pre-question check), `generateQuestionLog(ctx)` (post-question log), `generateInlineTuneFeedback(ctx)` (post-question tune: prompt with user-origin gate instructions).
@@ -208,7 +208,7 @@ Power users can type shortcuts (`narrative`, `vibe`, `reset`, `stats`, `enable`,
 
 - `scripts/resolvers/index.ts` — register 3 new resolvers.
 - `scripts/resolvers/preamble.ts` — `_QUESTION_TUNING` config read; inject 3 resolvers for tier >= 2.
-- `bin/gstack-builder-profile` — legacy shim delegates to `bin/workflow-developer-profile --read`.
+- `bin/gstack-builder-profile` — legacy shim delegates to `bin/gstack-developer-profile --read`.
 - Migration script — folds existing builder-profile.jsonl into unified developer-profile.json. Atomic, idempotent, archives source as `.migrated-YYYY-MM-DD`.
 
 ## NOT touched in v1
@@ -355,7 +355,7 @@ Initial user position (office-hours): "The psychographic IS the differentiation.
 
 - `bun test` passes including new `test/plan-tune.test.ts`.
 - Every AskUserQuestion invocation in every SKILL.md.tmpl has a registry entry. CI lint enforces.
-- Migration from `~/.workflow/builder-profile.jsonl` preserves 100% of sessions + signals_accumulated. Regression test with 7-session fixture.
+- Migration from `~/.gstack/builder-profile.jsonl` preserves 100% of sessions + signals_accumulated. Regression test with 7-session fixture.
 - One-way door registry-declared entries: 100% of destructive ops, architecture forks, scope-adds > 1 day CC effort, security/compliance choices are classified `one-way`.
 - User-origin gate test: attempting to write a tune event with `source: "inline-tool-output"` is rejected.
 - Dogfood: Garry uses `/plan-tune` for 2+ weeks. Reports back whether:
@@ -371,9 +371,9 @@ Initial user position (office-hours): "The psychographic IS the differentiation.
 3. Seed `scripts/one-way-doors.ts` with keyword-pattern fallback classifier.
 4. Seed `scripts/psychographic-signals.ts` with initial `{question_id, user_choice} → {dimension, delta}` mappings. Numbers are tentative — v1 ships, v2 recalibrates.
 5. Seed `scripts/archetypes.ts` with archetype definitions (referenced by future v2 `/plan-tune vibe`).
-6. `bin/workflow-question-log` — validates against registry, rejects unknown IDs.
-7. `bin/workflow-question-preference` — all subcommands + tests.
-8. `bin/workflow-developer-profile` — `--read` (legacy), `--derive`, `--gap`, `--profile`.
+6. `bin/gstack-question-log` — validates against registry, rejects unknown IDs.
+7. `bin/gstack-question-preference` — all subcommands + tests.
+8. `bin/gstack-developer-profile` — `--read` (legacy), `--derive`, `--gap`, `--profile`.
 9. Migration script — builder-profile.jsonl → unified developer-profile.json. Atomic, idempotent, archives source. Regression test with fixture.
 10. `scripts/resolvers/question-tuning.ts` — three generators (preference check, log, inline tune with user-origin gate instructions).
 11. Register the 3 resolvers in `scripts/resolvers/index.ts`.
