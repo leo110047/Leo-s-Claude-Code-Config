@@ -103,10 +103,12 @@ show_status() {
         target=$(readlink "$CODEX_RULES_DIR")
         echo -e "  ${YELLOW}[legacy symlink]${NC} codex-rules -> $target — 建議重跑 ./install.sh codex-rules"
     elif [ -d "$CODEX_RULES_DIR" ]; then
-        if [ -L "$CODEX_RULES_DIR/default.rules" ]; then
+        if [ -L "$CODEX_RULES_DIR/default.rules" ] && [ -L "$CODEX_RULES_DIR/goldband.rules" ]; then
             local rule_count
             rule_count=$(find "$CODEX_RULES_DIR" -name '*.rules' 2>/dev/null | wc -l | tr -d ' ')
             echo -e "  ${GREEN}[OK]${NC} codex-rules (${rule_count} 個 rule file)"
+        elif [ ! -L "$CODEX_RULES_DIR/goldband.rules" ]; then
+            echo -e "  ${YELLOW}[存在]${NC} codex-rules 目錄存在，但缺少 goldband.rules portable link"
         else
             echo -e "  ${YELLOW}[存在]${NC} codex-rules 目錄存在，但缺少 default.rules link"
         fi

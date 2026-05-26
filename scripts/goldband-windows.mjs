@@ -452,6 +452,24 @@ function installCodexRuleFile(context, sourcePath, destPath, label) {
   console.log(`  ${colorize(context.colorsEnabled, 'green', '[install]')} ${label}`);
 }
 
+function ensureCodexLocalDefaultRules(context) {
+  const localDefault = path.join(context.repoDir, 'codex', 'local', 'rules', 'default.rules');
+  if (fs.existsSync(localDefault)) {
+    return;
+  }
+
+  ensureDir(path.dirname(localDefault));
+  fs.writeFileSync(
+    localDefault,
+    [
+      '# Machine-local Codex execpolicy rules.',
+      '# This ignored file is the writable default target for one-off approvals.',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+}
+
 function installCodexRulesDirectory(context) {
   const baseRules = path.join(context.repoDir, 'codex', 'rules');
   const localRules = path.join(context.repoDir, 'codex', 'local', 'rules');
@@ -467,16 +485,21 @@ function installCodexRulesDirectory(context) {
     removePath(destDir);
   }
   ensureDir(destDir);
+  ensureCodexLocalDefaultRules(context);
 
-  for (const sourceDir of [baseRules, localRules]) {
-    if (!fs.existsSync(sourceDir)) {
-      continue;
-    }
-    for (const entry of fs.readdirSync(sourceDir).filter(name => name.endsWith('.rules')).sort()) {
-      const sourcePath = path.join(sourceDir, entry);
-      const label = sourceDir === localRules ? `Codex local rule ${entry}` : `Codex rule ${entry}`;
-      installCodexRuleFile(context, sourcePath, path.join(destDir, entry), label);
-    }
+  for (const entry of fs.readdirSync(baseRules).filter(name => name.endsWith('.rules')).sort()) {
+    const sourcePath = path.join(baseRules, entry);
+    const destName = entry === 'default.rules' ? 'goldband.rules' : entry;
+    installCodexRuleFile(context, sourcePath, path.join(destDir, destName), `Codex rule ${destName}`);
+  }
+
+  if (!fs.existsSync(localRules)) {
+    return;
+  }
+
+  for (const entry of fs.readdirSync(localRules).filter(name => name.endsWith('.rules')).sort()) {
+    const sourcePath = path.join(localRules, entry);
+    installCodexRuleFile(context, sourcePath, path.join(destDir, entry), `Codex local rule ${entry}`);
   }
 }
 
@@ -1273,7 +1296,9 @@ function showWindowsStatus(context) {
   console.log(`  Claude rules: ${fs.existsSync(path.join(context.paths.claudeDir, 'rules')) ? 'installed' : 'missing'}`);
   console.log(`  Codex config: ${fs.existsSync(context.paths.codexConfigFile) ? 'installed' : 'missing'}`);
   console.log(`  Codex agents: ${fs.existsSync(context.paths.codexAgentsFile) ? 'installed' : 'missing'}`);
-  console.log(`  Codex rules: ${fs.existsSync(context.paths.codexRulesDir) ? 'installed' : 'missing'}`);
+  const codexRulesInstalled = fs.existsSync(path.join(context.paths.codexRulesDir, 'goldband.rules')) &&
+    fs.existsSync(path.join(context.paths.codexRulesDir, 'default.rules'));
+  console.log(`  Codex rules: ${codexRulesInstalled ? 'installed' : 'missing'}`);
   console.log(`  PowerShell launchers: ${powershellProfilesInstalled(context) ? 'installed' : 'missing'}`);
   console.log(`  Workflow Claude runtime: ${fs.existsSync(path.join(context.paths.claudeDir, 'skills', 'workflow')) ? 'installed' : 'missing'}`);
   console.log(`  Workflow Codex runtime: ${fs.existsSync(context.paths.codexRuntimeWorkflowDir) ? 'installed' : 'missing'}`);

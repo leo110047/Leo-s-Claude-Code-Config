@@ -353,6 +353,16 @@ function main() {
     assert.match(codexProfile.skills, /\bfrontend-design\b/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'commands')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'AGENTS.md')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'rules', 'goldband.rules')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'rules', 'default.rules')));
+    assert.equal(
+      fs.readlinkSync(path.join(tmpHome, '.codex', 'rules', 'goldband.rules')),
+      path.join(tmpRoot, 'codex', 'rules', 'default.rules'),
+    );
+    assert.equal(
+      fs.readlinkSync(path.join(tmpHome, '.codex', 'rules', 'default.rules')),
+      path.join(tmpRoot, 'codex', 'local', 'rules', 'default.rules'),
+    );
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'bin', 'goldband-self-update.ps1')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'shell', 'goldband-launchers.ps1')));
 
@@ -395,6 +405,7 @@ function main() {
     console.log('[4/7] windows-mode status');
     const status = run(process.execPath, statusArgs(tmpRoot, tmpHome));
     assert.match(status.stdout, /PowerShell launchers: installed/);
+    assert.match(status.stdout, /Codex rules: installed/);
     assert.match(status.stdout, /Workflow Claude runtime: installed/);
 
     console.log('[5/7] windows-mode self-update guardrails');

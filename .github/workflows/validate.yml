@@ -51,6 +51,12 @@ jobs:
           echo "=== Verifying decision guidance parity ==="
           bash scripts/verify-decision-guidance.sh
 
+      - name: Test workflow installer integration
+        run: bash scripts/test-workflow-integration.sh
+
+      - name: Test Windows platform integration
+        run: node scripts/test-windows-platform-integration.mjs
+
       - name: Summary
         run: |
           echo "=== Validation Summary ==="
