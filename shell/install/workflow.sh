@@ -380,6 +380,24 @@ hide_workflow_root_skills() {
     fi
 }
 
+write_workflow_installed_versions() {
+    local host="$1"
+    local version="$2"
+    local runtime_root
+
+    [ -n "$version" ] || return 0
+
+    if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
+        runtime_root="$HOME/.claude/skills/workflow"
+        [ -d "$runtime_root" ] && printf '%s\n' "$version" > "$runtime_root/.installed-version"
+    fi
+
+    if [ "$host" = "codex" ] || [ "$host" = "auto" ]; then
+        runtime_root="$HOME/.codex/skills/workflow"
+        [ -d "$runtime_root" ] && printf '%s\n' "$version" > "$runtime_root/.installed-version"
+    fi
+}
+
 create_goldband_workflow_aliases() {
     local claude_runtime_root="$HOME/.claude/skills/workflow"
     local codex_skills_root="$HOME/.codex/skills"
@@ -532,4 +550,5 @@ install_workflow_host() {
     create_goldband_workflow_aliases
     cleanup_workflow_user_entries
     hide_workflow_root_skills "$host"
+    write_workflow_installed_versions "$host" "$version"
 }
