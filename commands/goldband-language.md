@@ -15,12 +15,15 @@ description: 切換或查詢 goldband workflow wrappers 的提問與說明語言
 
 ## Process
 
-1. 找 `workflow-config`，依序檢查：
+1. 找 workflow config binary，依序檢查：
+   - `~/.codex/skills/workflow/bin/gstack-config`
+   - `~/.claude/skills/workflow/bin/gstack-config`
+   - `vendor/workflow/bin/gstack-config`（只有在 repo 內且前兩者不存在時）
    - `~/.codex/skills/workflow/bin/workflow-config`
    - `~/.claude/skills/workflow/bin/workflow-config`
-   - `vendor/workflow/bin/workflow-config`（只有在 repo 內且前兩者不存在時）
+   - `vendor/workflow/bin/workflow-config`（只有在 repo 內且前面不存在時）
 
-2. 如果找不到 `workflow-config`：
+2. 如果找不到 workflow config binary：
    - 明確說 workflow runtime 尚未安裝
    - 提示使用者先跑 `./install.sh workflow-auto` 或 `./install.sh all-with-workflow`
    - 停止，不要假裝切換成功
@@ -43,6 +46,7 @@ description: 切換或查詢 goldband workflow wrappers 的提問與說明語言
    - 這一步會同時更新：
      - `goldband_language` config
      - `~/.claude/skills/goldband-*` 與 `~/.codex/skills/goldband-*` 的 skill description
+     - description 來源必須是 repo 內 `shell/install/workflow.sh` 的 `workflow_wrapper_manifest()`，不要維護第二份清單
    - 再執行一次 `~/.claude/commands/scripts/set-goldband-language.sh get` 驗證
    - 根據新語言回報切換結果
    - 補一句：若當前 session 還在吃舊 wrapper 狀態，重開 Claude Code / Codex 一次

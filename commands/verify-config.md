@@ -133,6 +133,7 @@ Required files:
 - `ARCHITECTURE.md`
 - `codex/AGENTS.md`
 - `codex/rules/default.rules`
+- `WORKFLOW_VENDORING.md`
 - `scripts/verify-decision-guidance.sh`
 - `scripts/check-workflow-vendor-integration.sh`
 - `scripts/verify-hook-script-references.py`
@@ -146,7 +147,7 @@ Decision guidance parity:
 - `bash scripts/verify-decision-guidance.sh` → should report `[OK]` for guidance, architecture boundary docs, commands, skills, docs, and context markers
 
 Workflow vendor integration:
-- `bash scripts/check-workflow-vendor-integration.sh` → should report `[OK]` for vendor version parity, complete goldband wrapper coverage, and workflow compatibility binaries
+- `bash scripts/check-workflow-vendor-integration.sh` → should report `[OK]` for vendor version parity, complete goldband wrapper coverage, language-description manifest parity, workflow compatibility binaries, and the vendoring runbook
 
 Hook script references:
 - `python3 scripts/verify-hook-script-references.py` → should report `[OK]` for every hook script path referenced by `hooks/hooks.json`

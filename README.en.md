@@ -26,6 +26,7 @@ This repo contains both goldband itself and a vendored `workflow` runtime source
 - install-time integration happens through [`shell/install/workflow.sh`](shell/install/workflow.sh), which turns workflow runtime content into `goldband-*` user-facing entry points and host-specific install layouts
 
 For the explicit boundary and maintenance rules, read [ARCHITECTURE.md](ARCHITECTURE.md). For runtime-specific product and internals documentation, read [vendor/workflow/README.md](vendor/workflow/README.md) and [vendor/workflow/ARCHITECTURE.md](vendor/workflow/ARCHITECTURE.md).
+When updating the vendored runtime, follow [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md) so wrappers, language sync, and validation stay aligned.
 
 ## Installation
 
@@ -139,9 +140,11 @@ If you already know the target language, you can also run:
 If you are in Codex or want to set it directly, you can run:
 
 ```bash
-~/.codex/skills/workflow/bin/workflow-config set goldband_language zh-TW
-~/.codex/skills/workflow/bin/workflow-config set goldband_language en
+~/.codex/skills/workflow/bin/gstack-config set goldband_language zh-TW
+~/.codex/skills/workflow/bin/gstack-config set goldband_language en
 ```
+
+The older `workflow-config` wrapper remains available for compatibility; new installs prefer `gstack-config`.
 
 If the current session does not pick up the new setting immediately, restart Claude Code or Codex once.
 

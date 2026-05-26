@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
+INSTALLER="$REPO_DIR/shell/install/workflow.sh"
+
 find_workflow_config_bin() {
   local candidate
   for candidate in \
+    "$HOME/.codex/skills/workflow/bin/gstack-config" \
+    "$HOME/.claude/skills/workflow/bin/gstack-config" \
+    "$REPO_DIR/vendor/workflow/bin/gstack-config" \
     "$HOME/.codex/skills/workflow/bin/workflow-config" \
-    "$HOME/.claude/skills/workflow/bin/workflow-config"
+    "$HOME/.claude/skills/workflow/bin/workflow-config" \
+    "$REPO_DIR/vendor/workflow/bin/workflow-config"
   do
     if [ -x "$candidate" ]; then
       printf '%s\n' "$candidate"
@@ -35,64 +43,35 @@ read_language() {
   fi
 }
 
+workflow_manifest_lines() {
+  if [ ! -f "$INSTALLER" ]; then
+    echo "workflow installer manifest not found: $INSTALLER" >&2
+    return 1
+  fi
+
+  awk '
+    /^workflow_wrapper_manifest\(\)/ { in_fn = 1; next }
+    in_fn && /^EOF$/ { exit }
+    in_fn && /^[a-zA-Z0-9-]+\|/ { print }
+  ' "$INSTALLER"
+}
+
 wrapper_description() {
   local wrapper_name="$1"
   local language="$2"
-  case "$wrapper_name:$language" in
-    goldband-autoplan:en) printf '%s\n' 'Automated end-to-end plan review workflow.' ;;
-    goldband-benchmark:en) printf '%s\n' 'Performance baselines and regression checks.' ;;
-    goldband-browse:en) printf '%s\n' 'Real Chromium browser tooling.' ;;
-    goldband-canary:en) printf '%s\n' 'Post-release observation and rapid verification.' ;;
-    goldband-careful:en) printf '%s\n' 'Prompt before high-risk operations.' ;;
-    goldband-codex:en) printf '%s\n' 'Use Codex for a second-opinion review.' ;;
-    goldband-cso:en) printf '%s\n' 'Deep security review.' ;;
-    goldband-design-consultation:en) printf '%s\n' 'Design direction and system planning.' ;;
-    goldband-design-review:en) printf '%s\n' 'Design review and correction.' ;;
-    goldband-document-release:en) printf '%s\n' 'Sync README and release docs.' ;;
-    goldband-freeze:en) printf '%s\n' 'Limit edit scope to avoid changing too much.' ;;
-    goldband-guard:en) printf '%s\n' 'Combined careful and freeze task guardrails.' ;;
-    goldband-investigate:en) printf '%s\n' 'Systematic debugging and root-cause investigation.' ;;
-    goldband-land-and-deploy:en) printf '%s\n' 'Merge, deploy, and post-launch verification.' ;;
-    goldband-office-hours:en) printf '%s\n' 'Reframe the problem from a product perspective.' ;;
-    goldband-plan-ceo-review:en) printf '%s\n' 'Review the plan from a CEO perspective.' ;;
-    goldband-plan-design-review:en) printf '%s\n' 'Design review before implementation.' ;;
-    goldband-plan-eng-review:en) printf '%s\n' 'Engineering review before implementation.' ;;
-    goldband-qa:en) printf '%s\n' 'Browser-based QA and verification.' ;;
-    goldband-qa-only:en) printf '%s\n' 'Test only, no fixes; output a bug report.' ;;
-    goldband-review:en) printf '%s\n' 'Pre-landing review for the current diff.' ;;
-    goldband-retro:en) printf '%s\n' 'Review recent output and improvement directions.' ;;
-    goldband-setup-browser-cookies:en) printf '%s\n' 'Import browser cookies for QA.' ;;
-    goldband-setup-deploy:en) printf '%s\n' 'Configure deploy and production verification info.' ;;
-    goldband-ship:en) printf '%s\n' 'Release and open a PR.' ;;
-    goldband-unfreeze:en) printf '%s\n' 'Remove freeze restrictions.' ;;
-    goldband-autoplan:*) printf '%s\n' '自動跑完整計畫審查流程。' ;;
-    goldband-benchmark:*) printf '%s\n' '效能基準與回歸檢查。' ;;
-    goldband-browse:*) printf '%s\n' '真實 Chromium 瀏覽器工具。' ;;
-    goldband-canary:*) printf '%s\n' '發版後觀察與快速驗證。' ;;
-    goldband-careful:*) printf '%s\n' '高風險操作前提醒確認。' ;;
-    goldband-codex:*) printf '%s\n' '用 Codex 做第二意見 review。' ;;
-    goldband-cso:*) printf '%s\n' '深度安全審查。' ;;
-    goldband-design-consultation:*) printf '%s\n' '設計方向與系統規劃。' ;;
-    goldband-design-review:*) printf '%s\n' '設計審查與修正。' ;;
-    goldband-document-release:*) printf '%s\n' '同步更新 README 與發版文件。' ;;
-    goldband-freeze:*) printf '%s\n' '限制編輯範圍，避免改太多。' ;;
-    goldband-guard:*) printf '%s\n' 'careful + freeze 的任務保護。' ;;
-    goldband-investigate:*) printf '%s\n' '系統化除錯與根因調查。' ;;
-    goldband-land-and-deploy:*) printf '%s\n' 'merge、deploy、上線後驗證。' ;;
-    goldband-office-hours:*) printf '%s\n' '從產品角度重想問題與方向。' ;;
-    goldband-plan-ceo-review:*) printf '%s\n' '用 CEO 視角重審計畫。' ;;
-    goldband-plan-design-review:*) printf '%s\n' '實作前先做設計審查。' ;;
-    goldband-plan-eng-review:*) printf '%s\n' '實作前先做工程規劃審查。' ;;
-    goldband-qa:*) printf '%s\n' '用真實瀏覽器做 QA 與驗證。' ;;
-    goldband-qa-only:*) printf '%s\n' '只測不修，輸出 bug report。' ;;
-    goldband-review:*) printf '%s\n' '針對目前 diff 做上線前審查。' ;;
-    goldband-retro:*) printf '%s\n' '回顧近期輸出與改善方向。' ;;
-    goldband-setup-browser-cookies:*) printf '%s\n' '匯入瀏覽器 cookies 供 QA 使用。' ;;
-    goldband-setup-deploy:*) printf '%s\n' '設定 deploy 與 production 驗證資訊。' ;;
-    goldband-ship:*) printf '%s\n' '發版與提 PR 流程。' ;;
-    goldband-unfreeze:*) printf '%s\n' '解除 freeze 限制。' ;;
-    *) return 1 ;;
-  esac
+
+  workflow_manifest_lines \
+    | awk -F'|' -v name="$wrapper_name" -v lang="$language" '
+        $1 == name {
+          if (lang == "en") {
+            print $5
+          } else {
+            print $4
+          }
+          found = 1
+        }
+        END { exit(found ? 0 : 1) }
+      '
 }
 
 rewrite_skill_description() {
@@ -156,8 +135,18 @@ main() {
   local workflow_config_bin
   local language
 
+  if [ "$mode" = "describe" ]; then
+    local wrapper_name="${2:-}"
+    language="$(normalize_language "${3:-zh-TW}")" || {
+      echo "unsupported language: ${3:-<empty>}" >&2
+      exit 1
+    }
+    wrapper_description "$wrapper_name" "$language"
+    exit 0
+  fi
+
   workflow_config_bin="$(find_workflow_config_bin)" || {
-    echo "workflow-config not found" >&2
+    echo "workflow config binary not found" >&2
     exit 1
   }
 

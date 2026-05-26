@@ -26,6 +26,7 @@ goldband 主要扮演三個角色：
 - 安裝時是 goldband 透過 [`shell/install/workflow.sh`](shell/install/workflow.sh) 把 workflow runtime 轉成 `goldband-*` 對外入口與 host-specific install layout。
 
 如果你想看更明確的邊界與維護規則，請讀 [ARCHITECTURE.md](ARCHITECTURE.md)。如果你要看 runtime 自己的產品與內部設計，請讀 [vendor/workflow/README.md](vendor/workflow/README.md) 與 [vendor/workflow/ARCHITECTURE.md](vendor/workflow/ARCHITECTURE.md)。
+更新 vendored runtime 時，照 [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md) 做，避免 wrapper、語言同步和驗證鏈分岔。
 
 
 ## 安裝
@@ -133,9 +134,11 @@ goldband wrapper 支援 `zh-TW` 和 `en`，預設是 `zh-TW`。
 如果你在 Codex 或想直接改設定，也可以用：
 
 ```bash
-~/.codex/skills/workflow/bin/workflow-config set goldband_language zh-TW
-~/.codex/skills/workflow/bin/workflow-config set goldband_language en
+~/.codex/skills/workflow/bin/gstack-config set goldband_language zh-TW
+~/.codex/skills/workflow/bin/gstack-config set goldband_language en
 ```
+
+舊的 `workflow-config` wrapper 仍保留相容性；新安裝優先使用 `gstack-config`。
 
 切換後如果目前 session 還沒吃到新設定，重開 Claude Code 或 Codex 一次即可。
 

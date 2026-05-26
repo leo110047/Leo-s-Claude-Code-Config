@@ -259,6 +259,8 @@ fi
 
 HOME="$TMP_HOME" "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh" set en >/tmp/goldband-language-sync.log
 grep -q '^  Systematic debugging and root-cause investigation.$' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+test "$(HOME="$TMP_HOME" "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh" describe goldband-design-html en)" = "Turn design direction into reviewable HTML."
+test "$(HOME="$TMP_HOME" "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh" describe goldband-workflow-upgrade zh-TW)" = "更新 bundled workflow runtime。"
 
 FAKE_BIN="$TMP_HOME/fake-bin"
 mkdir -p "$FAKE_BIN"

@@ -79,3 +79,4 @@ This makes the repository boundary more important, not less. The vendored runtim
 - Do not duplicate workflow product docs in root README; link to `vendor/workflow/README.md` or this file instead.
 - Do not treat workflow internals as goldband policy sources of truth.
 - When changing wrapper behavior or install paths, document the change in root docs and keep the boundary explicit.
+- When updating `vendor/workflow`, follow [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md) and keep `workflow_wrapper_manifest()` as the single source of truth for goldband wrapper aliases and descriptions.

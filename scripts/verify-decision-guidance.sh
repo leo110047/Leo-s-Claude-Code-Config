@@ -53,6 +53,8 @@ fi
 check_contains "ARCHITECTURE.md" "## Responsibility Boundary" "architecture doc defines responsibility boundary"
 check_contains "ARCHITECTURE.md" "## Integration Contract" "architecture doc defines integration contract"
 check_contains "ARCHITECTURE.md" "vendor/workflow owns" "architecture doc explains workflow ownership"
+check_contains "WORKFLOW_VENDORING.md" "workflow_wrapper_manifest()" "workflow vendoring runbook keeps wrapper manifest as source of truth"
+check_contains "WORKFLOW_VENDORING.md" "## Error Handling" "workflow vendoring runbook includes error handling"
 
 check_contains "codex/AGENTS.md" "## Decision Recommendation Standard" "codex decision recommendation section"
 check_contains "codex/AGENTS.md" "do not optimize for minimal code delta" "codex guidance rejects minimal-delta bias for recommendations"
