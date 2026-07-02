@@ -2,8 +2,8 @@ function buildAdditionalContext(hookEventName, additionalContext) {
   return {
     hookSpecificOutput: {
       hookEventName,
-      additionalContext
-    }
+      additionalContext,
+    },
   };
 }
 
@@ -14,11 +14,13 @@ function evaluateLifecycle(input) {
     return {
       decision: 'allow',
       blockedBy: null,
-      logs: ['[Hook] SessionStart: context restore is available via /goldband-context-restore when needed.'],
+      logs: [
+        '[Hook] SessionStart: context restore is available via /goldband-context-restore when needed.',
+      ],
       outputJson: buildAdditionalContext(
         'SessionStart',
-        'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.'
-      )
+        'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.',
+      ),
     };
   }
 
@@ -31,8 +33,8 @@ function evaluateLifecycle(input) {
       logs: [`[Hook] Tool failure observed in ${toolName}: ${error}`],
       outputJson: buildAdditionalContext(
         'PostToolUseFailure',
-        'A tool failed. Capture the exact failure and follow systematic debugging before proposing fixes.'
-      )
+        'A tool failed. Capture the exact failure and follow systematic debugging before proposing fixes.',
+      ),
     };
   }
 
@@ -40,7 +42,9 @@ function evaluateLifecycle(input) {
     return {
       decision: 'allow',
       blockedBy: null,
-      logs: ['[Hook] PreCompact: preserve active goal, verification state, and blockers in the compact summary.']
+      logs: [
+        '[Hook] PreCompact: preserve active goal, verification state, and blockers in the compact summary.',
+      ],
     };
   }
 
@@ -48,7 +52,9 @@ function evaluateLifecycle(input) {
     return {
       decision: 'allow',
       blockedBy: null,
-      logs: ['[Hook] PostCompact: re-check current files before making completion claims.']
+      logs: [
+        '[Hook] PostCompact: re-check current files before making completion claims.',
+      ],
     };
   }
 
@@ -56,17 +62,19 @@ function evaluateLifecycle(input) {
     return {
       decision: 'allow',
       blockedBy: null,
-      logs: ['[Hook] SessionEnd: context save is available via /goldband-context-save for reusable handoff state.']
+      logs: [
+        '[Hook] SessionEnd: context save is available via /goldband-context-save for reusable handoff state.',
+      ],
     };
   }
 
   return {
     decision: 'allow',
     blockedBy: null,
-    logs: []
+    logs: [],
   };
 }
 
 module.exports = {
-  evaluateLifecycle
+  evaluateLifecycle,
 };

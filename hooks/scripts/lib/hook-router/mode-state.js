@@ -4,28 +4,35 @@ const {
   getPersistentDataPath,
   getPluginDataDir,
   readFile,
-  writeFile
+  writeFile,
 } = require('../utils');
 
 const DEFAULT_SESSION_ID = 'default';
 
 function normalizeSessionId(sessionId) {
-  const raw = String(sessionId || process.env.CLAUDE_SESSION_ID || DEFAULT_SESSION_ID).trim();
+  const raw = String(
+    sessionId || process.env.CLAUDE_SESSION_ID || DEFAULT_SESSION_ID,
+  ).trim();
   const normalized = raw.length > 0 ? raw : DEFAULT_SESSION_ID;
   return normalized.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
 function resolveModeStateFile(sessionId) {
-  const override = typeof process.env.HOOK_ROUTER_MODE_STATE_FILE === 'string'
-    ? process.env.HOOK_ROUTER_MODE_STATE_FILE.trim()
-    : '';
+  const override =
+    typeof process.env.HOOK_ROUTER_MODE_STATE_FILE === 'string'
+      ? process.env.HOOK_ROUTER_MODE_STATE_FILE.trim()
+      : '';
 
   if (override.length > 0) {
     return override;
   }
 
   const safeSessionId = normalizeSessionId(sessionId);
-  return getPersistentDataPath('hook-router', 'modes', `session-${safeSessionId}.json`);
+  return getPersistentDataPath(
+    'hook-router',
+    'modes',
+    `session-${safeSessionId}.json`,
+  );
 }
 
 function detectStorageSource(filePath) {
@@ -36,7 +43,8 @@ function detectStorageSource(filePath) {
 
   const resolvedFilePath = path.resolve(filePath);
   const resolvedPluginDataDir = path.resolve(pluginDataDir);
-  return resolvedFilePath === resolvedPluginDataDir || resolvedFilePath.startsWith(`${resolvedPluginDataDir}${path.sep}`)
+  return resolvedFilePath === resolvedPluginDataDir ||
+    resolvedFilePath.startsWith(`${resolvedPluginDataDir}${path.sep}`)
     ? 'CLAUDE_PLUGIN_DATA'
     : 'temp-fallback';
 }
@@ -47,7 +55,7 @@ function buildEmptyState(sessionId, filePath) {
     updatedAt: null,
     modes: {},
     filePath,
-    storageSource: detectStorageSource(filePath)
+    storageSource: detectStorageSource(filePath),
   };
 }
 
@@ -58,16 +66,17 @@ function parseModeState(raw, sessionId, filePath) {
 
   try {
     const parsed = JSON.parse(raw);
-    const parsedModes = parsed && typeof parsed.modes === 'object' && !Array.isArray(parsed.modes)
-      ? parsed.modes
-      : {};
+    const parsedModes =
+      parsed && typeof parsed.modes === 'object' && !Array.isArray(parsed.modes)
+        ? parsed.modes
+        : {};
 
     return {
       sessionId: normalizeSessionId(parsed.sessionId || sessionId),
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null,
       modes: parsedModes,
       filePath,
-      storageSource: detectStorageSource(filePath)
+      storageSource: detectStorageSource(filePath),
     };
   } catch {
     return buildEmptyState(sessionId, filePath);
@@ -86,7 +95,7 @@ function writeModeState(sessionId, modes) {
   const nextState = {
     sessionId: current.sessionId,
     updatedAt: new Date().toISOString(),
-    modes
+    modes,
   };
 
   writeFile(current.filePath, JSON.stringify(nextState, null, 2) + '\n');
@@ -94,15 +103,16 @@ function writeModeState(sessionId, modes) {
   return {
     ...nextState,
     filePath: current.filePath,
-    storageSource: current.storageSource
+    storageSource: current.storageSource,
   };
 }
 
 function setModeActive(sessionId, modeName, active, metadata = {}) {
   const current = readModeState(sessionId);
-  const existingMode = current.modes[modeName] && typeof current.modes[modeName] === 'object'
-    ? current.modes[modeName]
-    : {};
+  const existingMode =
+    current.modes[modeName] && typeof current.modes[modeName] === 'object'
+      ? current.modes[modeName]
+      : {};
   const now = new Date().toISOString();
 
   const nextMode = active
@@ -112,19 +122,19 @@ function setModeActive(sessionId, modeName, active, metadata = {}) {
         active: true,
         enabledAt: existingMode.enabledAt || now,
         disabledAt: null,
-        updatedAt: now
+        updatedAt: now,
       }
     : {
         ...existingMode,
         ...metadata,
         active: false,
         disabledAt: now,
-        updatedAt: now
+        updatedAt: now,
       };
 
   return writeModeState(current.sessionId, {
     ...current.modes,
-    [modeName]: nextMode
+    [modeName]: nextMode,
   });
 }
 
@@ -149,5 +159,5 @@ module.exports = {
   writeModeState,
   setModeActive,
   isModeActive,
-  getActiveModes
+  getActiveModes,
 };

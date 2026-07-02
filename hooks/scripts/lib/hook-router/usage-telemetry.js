@@ -11,19 +11,27 @@ function parsePositiveInt(value, fallback) {
 }
 
 function usageTelemetryEnabled() {
-  const flag = String(process.env.GOLDBAND_USAGE_TELEMETRY_ENABLED ?? '1').toLowerCase();
+  const flag = String(
+    process.env.GOLDBAND_USAGE_TELEMETRY_ENABLED ?? '1',
+  ).toLowerCase();
   return flag === '1' || flag === 'true' || flag === 'yes';
 }
 
 function getUsageFile() {
-  return process.env.GOLDBAND_USAGE_FILE || getPersistentDataPath('hook-router', 'usage-events.jsonl');
+  return (
+    process.env.GOLDBAND_USAGE_FILE ||
+    getPersistentDataPath('hook-router', 'usage-events.jsonl')
+  );
 }
 
 function rotateIfOversized(usageFile) {
   try {
     if (!fs.existsSync(usageFile)) return;
 
-    const maxBytes = parsePositiveInt(process.env.GOLDBAND_USAGE_MAX_BYTES, DEFAULT_MAX_BYTES);
+    const maxBytes = parsePositiveInt(
+      process.env.GOLDBAND_USAGE_MAX_BYTES,
+      DEFAULT_MAX_BYTES,
+    );
     const stats = fs.statSync(usageFile);
     if (stats.size < maxBytes) return;
 
@@ -35,7 +43,10 @@ function rotateIfOversized(usageFile) {
 
 function cleanupExpiredUsageFiles(usageFile) {
   try {
-    const retentionDays = parsePositiveInt(process.env.GOLDBAND_USAGE_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
+    const retentionDays = parsePositiveInt(
+      process.env.GOLDBAND_USAGE_RETENTION_DAYS,
+      DEFAULT_RETENTION_DAYS,
+    );
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     const nowMs = Date.now();
     const directory = path.dirname(usageFile);
@@ -68,7 +79,7 @@ function appendUsageEvent(entry) {
   const usageFile = getUsageFile();
   const payload = {
     ...entry,
-    recordedAt: new Date().toISOString()
+    recordedAt: new Date().toISOString(),
   };
 
   try {
@@ -84,5 +95,5 @@ function appendUsageEvent(entry) {
 module.exports = {
   appendUsageEvent,
   getUsageFile,
-  usageTelemetryEnabled
+  usageTelemetryEnabled,
 };

@@ -2,18 +2,21 @@
 
 const { readStdinJson } = require('../lib/utils');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
-const { formatSuggestions, matchPrompt } = require('../lib/skill-activation/activation-rules');
+const {
+  formatSuggestions,
+  matchPrompt,
+} = require('../lib/skill-activation/activation-rules');
 const {
   shouldEmitClaimVerificationBaseline,
-  shouldEmitSuggestions
+  shouldEmitSuggestions,
 } = require('../lib/skill-activation/session-state');
 const {
   CLAIM_VERIFICATION_BASELINE_VERSION,
-  formatClaimVerificationBaseline
+  formatClaimVerificationBaseline,
 } = require('../lib/skill-activation/claim-verification-baseline');
 
 function buildMatchUsageEvents(matches, sessionId, prompt) {
-  return matches.map(match => ({
+  return matches.map((match) => ({
     category: 'prompt-trigger',
     name: match.skill,
     action: 'matched',
@@ -24,8 +27,8 @@ function buildMatchUsageEvents(matches, sessionId, prompt) {
       score: match.score,
       matchedKeywords: match.matchedKeywords,
       matchedPatterns: match.matchedPatterns,
-      promptPreview: String(prompt || '').slice(0, 160)
-    }
+      promptPreview: String(prompt || '').slice(0, 160),
+    },
   }));
 }
 
@@ -37,8 +40,8 @@ function buildSuggestionUsageEvent(matches, sessionId) {
     sessionId,
     source: 'skill-activation-suggestions',
     detail: {
-      skills: matches.map(match => match.skill)
-    }
+      skills: matches.map((match) => match.skill),
+    },
   };
 }
 
@@ -52,9 +55,14 @@ async function main() {
     appendUsageEvent(event);
   }
 
-  const suggestedSkills = matches.slice(0, 3).map(match => match.skill);
-  const shouldEmitBaseline = shouldEmitClaimVerificationBaseline(sessionId, CLAIM_VERIFICATION_BASELINE_VERSION);
-  const shouldEmitSuggestionsForPrompt = suggestedSkills.length > 0 && shouldEmitSuggestions(sessionId, suggestedSkills);
+  const suggestedSkills = matches.slice(0, 3).map((match) => match.skill);
+  const shouldEmitBaseline = shouldEmitClaimVerificationBaseline(
+    sessionId,
+    CLAIM_VERIFICATION_BASELINE_VERSION,
+  );
+  const shouldEmitSuggestionsForPrompt =
+    suggestedSkills.length > 0 &&
+    shouldEmitSuggestions(sessionId, suggestedSkills);
 
   if (!shouldEmitBaseline && !shouldEmitSuggestionsForPrompt) {
     process.stdout.write('{}');
@@ -67,15 +75,19 @@ async function main() {
 
   const additionalContext = [
     shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
-    shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null
-  ].filter(Boolean).join('\n\n');
+    shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'UserPromptSubmit',
-      additionalContext
-    }
-  }));
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext,
+      },
+    }),
+  );
 }
 
 main().catch(() => {

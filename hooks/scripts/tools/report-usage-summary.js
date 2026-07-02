@@ -1,42 +1,39 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
-const path = require('path');
 const { getUsageFile } = require('../lib/hook-router/usage-telemetry');
 
 function parseArgs(argv) {
   const options = {
     json: argv.includes('--json'),
     days: 30,
-    limit: 20
+    limit: 20,
   };
 
   for (let index = 2; index < argv.length; index += 1) {
-    const token = argv[index];
-
-    if (token === '--json') {
-      continue;
-    }
-
-    if (token === '--days') {
-      const next = parseInt(argv[index + 1], 10);
-      if (Number.isFinite(next) && next > 0) {
-        options.days = next;
-      }
-      index += 1;
-      continue;
-    }
-
-    if (token === '--limit') {
-      const next = parseInt(argv[index + 1], 10);
-      if (Number.isFinite(next) && next > 0) {
-        options.limit = next;
-      }
-      index += 1;
-    }
+    index = consumeArg(options, argv, index);
   }
 
   return options;
+}
+
+function consumeArg(options, argv, index) {
+  const token = argv[index];
+  if (token === '--json') return index;
+  if (token === '--days')
+    return consumePositiveInt(options, argv, index, 'days');
+  if (token === '--limit') {
+    return consumePositiveInt(options, argv, index, 'limit');
+  }
+  return index;
+}
+
+function consumePositiveInt(options, argv, index, key) {
+  const next = parseInt(argv[index + 1], 10);
+  if (Number.isFinite(next) && next > 0) {
+    options[key] = next;
+  }
+  return index + 1;
 }
 
 function loadEvents(usageFile) {
@@ -44,10 +41,11 @@ function loadEvents(usageFile) {
     return [];
   }
 
-  return fs.readFileSync(usageFile, 'utf8')
+  return fs
+    .readFileSync(usageFile, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map(line => {
+    .map((line) => {
       try {
         return JSON.parse(line);
       } catch {
@@ -58,8 +56,8 @@ function loadEvents(usageFile) {
 }
 
 function summarizeEvents(events, options, usageFile) {
-  const cutoffMs = Date.now() - (options.days * 24 * 60 * 60 * 1000);
-  const scoped = events.filter(event => {
+  const cutoffMs = Date.now() - options.days * 24 * 60 * 60 * 1000;
+  const scoped = events.filter((event) => {
     const recordedAt = Date.parse(event.recordedAt || '');
     return Number.isFinite(recordedAt) && recordedAt >= cutoffMs;
   });
@@ -81,7 +79,10 @@ function summarizeEvents(events, options, usageFile) {
       const [category, name, action] = key.split('|');
       return { category, name, action, count };
     })
-    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .sort(
+      (left, right) =>
+        right.count - left.count || left.name.localeCompare(right.name),
+    )
     .slice(0, options.limit);
 
   return {
@@ -89,7 +90,7 @@ function summarizeEvents(events, options, usageFile) {
     days: options.days,
     totalEvents: scoped.length,
     uniqueSessions: sessions.size,
-    topEvents
+    topEvents,
   };
 }
 
@@ -110,7 +111,9 @@ function printHuman(summary) {
   console.log('');
   console.log('Top Events:');
   for (const event of summary.topEvents) {
-    console.log(`- ${event.category}/${event.name}/${event.action}: ${event.count}`);
+    console.log(
+      `- ${event.category}/${event.name}/${event.action}: ${event.count}`,
+    );
   }
 }
 

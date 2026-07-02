@@ -8,7 +8,10 @@
 
 const { evaluatePreToolUse } = require('../lib/hook-router/pretool-policy');
 const { evaluatePostToolUse } = require('../lib/hook-router/posttool-policy');
-const { evaluateStop, evaluateNotification } = require('../lib/hook-router/stop-policy');
+const {
+  evaluateStop,
+  evaluateNotification,
+} = require('../lib/hook-router/stop-policy');
 const { evaluateLifecycle } = require('../lib/hook-router/lifecycle-policy');
 const { appendMetric } = require('../lib/hook-router/metrics');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
@@ -16,11 +19,11 @@ const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
 const MAX_STDIN_BYTES = 1024 * 1024;
 
 function readStdinRaw() {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     let data = '';
 
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => {
+    process.stdin.on('data', (chunk) => {
       if (data.length < MAX_STDIN_BYTES) {
         data += chunk;
       }
@@ -45,7 +48,7 @@ function defaultOutcome() {
     logs: [],
     outputJson: null,
     spawnedProcesses: 0,
-    usageEvents: []
+    usageEvents: [],
   };
 }
 
@@ -69,11 +72,11 @@ function dispatchByEvent(input) {
   }
 
   if (
-    hookEventName === 'SessionStart'
-    || hookEventName === 'SessionEnd'
-    || hookEventName === 'PostToolUseFailure'
-    || hookEventName === 'PreCompact'
-    || hookEventName === 'PostCompact'
+    hookEventName === 'SessionStart' ||
+    hookEventName === 'SessionEnd' ||
+    hookEventName === 'PostToolUseFailure' ||
+    hookEventName === 'PreCompact' ||
+    hookEventName === 'PostCompact'
   ) {
     return evaluateLifecycle(input);
   }
@@ -107,7 +110,7 @@ function buildMetric(input, outcome, durationMs) {
     durationMs: Number(durationMs.toFixed(3)),
     spawnedProcesses,
     totalProcesses: 1 + spawnedProcesses,
-    sessionId: input.session_id || process.env.CLAUDE_SESSION_ID || null
+    sessionId: input.session_id || process.env.CLAUDE_SESSION_ID || null,
   };
 }
 
@@ -119,7 +122,7 @@ async function main() {
   const rawOutcome = dispatchByEvent(input);
   const outcome = {
     ...defaultOutcome(),
-    ...rawOutcome
+    ...rawOutcome,
   };
   const endNs = process.hrtime.bigint();
 
@@ -146,8 +149,11 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(error => {
-  const message = error && error.stack ? error.stack : String(error || 'Unknown hook router error');
+main().catch((error) => {
+  const message =
+    error && error.stack
+      ? error.stack
+      : String(error || 'Unknown hook router error');
   console.error(`[HookRouterError] ${message}`);
   process.exit(1);
 });

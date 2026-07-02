@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+message_file="${1:?missing commit message file}"
+
+if [ "${GOLDBAND_STYLE_GATE:-1}" = "0" ]; then
+  state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/goldband"
+  mkdir -p "$state_dir"
+  printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$repo_root" "commit-msg bypass via GOLDBAND_STYLE_GATE=0" >> "$state_dir/style-gate-bypass.log"
+  echo "[goldband] WARNING: commit-msg gate bypassed with GOLDBAND_STYLE_GATE=0" >&2
+  exit 0
+fi
+
+if [ -f "$repo_root/.goldband-no-style-gate" ]; then
+  exit 0
+fi
+
+if [ "${GOLDBAND_GIT_WORKFLOW_GATE:-0}" != "1" ] && [ ! -f "$repo_root/.goldband-git-workflow.json" ]; then
+  exit 0
+fi
+
+first_line="$(sed -n '1p' "$message_file" | tr -d '\r')"
+case "$first_line" in
+  Merge\ *|Revert\ \"*|fixup!\ *|squash!\ *)
+    exit 0
+    ;;
+esac
+
+if ! printf '%s\n' "$first_line" | grep -Eq '^(feat|fix|refactor|docs|test|chore|perf|ci)(\([A-Za-z0-9._-]+\))?!?: .+'; then
+  {
+    echo "[goldband] commit message must follow Conventional Commits:"
+    echo "  <type>[optional scope][!]: <description>"
+    echo "  allowed types: feat, fix, refactor, docs, test, chore, perf, ci"
+    echo "  got: ${first_line:-<empty>}"
+  } >&2
+  exit 1
+fi

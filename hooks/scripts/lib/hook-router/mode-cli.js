@@ -2,7 +2,7 @@ const {
   normalizeSessionId,
   readModeState,
   setModeActive,
-  getActiveModes
+  getActiveModes,
 } = require('./mode-state');
 const { appendUsageEvent } = require('./usage-telemetry');
 
@@ -10,7 +10,7 @@ function parseArgs(argv) {
   const options = {
     action: 'status',
     sessionId: process.env.CLAUDE_SESSION_ID || 'default',
-    json: false
+    json: false,
   };
 
   for (let index = 2; index < argv.length; index += 1) {
@@ -42,12 +42,14 @@ function parseArgs(argv) {
   return options;
 }
 
-function buildSummary(action, modeName, displayName, sessionId, protections) {
+function buildSummary(options) {
+  const { action, modeName, displayName, sessionId, protections } = options;
   const state = readModeState(sessionId);
   const activeModes = getActiveModes(sessionId);
-  const modeState = state.modes[modeName] && typeof state.modes[modeName] === 'object'
-    ? state.modes[modeName]
-    : null;
+  const modeState =
+    state.modes[modeName] && typeof state.modes[modeName] === 'object'
+      ? state.modes[modeName]
+      : null;
 
   return {
     action,
@@ -58,16 +60,20 @@ function buildSummary(action, modeName, displayName, sessionId, protections) {
     activeModes,
     storageSource: state.storageSource,
     stateFile: state.filePath,
-    updatedAt: modeState ? modeState.updatedAt || state.updatedAt : state.updatedAt,
-    protections: protections.map(item => ({
+    updatedAt: modeState
+      ? modeState.updatedAt || state.updatedAt
+      : state.updatedAt,
+    protections: protections.map((item) => ({
       rule: item.rule,
-      detail: item.detail
-    }))
+      detail: item.detail,
+    })),
   };
 }
 
 function printHuman(summary) {
-  console.log(`${summary.displayName}: ${summary.active ? 'ENABLED' : 'DISABLED'}`);
+  console.log(
+    `${summary.displayName}: ${summary.active ? 'ENABLED' : 'DISABLED'}`,
+  );
   console.log(`Session: ${summary.sessionId}`);
   console.log(`Storage: ${summary.storageSource}`);
   console.log(`State File: ${summary.stateFile}`);
@@ -82,10 +88,13 @@ function printHuman(summary) {
   }
 
   console.log('');
-  console.log(`Usage: node scripts/${summary.modeName}.js <enable|disable|status> [--session <id>] [--json]`);
+  console.log(
+    `Usage: node scripts/${summary.modeName}.js <enable|disable|status> [--session <id>] [--json]`,
+  );
 }
 
-function emitUsageEvent(modeName, action, sessionId, source, protections) {
+function emitUsageEvent(options) {
+  const { modeName, action, sessionId, source, protections } = options;
   if (action !== 'enable' && action !== 'disable') {
     return;
   }
@@ -97,19 +106,13 @@ function emitUsageEvent(modeName, action, sessionId, source, protections) {
     sessionId,
     source,
     detail: {
-      protectionCount: protections.length
-    }
+      protectionCount: protections.length,
+    },
   });
 }
 
 function runModeCli(config) {
-  const {
-    argv,
-    modeName,
-    displayName,
-    protections,
-    source
-  } = config;
+  const { argv, modeName, displayName, protections, source } = config;
   const options = parseArgs(argv);
   const sessionId = normalizeSessionId(options.sessionId);
 
@@ -121,8 +124,20 @@ function runModeCli(config) {
     throw new Error(`Unknown action: ${options.action}`);
   }
 
-  emitUsageEvent(modeName, options.action, sessionId, source, protections);
-  const summary = buildSummary(options.action, modeName, displayName, sessionId, protections);
+  emitUsageEvent({
+    modeName,
+    action: options.action,
+    sessionId,
+    source,
+    protections,
+  });
+  const summary = buildSummary({
+    action: options.action,
+    modeName,
+    displayName,
+    sessionId,
+    protections,
+  });
 
   if (options.json) {
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
@@ -133,5 +148,5 @@ function runModeCli(config) {
 }
 
 module.exports = {
-  runModeCli
+  runModeCli,
 };

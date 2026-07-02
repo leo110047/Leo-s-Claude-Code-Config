@@ -247,6 +247,31 @@ install_hooks() {
     merge_hooks_config
 }
 
+install_style_gate() {
+    if [ ! -d "$GIT_HOOKS_DIR" ]; then
+        echo -e "  ${YELLOW}[跳過] Git style gate — 來源不存在${NC}"
+        return
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}[跳過] Git style gate — git 不可用${NC}"
+        return
+    fi
+
+    chmod +x "$GIT_HOOKS_DIR/pre-commit" "$GIT_HOOKS_DIR/commit-msg" 2>/dev/null || true
+
+    local current_hooks_path
+    current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+    if [ -n "$current_hooks_path" ] && [ "$current_hooks_path" != "$GIT_HOOKS_DIR" ]; then
+        echo -e "  ${YELLOW}[保留] global core.hooksPath 已設定為 $current_hooks_path${NC}"
+        echo -e "  ${CYAN}  若要啟用 goldband style gate，請先確認既有 hook 後手動設定:${NC}"
+        echo -e "  ${CYAN}  git config --global core.hooksPath \"$GIT_HOOKS_DIR\"${NC}"
+        return
+    fi
+
+    git config --global core.hooksPath "$GIT_HOOKS_DIR"
+    echo -e "  ${GREEN}[安裝] Git style gate -> global core.hooksPath=$GIT_HOOKS_DIR${NC}"
+}
+
 install_unity() {
     local project_dir
     project_dir="$(pwd)"

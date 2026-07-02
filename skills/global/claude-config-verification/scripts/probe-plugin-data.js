@@ -5,7 +5,11 @@ const os = require('os');
 const path = require('path');
 
 function resolveHookModule(relativePath) {
-  const candidate = path.resolve(__dirname, '../../../../hooks/scripts/lib/hook-router', relativePath);
+  const candidate = path.resolve(
+    __dirname,
+    '../../../../hooks/scripts/lib/hook-router',
+    relativePath,
+  );
   return fs.existsSync(candidate) ? require(candidate) : null;
 }
 
@@ -13,27 +17,28 @@ const usageTelemetry = resolveHookModule('usage-telemetry.js');
 
 function parseArgs(argv) {
   return {
-    json: argv.includes('--json')
+    json: argv.includes('--json'),
   };
 }
 
 function resolveBaseDir() {
-  const pluginDataDir = typeof process.env.CLAUDE_PLUGIN_DATA === 'string'
-    ? process.env.CLAUDE_PLUGIN_DATA.trim()
-    : '';
+  const pluginDataDir =
+    typeof process.env.CLAUDE_PLUGIN_DATA === 'string'
+      ? process.env.CLAUDE_PLUGIN_DATA.trim()
+      : '';
 
   if (pluginDataDir.length > 0) {
     return {
       source: 'CLAUDE_PLUGIN_DATA',
       envPresent: true,
-      baseDir: path.join(pluginDataDir, 'claude-config-verification')
+      baseDir: path.join(pluginDataDir, 'claude-config-verification'),
     };
   }
 
   return {
     source: 'temp-fallback',
     envPresent: false,
-    baseDir: path.join(os.tmpdir(), 'claude-config-verification')
+    baseDir: path.join(os.tmpdir(), 'claude-config-verification'),
   };
 }
 
@@ -42,7 +47,7 @@ function runProbe() {
   const probeFile = path.join(resolved.baseDir, `probe-${process.pid}.json`);
   const payload = {
     createdAt: new Date().toISOString(),
-    source: resolved.source
+    source: resolved.source,
   };
 
   try {
@@ -59,7 +64,7 @@ function runProbe() {
       source: resolved.source,
       envPresent: resolved.envPresent,
       baseDir: resolved.baseDir,
-      fallbackUsed: !resolved.envPresent
+      fallbackUsed: !resolved.envPresent,
     };
   } catch (error) {
     return {
@@ -70,7 +75,7 @@ function runProbe() {
       envPresent: resolved.envPresent,
       baseDir: resolved.baseDir,
       fallbackUsed: !resolved.envPresent,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -97,12 +102,13 @@ function main() {
     name: 'claude-config-verification',
     action: 'probe-plugin-data',
     sessionId: process.env.CLAUDE_SESSION_ID || null,
-    source: 'skills/global/claude-config-verification/scripts/probe-plugin-data.js',
+    source:
+      'skills/global/claude-config-verification/scripts/probe-plugin-data.js',
     detail: {
       ok: result.ok,
       source: result.source,
-      fallbackUsed: result.fallbackUsed
-    }
+      fallbackUsed: result.fallbackUsed,
+    },
   });
 
   if (args.json) {

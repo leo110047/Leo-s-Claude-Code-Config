@@ -32,6 +32,7 @@ CODEX_HOOKS_DIR="$CODEX_DIR/hooks"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
 CODEX_SKILLS_DIR="$HOME/.agents/skills"
 CODEX_SKILL_PROFILE_FILE="$CODEX_SKILLS_DIR/.goldband-profile"
+GIT_HOOKS_DIR="$REPO_DIR/git-hooks"
 SKILL_CATALOG_FILE="$REPO_DIR/shell/install/skill-catalog.txt"
 LEGACY_DEV_FLAG_USED=false
 
@@ -58,6 +59,7 @@ show_help() {
     echo "  contexts    只安裝 contexts"
     echo "  rules       只安裝 rules"
     echo "  hooks       只安裝 hooks"
+    echo "  style-gate  安裝全域 git style gate（pre-commit + commit-msg）"
     echo "  launchers   安裝 shell 啟動整合（claude/codex 啟動前自動檢查更新）"
     echo "  unity       安裝 Unity 專案 skills 到當前目錄"
     echo "  ----- Codex -----"
@@ -101,6 +103,8 @@ load_install_modules() {
     local install_module
     for install_module in \
         "$REPO_DIR/shell/install/common.sh" \
+        "$REPO_DIR/shell/install/codex.sh" \
+        "$REPO_DIR/shell/install/managed-profiles.sh" \
         "$REPO_DIR/shell/install/launchers.sh" \
         "$REPO_DIR/shell/install/workflow.sh" \
         "$REPO_DIR/shell/install/profiles.sh" \
@@ -228,6 +232,9 @@ for arg in "$@"; do
             ;;
         hooks)
             install_hooks
+            ;;
+        style-gate)
+            install_style_gate
             ;;
         launchers)
             install_launchers

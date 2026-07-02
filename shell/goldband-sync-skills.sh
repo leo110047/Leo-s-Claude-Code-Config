@@ -53,6 +53,8 @@ main() {
 
   # shellcheck source=/dev/null
   . "$REPO_DIR/shell/install/common.sh"
+  # shellcheck source=/dev/null
+  . "$REPO_DIR/shell/install/managed-profiles.sh"
 
   local changed=0
 

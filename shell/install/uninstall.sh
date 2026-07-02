@@ -132,5 +132,16 @@ do_uninstall() {
         fi
     fi
 
+    if command -v git >/dev/null 2>&1; then
+        local current_hooks_path
+        current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+        if [ "$current_hooks_path" = "$GIT_HOOKS_DIR" ]; then
+            git config --global --unset core.hooksPath
+            echo -e "  ${GREEN}[移除] global core.hooksPath goldband style gate${NC}"
+        elif [ -n "$current_hooks_path" ]; then
+            echo -e "  ${YELLOW}[保留] global core.hooksPath — 不是 goldband 管理: $current_hooks_path${NC}"
+        fi
+    fi
+
     echo -e "${GREEN}完成${NC}"
 }

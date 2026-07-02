@@ -1,40 +1,50 @@
 #!/usr/bin/env node
 
 const MAX_STDIN_BYTES = 1024 * 1024;
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const HIGH_RISK_SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/,
   /\bAKIA[0-9A-Z]{16}\b/,
   /\bghp_[A-Za-z0-9_]{30,}\b/,
-  /\bgithub_pat_[A-Za-z0-9_]{40,}\b/
+  /\bgithub_pat_[A-Za-z0-9_]{40,}\b/,
 ];
 
 const ADVISORY_SECRET_PATTERNS = [
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{24,}\b/,
-  /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token)\s*[=:]\s*['"][A-Za-z0-9_-]{20,}['"]/i
+  /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token)\s*[=:]\s*['"][A-Za-z0-9_-]{20,}['"]/i,
 ];
 
 const WORKFLOW_HINTS = [
   {
     name: 'review',
     pattern: /\b(code\s*review|review|pr\s*review)\b|審查|檢查/i,
-    message: 'For full code review, prefer /goldband-review. Use bounded reviewer agents only as a second pass.'
+    message:
+      'For full code review, prefer /goldband-review. Use bounded reviewer agents only as a second pass.',
   },
   {
     name: 'debug',
-    pattern: /\b(debug|bug|error|failure|failing|failed|root cause|regression)\b|除錯|錯誤|失敗|異常|根因/i,
-    message: 'For bugs or failing commands, capture the exact failure first and prefer /goldband-investigate before fixing.'
+    pattern:
+      /\b(debug|bug|error|failure|failing|failed|root cause|regression)\b|除錯|錯誤|失敗|異常|根因/i,
+    message:
+      'For bugs or failing commands, capture the exact failure first and prefer /goldband-investigate before fixing.',
   },
   {
     name: 'security',
-    pattern: /\b(security|secret|token|credential|auth|permission|cve|vulnerability)\b|安全|權限|憑證|密鑰|漏洞/i,
-    message: 'For security-sensitive work, prefer /goldband-cso or the security checklist before changing behavior.'
+    pattern:
+      /\b(security|secret|token|credential|auth|permission|cve|vulnerability)\b|安全|權限|憑證|密鑰|漏洞/i,
+    message:
+      'For security-sensitive work, prefer /goldband-cso or the security checklist before changing behavior.',
   },
   {
     name: 'planning',
-    pattern: /\b(plan|planning|proposal|roadmap|architecture|design)\b|計畫|規劃|拆解|架構/i,
-    message: 'For multi-file or risky planning, prefer /plan and use /goldband-plan-eng-review before implementation.'
-  }
+    pattern:
+      /\b(plan|planning|proposal|roadmap|architecture|design)\b|計畫|規劃|拆解|架構/i,
+    message:
+      'For multi-file or risky planning, prefer /plan and use /goldband-plan-eng-review before implementation.',
+  },
 ];
 
 function readStdinRaw() {
@@ -67,8 +77,8 @@ function buildAdditionalContextOutput(hookEventName, additionalContext) {
   return {
     hookSpecificOutput: {
       hookEventName,
-      additionalContext
-    }
+      additionalContext,
+    },
   };
 }
 
@@ -81,8 +91,8 @@ function buildPreToolUseDeny(reason) {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
-      permissionDecisionReason: reason
-    }
+      permissionDecisionReason: reason,
+    },
   };
 }
 
@@ -92,9 +102,9 @@ function buildPermissionRequestDeny(reason) {
       hookEventName: 'PermissionRequest',
       decision: {
         behavior: 'deny',
-        message: reason
-      }
-    }
+        message: reason,
+      },
+    },
   };
 }
 
@@ -120,7 +130,7 @@ function writeResult(result) {
 
 function secretWarningForPatch(command) {
   const patch = String(command || '');
-  if (ADVISORY_SECRET_PATTERNS.some(pattern => pattern.test(patch))) {
+  if (ADVISORY_SECRET_PATTERNS.some((pattern) => pattern.test(patch))) {
     return 'Patch content contains credential-shaped text. Verify it is a fixture/example and not a real secret before committing.';
   }
   return null;
@@ -133,7 +143,7 @@ function buildPostToolUseFailureContext(input) {
   if (exitCode && Number(exitCode) !== 0) {
     return resultAdditionalContext(
       'PostToolUse',
-      `${toolName} exited non-zero. Capture the exact failure and follow systematic debugging before fixing.`
+      `${toolName} exited non-zero. Capture the exact failure and follow systematic debugging before fixing.`,
     );
   }
 
@@ -144,23 +154,82 @@ function buildPostToolUsePatchContext(input) {
   const command = input.tool_input?.command || '';
   if (input.tool_name !== 'apply_patch') return null;
 
-  const messages = [];
-  if (/console\.log/.test(command)) {
-    messages.push('The patch contains console.log. Verify it is intentional before committing.');
-  }
+  const files = parseApplyPatchFiles(command);
+  if (files.length === 0) return null;
 
-  if (messages.length === 0) return null;
-  return resultAdditionalContext('PostToolUse', messages.join(' '));
+  const message = runStyleGateAdvisory(files);
+  if (!message) return null;
+  return resultAdditionalContext('PostToolUse', message);
 }
 
 function evaluatePostToolUseResult(input) {
-  return buildPostToolUseFailureContext(input) || buildPostToolUsePatchContext(input);
+  return (
+    buildPostToolUseFailureContext(input) || buildPostToolUsePatchContext(input)
+  );
+}
+
+function parseApplyPatchFiles(command) {
+  const files = [];
+  for (const line of String(command || '').split(/\r?\n/)) {
+    const match = line.match(/^\*\*\* (?:Add|Update) File: (.+)$/);
+    if (match) files.push(match[1].trim());
+  }
+  return [...new Set(files)];
+}
+
+function formatStyleGateIssue(issue) {
+  const location = issue.file
+    ? `${issue.file}${issue.line ? `:${issue.line}` : ''}`
+    : 'repo';
+  return `[${issue.rule}] ${location}: ${issue.message}`;
+}
+
+function runStyleGateAdvisory(files) {
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const scriptPath = path.join(repoRoot, 'scripts', 'check-code-style.mjs');
+  if (!fs.existsSync(scriptPath)) return null;
+
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, '--files', ...files, '--format', 'json'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      maxBuffer: 5 * 1024 * 1024,
+      env: { ...process.env, GOLDBAND_STYLE_GATE_HOST: '1' },
+    },
+  );
+
+  if (result.error) {
+    return `goldband style gate advisory failed: ${result.error.message}`;
+  }
+  if (result.status === 2) {
+    return ['goldband style gate advisory could not run.', result.stderr.trim()]
+      .filter(Boolean)
+      .join(' ');
+  }
+  if (!result.stdout.trim()) return null;
+
+  try {
+    const parsed = JSON.parse(result.stdout);
+    const issues = [...(parsed.violations || []), ...(parsed.advisories || [])];
+    if (issues.length === 0) return null;
+    return [
+      'goldband style gate advisory:',
+      ...issues.slice(0, 8).map(formatStyleGateIssue),
+      'These warnings are advisory here; pre-commit enforces blocking rules.',
+    ].join(' ');
+  } catch {
+    return 'goldband style gate advisory returned invalid JSON.';
+  }
 }
 
 function evaluateSubagentStopResult(input) {
   const message = input.last_assistant_message || '';
   if (hasCompletionClaim(message) && !hasEvidence(message)) {
-    return resultSystemMessage('Subagent output claims completion without concrete evidence. Treat it as unverified until checked in the parent session.');
+    return resultSystemMessage(
+      'Subagent output claims completion without concrete evidence. Treat it as unverified until checked in the parent session.',
+    );
   }
   return null;
 }
@@ -168,7 +237,9 @@ function evaluateSubagentStopResult(input) {
 function evaluateStopResult(input) {
   const message = input.last_assistant_message || '';
   if (hasCompletionClaim(message) && !hasEvidence(message)) {
-    return resultSystemMessage('The response appears to claim completion without concrete evidence. Re-check files or commands before relying on it.');
+    return resultSystemMessage(
+      'The response appears to claim completion without concrete evidence. Re-check files or commands before relying on it.',
+    );
   }
   return null;
 }
@@ -176,13 +247,22 @@ function evaluateStopResult(input) {
 function evaluateLifecycleResult(input) {
   const eventName = input.hook_event_name || '';
   if (eventName === 'SessionStart') {
-    return resultAdditionalContext('SessionStart', 'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.');
+    return resultAdditionalContext(
+      'SessionStart',
+      'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.',
+    );
   }
   if (eventName === 'PreCompact') {
-    return resultAdditionalContext('PreCompact', 'Preserve goal, verification state, and blockers in the compact summary.');
+    return resultAdditionalContext(
+      'PreCompact',
+      'Preserve goal, verification state, and blockers in the compact summary.',
+    );
   }
   if (eventName === 'PostCompact') {
-    return resultAdditionalContext('PostCompact', 'Re-check current files before making completion claims after compaction.');
+    return resultAdditionalContext(
+      'PostCompact',
+      'Re-check current files before making completion claims after compaction.',
+    );
   }
   if (eventName === 'Stop') {
     return evaluateStopResult(input);
@@ -197,9 +277,9 @@ function evaluateUserPromptSubmitResult(input) {
     return null;
   }
 
-  const messages = WORKFLOW_HINTS
-    .filter(hint => hint.pattern.test(prompt))
-    .map(hint => hint.message);
+  const messages = WORKFLOW_HINTS.filter((hint) =>
+    hint.pattern.test(prompt),
+  ).map((hint) => hint.message);
 
   if (messages.length === 0) return null;
   return resultAdditionalContext('UserPromptSubmit', messages.join(' '));
@@ -215,7 +295,9 @@ function evaluatePreToolUseResult(input) {
   const toolName = input.tool_name || '';
   const contexts = [];
   if (toolName === 'Bash' && shouldWarnDevServer(command)) {
-    contexts.push('Dev server commands are allowed, but prefer a persistent terminal or tmux so logs remain available.');
+    contexts.push(
+      'Dev server commands are allowed, but prefer a persistent terminal or tmux so logs remain available.',
+    );
   }
 
   if (toolName === 'apply_patch') {
@@ -224,7 +306,9 @@ function evaluatePreToolUseResult(input) {
   }
 
   if (isProbablyMutatingMcp(toolName)) {
-    contexts.push('This MCP tool name looks mutating. Verify authorization and expected side effects before proceeding.');
+    contexts.push(
+      'This MCP tool name looks mutating. Verify authorization and expected side effects before proceeding.',
+    );
   }
 
   if (contexts.length === 0) return null;
@@ -242,9 +326,11 @@ function evaluatePermissionRequestResult(input) {
 function evaluateInput(input) {
   const eventName = input.hook_event_name || '';
 
-  if (eventName === 'UserPromptSubmit') return evaluateUserPromptSubmitResult(input);
+  if (eventName === 'UserPromptSubmit')
+    return evaluateUserPromptSubmitResult(input);
   if (eventName === 'PreToolUse') return evaluatePreToolUseResult(input);
-  if (eventName === 'PermissionRequest') return evaluatePermissionRequestResult(input);
+  if (eventName === 'PermissionRequest')
+    return evaluatePermissionRequestResult(input);
   if (eventName === 'PostToolUse') return evaluatePostToolUseResult(input);
   if (eventName === 'SubagentStop') return evaluateSubagentStopResult(input);
   return evaluateLifecycleResult(input);
@@ -279,12 +365,17 @@ function isRiskyRmTarget(value) {
     '/usr',
     '/bin',
     '/sbin',
-    '/Applications'
+    '/Applications',
   ]);
   if (riskyExact.has(target)) return true;
   if (/^(?:\.{1,2}|~|\$HOME)?\/?\*$/.test(target)) return true;
   if (/^(?:\.|~|\$HOME)\//.test(target)) return true;
-  if (/^\/(?:Users|System|Library|private|etc|var|usr|bin|sbin|Applications)(?:\/|$)/.test(target)) return true;
+  if (
+    /^\/(?:Users|System|Library|private|etc|var|usr|bin|sbin|Applications)(?:\/|$)/.test(
+      target,
+    )
+  )
+    return true;
   return false;
 }
 
@@ -310,7 +401,10 @@ function isRecursiveForceRm(tokens, index) {
 
 function findGitCleanCommand(tokens) {
   for (let i = 0; i < tokens.length - 1; i += 1) {
-    if (stripQuotes(tokens[i]) === 'git' && stripQuotes(tokens[i + 1]) === 'clean') {
+    if (
+      stripQuotes(tokens[i]) === 'git' &&
+      stripQuotes(tokens[i + 1]) === 'clean'
+    ) {
       return i;
     }
   }
@@ -327,14 +421,21 @@ function isDestructiveGitClean(tokens, index) {
     if (!token.startsWith('-')) continue;
 
     if (token === '-n' || token === '--dry-run') hasDryRun = true;
-    if (token === '-f' || token === '--force' || /^-[A-Za-z]*f[A-Za-z]*$/.test(token)) hasForce = true;
+    if (
+      token === '-f' ||
+      token === '--force' ||
+      /^-[A-Za-z]*f[A-Za-z]*$/.test(token)
+    )
+      hasForce = true;
   }
 
   return hasForce && !hasDryRun;
 }
 
 function findHighRiskBash(command) {
-  const normalized = String(command || '').replace(/\s+/g, ' ').trim();
+  const normalized = String(command || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const tokens = tokenizeCommand(command);
 
   for (let i = 0; i < tokens.length; i += 1) {
@@ -351,49 +452,56 @@ function findHighRiskBash(command) {
   const rules = [
     {
       pattern: /^\s*sudo\b/,
-      reason: 'sudo commands are high-risk and require explicit user approval outside the hook path.'
+      reason:
+        'sudo commands are high-risk and require explicit user approval outside the hook path.',
     },
     {
       pattern: /\b(?:curl|wget)\b[\s\S]*\|\s*(?:sh|bash|zsh|fish)\b/,
-      reason: 'Piping downloaded code directly into a shell is high-risk.'
+      reason: 'Piping downloaded code directly into a shell is high-risk.',
     },
     {
       pattern: /\bdd\b[\s\S]*\bof=\/dev\//,
-      reason: 'Writing raw data to a device path is high-risk.'
+      reason: 'Writing raw data to a device path is high-risk.',
     },
     {
-      pattern: /\b(?:mkfs|fdisk|gparted)\b|\bdiskutil\s+(?:erase|partition|apfs\s+delete)/i,
-      reason: 'Disk formatting or partition commands are high-risk.'
+      pattern:
+        /\b(?:mkfs|fdisk|gparted)\b|\bdiskutil\s+(?:erase|partition|apfs\s+delete)/i,
+      reason: 'Disk formatting or partition commands are high-risk.',
     },
     {
-      pattern: /\bgit\s+reset\s+--hard\b|\bgit\s+push\b[^\n]*--force(?:-with-lease)?\b/,
-      reason: 'Destructive git history or untracked-file operations are high-risk.'
+      pattern:
+        /\bgit\s+reset\s+--hard\b|\bgit\s+push\b[^\n]*--force(?:-with-lease)?\b/,
+      reason:
+        'Destructive git history or untracked-file operations are high-risk.',
     },
     {
-      pattern: /\bchmod\s+-R\s+777\s+(?:\/|~|\$HOME|\.|\*)\b|\bchown\s+-R\b[\s\S]*\s(?:\/|~|\$HOME|\.|\*)\b/,
-      reason: 'Recursive permission or ownership changes over broad targets are high-risk.'
+      pattern:
+        /\bchmod\s+-R\s+777\s+(?:\/|~|\$HOME|\.|\*)\b|\bchown\s+-R\b[\s\S]*\s(?:\/|~|\$HOME|\.|\*)\b/,
+      reason:
+        'Recursive permission or ownership changes over broad targets are high-risk.',
     },
     {
-      pattern: /\b(?:cat|less|more|sed|awk)\b[\s\S]*(?:~\/\.ssh\/id_|~\/\.aws\/credentials|~\/\.netrc|~\/\.npmrc|~\/\.pypirc|~\/\.kube\/config)/,
-      reason: 'Reading credential files into the session is high-risk.'
+      pattern:
+        /\b(?:cat|less|more|sed|awk)\b[\s\S]*(?:~\/\.ssh\/id_|~\/\.aws\/credentials|~\/\.netrc|~\/\.npmrc|~\/\.pypirc|~\/\.kube\/config)/,
+      reason: 'Reading credential files into the session is high-risk.',
     },
     {
       pattern: /^\s*(?:env|printenv)\s*$/,
-      reason: 'Dumping the full environment can expose secrets.'
+      reason: 'Dumping the full environment can expose secrets.',
     },
     {
       pattern: /\bsecurity\s+find-(?:generic|internet)-password\b/,
-      reason: 'Reading passwords from the system keychain is high-risk.'
-    }
+      reason: 'Reading passwords from the system keychain is high-risk.',
+    },
   ];
 
-  const match = rules.find(rule => rule.pattern.test(normalized));
+  const match = rules.find((rule) => rule.pattern.test(normalized));
   return match ? match.reason : null;
 }
 
 function findHighRiskPatch(command) {
   const patch = String(command || '');
-  if (HIGH_RISK_SECRET_PATTERNS.some(pattern => pattern.test(patch))) {
+  if (HIGH_RISK_SECRET_PATTERNS.some((pattern) => pattern.test(patch))) {
     return 'Patch content appears to contain a high-confidence secret or private key.';
   }
 
@@ -424,11 +532,18 @@ function shouldWarnDevServer(command) {
 }
 
 function isProbablyMutatingMcp(toolName) {
-  return /^mcp__/.test(toolName) && /(?:create|update|delete|remove|write|send|post|deploy|merge|close|resolve)/i.test(toolName);
+  return (
+    /^mcp__/.test(toolName) &&
+    /(?:create|update|delete|remove|write|send|post|deploy|merge|close|resolve)/i.test(
+      toolName,
+    )
+  );
 }
 
 function hasCompletionClaim(message) {
-  return /\b(done|complete|completed|fixed|implemented|finished|resolved|all set|verified)\b|已完成|修好|處理好了/i.test(message || '');
+  return /\b(done|complete|completed|fixed|implemented|finished|resolved|all set|verified)\b|已完成|修好|處理好了/i.test(
+    message || '',
+  );
 }
 
 function hasEvidence(message) {
@@ -440,9 +555,9 @@ function hasEvidence(message) {
     /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+(?::\d+)?\b/,
     /\b[A-Za-z0-9_.-]+\.(?:js|jsx|ts|tsx|py|md|json|toml|yaml|yml|sh|mjs|cjs)(?::\d+)?\b/,
     /\bgit\s+(?:diff|status|show|log)\b/i,
-    /測試\s*(?:通過|失敗)|驗證\s*(?:通過|失敗)|指令[:：]|檔案[:：]|路徑[:：]/
+    /測試\s*(?:通過|失敗)|驗證\s*(?:通過|失敗)|指令[:：]|檔案[:：]|路徑[:：]/,
   ];
-  return evidencePatterns.some(pattern => pattern.test(text));
+  return evidencePatterns.some((pattern) => pattern.test(text));
 }
 
 async function main() {
@@ -462,5 +577,5 @@ module.exports = {
   findHighRiskBash,
   findHighRiskPatch,
   hasCompletionClaim,
-  hasEvidence
+  hasEvidence,
 };

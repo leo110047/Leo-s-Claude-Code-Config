@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+goldband_root="$(cd "$hook_dir/.." && pwd)"
+
+if [ "${GOLDBAND_STYLE_GATE:-1}" = "0" ]; then
+  state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/goldband"
+  mkdir -p "$state_dir"
+  printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$repo_root" "GOLDBAND_STYLE_GATE=0" >> "$state_dir/style-gate-bypass.log"
+  echo "[goldband] WARNING: style gate bypassed with GOLDBAND_STYLE_GATE=0" >&2
+  exit 0
+fi
+
+if [ -f "$repo_root/.goldband-no-style-gate" ]; then
+  echo "[goldband] style gate skipped: .goldband-no-style-gate exists" >&2
+  exit 0
+fi
+
+gate_script="${GOLDBAND_STYLE_GATE_SCRIPT:-$goldband_root/scripts/check-code-style.mjs}"
+if [ ! -f "$gate_script" ]; then
+  echo "[goldband] WARNING: style gate script missing, allowing commit: $gate_script" >&2
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[goldband] WARNING: node not found; style gate skipped" >&2
+  exit 0
+fi
+
+node "$gate_script" --staged

@@ -4,12 +4,18 @@ const fs = require('fs');
 const path = require('path');
 
 function resolveHookModule(relativePath) {
-  const candidate = path.resolve(__dirname, '../../../../hooks/scripts/lib/hook-router', relativePath);
+  const candidate = path.resolve(
+    __dirname,
+    '../../../../hooks/scripts/lib/hook-router',
+    relativePath,
+  );
   if (fs.existsSync(candidate)) {
     return require(candidate);
   }
 
-  throw new Error(`Unable to locate ${relativePath}. Install goldband hooks or run from the repo root.`);
+  throw new Error(
+    `Unable to locate ${relativePath}. Install goldband hooks or run from the repo root.`,
+  );
 }
 
 const { runModeCli } = resolveHookModule('mode-cli.js');
@@ -21,7 +27,7 @@ try {
     modeName: 'careful-mode',
     displayName: 'Careful Mode',
     protections: CAREFUL_MODE_GUARDS,
-    source: 'skills/global/careful-mode/scripts/careful-mode.js'
+    source: 'skills/global/careful-mode/scripts/careful-mode.js',
   });
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

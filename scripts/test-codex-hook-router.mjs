@@ -2,16 +2,20 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
 const routerPath = path.join(repoDir, 'codex', 'hooks', 'hook-router.js');
 
 function runHook(input) {
   const result = spawnSync(process.execPath, [routerPath], {
     input: JSON.stringify(input),
-    encoding: 'utf8'
+    encoding: 'utf8',
   });
 
   assert.equal(result.status, 0, result.stderr);
@@ -29,19 +33,27 @@ function testHighRiskBashDenied() {
     ['git clean -fd', /git clean/],
     ['git clean -f -d', /git clean/],
     ['git clean -x -f -d', /git clean/],
-    ['git clean -f', /git clean/]
+    ['git clean -f', /git clean/],
   ];
 
   for (const [command, reasonPattern] of commands) {
     const output = runHook({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
-      tool_input: { command }
+      tool_input: { command },
     });
 
-    assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse', command);
+    assert.equal(
+      output.hookSpecificOutput.hookEventName,
+      'PreToolUse',
+      command,
+    );
     assert.equal(output.hookSpecificOutput.permissionDecision, 'deny', command);
-    assert.match(output.hookSpecificOutput.permissionDecisionReason, reasonPattern, command);
+    assert.match(
+      output.hookSpecificOutput.permissionDecisionReason,
+      reasonPattern,
+      command,
+    );
   }
 }
 
@@ -49,7 +61,7 @@ function testGitCleanDryRunAllowed() {
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
-    tool_input: { command: 'git clean -n -fd' }
+    tool_input: { command: 'git clean -n -fd' },
   });
 
   assert.equal(output, null);
@@ -59,7 +71,7 @@ function testNormalBashAllowedSilently() {
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
-    tool_input: { command: 'npm test' }
+    tool_input: { command: 'npm test' },
   });
 
   assert.equal(output, null);
@@ -69,7 +81,7 @@ function testDevServerWarnsWithoutDeny() {
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
-    tool_input: { command: 'npm run dev' }
+    tool_input: { command: 'npm run dev' },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
@@ -81,20 +93,24 @@ function testPermissionRequestOnlyDeniesHighRisk() {
   const safeOutput = runHook({
     hook_event_name: 'PermissionRequest',
     tool_name: 'Bash',
-    tool_input: { command: 'git status' }
+    tool_input: { command: 'git status' },
   });
   assert.equal(safeOutput, null);
 
   const riskyOutput = runHook({
     hook_event_name: 'PermissionRequest',
     tool_name: 'Bash',
-    tool_input: { command: 'git reset --hard HEAD' }
+    tool_input: { command: 'git reset --hard HEAD' },
   });
-  assert.equal(riskyOutput.hookSpecificOutput.hookEventName, 'PermissionRequest');
+  assert.equal(
+    riskyOutput.hookSpecificOutput.hookEventName,
+    'PermissionRequest',
+  );
   assert.equal(riskyOutput.hookSpecificOutput.decision.behavior, 'deny');
 }
 
 function testPatchSecretDenied() {
+  const fakeToken = 'github_pat_' + 'a'.repeat(64);
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'apply_patch',
@@ -102,10 +118,10 @@ function testPatchSecretDenied() {
       command: [
         '*** Begin Patch',
         '*** Add File: leaked.txt',
-        '+github_pat_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-        '*** End Patch'
-      ].join('\n')
-    }
+        `+${fakeToken}`,
+        '*** End Patch',
+      ].join('\n'),
+    },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
@@ -122,14 +138,17 @@ function testPatchAdvisorySecretWarnsOnly() {
         '*** Begin Patch',
         '*** Add File: fixtures/openai-example.txt',
         '+sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
-        '*** End Patch'
-      ].join('\n')
-    }
+        '*** End Patch',
+      ].join('\n'),
+    },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
   assert.equal(output.hookSpecificOutput.permissionDecision, undefined);
-  assert.match(output.hookSpecificOutput.additionalContext, /credential-shaped/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /credential-shaped/,
+  );
 }
 
 function testGitPatchDenied() {
@@ -141,9 +160,9 @@ function testGitPatchDenied() {
         '*** Begin Patch',
         '*** Add File: .git/config',
         '+[core]',
-        '*** End Patch'
-      ].join('\n')
-    }
+        '*** End Patch',
+      ].join('\n'),
+    },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
@@ -155,18 +174,52 @@ function testPostToolUseFailureContext() {
   const output = runHook({
     hook_event_name: 'PostToolUse',
     tool_name: 'Bash',
-    tool_response: { exit_code: 1 }
+    tool_response: { exit_code: 1 },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PostToolUse');
-  assert.match(output.hookSpecificOutput.additionalContext, /systematic debugging/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /systematic debugging/,
+  );
+}
+
+function testPostToolUseStyleGateAdvisory() {
+  const fixtureDir = fs.mkdtempSync(path.join(repoDir, '.tmp-style-gate-'));
+  const fixtureFile = path.join(fixtureDir, 'fixture.ts');
+  const relativeFixture = path.relative(repoDir, fixtureFile);
+  try {
+    fs.writeFileSync(fixtureFile, 'console.log("debug");\n', 'utf8');
+    const output = runHook({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'apply_patch',
+      tool_input: {
+        command: [
+          '*** Begin Patch',
+          `*** Update File: ${relativeFixture}`,
+          '@@',
+          '+con' + 'sole.log("debug");',
+          '*** End Patch',
+        ].join('\n'),
+      },
+    });
+
+    assert.equal(output.hookSpecificOutput.hookEventName, 'PostToolUse');
+    assert.match(
+      output.hookSpecificOutput.additionalContext,
+      /goldband style gate advisory/,
+    );
+    assert.match(output.hookSpecificOutput.additionalContext, /console-log/);
+  } finally {
+    fs.rmSync(fixtureDir, { recursive: true, force: true });
+  }
 }
 
 function testLifecycleContexts() {
   const cases = [
     ['SessionStart', /context-restore/],
     ['PreCompact', /Preserve goal/],
-    ['PostCompact', /Re-check current files/]
+    ['PostCompact', /Re-check current files/],
   ];
 
   for (const [hookEventName, contextPattern] of cases) {
@@ -180,7 +233,7 @@ function testMutatingMcpWarnsOnly() {
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'mcp__github__create_issue',
-    tool_input: { title: 'test' }
+    tool_input: { title: 'test' },
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'PreToolUse');
@@ -191,33 +244,41 @@ function testMutatingMcpWarnsOnly() {
 function testPromptWorkflowHint() {
   const output = runHook({
     hook_event_name: 'UserPromptSubmit',
-    prompt: 'please review this diff and debug the failing test'
+    prompt: 'please review this diff and debug the failing test',
   });
 
   assert.equal(output.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.match(output.hookSpecificOutput.additionalContext, /goldband-review/);
-  assert.match(output.hookSpecificOutput.additionalContext, /goldband-investigate/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /goldband-investigate/,
+  );
 }
 
 function testSubagentCompletionNeedsEvidence() {
   const unsupportedClaims = [
     'Done, everything is complete.',
     'Done, verified.',
-    'Fixed. I checked the file.'
+    'Fixed. I checked the file.',
   ];
 
   for (const lastAssistantMessage of unsupportedClaims) {
     const output = runHook({
       hook_event_name: 'SubagentStop',
-      last_assistant_message: lastAssistantMessage
+      last_assistant_message: lastAssistantMessage,
     });
 
-    assert.match(output.systemMessage, /without concrete evidence/, lastAssistantMessage);
+    assert.match(
+      output.systemMessage,
+      /without concrete evidence/,
+      lastAssistantMessage,
+    );
   }
 
   const supportedOutput = runHook({
     hook_event_name: 'SubagentStop',
-    last_assistant_message: 'Fixed. Verified with node scripts/test-codex-hook-router.mjs and README.md:101.'
+    last_assistant_message:
+      'Fixed. Verified with node scripts/test-codex-hook-router.mjs and README.md:101.',
   });
   assert.equal(supportedOutput, null);
 }
@@ -231,6 +292,7 @@ testPatchSecretDenied();
 testPatchAdvisorySecretWarnsOnly();
 testGitPatchDenied();
 testPostToolUseFailureContext();
+testPostToolUseStyleGateAdvisory();
 testLifecycleContexts();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();

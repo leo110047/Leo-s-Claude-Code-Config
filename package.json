@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "lint:style": "node scripts/check-code-style.mjs",
+    "lint:style:staged": "node scripts/check-code-style.mjs --staged",
+    "test:style-gate": "node scripts/test-code-style-gate.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0"
+  }
+}

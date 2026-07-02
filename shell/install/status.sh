@@ -206,6 +206,22 @@ show_status() {
     fi
 
     echo ""
+    echo -e "${BLUE}Git style gate 狀態${NC}"
+    if command -v git >/dev/null 2>&1; then
+        local current_hooks_path
+        current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+        if [ "$current_hooks_path" = "$GIT_HOOKS_DIR" ]; then
+            echo -e "  ${GREEN}[OK]${NC} global core.hooksPath -> $GIT_HOOKS_DIR"
+        elif [ -n "$current_hooks_path" ]; then
+            echo -e "  ${YELLOW}[外部設定]${NC} global core.hooksPath -> $current_hooks_path"
+        else
+            echo -e "  ${RED}[未安裝]${NC} global core.hooksPath 未設定"
+        fi
+    else
+        echo -e "  ${YELLOW}[無法檢查]${NC} git 不可用"
+    fi
+
+    echo ""
     echo -e "${BLUE}workflow 狀態${NC}"
 
     local workflow_claude_dir="$HOME/.claude/skills/workflow"

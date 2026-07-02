@@ -1,17 +1,18 @@
-const {
-  getPersistentDataPath,
-  readFile,
-  writeFile
-} = require('../utils');
+const { getPersistentDataPath, readFile, writeFile } = require('../utils');
 
 function normalizeSessionId(sessionId) {
-  const raw = String(sessionId || process.env.CLAUDE_SESSION_ID || 'default').trim();
+  const raw = String(
+    sessionId || process.env.CLAUDE_SESSION_ID || 'default',
+  ).trim();
   return (raw.length > 0 ? raw : 'default').replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
 function resolveStateFile(sessionId) {
   const safeSessionId = normalizeSessionId(sessionId);
-  return getPersistentDataPath('skill-activation', `session-${safeSessionId}.json`);
+  return getPersistentDataPath(
+    'skill-activation',
+    `session-${safeSessionId}.json`,
+  );
 }
 
 function readState(sessionId) {
@@ -22,31 +23,32 @@ function readState(sessionId) {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
       lastBaselineVersion: null,
-      filePath
+      filePath,
     };
   }
 
   try {
     const parsed = JSON.parse(raw);
     const lastSuggestedSkills = Array.isArray(parsed.lastSuggestedSkills)
-      ? parsed.lastSuggestedSkills.filter(item => typeof item === 'string')
+      ? parsed.lastSuggestedSkills.filter((item) => typeof item === 'string')
       : [];
-    const lastBaselineVersion = typeof parsed.lastBaselineVersion === 'string'
-      ? parsed.lastBaselineVersion
-      : null;
+    const lastBaselineVersion =
+      typeof parsed.lastBaselineVersion === 'string'
+        ? parsed.lastBaselineVersion
+        : null;
 
     return {
       sessionId: normalizeSessionId(parsed.sessionId || sessionId),
       lastSuggestedSkills,
       lastBaselineVersion,
-      filePath
+      filePath,
     };
   } catch {
     return {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
       lastBaselineVersion: null,
-      filePath
+      filePath,
     };
   }
 }
@@ -57,16 +59,26 @@ function sameSkillList(left, right) {
 }
 
 function persistState(state, updates) {
-  writeFile(state.filePath, JSON.stringify({
-    sessionId: state.sessionId,
-    updatedAt: new Date().toISOString(),
-    lastSuggestedSkills: Array.isArray(updates.lastSuggestedSkills)
-      ? updates.lastSuggestedSkills
-      : state.lastSuggestedSkills,
-    lastBaselineVersion: Object.prototype.hasOwnProperty.call(updates, 'lastBaselineVersion')
-      ? updates.lastBaselineVersion
-      : state.lastBaselineVersion
-  }, null, 2) + '\n');
+  writeFile(
+    state.filePath,
+    JSON.stringify(
+      {
+        sessionId: state.sessionId,
+        updatedAt: new Date().toISOString(),
+        lastSuggestedSkills: Array.isArray(updates.lastSuggestedSkills)
+          ? updates.lastSuggestedSkills
+          : state.lastSuggestedSkills,
+        lastBaselineVersion: Object.prototype.hasOwnProperty.call(
+          updates,
+          'lastBaselineVersion',
+        )
+          ? updates.lastBaselineVersion
+          : state.lastBaselineVersion,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
 }
 
 function shouldEmitSuggestions(sessionId, skills) {
@@ -78,7 +90,7 @@ function shouldEmitSuggestions(sessionId, skills) {
   }
 
   persistState(state, {
-    lastSuggestedSkills: normalizedSkills
+    lastSuggestedSkills: normalizedSkills,
   });
 
   return true;
@@ -92,7 +104,7 @@ function shouldEmitClaimVerificationBaseline(sessionId, baselineVersion) {
   }
 
   persistState(state, {
-    lastBaselineVersion: baselineVersion
+    lastBaselineVersion: baselineVersion,
   });
 
   return true;
@@ -101,5 +113,5 @@ function shouldEmitClaimVerificationBaseline(sessionId, baselineVersion) {
 module.exports = {
   normalizeSessionId,
   shouldEmitClaimVerificationBaseline,
-  shouldEmitSuggestions
+  shouldEmitSuggestions,
 };

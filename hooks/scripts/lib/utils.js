@@ -1,8 +1,3 @@
-/**
- * Cross-platform utility functions for Claude Code hooks and scripts
- * Works on Windows, macOS, and Linux
- */
-
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -13,37 +8,22 @@ const isWindows = process.platform === 'win32';
 const isMacOS = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
 
-/**
- * Get the user's home directory (cross-platform)
- */
 function getHomeDir() {
   return os.homedir();
 }
 
-/**
- * Get the Claude config directory
- */
 function getClaudeDir() {
   return path.join(getHomeDir(), '.claude');
 }
 
-/**
- * Get the sessions directory
- */
 function getSessionsDir() {
   return path.join(getClaudeDir(), 'sessions');
 }
 
-/**
- * Get the learned skills directory
- */
 function getLearnedSkillsDir() {
   return path.join(getClaudeDir(), 'skills', 'learned');
 }
 
-/**
- * Get the temp directory (cross-platform)
- */
 function getTempDir() {
   return os.tmpdir();
 }
@@ -67,15 +47,19 @@ function getPluginDataDir() {
 function getPersistentDataDir(namespace = 'goldband') {
   const safeNamespace = String(namespace || 'goldband')
     .split(/[\\/]+/)
-    .map(part => part.trim())
-    .filter(part => part.length > 0 && part !== '.' && part !== '..')
-    .map(part => part.replace(/[^a-zA-Z0-9._-]/g, '-'))
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && part !== '.' && part !== '..')
+    .map((part) => part.replace(/[^a-zA-Z0-9._-]/g, '-'))
     .filter(Boolean);
-  const normalizedNamespace = safeNamespace.length > 0 ? safeNamespace : ['goldband'];
+  const normalizedNamespace =
+    safeNamespace.length > 0 ? safeNamespace : ['goldband'];
 
   const pluginDataDir = getPluginDataDir();
   const candidates = pluginDataDir
-    ? [path.join(pluginDataDir, ...normalizedNamespace), path.join(getTempDir(), ...normalizedNamespace)]
+    ? [
+        path.join(pluginDataDir, ...normalizedNamespace),
+        path.join(getTempDir(), ...normalizedNamespace),
+      ]
     : [path.join(getTempDir(), ...normalizedNamespace)];
 
   for (const candidate of candidates) {
@@ -89,9 +73,6 @@ function getPersistentDataDir(namespace = 'goldband') {
   return path.join(getTempDir(), ...normalizedNamespace);
 }
 
-/**
- * Build a persistent data file path within a namespace.
- */
 function getPersistentDataPath(namespace, ...parts) {
   const baseDir = getPersistentDataDir(namespace);
   if (parts.length === 0) {
@@ -115,7 +96,9 @@ function ensureDir(dirPath) {
   } catch (err) {
     // EEXIST is fine (race condition with another process creating it)
     if (err.code !== 'EEXIST') {
-      throw new Error(`Failed to create directory '${dirPath}': ${err.message}`);
+      throw new Error(
+        `Failed to create directory '${dirPath}': ${err.message}`,
+      );
     }
   }
   return dirPath;
@@ -211,44 +194,60 @@ function findFiles(dir, pattern, options = {}) {
     .replace(/\?/g, '.');
   const regex = new RegExp(`^${regexPattern}$`);
 
-  function searchDir(currentDir) {
-    try {
-      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = path.join(currentDir, entry.name);
-
-        if (entry.isFile() && regex.test(entry.name)) {
-          let stats;
-          try {
-            stats = fs.statSync(fullPath);
-          } catch {
-            continue; // File deleted between readdir and stat
-          }
-
-          if (maxAge !== null) {
-            const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
-            if (ageInDays <= maxAge) {
-              results.push({ path: fullPath, mtime: stats.mtimeMs });
-            }
-          } else {
-            results.push({ path: fullPath, mtime: stats.mtimeMs });
-          }
-        } else if (entry.isDirectory() && recursive) {
-          searchDir(fullPath);
-        }
-      }
-    } catch (_err) {
-      // Ignore permission errors
-    }
-  }
-
-  searchDir(dir);
+  searchMatchingFiles({
+    currentDir: dir,
+    regex,
+    maxAge,
+    recursive,
+    results,
+  });
 
   // Sort by modification time (newest first)
   results.sort((a, b) => b.mtime - a.mtime);
 
   return results;
+}
+
+function fileMatchesAge(stats, maxAge) {
+  if (maxAge === null) return true;
+  const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
+  return ageInDays <= maxAge;
+}
+
+function collectMatchingFile(fullPath, maxAge, results) {
+  try {
+    const stats = fs.statSync(fullPath);
+    if (fileMatchesAge(stats, maxAge)) {
+      results.push({ path: fullPath, mtime: stats.mtimeMs });
+    }
+  } catch {
+    // File deleted between readdir and stat.
+  }
+}
+
+function searchMatchingFiles(options) {
+  const { currentDir, regex, maxAge, recursive, results } = options;
+  let entries;
+  try {
+    entries = fs.readdirSync(currentDir, { withFileTypes: true });
+  } catch (_err) {
+    return;
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isFile() && regex.test(entry.name)) {
+      collectMatchingFile(fullPath, maxAge, results);
+    } else if (entry.isDirectory() && recursive) {
+      searchMatchingFiles({
+        currentDir: fullPath,
+        regex,
+        maxAge,
+        recursive,
+        results,
+      });
+    }
+  }
 }
 
 /**
@@ -265,51 +264,45 @@ async function readStdinJson(options = {}) {
     let data = '';
     let settled = false;
 
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(parseJsonOrEmpty(data));
+    };
+
     const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        // Clean up stdin listeners so the event loop can exit
-        process.stdin.removeAllListeners('data');
-        process.stdin.removeAllListeners('end');
-        process.stdin.removeAllListeners('error');
-        if (process.stdin.unref) process.stdin.unref();
-        // Resolve with whatever we have so far rather than hanging
-        try {
-          resolve(data.trim() ? JSON.parse(data) : {});
-        } catch {
-          resolve({});
-        }
-      }
+      if (settled) return;
+      process.stdin.removeAllListeners('data');
+      process.stdin.removeAllListeners('end');
+      process.stdin.removeAllListeners('error');
+      if (process.stdin.unref) process.stdin.unref();
+      finish();
     }, timeoutMs);
 
     process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => {
+    process.stdin.on('data', (chunk) => {
       if (data.length < maxSize) {
         data += chunk;
       }
     });
 
     process.stdin.on('end', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        resolve(data.trim() ? JSON.parse(data) : {});
-      } catch {
-        // Consistent with timeout path: resolve with empty object
-        // so hooks don't crash on malformed input
-        resolve({});
-      }
+      finish();
     });
 
     process.stdin.on('error', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      // Resolve with empty object so hooks don't crash on stdin errors
-      resolve({});
+      finish();
     });
   });
+}
+
+function parseJsonOrEmpty(data) {
+  try {
+    return data.trim() ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -396,7 +389,7 @@ function runCommand(cmd, options = {}) {
     const result = execSync(cmd, {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      ...options
+      ...options,
     });
     return { success: true, output: result.trim() };
   } catch (err) {
@@ -425,23 +418,27 @@ function getGitModifiedFiles(patterns = []) {
 
   let files = result.output.split('\n').filter(Boolean);
 
-  if (patterns.length > 0) {
-    // Pre-compile patterns, skipping invalid ones
-    const compiled = [];
-    for (const pattern of patterns) {
-      if (typeof pattern !== 'string' || pattern.length === 0) continue;
-      try {
-        compiled.push(new RegExp(pattern));
-      } catch {
-        // Skip invalid regex patterns
-      }
-    }
-    if (compiled.length > 0) {
-      files = files.filter(file => compiled.some(regex => regex.test(file)));
+  return filterFilesByPatterns(files, patterns);
+}
+
+function compilePatterns(patterns) {
+  const compiled = [];
+  for (const pattern of patterns) {
+    if (typeof pattern !== 'string' || pattern.length === 0) continue;
+    try {
+      compiled.push(new RegExp(pattern));
+    } catch {
+      // Skip invalid regex patterns.
     }
   }
+  return compiled;
+}
 
-  return files;
+function filterFilesByPatterns(files, patterns) {
+  if (patterns.length === 0) return files;
+  const compiled = compilePatterns(patterns);
+  if (compiled.length === 0) return files;
+  return files.filter((file) => compiled.some((regex) => regex.test(file)));
 }
 
 /**
@@ -490,7 +487,10 @@ function countInFile(filePath, pattern) {
   try {
     if (pattern instanceof RegExp) {
       // Always create new RegExp to avoid shared lastIndex state; ensure global flag
-      regex = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+      regex = new RegExp(
+        pattern.source,
+        pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g',
+      );
     } else if (typeof pattern === 'string') {
       regex = new RegExp(pattern, 'g');
     } else {
@@ -581,5 +581,5 @@ module.exports = {
   commandExists,
   runCommand,
   isGitRepo,
-  getGitModifiedFiles
+  getGitModifiedFiles,
 };

@@ -11,19 +11,27 @@ function parsePositiveInt(value, fallback) {
 }
 
 function metricsEnabled() {
-  const flag = String(process.env.HOOK_ROUTER_METRICS_ENABLED || '0').toLowerCase();
+  const flag = String(
+    process.env.HOOK_ROUTER_METRICS_ENABLED || '0',
+  ).toLowerCase();
   return flag === '1' || flag === 'true' || flag === 'yes';
 }
 
 function getMetricsFile() {
-  return process.env.HOOK_ROUTER_METRICS_FILE || getPersistentDataPath('hook-router', 'metrics.jsonl');
+  return (
+    process.env.HOOK_ROUTER_METRICS_FILE ||
+    getPersistentDataPath('hook-router', 'metrics.jsonl')
+  );
 }
 
 function rotateIfOversized(metricsFile) {
   try {
     if (!fs.existsSync(metricsFile)) return;
 
-    const maxBytes = parsePositiveInt(process.env.HOOK_ROUTER_METRICS_MAX_BYTES, DEFAULT_MAX_BYTES);
+    const maxBytes = parsePositiveInt(
+      process.env.HOOK_ROUTER_METRICS_MAX_BYTES,
+      DEFAULT_MAX_BYTES,
+    );
     const stats = fs.statSync(metricsFile);
     if (stats.size < maxBytes) return;
 
@@ -38,7 +46,7 @@ function cleanupExpiredMetrics(metricsFile) {
   try {
     const retentionDays = parsePositiveInt(
       process.env.HOOK_ROUTER_METRICS_RETENTION_DAYS,
-      DEFAULT_RETENTION_DAYS
+      DEFAULT_RETENTION_DAYS,
     );
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     const nowMs = Date.now();
@@ -71,7 +79,7 @@ function appendMetric(entry) {
   const metricsFile = getMetricsFile();
   const payload = {
     ...entry,
-    recordedAt: new Date().toISOString()
+    recordedAt: new Date().toISOString(),
   };
 
   try {
@@ -87,5 +95,5 @@ function appendMetric(entry) {
 module.exports = {
   appendMetric,
   getMetricsFile,
-  metricsEnabled
+  metricsEnabled,
 };

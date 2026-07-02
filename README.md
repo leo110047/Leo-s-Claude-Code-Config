@@ -62,6 +62,7 @@ pwsh -File .\install.ps1 status
 ./install.sh codex-agents       # Codex AGENTS.md + custom agents
 ./install.sh codex-hooks        # Codex hooks
 ./install.sh codex-requirements # Codex managed requirements
+./install.sh style-gate         # 全域 git style gate
 ./install.sh workflow           # Claude 端 workflow
 ./install.sh workflow-codex     # Codex 端 workflow
 ./install.sh launchers          # shell 啟動整合
@@ -79,6 +80,7 @@ pwsh -File .\install.ps1 status
 - Codex 全域守則：`codex/AGENTS.md` -> `~/.codex/AGENTS.md`
 - Claude assets：`commands/`、`contexts/`、`rules/`、`hooks/`、portable skills
 - Codex assets：config、profiles、rules、hooks、custom agents、portable skills
+- Git style gate（選配）：`git-hooks/` -> global `core.hooksPath`
 - workflow runtime：Claude 在 `~/.claude/skills/workflow`，Codex 在 `~/.codex/skills/workflow`
 
 全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 `goldband-*` workflow、commands、skills、hooks 和 rules。
@@ -103,6 +105,35 @@ Codex tracked config/rules 只放 portable baseline。本機路徑、trusted pro
 `codex-requirements` 會安裝 managed requirements。POSIX 預設寫到 `/etc/codex/requirements.toml`；Windows 目前只 staged 到 `~/.codex/requirements.toml`，不宣稱 runtime 已強制載入。
 
 MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。Codex 現代化狀態看 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
+
+## Git style gate
+
+`./install.sh style-gate` 會嘗試把 global `core.hooksPath` 設到 repo-linked
+`git-hooks/`。預設安裝包不會改動這個機器全域 git 設定。明確安裝後會啟用：
+
+- `pre-commit`：只檢查 staged 檔，呼叫 `node scripts/check-code-style.mjs --staged`
+- `commit-msg`：只有 repo 放 `.goldband-git-workflow.json` 或設定
+  `GOLDBAND_GIT_WORKFLOW_GATE=1` 時，才檢查
+  `<type>[optional scope][!]: <description>`；type 依 `rules/git-workflow.md`
+
+如果 global `core.hooksPath` 已有非 goldband 值，installer 只警告不覆蓋。Husky
+或其他專案設定 local `core.hooksPath` 時，local 會覆蓋 global；這些 repo 不受
+goldband style gate 影響，這是預期行為。
+
+JS/TS Biome checks 只在 target repo 有 `biome.json` 時執行；沒有 config 的 repo
+會降級為 advisory，零依賴 staged 檢查仍照跑。
+
+Opt-out：
+
+- repo 根目錄放 `.goldband-no-style-gate`
+- 單次使用 `GOLDBAND_STYLE_GATE=0 git commit`，hook 會印警告並寫本機 bypass log
+
+手動檢查：
+
+```bash
+node scripts/check-code-style.mjs
+node scripts/check-code-style.mjs --staged
+```
 
 ## 常用入口
 

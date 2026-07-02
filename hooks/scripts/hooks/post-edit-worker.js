@@ -11,7 +11,7 @@ const { getPersistentDataPath } = require('../lib/utils');
 
 const DEFAULT_DEBOUNCE_WINDOWS = {
   format: 2000,
-  typecheck: 12000
+  typecheck: 12000,
 };
 
 const DEFAULT_STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -38,25 +38,40 @@ function parsePositiveInt(value, fallback) {
 }
 
 function getDebounceStateFile() {
-  return process.env.HOOK_ROUTER_DEBOUNCE_FILE || getPersistentDataPath('hook-router', 'worker-debounce.json');
+  return (
+    process.env.HOOK_ROUTER_DEBOUNCE_FILE ||
+    getPersistentDataPath('hook-router', 'worker-debounce.json')
+  );
 }
 
 function getDebounceWindowMs(task) {
   if (task === 'format') {
-    return parsePositiveInt(process.env.HOOK_DEBOUNCE_FORMAT_MS, DEFAULT_DEBOUNCE_WINDOWS.format);
+    return parsePositiveInt(
+      process.env.HOOK_DEBOUNCE_FORMAT_MS,
+      DEFAULT_DEBOUNCE_WINDOWS.format,
+    );
   }
   if (task === 'typecheck') {
-    return parsePositiveInt(process.env.HOOK_DEBOUNCE_TYPECHECK_MS, DEFAULT_DEBOUNCE_WINDOWS.typecheck);
+    return parsePositiveInt(
+      process.env.HOOK_DEBOUNCE_TYPECHECK_MS,
+      DEFAULT_DEBOUNCE_WINDOWS.typecheck,
+    );
   }
   return 0;
 }
 
 function getStateTtlMs() {
-  return parsePositiveInt(process.env.HOOK_DEBOUNCE_STATE_TTL_MS, DEFAULT_STATE_TTL_MS);
+  return parsePositiveInt(
+    process.env.HOOK_DEBOUNCE_STATE_TTL_MS,
+    DEFAULT_STATE_TTL_MS,
+  );
 }
 
 function getLockStaleMs() {
-  return parsePositiveInt(process.env.HOOK_DEBOUNCE_LOCK_STALE_MS, DEFAULT_LOCK_STALE_MS);
+  return parsePositiveInt(
+    process.env.HOOK_DEBOUNCE_LOCK_STALE_MS,
+    DEFAULT_LOCK_STALE_MS,
+  );
 }
 
 function readHookInputFromStdin() {
@@ -76,14 +91,12 @@ function resolveTaskTarget(args) {
 
   const candidatePath = args.file || toolInput.file_path || '';
   const cwd = args.cwd || hookInput.cwd || process.cwd();
-  const absolutePath = candidatePath
-    ? path.resolve(cwd, candidatePath)
-    : '';
+  const absolutePath = candidatePath ? path.resolve(cwd, candidatePath) : '';
 
   return {
     task,
     cwd,
-    filePath: absolutePath
+    filePath: absolutePath,
   };
 }
 
@@ -188,7 +201,7 @@ function shouldRunTask(task, absoluteFilePath) {
 
     const nextState = {
       ...cleanState,
-      [key]: nowMs
+      [key]: nowMs,
     };
     saveState(stateFile, nextState);
     return true;
@@ -205,7 +218,7 @@ function runPrettier(filePath, cwd) {
   execFileSync(getNpxBinary(), ['prettier', '--write', filePath], {
     cwd,
     stdio: ['ignore', 'ignore', 'ignore'],
-    timeout: 15000
+    timeout: 15000,
   });
 }
 
@@ -243,7 +256,7 @@ function runTypecheck(filePath) {
   execFileSync(getNpxBinary(), ['tsc', '--noEmit', '--pretty', 'false'], {
     cwd: tsconfigDir,
     stdio: ['ignore', 'ignore', 'ignore'],
-    timeout: 45000
+    timeout: 45000,
   });
 }
 

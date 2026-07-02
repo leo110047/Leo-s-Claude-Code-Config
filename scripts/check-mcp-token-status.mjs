@@ -42,25 +42,31 @@ function parseEnvFile(filePath) {
   const result = {};
   const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
   for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) {
-      continue;
-    }
-    const equalsIndex = line.indexOf('=');
-    if (equalsIndex <= 0) {
-      continue;
-    }
-    const key = line.slice(0, equalsIndex).trim();
-    let value = line.slice(equalsIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
+    const entry = parseEnvLine(rawLine);
+    if (entry) result[entry.key] = entry.value;
   }
   return result;
+}
+
+function parseEnvLine(rawLine) {
+  const line = rawLine.trim();
+  if (!line || line.startsWith('#')) return null;
+  const equalsIndex = line.indexOf('=');
+  if (equalsIndex <= 0) return null;
+  return {
+    key: line.slice(0, equalsIndex).trim(),
+    value: unquoteEnvValue(line.slice(equalsIndex + 1).trim()),
+  };
+}
+
+function unquoteEnvValue(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 function hasUsableValue(value) {
@@ -68,11 +74,17 @@ function hasUsableValue(value) {
     return false;
   }
   const normalized = String(value).trim();
-  return normalized.length > 0 && !normalized.includes('${') && normalized !== 'changeme';
+  return (
+    normalized.length > 0 &&
+    !normalized.includes('${') &&
+    normalized !== 'changeme'
+  );
 }
 
 function envValue(name, localEnv) {
-  return hasUsableValue(process.env[name]) ? process.env[name] : localEnv[name] ?? '';
+  return hasUsableValue(process.env[name])
+    ? process.env[name]
+    : (localEnv[name] ?? '');
 }
 
 function main() {
@@ -81,7 +93,9 @@ function main() {
   const localEnv = parseEnvFile(options.envFile);
 
   const rows = registry.servers.map((server) => {
-    const missing = server.requiredEnv.filter((name) => !hasUsableValue(envValue(name, localEnv)));
+    const missing = server.requiredEnv.filter(
+      (name) => !hasUsableValue(envValue(name, localEnv)),
+    );
     return {
       name: server.name,
       requiredEnv: server.requiredEnv,
@@ -94,13 +108,20 @@ function main() {
   if (options.summary) {
     const configured = rows.filter((row) => row.configured).length;
     const total = rows.length;
-    const label = configured === total ? '[OK]' : configured > 0 ? '[部分設定]' : '[未設定]';
+    const label =
+      configured === total
+        ? '[OK]'
+        : configured > 0
+          ? '[部分設定]'
+          : '[未設定]';
     console.log(`  ${label} token-backed MCP env (${configured}/${total})`);
     return;
   }
 
   for (const row of rows) {
-    const status = row.configured ? 'configured' : `missing ${row.missing.join(', ')}`;
+    const status = row.configured
+      ? 'configured'
+      : `missing ${row.missing.join(', ')}`;
     console.log(`${row.name}: ${status}`);
     if (options.printSmoke) {
       console.log(`  smoke: ${row.inspectorCommand}`);

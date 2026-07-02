@@ -41,6 +41,15 @@ jobs:
       - name: Check Codex portable baseline
         run: bash scripts/check-codex-portability.sh
 
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Check coding style gate
+        run: node scripts/check-code-style.mjs
+
+      - name: Test coding style gate
+        run: npm run test:style-gate
+
       - name: Verify hook script references
         run: |
           echo "=== Verifying hook script references ==="
