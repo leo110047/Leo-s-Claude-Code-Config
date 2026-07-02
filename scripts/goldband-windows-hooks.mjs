@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import {
@@ -154,13 +155,17 @@ function removeHookPhases(settings, hooksConfig) {
 }
 
 function removeStatusLine(settings, context) {
-  const expectedCommand = `bash ${path.join(context.paths.claudeDir, 'statusline-command.sh')}`;
+  const expectedCommand = statusLineCommand(context);
   if (
     settings.statusLine?.type === 'command' &&
     settings.statusLine.command === expectedCommand
   ) {
     delete settings.statusLine;
   }
+}
+
+function statusLineCommand(context) {
+  return `bash ${context.paths.claudeDir}/statusline-command.sh`;
 }
 
 function removePermissions(settings, permissions) {

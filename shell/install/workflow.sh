@@ -497,6 +497,7 @@ install_workflow_host() {
     local host="$1"
     local repo_dir
     local setup_status=0
+    local mutation_snapshot=""
 
     if ! repo_dir="$(resolve_workflow_repo_dir)"; then
         echo -e "${RED}找不到 workflow runtime。${NC}"
@@ -512,7 +513,9 @@ install_workflow_host() {
     echo -e "  repo: ${CYAN}$repo_dir${NC}"
     echo -e "  version: ${CYAN}$version${NC}"
     echo ""
+    mutation_snapshot="$(create_workflow_vendor_mutation_snapshot "$repo_dir")"
     run_workflow_setup "$repo_dir" "$host" || setup_status="$?"
+    restore_workflow_vendor_mutation_snapshot "$repo_dir" "$mutation_snapshot"
     if [ "$setup_status" -ne 0 ]; then
         exit "$setup_status"
     fi
@@ -522,6 +525,53 @@ install_workflow_host() {
     cleanup_workflow_user_entries
     hide_workflow_root_skills "$host"
     write_workflow_installed_versions "$host" "$version"
+}
+
+create_workflow_vendor_mutation_snapshot() {
+    local repo_dir="$1"
+    local snapshot_dir
+    local manifest
+    local rel
+
+    if ! workflow_review_same_dir "$repo_dir" "$REPO_DIR/vendor/workflow"; then
+        return 0
+    fi
+
+    snapshot_dir="$(mktemp -d)"
+    manifest="$snapshot_dir/manifest"
+    (
+        cd "$repo_dir" || exit 1
+        find . -name SKILL.md -type f -print
+        [ -f ./gstack/llms.txt ] && printf '%s\n' './gstack/llms.txt'
+    ) > "$manifest"
+
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        mkdir -p "$snapshot_dir/files/$(dirname "$rel")"
+        cp "$repo_dir/$rel" "$snapshot_dir/files/$rel"
+    done < "$manifest"
+
+    printf '%s\n' "$snapshot_dir"
+}
+
+restore_workflow_vendor_mutation_snapshot() {
+    local repo_dir="$1"
+    local snapshot_dir="$2"
+    local manifest
+    local rel
+
+    [ -n "$snapshot_dir" ] || return 0
+    manifest="$snapshot_dir/manifest"
+    [ -f "$manifest" ] || return 0
+
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        if [ -f "$snapshot_dir/files/$rel" ]; then
+            cp "$snapshot_dir/files/$rel" "$repo_dir/$rel"
+        fi
+    done < "$manifest"
+
+    rm -rf "$snapshot_dir"
 }
 
 run_workflow_setup() {
@@ -540,7 +590,11 @@ run_workflow_setup() {
             echo "  [錯誤] 無法進入 workflow runtime: $repo_dir"
             exit 1
         }
-        GSTACK_HOME="$HOME/.workflow" ./setup --host "$host" --prefix --quiet 2>&1
+        # goldband exposes workflow through goldband-* wrappers and removes the
+        # native workflow entries after setup. Avoid upstream prefix mode here:
+        # it mutates source SKILL.md frontmatter via gstack-patch-names, which
+        # dirties the bundled vendor/workflow checkout during install.
+        GSTACK_HOME="$HOME/.workflow" ./setup --host "$host" --no-prefix --quiet 2>&1
     ) | awk -v legacy="$legacy_runtime_name" '{
         gsub(legacy, "workflow")
         print

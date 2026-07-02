@@ -186,16 +186,23 @@ function assertInstalledArtifacts(tmpHome, tmpRoot) {
   for (const targetPath of expectedInstalledPaths(tmpHome)) {
     assert.ok(fs.existsSync(targetPath));
   }
-  assert.equal(
-    fs.readlinkSync(path.join(tmpHome, '.codex', 'rules', 'goldband.rules')),
+  assertInstalledFileMatches(
+    path.join(tmpHome, '.codex', 'rules', 'goldband.rules'),
     path.join(tmpRoot, 'codex', 'rules', 'default.rules'),
   );
-  assert.equal(
-    fs.readlinkSync(path.join(tmpHome, '.codex', 'rules', 'default.rules')),
+  assertInstalledFileMatches(
+    path.join(tmpHome, '.codex', 'rules', 'default.rules'),
     path.join(tmpRoot, 'codex', 'local', 'rules', 'default.rules'),
   );
   const pwsh7Profile = fs.readFileSync(powershellProfilePath(tmpHome), 'utf8');
   assert.match(pwsh7Profile, /goldband-launchers\.ps1/);
+}
+
+function assertInstalledFileMatches(installedPath, sourcePath) {
+  assert.equal(
+    fs.readFileSync(installedPath, 'utf8'),
+    fs.readFileSync(sourcePath, 'utf8'),
+  );
 }
 
 function expectedInstalledPaths(tmpHome) {
@@ -300,6 +307,10 @@ function workflowScenario({ tmpHome, tmpRoot }) {
         'SKILL.md',
       ),
     ),
+  );
+  assert.match(
+    readText(tmpRoot, 'vendor', 'workflow', 'review', 'SKILL.md'),
+    /^name: review$/m,
   );
 }
 

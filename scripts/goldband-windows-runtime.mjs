@@ -71,12 +71,14 @@ function syncSkills(context) {
   return changed;
 }
 
-function refreshManagedRuntime(context) {
+function refreshManagedRuntime(context, options = {}) {
   const state = readWindowsState(context);
   refreshSkillProfiles(context, state);
   refreshClaudeComponents(context, state);
   refreshCodexComponents(context, state);
-  refreshWorkflowRuntime(context, state);
+  if (options.workflow !== false) {
+    refreshWorkflowRuntime(context, state);
+  }
 }
 
 function refreshSkillProfiles(context, state) {
@@ -195,10 +197,16 @@ function codexRefreshComponents(context) {
 
 function component(...args) {
   const [key, context, source, dest, label, kind] = args;
+  const sourcePath = path.isAbsolute(source)
+    ? source
+    : path.join(context.repoDir, ...source.split('/'));
+  const destPath = path.isAbsolute(dest)
+    ? dest
+    : path.join(context.paths.claudeDir, ...dest.split('/'));
   return directComponent(
     key,
-    path.join(context.repoDir, ...source.split('/')),
-    path.join(context.paths.claudeDir, ...dest.split('/')),
+    sourcePath,
+    destPath,
     label,
     kind,
   );
@@ -276,12 +284,13 @@ function currentUpstream(context, repoDir) {
 
 function selfUpdate(context) {
   syncSkills(context);
-  refreshManagedRuntime(context);
+  refreshManagedRuntime(context, { workflow: false });
   const repoDir = context.repoDir;
   if (!canFastForward(context, repoDir)) return;
   const oldHead =
     gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
   if (!pullFastForward(context, repoDir)) return;
+  refreshManagedRuntime(context);
   reportSelfUpdateIfChanged(context, repoDir, oldHead);
 }
 

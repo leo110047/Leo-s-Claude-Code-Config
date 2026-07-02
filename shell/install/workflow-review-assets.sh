@@ -46,6 +46,7 @@ create_repo_workflow_review_sidecar() {
     link_workflow_review_asset "$repo_dir" "$sidecar_dir" "TODOS-format.md"
 
     if [ -d "$repo_dir/review/specialists" ]; then
+        rm -rf "$sidecar_dir/specialists"
         ln -snf \
             "$(workflow_review_asset_link_target "$repo_dir" "specialists")" \
             "$sidecar_dir/specialists"
@@ -60,6 +61,7 @@ link_workflow_review_asset() {
 
     [ -f "$repo_dir/review/$asset" ] || return 0
     target="$(workflow_review_asset_link_target "$repo_dir" "$asset")"
+    rm -rf "$sidecar_dir/$asset"
     ln -snf "$target" "$sidecar_dir/$asset"
 }
 
