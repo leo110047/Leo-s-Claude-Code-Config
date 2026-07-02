@@ -137,6 +137,11 @@ rewrite_goldband_wrapper_runtime_paths() {
 }
 
 workflow_wrapper_manifest() {
+    workflow_wrapper_manifest_primary
+    workflow_wrapper_manifest_secondary
+}
+
+workflow_wrapper_manifest_primary() {
     cat <<'EOF'
 goldband-autoplan|autoplan|workflow-autoplan|自動跑完整計畫審查流程。|Automated end-to-end plan review workflow.
 goldband-benchmark|benchmark|workflow-benchmark|效能基準與回歸檢查。|Performance baselines and regression checks.
@@ -167,6 +172,11 @@ goldband-ios-qa|ios-qa|workflow-ios-qa|用真機流程測試 iOS app。|Test iOS
 goldband-ios-sync|ios-sync|workflow-ios-sync|同步 iOS QA 所需橋接程式碼。|Sync bridge code required for iOS QA.
 goldband-land-and-deploy|land-and-deploy|workflow-land-and-deploy|merge、deploy、上線後驗證。|Merge, deploy, and post-launch verification.
 goldband-landing-report|landing-report|workflow-landing-report|整理落地頁或產品頁檢查報告。|Prepare landing or product page review reports.
+EOF
+}
+
+workflow_wrapper_manifest_secondary() {
+    cat <<'EOF'
 goldband-learn|learn|workflow-learn|記錄可重用的專案學習。|Record reusable project learnings.
 goldband-make-pdf|make-pdf|workflow-make-pdf|把頁面或文件轉成 PDF。|Turn pages or documents into PDFs.
 goldband-office-hours|office-hours|workflow-office-hours|從產品角度重想問題與方向。|Reframe the problem from a product perspective.
@@ -218,6 +228,13 @@ localize_goldband_wrapper_description() {
     temp_file="$(mktemp)"
 
     goldband_wrapper_description "$wrapper_name" "$language" > "$temp_file"
+    rewrite_goldband_wrapper_description "$skill_file" "$temp_file"
+    rm -f "$temp_file"
+}
+
+rewrite_goldband_wrapper_description() {
+    local skill_file="$1"
+    local temp_file="$2"
     awk -v desc_file="$temp_file" '
         BEGIN {
             in_description = 0
@@ -262,7 +279,6 @@ localize_goldband_wrapper_description() {
         ' "$skill_file" > "${skill_file}.tmp"
 
     mv "${skill_file}.tmp" "$skill_file"
-    rm -f "$temp_file"
 }
 
 localize_goldband_wrapper_language_policy() {
@@ -516,9 +532,7 @@ normalize_workflow_runtime_install() {
 install_workflow_host() {
     local host="$1"
     local repo_dir
-    local setup_status
-    local errexit_was_set=0
-    local legacy_runtime_name="g""stack"
+    local setup_status=0
 
     if ! repo_dir="$(resolve_workflow_repo_dir)"; then
         echo -e "${RED}找不到 workflow runtime。${NC}"
@@ -534,6 +548,24 @@ install_workflow_host() {
     echo -e "  repo: ${CYAN}$repo_dir${NC}"
     echo -e "  version: ${CYAN}$version${NC}"
     echo ""
+    run_workflow_setup "$repo_dir" "$host" || setup_status="$?"
+    if [ "$setup_status" -ne 0 ]; then
+        exit "$setup_status"
+    fi
+    normalize_workflow_runtime_install "$host"
+    create_goldband_workflow_aliases
+    cleanup_workflow_user_entries
+    hide_workflow_root_skills "$host"
+    write_workflow_installed_versions "$host" "$version"
+}
+
+run_workflow_setup() {
+    local repo_dir="$1"
+    local host="$2"
+    local setup_status
+    local errexit_was_set=0
+    local legacy_runtime_name="g""stack"
+
     case "$-" in
         *e*) errexit_was_set=1 ;;
     esac
@@ -555,12 +587,5 @@ install_workflow_host() {
     else
         set +e
     fi
-    if [ "$setup_status" -ne 0 ]; then
-        exit "$setup_status"
-    fi
-    normalize_workflow_runtime_install "$host"
-    create_goldband_workflow_aliases
-    cleanup_workflow_user_entries
-    hide_workflow_root_skills "$host"
-    write_workflow_installed_versions "$host" "$version"
+    return "$setup_status"
 }

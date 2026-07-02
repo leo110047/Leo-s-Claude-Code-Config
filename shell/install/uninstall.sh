@@ -2,32 +2,56 @@
 
 do_uninstall() {
     echo -e "${YELLOW}移除安裝...${NC}"
+    uninstall_claude_skills
+    uninstall_claude_guidance
+    uninstall_claude_paths
+    uninstall_claude_settings
+    uninstall_codex_skills
+    uninstall_codex_paths
+    uninstall_codex_requirements
+    uninstall_style_gate
+    echo -e "${GREEN}完成${NC}"
+}
+
+uninstall_claude_skills() {
     if [ -L "$SKILLS_DIR" ]; then
         rm "$SKILLS_DIR"
         echo -e "  ${GREEN}[移除] $SKILLS_DIR${NC}"
     elif [ -d "$SKILLS_DIR" ] && [ -f "$SKILL_PROFILE_FILE" ]; then
-        local skills_line
-        skills_line=$(grep '^skills=' "$SKILL_PROFILE_FILE" 2>/dev/null || true)
-        local skills_csv="${skills_line#skills=}"
-        local skill
-        local skill_array=()
-        read_profile_skill_array "$skills_csv" skill_array
-        for skill in "${skill_array[@]}"; do
-            rm -rf "${SKILLS_DIR:?}/$skill"
-        done
+        remove_profile_skills "$SKILLS_DIR" "$SKILL_PROFILE_FILE"
         rm -rf "$SKILLS_DIR/README.md" "$SKILLS_DIR/skill-rules.json"
-        rm -f "$SKILL_PROFILE_FILE"
-        if [ -z "$(ls -A "$SKILLS_DIR" 2>/dev/null)" ]; then
-            rmdir "$SKILLS_DIR"
-        fi
+        remove_empty_dir "$SKILLS_DIR"
         echo -e "  ${GREEN}[移除] skills${NC}"
     fi
+}
 
-    local claude_guidance_src="$REPO_DIR/claude/CLAUDE.md"
+remove_profile_skills() {
+    local skills_dir="$1"
+    local profile_file="$2"
+    local skills_line skills_csv skill
+    local skill_array=()
+    skills_line=$(grep '^skills=' "$profile_file" 2>/dev/null || true)
+    skills_csv="${skills_line#skills=}"
+    read_profile_skill_array "$skills_csv" skill_array
+    for skill in "${skill_array[@]}"; do
+        rm -rf "${skills_dir:?}/$skill"
+    done
+    rm -f "$profile_file"
+}
+
+remove_empty_dir() {
+    local dir="$1"
+    if [ -d "$dir" ] && [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+        rmdir "$dir"
+    fi
+}
+
+uninstall_claude_guidance() {
+    local src="$REPO_DIR/claude/CLAUDE.md"
     if [ -L "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" ]; then
-        local claude_guidance_target
-        claude_guidance_target=$(readlink "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE")
-        if [ "$claude_guidance_target" = "$claude_guidance_src" ]; then
+        local target
+        target=$(readlink "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE")
+        if [ "$target" = "$src" ]; then
             rm "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE"
             echo -e "  ${GREEN}[移除] $CLAUDE_GLOBAL_INSTRUCTIONS_FILE${NC}"
         else
@@ -36,10 +60,27 @@ do_uninstall() {
     elif [ -e "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" ]; then
         echo -e "  ${YELLOW}[保留] Claude CLAUDE.md — 不是 goldband 管理的連結: $CLAUDE_GLOBAL_INSTRUCTIONS_FILE${NC}"
     fi
+}
 
-    local paths=("$CLAUDE_DIR/commands" "$CLAUDE_DIR/contexts" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/hooks/scripts" "$SHELL_UPDATE_BIN" "$SHELL_LAUNCHERS_FILE")
+uninstall_claude_paths() {
+    local paths=(
+        "$CLAUDE_DIR/commands"
+        "$CLAUDE_DIR/contexts"
+        "$CLAUDE_DIR/rules"
+        "$CLAUDE_DIR/hooks/scripts"
+        "$SHELL_UPDATE_BIN"
+        "$SHELL_LAUNCHERS_FILE"
+    )
+    remove_paths "${paths[@]}"
+    remove_statusline_command
+    remove_shell_launcher_block "$ZSHRC_FILE"
+    remove_empty_dir "$CLAUDE_BIN_DIR"
+    remove_empty_dir "$CLAUDE_SHELL_DIR"
+}
 
-    for p in "${paths[@]}"; do
+remove_paths() {
+    local p
+    for p in "$@"; do
         if [ -L "$p" ]; then
             rm "$p"
             echo -e "  ${GREEN}[移除] $p${NC}"
@@ -48,23 +89,17 @@ do_uninstall() {
             echo -e "  ${GREEN}[移除] $p${NC}"
         fi
     done
+}
 
-    if [ -L "$CLAUDE_DIR/statusline-command.sh" ]; then
-        rm "$CLAUDE_DIR/statusline-command.sh"
+remove_statusline_command() {
+    local path="$CLAUDE_DIR/statusline-command.sh"
+    if [ -L "$path" ] || [ -f "$path" ]; then
+        rm "$path"
         echo -e "  ${GREEN}[移除] statusline-command.sh${NC}"
-    elif [ -f "$CLAUDE_DIR/statusline-command.sh" ]; then
-        rm "$CLAUDE_DIR/statusline-command.sh"
-        echo -e "  ${GREEN}[移除] statusline-command.sh${NC}"
     fi
+}
 
-    remove_shell_launcher_block "$ZSHRC_FILE"
-    if [ -d "$CLAUDE_BIN_DIR" ] && [ -z "$(ls -A "$CLAUDE_BIN_DIR" 2>/dev/null)" ]; then
-        rmdir "$CLAUDE_BIN_DIR"
-    fi
-    if [ -d "$CLAUDE_SHELL_DIR" ] && [ -z "$(ls -A "$CLAUDE_SHELL_DIR" 2>/dev/null)" ]; then
-        rmdir "$CLAUDE_SHELL_DIR"
-    fi
-
+uninstall_claude_settings() {
     local settings_json="$CLAUDE_DIR/settings.json"
     if [ -f "$settings_json" ] && command -v jq &> /dev/null; then
         cp "$settings_json" "${settings_json}.bak"
@@ -72,24 +107,17 @@ do_uninstall() {
             && mv "${settings_json}.tmp" "$settings_json"
         echo -e "  ${GREEN}[移除] settings.json 中的 hooks/statusLine 設定（已備份為 .bak）${NC}"
     fi
+}
 
+uninstall_codex_skills() {
     if [ -d "$CODEX_SKILLS_DIR" ] && [ -f "$CODEX_SKILL_PROFILE_FILE" ]; then
-        local skills_line
-        skills_line=$(grep '^skills=' "$CODEX_SKILL_PROFILE_FILE" 2>/dev/null || true)
-        local skills_csv="${skills_line#skills=}"
-        local skill
-        local skill_array=()
-        read_profile_skill_array "$skills_csv" skill_array
-        for skill in "${skill_array[@]}"; do
-            rm -rf "${CODEX_SKILLS_DIR:?}/$skill"
-        done
-        rm -f "$CODEX_SKILL_PROFILE_FILE"
-        if [ -z "$(ls -A "$CODEX_SKILLS_DIR" 2>/dev/null)" ]; then
-            rmdir "$CODEX_SKILLS_DIR"
-        fi
+        remove_profile_skills "$CODEX_SKILLS_DIR" "$CODEX_SKILL_PROFILE_FILE"
+        remove_empty_dir "$CODEX_SKILLS_DIR"
         echo -e "  ${GREEN}[移除] Codex skills${NC}"
     fi
+}
 
+uninstall_codex_paths() {
     local codex_paths=(
         "$CODEX_CONFIG_FILE"
         "$CODEX_AGENTS_FILE"
@@ -98,40 +126,44 @@ do_uninstall() {
         "$CODEX_HOOKS_DIR"
         "$CODEX_RULES_DIR"
     )
+    local profile_path
+    while IFS= read -r profile_path; do
+        [ -n "$profile_path" ] && codex_paths+=("$profile_path")
+    done < <(codex_profile_paths)
+    remove_paths "${codex_paths[@]}"
+}
 
+codex_profile_paths() {
     local codex_profile_dir="$REPO_DIR/codex/profiles"
-    if [ -d "$codex_profile_dir" ]; then
-        local profile_file
-        for profile_file in "$codex_profile_dir"/*.config.toml; do
-            [ -f "$profile_file" ] || continue
-            codex_paths+=("$CODEX_DIR/$(basename "$profile_file")")
-        done
-    fi
-
-    for p in "${codex_paths[@]}"; do
-        if [ -L "$p" ]; then
-            rm "$p"
-            echo -e "  ${GREEN}[移除] $p${NC}"
-        elif [ -e "$p" ]; then
-            rm -rf "$p"
-            echo -e "  ${GREEN}[移除] $p${NC}"
-        fi
+    [ -d "$codex_profile_dir" ] || return 0
+    local profile_file
+    for profile_file in "$codex_profile_dir"/*.config.toml; do
+        [ -f "$profile_file" ] || continue
+        printf '%s\n' "$CODEX_DIR/$(basename "$profile_file")"
     done
+}
 
-    local codex_requirements_src="$REPO_DIR/codex/requirements.toml"
-    if [ -f "$codex_requirements_src" ] && [ -f "$CODEX_REQUIREMENTS_FILE" ]; then
-        if cmp -s "$codex_requirements_src" "$CODEX_REQUIREMENTS_FILE" 2>/dev/null; then
-            if [ "$(id -u)" -eq 0 ]; then
-                rm "$CODEX_REQUIREMENTS_FILE"
-            else
-                sudo rm "$CODEX_REQUIREMENTS_FILE"
-            fi
+uninstall_codex_requirements() {
+    local src="$REPO_DIR/codex/requirements.toml"
+    if [ -f "$src" ] && [ -f "$CODEX_REQUIREMENTS_FILE" ]; then
+        if cmp -s "$src" "$CODEX_REQUIREMENTS_FILE" 2>/dev/null; then
+            remove_codex_requirements_file
             echo -e "  ${GREEN}[移除] $CODEX_REQUIREMENTS_FILE${NC}"
         else
             echo -e "  ${YELLOW}[保留] Codex requirements 不同於 repo 版本: $CODEX_REQUIREMENTS_FILE${NC}"
         fi
     fi
+}
 
+remove_codex_requirements_file() {
+    if [ "$(id -u)" -eq 0 ]; then
+        rm "$CODEX_REQUIREMENTS_FILE"
+    else
+        sudo rm "$CODEX_REQUIREMENTS_FILE"
+    fi
+}
+
+uninstall_style_gate() {
     if command -v git >/dev/null 2>&1; then
         local current_hooks_path
         current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
@@ -142,6 +174,4 @@ do_uninstall() {
             echo -e "  ${YELLOW}[保留] global core.hooksPath — 不是 goldband 管理: $current_hooks_path${NC}"
         fi
     fi
-
-    echo -e "${GREEN}完成${NC}"
 }

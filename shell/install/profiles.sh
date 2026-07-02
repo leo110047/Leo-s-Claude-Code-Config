@@ -143,35 +143,16 @@ merge_hooks_config() {
     local hooks_dir="$CLAUDE_DIR/hooks"
 
     if ! command -v jq &> /dev/null; then
-        echo -e "  ${YELLOW}[提示] jq 未安裝，無法自動合併 hooks 設定${NC}"
-        echo -e "  ${CYAN}  請手動操作:${NC}"
-        echo -e "  ${CYAN}  1. 將 hooks/hooks.json 的內容合併到 ~/.claude/settings.json${NC}"
-        echo -e "  ${CYAN}  2. 將路徑中的 \${HOOKS_DIR} 替換為:${NC}"
-        echo -e "  ${CYAN}     $hooks_dir${NC}"
-        echo -e "  ${CYAN}  或安裝 jq 後重新執行: brew install jq${NC}"
+        print_missing_jq_hooks_help "$hooks_dir"
         return
     fi
 
     local hooks_content
-    hooks_content=$(jq --arg dir "$hooks_dir" '
-        def expand_hook_paths:
-            walk(if type == "string" then gsub("\\$\\{HOOKS_DIR\\}"; $dir) else . end);
-        .hooks | expand_hook_paths
-    ' "$hooks_json")
+    hooks_content="$(read_expanded_hooks_content "$hooks_json" "$hooks_dir")"
 
     if [ -z "$hooks_content" ] || [ "$hooks_content" = "null" ]; then
         echo -e "  ${RED}[錯誤] 無法讀取 hooks.json${NC}"
         return
-    fi
-
-    local permissions_content
-    permissions_content=$(jq '.permissions // null' "$hooks_json")
-    local retired_permissions_file="$REPO_DIR/hooks/claude-retired-permission-allow.json"
-    local retired_permissions_allow
-    if [ -f "$retired_permissions_file" ]; then
-        retired_permissions_allow=$(jq '.' "$retired_permissions_file")
-    else
-        retired_permissions_allow='[]'
     fi
 
     if [ ! -f "$settings_json" ]; then
@@ -185,10 +166,20 @@ merge_hooks_config() {
     existing_hooks=$(jq '.hooks // {}' "$settings_json")
 
     local merged_hooks
-    merged_hooks=$(jq -n \
-        --argjson existing "$existing_hooks" \
-        --argjson new_hooks "$hooks_content" \
-        '
+    merged_hooks="$(merge_claude_hooks_json "$existing_hooks" "$hooks_content")"
+
+    jq --argjson hooks "$merged_hooks" '.hooks = $hooks' "$settings_json" > "${settings_json}.tmp" \
+        && mv "${settings_json}.tmp" "$settings_json"
+
+    echo -e "  ${GREEN}[合併] Hooks 設定已自動合併到 settings.json${NC}"
+    merge_statusline_config "$hooks_json" "$settings_json"
+    merge_permissions_config "$hooks_json" "$settings_json"
+}
+
+merge_claude_hooks_json() {
+    local existing_hooks="$1"
+    local hooks_content="$2"
+    jq -n --argjson existing "$existing_hooks" --argjson new_hooks "$hooks_content" '
         def hook_key:
             .hooks[0].command // .hooks[0].prompt // .description // tostring;
 
@@ -210,13 +201,32 @@ merge_hooks_config() {
             PostCompact: merge_phase("PostCompact"),
             SessionEnd: merge_phase("SessionEnd")
         }
-        ')
+        '
+}
 
-    jq --argjson hooks "$merged_hooks" '.hooks = $hooks' "$settings_json" > "${settings_json}.tmp" \
-        && mv "${settings_json}.tmp" "$settings_json"
+print_missing_jq_hooks_help() {
+    local hooks_dir="$1"
+    echo -e "  ${YELLOW}[提示] jq 未安裝，無法自動合併 hooks 設定${NC}"
+    echo -e "  ${CYAN}  請手動操作:${NC}"
+    echo -e "  ${CYAN}  1. 將 hooks/hooks.json 的內容合併到 ~/.claude/settings.json${NC}"
+    echo -e "  ${CYAN}  2. 將路徑中的 \${HOOKS_DIR} 替換為:${NC}"
+    echo -e "  ${CYAN}     $hooks_dir${NC}"
+    echo -e "  ${CYAN}  或安裝 jq 後重新執行: brew install jq${NC}"
+}
 
-    echo -e "  ${GREEN}[合併] Hooks 設定已自動合併到 settings.json${NC}"
+read_expanded_hooks_content() {
+    local hooks_json="$1"
+    local hooks_dir="$2"
+    jq --arg dir "$hooks_dir" '
+        def expand_hook_paths:
+            walk(if type == "string" then gsub("\\$\\{HOOKS_DIR\\}"; $dir) else . end);
+        .hooks | expand_hook_paths
+    ' "$hooks_json"
+}
 
+merge_statusline_config() {
+    local hooks_json="$1"
+    local settings_json="$2"
     local statusline_content
     statusline_content=$(jq '.statusLine // null' "$hooks_json")
     if [ "$statusline_content" != "null" ] && [ -n "$statusline_content" ]; then
@@ -228,8 +238,21 @@ merge_hooks_config() {
             && mv "${settings_json}.tmp" "$settings_json"
         echo -e "  ${GREEN}[合併] statusLine 設定已自動合併到 settings.json${NC}"
     fi
+}
 
+merge_permissions_config() {
+    local hooks_json="$1"
+    local settings_json="$2"
+    local permissions_content
+    permissions_content=$(jq '.permissions // null' "$hooks_json")
     if [ "$permissions_content" != "null" ] && [ -n "$permissions_content" ]; then
+        local retired_permissions_file="$REPO_DIR/hooks/claude-retired-permission-allow.json"
+        local retired_permissions_allow
+        if [ -f "$retired_permissions_file" ]; then
+            retired_permissions_allow=$(jq '.' "$retired_permissions_file")
+        else
+            retired_permissions_allow='[]'
+        fi
         jq --argjson new_perms "$permissions_content" --argjson retired_allow "$retired_permissions_allow" '
             .permissions.defaultMode = ($new_perms.defaultMode // .permissions.defaultMode // "default") |
             .permissions.allow = (((.permissions.allow // []) - $retired_allow) + ($new_perms.allow // []) | unique) |

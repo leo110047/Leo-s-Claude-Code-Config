@@ -135,29 +135,10 @@ install_managed_skill_profile() {
     cleanup_managed_profile_entries "$target_dir" "$profile_file"
 
     local installed=0
-    local skill
-    if [ "${#selected_skills[@]}" -gt 0 ]; then
-        for skill in "${selected_skills[@]}"; do
-            local src="$REPO_DIR/skills/global/$skill"
-            local dest="$target_dir/$skill"
-
-            if [ ! -d "$src" ]; then
-                echo -e "  ${YELLOW}[跳過] ${missing_label} 不存在: $skill${NC}"
-                continue
-            fi
-
-            link_skill_entry "$src" "$dest"
-            installed=$((installed + 1))
-        done
-    fi
-
-    local link_spec
+    install_selected_profile_skills "$target_dir" "$missing_label" "${selected_skills[@]}"
+    installed="$SELECTED_PROFILE_SKILLS_INSTALLED"
     if [ "${#extra_links[@]}" -gt 0 ]; then
-        for link_spec in "${extra_links[@]}"; do
-            local extra_src="${link_spec%%:*}"
-            local extra_dest_name="${link_spec##*:}"
-            link_skill_entry "$extra_src" "$target_dir/$extra_dest_name"
-        done
+        install_profile_extra_links "$target_dir" "${extra_links[@]}"
     fi
 
     if [ "${#selected_skills[@]}" -gt 0 ]; then
@@ -167,6 +148,36 @@ install_managed_skill_profile() {
     fi
 
     echo -e "  ${GREEN}[安裝] ${label}: $profile (${installed} 個)${NC}"
+}
+
+install_selected_profile_skills() {
+    local target_dir="$1"
+    local missing_label="$2"
+    shift 2
+    local installed=0
+    local skill
+    for skill in "$@"; do
+        local src="$REPO_DIR/skills/global/$skill"
+        local dest="$target_dir/$skill"
+        if [ ! -d "$src" ]; then
+            echo -e "  ${YELLOW}[跳過] ${missing_label} 不存在: $skill${NC}" >&2
+            continue
+        fi
+        link_skill_entry "$src" "$dest"
+        installed=$((installed + 1))
+    done
+    SELECTED_PROFILE_SKILLS_INSTALLED="$installed"
+}
+
+install_profile_extra_links() {
+    local target_dir="$1"
+    shift
+    local link_spec
+    for link_spec in "$@"; do
+        local extra_src="${link_spec%%:*}"
+        local extra_dest_name="${link_spec##*:}"
+        link_skill_entry "$extra_src" "$target_dir/$extra_dest_name"
+    done
 }
 
 managed_profile_needs_sync() {
@@ -191,36 +202,35 @@ managed_profile_needs_sync() {
 
     [ "$desired_csv" = "$current_csv" ] || return 0
 
-    local skill
-    if [ "${#desired_skills[@]}" -gt 0 ]; then
-        for skill in "${desired_skills[@]}"; do
-            local dest="$target_dir/$skill"
-            local src="$REPO_DIR/skills/global/$skill"
-            if [ ! -d "$src" ]; then
-                return 0
-            fi
-            if [ ! -L "$dest" ] || [ "$(readlink "$dest")" != "$src" ]; then
-                return 0
-            fi
-        done
-    fi
-
-    local link_spec
-    if [ "${#extra_links[@]}" -gt 0 ]; then
-        for link_spec in "${extra_links[@]}"; do
-            local extra_src="${link_spec%%:*}"
-            local extra_dest_name="${link_spec##*:}"
-            local dest="$target_dir/$extra_dest_name"
-            if [ ! -e "$extra_src" ]; then
-                return 0
-            fi
-            if [ ! -L "$dest" ] || [ "$(readlink "$dest")" != "$extra_src" ]; then
-                return 0
-            fi
-        done
-    fi
+    managed_profile_skills_synced "$target_dir" "${desired_skills[@]}" || return 0
+    managed_profile_extra_links_synced "$target_dir" "${extra_links[@]}" || return 0
 
     return 1
+}
+
+managed_profile_skills_synced() {
+    local target_dir="$1"
+    shift
+    local skill
+    for skill in "$@"; do
+        local dest="$target_dir/$skill"
+        local src="$REPO_DIR/skills/global/$skill"
+        [ -d "$src" ] || return 1
+        [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ] || return 1
+    done
+}
+
+managed_profile_extra_links_synced() {
+    local target_dir="$1"
+    shift
+    local link_spec
+    for link_spec in "$@"; do
+        local extra_src="${link_spec%%:*}"
+        local extra_dest_name="${link_spec##*:}"
+        local dest="$target_dir/$extra_dest_name"
+        [ -e "$extra_src" ] || return 1
+        [ -L "$dest" ] && [ "$(readlink "$dest")" = "$extra_src" ] || return 1
+    done
 }
 
 sync_existing_managed_skill_profile() {
@@ -243,53 +253,66 @@ sync_existing_managed_skill_profile() {
     done
 
     local profile
-    profile=$(read_profile_value "$profile_file" "profile" 2>/dev/null || true)
-    case "$profile" in
-        core|dev|full)
-            ;;
-        *)
-            profile=$(infer_managed_skill_profile "$tool" "$target_dir" 2>/dev/null || true)
-            case "$profile" in
-                core|dev|full)
-                    ;;
-                *)
-                    return 1
-                    ;;
-            esac
-            ;;
-    esac
+    profile="$(resolve_existing_managed_profile "$tool" "$target_dir" "$profile_file")" || return 1
 
+    if [ "${#extra_links[@]}" -gt 0 ]; then
+        sync_managed_profile_if_needed \
+            "$tool" "$target_dir" "$profile_file" "$profile" \
+            "$label" "$missing_label" "$profile_writer" "${extra_links[@]}"
+    else
+        sync_managed_profile_if_needed \
+            "$tool" "$target_dir" "$profile_file" "$profile" \
+            "$label" "$missing_label" "$profile_writer"
+    fi
+}
+
+sync_managed_profile_if_needed() {
+    local tool="$1"
+    local target_dir="$2"
+    local profile_file="$3"
+    local profile="$4"
+    local label="$5"
+    local missing_label="$6"
+    local profile_writer="$7"
+    shift 7
+    local extra_links=("$@")
     local sync_args=("$tool" "$target_dir" "$profile_file" "$profile")
     if [ "${#extra_links[@]}" -gt 0 ]; then
         sync_args+=("${extra_links[@]}")
     fi
+    managed_profile_needs_sync "${sync_args[@]}" || return 1
 
-    if managed_profile_needs_sync "${sync_args[@]}"; then
-        local selected_skills=()
-        while IFS= read -r skill; do
-            [ -n "$skill" ] && selected_skills+=("$skill")
-        done < <(build_managed_skill_profile_list "$tool" "$profile")
+    local selected_skills=()
+    while IFS= read -r skill; do
+        [ -n "$skill" ] && selected_skills+=("$skill")
+    done < <(build_managed_skill_profile_list "$tool" "$profile")
 
-        local install_args=(
-            "$target_dir"
-            "$profile_file"
-            "$profile"
-            "$label"
-            "$missing_label"
-            "$profile_writer"
-        )
-        if [ "${#extra_links[@]}" -gt 0 ]; then
-            install_args+=("${extra_links[@]}")
-        fi
-        install_args+=("--")
-        if [ "${#selected_skills[@]}" -gt 0 ]; then
-            install_args+=("${selected_skills[@]}")
-        fi
-
-        install_managed_skill_profile \
-            "${install_args[@]}"
-        return 0
+    local install_args=("$target_dir" "$profile_file" "$profile" "$label" "$missing_label" "$profile_writer")
+    if [ "${#extra_links[@]}" -gt 0 ]; then
+        install_args+=("${extra_links[@]}")
     fi
+    install_args+=("--")
+    if [ "${#selected_skills[@]}" -gt 0 ]; then
+        install_args+=("${selected_skills[@]}")
+    fi
+    install_managed_skill_profile "${install_args[@]}"
+}
 
-    return 1
+resolve_existing_managed_profile() {
+    local tool="$1"
+    local target_dir="$2"
+    local profile_file="$3"
+    local profile
+    profile=$(read_profile_value "$profile_file" "profile" 2>/dev/null || true)
+    case "$profile" in
+        core|dev|full)
+            printf '%s\n' "$profile"
+            return 0
+            ;;
+    esac
+    profile=$(infer_managed_skill_profile "$tool" "$target_dir" 2>/dev/null || true)
+    case "$profile" in
+        core|dev|full) printf '%s\n' "$profile" ;;
+        *) return 1 ;;
+    esac
 }

@@ -15,11 +15,7 @@ check_skill_file() {
     return
   fi
 
-  local line_count
-  line_count="$(wc -l < "$skill_file" | tr -d ' ')"
-  if [ "$line_count" -gt 500 ]; then
-    echo "[WARN] $rel over 500 lines ($line_count)"
-  fi
+  warn_large_skill_file "$skill_file" "$rel"
 
   if ! grep -q '^---$' "$skill_file"; then
     echo "[FAIL] $rel missing frontmatter"
@@ -30,6 +26,25 @@ check_skill_file() {
   local frontmatter
   frontmatter="$(sed -n '1,/^---$/p' "$skill_file")"
 
+  check_required_frontmatter "$rel" "$frontmatter"
+  check_special_frontmatter "$rel" "$frontmatter"
+  check_skill_name "$skill_file" "$rel" "$frontmatter"
+  check_skill_references "$skill_file" "$rel"
+}
+
+warn_large_skill_file() {
+  local skill_file="$1"
+  local rel="$2"
+  local line_count
+  line_count="$(wc -l < "$skill_file" | tr -d ' ')"
+  if [ "$line_count" -gt 500 ]; then
+    echo "[WARN] $rel over 500 lines ($line_count)"
+  fi
+}
+
+check_required_frontmatter() {
+  local rel="$1"
+  local frontmatter="$2"
   local name
   name="$(printf '%s\n' "$frontmatter" | awk -F': *' '/^name:/{print $2; exit}')"
 
@@ -53,7 +68,11 @@ check_skill_file() {
     echo "[FAIL] $rel missing allowed-tools:"
     EXIT_CODE=1
   fi
+}
 
+check_special_frontmatter() {
+  local rel="$1"
+  local frontmatter="$2"
   case "$rel" in
     skills/global/careful-mode/SKILL.md|skills/global/freeze-mode/SKILL.md)
       if ! printf '%s\n' "$frontmatter" | grep -q '^disable-model-invocation: true$'; then
@@ -71,7 +90,14 @@ check_skill_file() {
       fi
       ;;
   esac
+}
 
+check_skill_name() {
+  local skill_file="$1"
+  local rel="$2"
+  local frontmatter="$3"
+  local name
+  name="$(printf '%s\n' "$frontmatter" | awk -F': *' '/^name:/{print $2; exit}')"
   local skill_dir
   skill_dir="$(dirname "$skill_file")"
   local expected_name
@@ -86,7 +112,13 @@ check_skill_file() {
     echo "[FAIL] $rel name '$name' is not lowercase kebab-case"
     EXIT_CODE=1
   fi
+}
 
+check_skill_references() {
+  local skill_file="$1"
+  local rel="$2"
+  local skill_dir
+  skill_dir="$(dirname "$skill_file")"
   local ref
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue

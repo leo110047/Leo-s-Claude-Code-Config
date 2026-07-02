@@ -42,9 +42,7 @@ fi
 
 manifest_lines="$(
   awk '
-    /^workflow_wrapper_manifest\(\)/ { in_fn = 1; next }
-    in_fn && /^EOF$/ { exit }
-    in_fn && /^[a-zA-Z0-9-]+\|/ { print }
+    /^[a-zA-Z0-9-]+\|/ { print }
   ' "$INSTALLER"
 )"
 

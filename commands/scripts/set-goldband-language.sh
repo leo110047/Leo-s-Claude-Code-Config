@@ -50,9 +50,7 @@ workflow_manifest_lines() {
   fi
 
   awk '
-    /^workflow_wrapper_manifest\(\)/ { in_fn = 1; next }
-    in_fn && /^EOF$/ { exit }
-    in_fn && /^[a-zA-Z0-9-]+\|/ { print }
+    /^[a-zA-Z0-9-]+\|/ { print }
   ' "$INSTALLER"
 }
 
@@ -129,6 +127,44 @@ sync_wrapper_descriptions() {
   done
 }
 
+describe_wrapper() {
+  local wrapper_name="${1:-}"
+  local language
+  language="$(normalize_language "${2:-zh-TW}")" || {
+    echo "unsupported language: ${2:-<empty>}" >&2
+    exit 1
+  }
+  wrapper_description "$wrapper_name" "$language"
+}
+
+language_for_mode() {
+  local mode="$1"
+  local requested="$2"
+  local workflow_config_bin="$3"
+  local normalized
+
+  case "$mode" in
+    set)
+      normalized="$(normalize_language "$requested")" || return 1
+      "$workflow_config_bin" set goldband_language "$normalized"
+      printf '%s\n' "$normalized"
+      ;;
+    sync)
+      if [ -n "$requested" ]; then
+        normalize_language "$requested" || return 1
+      else
+        read_language "$workflow_config_bin"
+      fi
+      ;;
+    get)
+      read_language "$workflow_config_bin"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
 main() {
   local mode="${1:-sync}"
   local requested="${2:-}"
@@ -136,12 +172,7 @@ main() {
   local language
 
   if [ "$mode" = "describe" ]; then
-    local wrapper_name="${2:-}"
-    language="$(normalize_language "${3:-zh-TW}")" || {
-      echo "unsupported language: ${3:-<empty>}" >&2
-      exit 1
-    }
-    wrapper_description "$wrapper_name" "$language"
+    describe_wrapper "${2:-}" "${3:-zh-TW}"
     exit 0
   fi
 
@@ -150,36 +181,18 @@ main() {
     exit 1
   }
 
-  case "$mode" in
-    set)
-      language="$(normalize_language "$requested")" || {
-        echo "unsupported language: ${requested:-<empty>}" >&2
-        exit 1
-      }
-      "$workflow_config_bin" set goldband_language "$language"
-      ;;
-    sync)
-      if [ -n "$requested" ]; then
-        language="$(normalize_language "$requested")" || {
-          echo "unsupported language: $requested" >&2
-          exit 1
-        }
-      else
-        language="$(read_language "$workflow_config_bin")"
-      fi
-      ;;
-    get)
-      read_language "$workflow_config_bin"
-      exit 0
-      ;;
-    *)
+  language="$(language_for_mode "$mode" "$requested" "$workflow_config_bin")" || {
+    if [ "$?" -eq 2 ]; then
       echo "usage: $0 {set <zh-TW|en>|sync [zh-TW|en]|get}" >&2
-      exit 1
-      ;;
-  esac
+    else
+      echo "unsupported language: ${requested:-<empty>}" >&2
+    fi
+    exit 1
+  }
 
-  if [ -z "${language:-}" ]; then
-    language="$(read_language "$workflow_config_bin")"
+  if [ "$mode" = "get" ]; then
+    printf '%s\n' "$language"
+    exit 0
   fi
 
   sync_wrapper_descriptions "$language"

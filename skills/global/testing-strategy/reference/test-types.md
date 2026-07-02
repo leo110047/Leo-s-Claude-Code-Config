@@ -55,18 +55,19 @@ describe('UserService', () => {
 
   describe('createUser', () => {
     it('creates user with valid credentials', async () => {
-      const user = await service.createUser('test@example.com', 'password123')
+      const validPassword = 'sample-passphrase'
+      const user = await service.createUser('test@example.com', validPassword)
 
       expect(mockDb.users.create).toHaveBeenCalledWith({
         email: 'test@example.com',
-        password: 'password123'
+        password: validPassword
       })
       expect(user).toEqual({ id: '1', email: 'test@example.com' })
     })
 
     it('rejects invalid email', async () => {
       await expect(
-        service.createUser('invalid-email', 'password123')
+        service.createUser('invalid-email', 'sample-passphrase')
       ).rejects.toThrow('Invalid email')
     })
 
@@ -175,11 +176,12 @@ import { app } from '../app'
 
 describe('POST /api/users', () => {
   it('creates new user and returns 201', async () => {
+    const validPassword = 'sample-passphrase'
     const response = await request(app)
       .post('/api/users')
       .send({
         email: 'test@example.com',
-        password: 'password123'
+        password: validPassword
       })
       .expect(201)
 
@@ -191,11 +193,12 @@ describe('POST /api/users', () => {
   })
 
   it('returns 400 for invalid email', async () => {
+    const validPassword = 'sample-passphrase'
     const response = await request(app)
       .post('/api/users')
       .send({
         email: 'invalid-email',
-        password: 'password123'
+        password: validPassword
       })
       .expect(400)
 
@@ -217,7 +220,7 @@ test.describe('Checkout Flow', () => {
     // Login
     await page.goto('/login')
     await page.fill('[name="email"]', 'test@example.com')
-    await page.fill('[name="password"]', 'password123')
+    await page.fill('[name="password"]', 'sample-passphrase')
     await page.click('button[type="submit"]')
 
     // Add item to cart

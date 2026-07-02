@@ -26,12 +26,10 @@ resolve_repo_dir() {
   cd "$script_dir/.." && pwd
 }
 
-main() {
-  local repo_dir
-  repo_dir="$(resolve_repo_dir)" || exit 0
-
+init_sync_environment() {
+  local repo_dir="$1"
   local skill_catalog_file="$repo_dir/shell/install/skill-catalog.txt"
-  [ -f "$skill_catalog_file" ] || exit 0
+  [ -f "$skill_catalog_file" ] || return 1
 
   REPO_DIR="$repo_dir"
   CLAUDE_DIR="$HOME/.claude"
@@ -55,9 +53,9 @@ main() {
   . "$REPO_DIR/shell/install/common.sh"
   # shellcheck source=/dev/null
   . "$REPO_DIR/shell/install/managed-profiles.sh"
+}
 
-  local changed=0
-
+sync_claude_skill_profile() {
   if sync_existing_managed_skill_profile \
       "claude" \
       "$SKILLS_DIR" \
@@ -68,10 +66,11 @@ main() {
       "$REPO_DIR/skills/global/README.md:README.md" \
       "$REPO_DIR/skills/global/skill-rules.json:skill-rules.json" \
       --; then
-    changed=1
     printf '[goldband] synced Claude skills profile from repo catalog.\n' >&2
   fi
+}
 
+sync_codex_skill_profile() {
   if sync_existing_managed_skill_profile \
       "codex" \
       "$CODEX_SKILLS_DIR" \
@@ -80,10 +79,16 @@ main() {
       "Codex skill" \
       "write_codex_skill_profile_file" \
       --; then
-    changed=1
     printf '[goldband] synced Codex skills profile from repo catalog.\n' >&2
   fi
+}
 
+main() {
+  local repo_dir
+  repo_dir="$(resolve_repo_dir)" || exit 0
+  init_sync_environment "$repo_dir" || exit 0
+  sync_claude_skill_profile
+  sync_codex_skill_profile
   exit 0
 }
 

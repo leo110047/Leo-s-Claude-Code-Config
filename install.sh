@@ -44,6 +44,12 @@ show_help() {
     echo "用法: ./install.sh [選項]"
     echo ""
     echo "選項:"
+    show_help_claude_options
+    show_help_codex_options
+    show_help_examples
+}
+
+show_help_claude_options() {
     echo "  ----- Claude Code -----"
     echo "  pack-core   安裝核心包（預設，最小 token）"
     echo "  pack-quality 安裝品質開發包（core + commands/contexts）"
@@ -62,6 +68,9 @@ show_help() {
     echo "  style-gate  安裝全域 git style gate（pre-commit + commit-msg）"
     echo "  launchers   安裝 shell 啟動整合（claude/codex 啟動前自動檢查更新）"
     echo "  unity       安裝 Unity 專案 skills 到當前目錄"
+}
+
+show_help_codex_options() {
     echo "  ----- Codex -----"
     echo "  codex-core  安裝 Codex 核心設定（global AGENTS/config/rules + core skills）"
     echo "  codex-full  安裝 Codex 完整設定（global AGENTS/config/rules + portable skills）"
@@ -81,6 +90,9 @@ show_help() {
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
+}
+
+show_help_examples() {
     echo ""
     echo "範例:"
     echo "  ./install.sh              # 安裝 pack-core（預設）"
