@@ -103,6 +103,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ -n "${GOLDBAND_TEST_WORKFLOW_SETUP_DELAY:-}" ]; then
+  echo "fixture workflow setup started: $HOST"
+  sleep "$GOLDBAND_TEST_WORKFLOW_SETUP_DELAY"
+fi
+
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 mkdir -p "$HOME/.workflow/projects"
@@ -178,17 +183,38 @@ cp -R "$TMP_WORKFLOW" "$TMP_ROOT/vendor/workflow"
 chmod +x "$TMP_ROOT/install.sh"
 chmod +x "$TMP_ROOT/shell/goldband-self-update.sh" "$TMP_ROOT/shell/goldband-sync-skills.sh"
 
-echo "[1/5] skill and Codex hook checks"
+echo "[1/8] skill and Codex hook checks"
 "$ROOT_DIR/scripts/check-skills.sh"
 node "$ROOT_DIR/scripts/test-codex-hook-router.mjs"
 
-echo "[2/5] installer smoke"
+echo "[2/8] installer smoke"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-workflow-install.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-workflow-codex.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" all-with-workflow >/tmp/goldband-all-with-workflow.log
 CODEX_REQUIREMENTS_FILE="$TMP_HOME/.codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" codex-requirements >/tmp/goldband-codex-requirements.log
 
-echo "[3/6] verify symlinks"
+echo "[3/8] workflow setup output streams while running"
+STREAM_LOG="/tmp/goldband-workflow-stream.log"
+GOLDBAND_TEST_WORKFLOW_SETUP_DELAY=2 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-auto >"$STREAM_LOG" 2>&1 &
+stream_pid=$!
+stream_seen=0
+stream_deadline=$((SECONDS + 10))
+while [ "$SECONDS" -lt "$stream_deadline" ]; do
+    if grep -q "fixture workflow setup started: auto" "$STREAM_LOG"; then
+        stream_seen=1
+        break
+    fi
+    sleep 0.2
+done
+if [ "$stream_seen" -ne 1 ]; then
+    kill "$stream_pid" 2>/dev/null || true
+    wait "$stream_pid" 2>/dev/null || true
+    echo "workflow setup output did not stream before completion" >&2
+    exit 1
+fi
+wait "$stream_pid"
+
+echo "[4/8] verify symlinks"
 test -d "$TMP_HOME/.claude/skills/workflow"
 test -d "$TMP_HOME/.codex/skills/workflow"
 test -d "$TMP_HOME/.workflow/projects"
@@ -339,7 +365,7 @@ NEW_HEAD="$(git -C "$TMP_UPDATE_WORK/repo" rev-parse HEAD)"
 test "$OLD_HEAD" != "$NEW_HEAD"
 grep -q '\[goldband\] updated' /tmp/goldband-self-update.log
 
-echo "[4/7] managed skill sync"
+echo "[5/8] managed skill sync"
 mkdir -p "$TMP_ROOT/skills/global/dummy-ui-skill"
 cat > "$TMP_ROOT/skills/global/dummy-ui-skill/SKILL.md" <<'EOF'
 ---
@@ -360,7 +386,7 @@ grep -q 'dummy-ui-skill' "$TMP_HOME/.agents/skills/.goldband-profile"
 grep -q '\[goldband\] synced Claude skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
 grep -q '\[goldband\] synced Codex skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
 
-echo "[5/7] status output"
+echo "[6/8] status output"
 STATUS_OUTPUT="$(CODEX_REQUIREMENTS_FILE="$TMP_HOME/.codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
 echo "$STATUS_OUTPUT" | grep -q "workflow Claude install"
 echo "$STATUS_OUTPUT" | grep -q "workflow Codex runtime (0.0.0-test)"
@@ -383,7 +409,7 @@ printf '%s\n' 'user-owned claude guidance' > "$USER_CLAUDE_HOME/.claude/CLAUDE.m
 CODEX_REQUIREMENTS_FILE="$USER_CLAUDE_HOME/.codex/requirements.toml" HOME="$USER_CLAUDE_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-user-claude-uninstall.log
 grep -q 'user-owned claude guidance' "$USER_CLAUDE_HOME/.claude/CLAUDE.md"
 
-echo "[6/7] verifier output"
+echo "[7/8] verifier output"
 VERIFIER_OUTPUT="$(HOME="$TMP_HOME" node "$TMP_ROOT/skills/global/claude-config-verification/scripts/verify-claude-config.js" --json)"
 echo "$VERIFIER_OUTPUT" | grep -q '"claudeInstalled": true'
 echo "$VERIFIER_OUTPUT" | grep -q '"codexInstalled": true'
@@ -391,7 +417,7 @@ echo "$VERIFIER_OUTPUT" | grep -q '"stateInstalled": true'
 echo "$VERIFIER_OUTPUT" | grep -q '"codexVersion": "0.0.0-test"'
 echo "$VERIFIER_OUTPUT" | grep -q '~/.codex/skills/goldband-\*'
 
-echo "[7/7] language command flow docs"
+echo "[8/8] language command flow docs"
 grep -q '不要先讀目前設定' "$TMP_ROOT/commands/goldband-language.md"
 grep -q '第一個提問固定用中英雙語短句' "$TMP_ROOT/commands/goldband-language.md"
 

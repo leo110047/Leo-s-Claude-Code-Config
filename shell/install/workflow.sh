@@ -516,7 +516,8 @@ normalize_workflow_runtime_install() {
 install_workflow_host() {
     local host="$1"
     local repo_dir
-    local setup_output
+    local setup_status
+    local errexit_was_set=0
     local legacy_runtime_name="g""stack"
 
     if ! repo_dir="$(resolve_workflow_repo_dir)"; then
@@ -533,18 +534,29 @@ install_workflow_host() {
     echo -e "  repo: ${CYAN}$repo_dir${NC}"
     echo -e "  version: ${CYAN}$version${NC}"
     echo ""
-    if ! setup_output="$(
+    case "$-" in
+        *e*) errexit_was_set=1 ;;
+    esac
+    set +e
+    (
         cd "$repo_dir" || {
             echo "  [錯誤] 無法進入 workflow runtime: $repo_dir"
             exit 1
         }
         GSTACK_HOME="$HOME/.workflow" ./setup --host "$host" --prefix --quiet 2>&1
-    )"; then
-        printf '%s\n' "$setup_output" | sed "s/$legacy_runtime_name/workflow/g"
-        exit 1
+    ) | awk -v legacy="$legacy_runtime_name" '{
+        gsub(legacy, "workflow")
+        print
+        fflush()
+    }'
+    setup_status=${PIPESTATUS[0]}
+    if [ "$errexit_was_set" -eq 1 ]; then
+        set -e
+    else
+        set +e
     fi
-    if [ -n "$setup_output" ]; then
-        printf '%s\n' "$setup_output" | sed "s/$legacy_runtime_name/workflow/g"
+    if [ "$setup_status" -ne 0 ]; then
+        exit "$setup_status"
     fi
     normalize_workflow_runtime_install "$host"
     create_goldband_workflow_aliases

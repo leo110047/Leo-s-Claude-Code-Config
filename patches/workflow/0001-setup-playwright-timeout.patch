@@ -1,0 +1,62 @@
+diff --git a/vendor/workflow/setup b/vendor/workflow/setup
+index 1638657..1a7f0e5 100755
+--- a/vendor/workflow/setup
++++ b/vendor/workflow/setup
+@@ -285,0 +286,26 @@ bun_cmd() {
++run_with_timeout() {
++  local timeout_seconds="$1"
++  shift
++
++  if command -v gtimeout >/dev/null 2>&1; then
++    gtimeout "${timeout_seconds}s" "$@"
++  elif command -v timeout >/dev/null 2>&1; then
++    timeout "${timeout_seconds}s" "$@"
++  elif command -v python3 >/dev/null 2>&1; then
++    python3 -c '
++import subprocess
++import sys
++
++timeout = float(sys.argv[1])
++command = sys.argv[2:]
++try:
++    raise SystemExit(subprocess.call(command, timeout=timeout))
++except subprocess.TimeoutExpired:
++    raise SystemExit(124)
++' "$timeout_seconds" "$@"
++  else
++    echo "gstack setup warning: no timeout helper found; skipping timed command to avoid an unbounded hang" >&2
++    return 124
++  fi
++}
++
+@@ -396,0 +423 @@ fi
++PLAYWRIGHT_READY=1
+@@ -398,0 +426 @@ if ! ensure_playwright_browser; then
++  PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS="${GSTACK_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS:-300}"
+@@ -401,2 +429,12 @@ if ! ensure_playwright_browser; then
+-    bunx playwright install chromium
+-  )
++    run_with_timeout "$PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS" bunx playwright install chromium
++  ) || {
++    if [ "${GSTACK_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
++      echo "gstack setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
++      echo "  Re-run manually for details: cd $SOURCE_GSTACK_DIR && bunx playwright install chromium" >&2
++      echo "  Or increase the timeout: GSTACK_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
++      exit 1
++    fi
++    PLAYWRIGHT_READY=0
++    echo "warning: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s; continuing without browser runtime" >&2
++    echo "  Re-run manually for details: cd $SOURCE_GSTACK_DIR && bunx playwright install chromium" >&2
++  }
+@@ -404 +442 @@ if ! ensure_playwright_browser; then
+-  if [ "$IS_WINDOWS" -eq 1 ]; then
++  if [ "$PLAYWRIGHT_READY" -eq 1 ] && [ "$IS_WINDOWS" -eq 1 ]; then
+@@ -425 +463 @@ fi
+-if ! ensure_playwright_browser; then
++if [ "$PLAYWRIGHT_READY" -eq 1 ] && ! ensure_playwright_browser; then
+@@ -433 +471,4 @@ if ! ensure_playwright_browser; then
+-  exit 1
++  if [ "${GSTACK_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
++    exit 1
++  fi
++  echo "warning: continuing without browser runtime; run 'cd $SOURCE_GSTACK_DIR && bunx playwright install chromium' to enable browser workflows" >&2

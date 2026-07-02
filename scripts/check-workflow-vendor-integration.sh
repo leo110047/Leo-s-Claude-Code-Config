@@ -6,6 +6,8 @@ WORKFLOW_DIR="$ROOT_DIR/vendor/workflow"
 INSTALLER="$ROOT_DIR/shell/install/workflow.sh"
 LANGUAGE_SCRIPT="$ROOT_DIR/commands/scripts/set-goldband-language.sh"
 RUNBOOK="$ROOT_DIR/WORKFLOW_VENDORING.md"
+PATCH_DIR="$ROOT_DIR/patches/workflow"
+PATCH_REPLAY_SCRIPT="$ROOT_DIR/scripts/apply-workflow-vendor-patches.sh"
 EXIT_CODE=0
 
 fail() {
@@ -111,6 +113,8 @@ if [ -f "$RUNBOOK" ]; then
     "## Constraints" \
     "## Iteration Policy" \
     "## Error Handling" \
+    "scripts/apply-workflow-vendor-patches.sh" \
+    "patches/workflow/" \
     "workflow_wrapper_manifest()"
   do
     if grep -Fq "$required" "$RUNBOOK"; then
@@ -121,6 +125,32 @@ if [ -f "$RUNBOOK" ]; then
   done
 else
   fail "workflow vendoring runbook missing: WORKFLOW_VENDORING.md"
+fi
+
+if [ -x "$PATCH_REPLAY_SCRIPT" ]; then
+  ok "workflow vendor patch replay script exists"
+else
+  fail "workflow vendor patch replay script missing or not executable: scripts/apply-workflow-vendor-patches.sh"
+fi
+
+if [ -d "$PATCH_DIR" ]; then
+  patch_count="$(find "$PATCH_DIR" -maxdepth 1 -name '*.patch' -print | wc -l | tr -d ' ')"
+  if [ "$patch_count" -gt 0 ]; then
+    ok "workflow vendor patches registered: $patch_count"
+  else
+    fail "workflow vendor patch directory has no patch files"
+  fi
+
+  while IFS= read -r patch; do
+    [ -n "$patch" ] || continue
+    if git -C "$ROOT_DIR" apply --unidiff-zero --reverse --check "$patch" >/dev/null 2>&1; then
+      ok "workflow vendor patch is applied: ${patch#$ROOT_DIR/}"
+    else
+      fail "workflow vendor patch is not applied cleanly: ${patch#$ROOT_DIR/}"
+    fi
+  done < <(find "$PATCH_DIR" -maxdepth 1 -name '*.patch' -print | sort)
+else
+  fail "workflow vendor patch directory missing: patches/workflow"
 fi
 
 if [ "$EXIT_CODE" -eq 0 ]; then

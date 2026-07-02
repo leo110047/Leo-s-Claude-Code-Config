@@ -37,7 +37,17 @@ A complete workflow vendor update leaves the repo in this state:
    rsync -a --delete --exclude .git --exclude node_modules /path/to/upstream/ vendor/workflow/
    ```
 
-4. Reapply the goldband integration layer outside the vendor boundary:
+4. Reapply tracked goldband patches to the vendored source snapshot:
+
+   ```bash
+   bash scripts/apply-workflow-vendor-patches.sh
+   ```
+
+   Patch files live outside the vendor boundary under `patches/workflow/` so
+   `rsync --delete` cannot silently remove them. Prefer upstreaming these
+   patches; keep only intentional, reviewed deltas here.
+
+5. Reapply the goldband integration layer outside the vendor boundary:
 
    - compatibility wrappers in `vendor/workflow/bin/workflow-*` when upstream
      only exposes `gstack-*`
@@ -46,7 +56,7 @@ A complete workflow vendor update leaves the repo in this state:
    - language wrapper runtime injection
    - CI and verification docs
 
-5. Regenerate workflow skill docs if templates changed:
+6. Regenerate workflow skill docs if templates changed:
 
    ```bash
    cd vendor/workflow
@@ -54,7 +64,7 @@ A complete workflow vendor update leaves the repo in this state:
    bun run gen:skill-docs --host codex
    ```
 
-6. Stage all source changes, then verify ignored artifacts are not staged:
+7. Stage all source changes, then verify ignored artifacts are not staged:
 
    ```bash
    git add -A
@@ -95,6 +105,10 @@ worktree output.
 - Do not edit generated directories such as `vendor/workflow/.agents/`,
   `vendor/workflow/.factory/`, `vendor/workflow/*/dist/`, or
   `vendor/workflow/node_modules/`.
+- Do not leave direct `vendor/workflow` source edits undocumented. If a
+  vendored source delta cannot land upstream immediately, record it as a
+  replayable patch under `patches/workflow/` and verify it with
+  `scripts/apply-workflow-vendor-patches.sh`.
 - Do not duplicate wrapper descriptions outside
   `workflow_wrapper_manifest()`.
 - Do not expose upstream `gstack-*` names as goldband's primary user-facing
@@ -109,7 +123,8 @@ While working, keep a short record of:
 
 - upstream source and version
 - files changed outside `vendor/workflow`
-- goldband patches reapplied after vendoring
+- goldband patches reapplied after vendoring, including patch filenames from
+  `patches/workflow/`
 - commands run and their pass/fail result
 - intentionally skipped checks and why
 

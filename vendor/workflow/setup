@@ -283,6 +283,32 @@ bun_cmd() {
   "$BUN_CMD" "$@"
 }
 
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "${timeout_seconds}s" "$@"
+  elif command -v timeout >/dev/null 2>&1; then
+    timeout "${timeout_seconds}s" "$@"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import subprocess
+import sys
+
+timeout = float(sys.argv[1])
+command = sys.argv[2:]
+try:
+    raise SystemExit(subprocess.call(command, timeout=timeout))
+except subprocess.TimeoutExpired:
+    raise SystemExit(124)
+' "$timeout_seconds" "$@"
+  else
+    echo "gstack setup warning: no timeout helper found; skipping timed command to avoid an unbounded hang" >&2
+    return 124
+  fi
+}
+
 cleanup_copied_bun() {
   if [ "${BUN_CMD_WAS_COPIED:-0}" -eq 1 ]; then
     rm -rf "$SOURCE_GSTACK_DIR/.tmp-bun-bin"
@@ -394,14 +420,26 @@ if [ "$INSTALL_OPENCODE" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
 fi
 
 # 2. Ensure Playwright's Chromium is available
+PLAYWRIGHT_READY=1
 if ! ensure_playwright_browser; then
   echo "Installing Playwright Chromium..."
+  PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS="${GSTACK_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS:-300}"
   (
     cd "$SOURCE_GSTACK_DIR"
-    bunx playwright install chromium
-  )
+    run_with_timeout "$PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS" bunx playwright install chromium
+  ) || {
+    if [ "${GSTACK_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
+      echo "gstack setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
+      echo "  Re-run manually for details: cd $SOURCE_GSTACK_DIR && bunx playwright install chromium" >&2
+      echo "  Or increase the timeout: GSTACK_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
+      exit 1
+    fi
+    PLAYWRIGHT_READY=0
+    echo "warning: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s; continuing without browser runtime" >&2
+    echo "  Re-run manually for details: cd $SOURCE_GSTACK_DIR && bunx playwright install chromium" >&2
+  }
 
-  if [ "$IS_WINDOWS" -eq 1 ]; then
+  if [ "$PLAYWRIGHT_READY" -eq 1 ] && [ "$IS_WINDOWS" -eq 1 ]; then
     # On Windows, Node.js launches Chromium (not Bun — see oven-sh/bun#4253).
     # Ensure playwright is importable by Node from the gstack directory.
     if ! command -v node >/dev/null 2>&1; then
@@ -422,7 +460,7 @@ if ! ensure_playwright_browser; then
   fi
 fi
 
-if ! ensure_playwright_browser; then
+if [ "$PLAYWRIGHT_READY" -eq 1 ] && ! ensure_playwright_browser; then
   if [ "$IS_WINDOWS" -eq 1 ]; then
     echo "gstack setup failed: Playwright Chromium could not be launched via Node.js" >&2
     echo "  This is a known issue with Bun on Windows (oven-sh/bun#4253)." >&2
@@ -430,7 +468,10 @@ if ! ensure_playwright_browser; then
   else
     echo "gstack setup failed: Playwright Chromium could not be launched" >&2
   fi
-  exit 1
+  if [ "${GSTACK_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
+    exit 1
+  fi
+  echo "warning: continuing without browser runtime; run 'cd $SOURCE_GSTACK_DIR && bunx playwright install chromium' to enable browser workflows" >&2
 fi
 
 # 3. Ensure ~/.gstack global state directory exists
