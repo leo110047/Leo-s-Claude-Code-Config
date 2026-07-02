@@ -189,28 +189,26 @@ merge_hooks_config() {
         --argjson existing "$existing_hooks" \
         --argjson new_hooks "$hooks_content" \
         '
+        def hook_key:
+            .hooks[0].command // .hooks[0].prompt // .description // tostring;
+
         def merge_phase(phase):
             (($existing[phase] // []) + ($new_hooks[phase] // []))
-            | group_by(.hooks[0].command)
-            | map(last);
-
-        def merge_by_description(phase):
-            (($existing[phase] // []) + ($new_hooks[phase] // []))
-            | group_by(.description)
+            | group_by(hook_key)
             | map(last);
 
         {
-            SessionStart: merge_by_description("SessionStart"),
+            SessionStart: merge_phase("SessionStart"),
             UserPromptSubmit: merge_phase("UserPromptSubmit"),
             PreToolUse: merge_phase("PreToolUse"),
             PostToolUse: merge_phase("PostToolUse"),
-            PostToolUseFailure: merge_by_description("PostToolUseFailure"),
+            PostToolUseFailure: merge_phase("PostToolUseFailure"),
             Stop: merge_phase("Stop"),
-            SubagentStop: merge_by_description("SubagentStop"),
-            Notification: merge_by_description("Notification"),
-            PreCompact: merge_by_description("PreCompact"),
-            PostCompact: merge_by_description("PostCompact"),
-            SessionEnd: merge_by_description("SessionEnd")
+            SubagentStop: merge_phase("SubagentStop"),
+            Notification: merge_phase("Notification"),
+            PreCompact: merge_phase("PreCompact"),
+            PostCompact: merge_phase("PostCompact"),
+            SessionEnd: merge_phase("SessionEnd")
         }
         ')
 

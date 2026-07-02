@@ -796,12 +796,14 @@ function mergeHooksConfig(context) {
     return [...map.values()];
   };
 
-  mergedHooks.UserPromptSubmit = mergeBy('UserPromptSubmit', (entry) => entry.hooks?.[0]?.command ?? JSON.stringify(entry));
-  mergedHooks.PreToolUse = mergeBy('PreToolUse', (entry) => entry.hooks?.[0]?.command ?? JSON.stringify(entry));
-  mergedHooks.PostToolUse = mergeBy('PostToolUse', (entry) => entry.hooks?.[0]?.command ?? JSON.stringify(entry));
-  mergedHooks.Stop = mergeBy('Stop', (entry) => entry.hooks?.[0]?.command ?? JSON.stringify(entry));
-  mergedHooks.SubagentStop = mergeBy('SubagentStop', (entry) => entry.description ?? JSON.stringify(entry));
-  mergedHooks.Notification = mergeBy('Notification', (entry) => entry.description ?? JSON.stringify(entry));
+  const hookKey = (entry) => entry.hooks?.[0]?.command ?? entry.hooks?.[0]?.prompt ?? entry.description ?? JSON.stringify(entry);
+
+  mergedHooks.UserPromptSubmit = mergeBy('UserPromptSubmit', hookKey);
+  mergedHooks.PreToolUse = mergeBy('PreToolUse', hookKey);
+  mergedHooks.PostToolUse = mergeBy('PostToolUse', hookKey);
+  mergedHooks.Stop = mergeBy('Stop', hookKey);
+  mergedHooks.SubagentStop = mergeBy('SubagentStop', hookKey);
+  mergedHooks.Notification = mergeBy('Notification', hookKey);
 
   settings.hooks = mergedHooks;
 

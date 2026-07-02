@@ -83,6 +83,10 @@ pwsh -File .\install.ps1 status
 
 全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 `goldband-*` workflow、commands、skills、hooks 和 rules。
 
+## 權限邊界
+
+Claude `hooks/hooks.json` 使用 `defaultMode: acceptEdits`，定位是信任本機開發環境的便利 profile，不是 sandbox。它會用 hooks、permissions 和 deny list 降低誤操作風險，但不能把惡意或任意 shell 視為已隔離。`node`、`python`、`xargs`、`find` 和 `sed` 這類可包裝或批次執行其他動作的 broad allow pattern 不應放回 source auto-allow；需要時應由使用者針對具體命令確認，或在本機 overlay 裡明確承擔信任邊界。
+
 ## Codex 補充
 
 Codex tracked config/rules 只放 portable baseline。本機路徑、trusted projects、plugin state 和一次性 approvals 放在 ignored overlay：

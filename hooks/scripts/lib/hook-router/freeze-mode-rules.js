@@ -5,7 +5,7 @@ const FREEZE_MODE_PROTECTIONS = [
   },
   {
     rule: 'no-shell-chaining',
-    detail: 'blocks shell chaining, pipes, and redirections because they are harder to classify as read-only'
+    detail: 'blocks shell chaining, command substitution, pipes, and redirections because they are harder to classify as read-only'
   },
   {
     rule: 'no-file-edits',
@@ -105,15 +105,15 @@ const FREEZE_MODE_ALLOWED_BASH = [
     }
   },
   {
-    rule: 'env',
+    rule: 'printenv',
     matches(command) {
-      return /^(env|printenv)(?:\s|$)/.test(command);
+      return /^printenv(?:\s|$)/.test(command);
     }
   },
   {
     rule: 'echo',
     matches(command) {
-      return /^(echo|printf)(?:\s|$)/.test(command);
+      return /^echo(?:\s|$)/.test(command);
     }
   },
   {
@@ -128,7 +128,7 @@ const FREEZE_MODE_ALLOWED_BASH = [
 ];
 
 function hasShellControlOperators(command) {
-  return /[|;&><]/.test(command);
+  return /[|;&><`]/.test(command) || /\$\(/.test(command) || /[\r\n]/.test(command);
 }
 
 function matchFreezeModeBashViolation(command) {
@@ -136,14 +136,15 @@ function matchFreezeModeBashViolation(command) {
     return null;
   }
 
-  const normalized = String(command).replace(/\s+/g, ' ').trim();
-  if (hasShellControlOperators(normalized)) {
+  const rawCommand = String(command);
+  if (hasShellControlOperators(rawCommand)) {
     return {
       rule: 'no-shell-chaining',
-      detail: 'freeze-mode blocks shell chaining, pipes, and redirections'
+      detail: 'freeze-mode blocks shell chaining, command substitution, pipes, and redirections'
     };
   }
 
+  const normalized = rawCommand.replace(/\s+/g, ' ').trim();
   if (FREEZE_MODE_ALLOWED_BASH.some(item => item.matches(normalized))) {
     return null;
   }

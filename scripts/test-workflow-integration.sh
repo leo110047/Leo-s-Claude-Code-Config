@@ -240,6 +240,13 @@ if jq -e --slurpfile retired "$TMP_ROOT/hooks/claude-retired-permission-allow.js
     echo "retired broad Claude permission allow patterns should not be installed" >&2
     exit 1
 fi
+EXPECTED_HOOK_COUNT="$(jq '[.hooks[] | length] | add' "$TMP_ROOT/hooks/hooks.json")"
+jq '.hooks.SessionStart += [{"hooks":[{"type":"command","command":"node \"'"$TMP_HOME"'/.claude/hooks/scripts/hooks/hook-router.js\"","timeout":5}]}]' \
+  "$TMP_HOME/.claude/settings.json" > "$TMP_HOME/.claude/settings.json.tmp"
+mv "$TMP_HOME/.claude/settings.json.tmp" "$TMP_HOME/.claude/settings.json"
+HOME="$TMP_HOME" "$TMP_ROOT/install.sh" hooks >/tmp/goldband-hooks-dedup.log
+ACTUAL_HOOK_COUNT="$(jq '[.hooks[] | length] | add' "$TMP_HOME/.claude/settings.json")"
+test "$ACTUAL_HOOK_COUNT" = "$EXPECTED_HOOK_COUNT"
 test ! -e "$TMP_HOME/.claude/skills/review"
 test ! -e "$TMP_HOME/.claude/skills/goldband-upgrade"
 test ! -e "$TMP_HOME/.codex/skills/workflow-review"
@@ -365,7 +372,7 @@ echo "$STATUS_OUTPUT" | grep -q "token-backed MCP env"
 USER_CLAUDE_HOME="$TMP_HOME/user-owned-claude"
 mkdir -p "$USER_CLAUDE_HOME/.claude"
 printf '%s\n' 'user-owned claude guidance' > "$USER_CLAUDE_HOME/.claude/CLAUDE.md"
-HOME="$USER_CLAUDE_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-user-claude-uninstall.log
+CODEX_REQUIREMENTS_FILE="$USER_CLAUDE_HOME/.codex/requirements.toml" HOME="$USER_CLAUDE_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-user-claude-uninstall.log
 grep -q 'user-owned claude guidance' "$USER_CLAUDE_HOME/.claude/CLAUDE.md"
 
 echo "[6/7] verifier output"

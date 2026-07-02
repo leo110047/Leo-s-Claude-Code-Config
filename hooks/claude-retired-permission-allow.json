@@ -8,6 +8,11 @@
   "Bash(tar *)",
   "Bash(unzip *)",
   "Bash(curl *)",
-  "Bash(chmod *)"
+  "Bash(chmod *)",
+  "Bash(find *)",
+  "Bash(sed *)",
+  "Bash(xargs *)",
+  "Bash(python3 *)",
+  "Bash(python *)",
+  "Bash(node *)"
 ]
-

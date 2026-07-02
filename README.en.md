@@ -90,6 +90,17 @@ Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
 `goldband-*` workflows, commands, skills, hooks, and rules.
 
+## Permission Boundary
+
+Claude `hooks/hooks.json` uses `defaultMode: acceptEdits`. This is a convenience
+profile for a trusted local development environment, not a sandbox. Hooks,
+permissions, and deny rules reduce accidental-risk exposure, but they do not
+isolate malicious or arbitrary shell commands. Broad allow patterns for command
+wrappers or batch executors such as `node`, `python`, `xargs`, `find`, and `sed`
+should not be restored to the source auto-allow list; if needed, approve the
+specific command explicitly or place the local trust decision in an ignored
+machine-local overlay.
+
 ## Codex Notes
 
 Codex tracked config/rules are the portable baseline only. Machine-local paths,
