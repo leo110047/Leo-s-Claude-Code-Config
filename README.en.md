@@ -97,8 +97,10 @@ the ignored overlay:
 `./install.sh codex-full` combines the portable baseline and local overlay into
 `~/.codex/`.
 Codex custom agents are installed from `codex/agents/` to `~/.codex/agents/`.
-The current prototypes are `reviewer`, `explorer`, and `planner` for code
-review, read-only exploration, and planning.
+The current workflow-aligned read-only helpers are `reviewer`, `explorer`, and
+`planner`. Full review still belongs to `/goldband-review`; full planning still
+belongs to `/plan` / `/goldband-plan-eng-review`. The agents are for bounded
+second passes, current-state mapping, or plan drafts.
 Codex hooks are installed from `codex/hooks.json` and `codex/hooks/` to
 `~/.codex/`, providing minimal SessionStart, PreToolUse, PostToolUse,
 PreCompact, PostCompact, and Stop parity.

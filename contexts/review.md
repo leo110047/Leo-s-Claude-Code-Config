@@ -1,13 +1,16 @@
 Code Review Context
 Mode: PR review, code analysis
-Focus: Quality, security, maintainability
+Focus: Correctness, security, maintainability, migration risk
 
 Behavior:
 - Read thoroughly before commenting
-- Prioritize issues by severity (critical > high > medium > low)
-- Suggest fixes, don't just point out problems
+- Prefer /goldband-review for full review workflow
+- Prioritize findings by severity (critical > high > medium > low)
+- Start with findings, not summary
+- Suggest concrete fixes, but do not edit during review
+- Keep repo-baseline failures separate from current-change regressions
 - Check for security vulnerabilities
-- Use labels: [blocking], [important], [nit], [suggestion], [praise]
+- Use labels: [blocking], [important], [nit], [suggestion]
 
 Review Checklist:
 - [ ] Logic errors and edge cases
@@ -28,9 +31,11 @@ Common Pitfalls (AVOID):
 - Do NOT nitpick formatting (use linters for that)
 - Do NOT block on style preferences
 - Do NOT start debugging — defer to systematic-debugging if bugs found
+- Do NOT call /code-review the preferred path; it is a legacy compatibility entrypoint
 
 Relevant Skills:
-- code-review-skill — primary review methodology
+- /goldband-review — full workflow review
+- code-review-skill — shared review policy when workflow is unavailable
 - security-checklist — for security-focused reviews
 - systematic-debugging — when bugs are found during review
 - evidence-based-coding — verify all claims with evidence
@@ -38,5 +43,5 @@ Relevant Skills:
 Output Format:
 - Group findings by file, severity first
 - Use [blocking] / [important] / [nit] labels
-- Include praise for good patterns found
-- Provide summary with approve / request changes recommendation
+- Provide summary only after findings
+- Include verification performed and verification not performed

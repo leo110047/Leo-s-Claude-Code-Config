@@ -28,7 +28,8 @@ $ARGUMENTS can be:
 3. Separate patch-specific findings from repo baseline failures.
 4. If a concrete bug, failing command, or unexpected behavior appears, stop the
    review stance and switch to debugging before proposing fixes.
-5. Block on CRITICAL/HIGH issues; otherwise clearly state residual risk and test
+5. Do not edit files or auto-fix from this legacy command.
+6. Block on CRITICAL/HIGH issues; otherwise clearly state residual risk and test
    gaps.
 
 ## Spec Compliance

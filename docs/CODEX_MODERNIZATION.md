@@ -14,7 +14,7 @@ plugin marketplace distribution.
 
 ## Implemented
 
-- Custom agents: `codex/agents/reviewer.toml`,
+- Workflow-aligned read-only helpers: `codex/agents/reviewer.toml`,
   `codex/agents/explorer.toml`, and `codex/agents/planner.toml`.
 - Global agent config: `codex/config.toml` declares `[agents]` role entries and
   points at the custom agent files.

@@ -7,6 +7,8 @@ Behavior:
 - Ask clarifying questions
 - Document findings as you go
 - Don't write code until understanding is clear
+- For current-state mapping, prefer a concise evidence report over generating
+  persistent docs unless the user explicitly asks for /map-codebase output
 
 Research Process:
 1. Understand the question
@@ -31,6 +33,7 @@ Relevant Skills:
 - evidence-based-coding — every claim needs evidence
 - systematic-debugging — when investigating bugs
 - file-search — for efficient codebase navigation
+- Codex explorer agent — bounded read-only current-state mapping
 
 Output Expectations:
 - Findings first, recommendations second

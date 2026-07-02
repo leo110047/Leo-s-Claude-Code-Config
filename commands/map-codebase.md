@@ -1,10 +1,16 @@
 ---
-description: Generate structured codebase analysis documents for planning and onboarding.
+description: Legacy onboarding documentation command. Prefer concise current-state mapping unless persistent docs are explicitly requested.
 ---
 
 # Map Codebase Command
 
-Analyze the current codebase and generate structured documentation in `.planning/codebase/`.
+Analyze the current codebase and generate structured documentation in
+`.planning/codebase/`.
+
+This is a legacy/onboarding command for persistent repo documentation. For live
+orientation before implementation, prefer a concise current-state report: read
+the relevant files, summarize concrete paths/contracts/unknowns, and then use
+`/plan` for implementation planning.
 
 ## Usage
 
@@ -100,6 +106,7 @@ Multiple sections can be specified: `/map-codebase tech arch`
 - **Evidence-based only** — Every claim must reference actual files/lines
 - Do NOT guess at architecture — read the code and trace execution paths
 - Do NOT assume frameworks — read package.json / config files
+- Do NOT use this as a substitute for `/plan` or `/goldband-review`
 - If a section has nothing to report (e.g., no tests exist), say so explicitly
 - Output files go to `.planning/codebase/`, NEVER modify source code
 - If `.planning/codebase/` already exists, overwrite files (fresh analysis each time)

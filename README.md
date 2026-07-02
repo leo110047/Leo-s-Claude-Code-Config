@@ -95,7 +95,9 @@ Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted
 
 `./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
 Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提供
-`reviewer`、`explorer`、`planner` 三個原型，對應 code review、唯讀探索與規劃分工。
+`reviewer`、`explorer`、`planner` 三個 workflow-aligned 唯讀 helper：完整 review
+仍走 `/goldband-review`，完整 planning 仍走 `/plan` / `/goldband-plan-eng-review`；
+agent 只負責 bounded second pass、current-state mapping 或 plan draft。
 Codex hooks 由 `codex/hooks.json` 與 `codex/hooks/` 安裝到 `~/.codex/`，提供
 SessionStart、PreToolUse、PostToolUse、PreCompact、PostCompact、Stop 的最小 parity。
 MCP template 與驗證方式記錄在 [mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
