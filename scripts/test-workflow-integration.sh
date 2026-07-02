@@ -47,6 +47,11 @@ source <(~/.claude/skills/workflow/bin/workflow-repo-mode 2>/dev/null) || true
 ```
 SKILL_BODY
 fi)
+$(if [ "$skill" = "review" ]; then cat <<'SKILL_BODY'
+Read `.claude/skills/review/checklist.md`.
+Read `.agents/skills/workflow/review/checklist.md`.
+SKILL_BODY
+fi)
 EOF
 done
 
@@ -140,6 +145,10 @@ _PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "tr
 ```
 SKILL_BODY
 fi)
+$(if [ "$skill" = "review" ]; then cat <<'SKILL_BODY'
+Read `.agents/skills/workflow/review/checklist.md`.
+SKILL_BODY
+fi)
 SKILL
   done
   printf '%s\n' "$VERSION" > "$HOME/.codex/skills/workflow/.installed-version"
@@ -167,6 +176,7 @@ chmod +x "$TMP_WORKFLOW/setup"
 mkdir -p "$TMP_ROOT/vendor"
 cp "$ROOT_DIR/install.sh" "$TMP_ROOT/install.sh"
 cp "$ROOT_DIR/AGENTS.md" "$TMP_ROOT/AGENTS.md"
+cp "$ROOT_DIR/.gitignore" "$TMP_ROOT/.gitignore"
 cp -R "$ROOT_DIR/skills" "$TMP_ROOT/skills"
 cp -R "$ROOT_DIR/hooks" "$TMP_ROOT/hooks"
 cp -R "$ROOT_DIR/claude" "$TMP_ROOT/claude"
@@ -250,6 +260,10 @@ test ! -e "$TMP_HOME/.codex/skills/workflow/SKILL.md"
 test -e "$TMP_HOME/.claude/skills/workflow/freeze"
 test -e "$TMP_HOME/.claude/skills/workflow/bin/workflow-repo-mode"
 test -e "$TMP_HOME/.codex/skills/workflow/review"
+test -f "$TMP_ROOT/.agents/skills/workflow/review/checklist.md"
+test "$(readlink "$TMP_ROOT/.agents/skills/workflow/review/checklist.md")" = "../../../../vendor/workflow/review/checklist.md"
+git -C "$TMP_ROOT" init -q
+git -C "$TMP_ROOT" check-ignore -q ".agents/skills/workflow/review/checklist.md"
 test -e "$TMP_HOME/.codex/skills/workflow/bin/workflow-config"
 test -f "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
 test -f "$TMP_HOME/.claude/skills/goldband-review/SKILL.md"
@@ -261,6 +275,8 @@ test -f "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
 test -f "$TMP_HOME/.codex/skills/goldband-claude/SKILL.md"
+test -f "$TMP_HOME/.claude/skills/goldband-review/review/checklist.md"
+test -f "$TMP_HOME/.codex/skills/goldband-review/review/checklist.md"
 test -f "$TMP_HOME/.claude/commands/goldband-language.md"
 test -f "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh"
 grep -q '^# >>> goldband shell launchers >>>$' "$TMP_HOME/.zshrc"
@@ -299,6 +315,8 @@ grep -q '^name: goldband-claude$' "$TMP_HOME/.codex/skills/goldband-claude/SKILL
 test "$(sed -n '1p' "$TMP_HOME/.claude/commands/goldband-language.md")" = "---"
 grep -q '提問、建議、選項、摘要與指令說明語言' "$TMP_HOME/.claude/commands/goldband-language.md"
 grep -q '^  系統化除錯與根因調查。$' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -q '\$HOME/.claude/skills/goldband-review/review/checklist.md' "$TMP_HOME/.claude/skills/goldband-review/SKILL.md"
+grep -q '\$HOME/.codex/skills/goldband-review/review/checklist.md' "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 grep -Eq '(gstack-config|workflow-config) get goldband_language' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q 'GOLDBAND_LANGUAGE:' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q '支援 `zh-TW` 與 `en`' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"

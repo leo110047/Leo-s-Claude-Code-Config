@@ -412,7 +412,7 @@ function seedOriginRepo({ tmpOrigin, tmpSeed }) {
   configureGitUser(path.join(tmpSeed, 'repo'));
   copyRepoSubset(ROOT_DIR, path.join(tmpSeed, 'repo'));
   run('git', ['-C', path.join(tmpSeed, 'repo'), 'add', '.']);
-  run('git', ['-C', path.join(tmpSeed, 'repo'), 'commit', '-m', 'seed']);
+  gitCommitNoHooks(path.join(tmpSeed, 'repo'), ['-m', 'seed']);
   run('git', [
     '-C',
     path.join(tmpSeed, 'repo'),
@@ -426,6 +426,10 @@ function seedOriginRepo({ tmpOrigin, tmpSeed }) {
 function configureGitUser(repoDir) {
   run('git', ['-C', repoDir, 'config', 'user.name', 'goldband-test']);
   run('git', ['-C', repoDir, 'config', 'user.email', 'goldband@example.com']);
+}
+
+function gitCommitNoHooks(repoDir, args) {
+  run('git', ['-c', 'core.hooksPath=', '-C', repoDir, 'commit', ...args]);
 }
 
 function cloneWorkRepo({ tmpOrigin, tmpWork }) {
@@ -450,7 +454,7 @@ function pushNextCommit({ tmpOrigin, tmpSeed }) {
     '\nwindows-update\n',
     'utf8',
   );
-  run('git', ['-C', repoNext, 'commit', '-am', 'update']);
+  gitCommitNoHooks(repoNext, ['-am', 'update']);
   run('git', ['-C', repoNext, 'push', 'origin', 'main']);
 }
 

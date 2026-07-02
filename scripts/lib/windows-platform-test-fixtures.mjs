@@ -113,6 +113,7 @@ function skillFileContents(skill) {
     'description: test fixture',
     '---',
     skill === 'investigate' ? investigateSkillBody() : '',
+    skill === 'review' ? reviewSkillBody() : '',
     '',
   ].join('\n');
 }
@@ -124,6 +125,13 @@ function investigateSkillBody() {
     '_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")',
     'source <(~/.claude/skills/workflow/bin/workflow-repo-mode 2>/dev/null) || true',
     '```',
+  ].join('\n');
+}
+
+function reviewSkillBody() {
+  return [
+    'Read `.claude/skills/review/checklist.md`.',
+    'Read `.agents/skills/workflow/review/checklist.md`.',
   ].join('\n');
 }
 
@@ -276,6 +284,10 @@ function generatedCodexSkillLines() {
     'WORKFLOW_BIN="$WORKFLOW_ROOT/bin"',
     '_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")',
     '```',
+    'SKILL_BODY',
+    'fi)',
+    '$(if [ "$skill" = "review" ]; then cat <<\'SKILL_BODY\'',
+    'Read `.agents/skills/workflow/review/checklist.md`.',
     'SKILL_BODY',
     'fi)',
     'SKILL',

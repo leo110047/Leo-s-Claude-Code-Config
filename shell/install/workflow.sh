@@ -1,5 +1,12 @@
 # This file must be sourced by bash, not executed directly.
 
+# Keep workflow support modules behind this entrypoint so direct callers like
+# shell/goldband-install-workflow.sh get the same behavior as install.sh.
+# shellcheck source=/dev/null
+. "$REPO_DIR/shell/install/workflow-review-assets.sh"
+# shellcheck source=/dev/null
+. "$REPO_DIR/shell/install/workflow-wrapper-aliases.sh"
+
 resolve_workflow_repo_dir() {
     local candidates=()
 
@@ -414,49 +421,6 @@ write_workflow_installed_versions() {
     fi
 }
 
-create_goldband_workflow_aliases() {
-    local claude_runtime_root="$HOME/.claude/skills/workflow"
-    local codex_skills_root="$HOME/.codex/skills"
-    local goldband_language="zh-TW"
-    local workflow_config_bin
-    local alias_name
-    local claude_target
-    local codex_target
-    local _description
-    local _description_en
-
-    if workflow_config_bin="$(find_workflow_config_bin 2>/dev/null)"; then
-        goldband_language="$(read_goldband_wrapper_language "$workflow_config_bin")"
-    fi
-
-    while IFS='|' read -r alias_name claude_target codex_target _description _description_en; do
-        if [ -d "$claude_runtime_root" ] && [ -n "$claude_target" ]; then
-            local alias_path="$HOME/.claude/skills/$alias_name"
-            local source_skill="$claude_runtime_root/$claude_target/SKILL.md"
-            if [ -f "$source_skill" ]; then
-                write_goldband_wrapper_skill "$source_skill" "$alias_path" "$claude_target" "$alias_name"
-                localize_goldband_wrapper_description "$alias_path/SKILL.md" "$alias_name" "$goldband_language"
-                inject_goldband_wrapper_language_runtime "$alias_path/SKILL.md"
-                localize_goldband_wrapper_language_policy "$alias_path/SKILL.md"
-                rewrite_goldband_wrapper_runtime_paths "$alias_path/SKILL.md"
-            fi
-        fi
-
-        if [ -d "$codex_skills_root" ] && [ -n "$codex_target" ]; then
-            local alias_path="$codex_skills_root/$alias_name"
-            local source_skill="$codex_skills_root/$codex_target/SKILL.md"
-            local source_name="${codex_target#workflow-}"
-            if [ -f "$source_skill" ]; then
-                write_goldband_wrapper_skill "$source_skill" "$alias_path" "$source_name" "$alias_name"
-                localize_goldband_wrapper_description "$alias_path/SKILL.md" "$alias_name" "$goldband_language"
-                inject_goldband_wrapper_language_runtime "$alias_path/SKILL.md"
-                localize_goldband_wrapper_language_policy "$alias_path/SKILL.md"
-                rewrite_goldband_wrapper_runtime_paths "$alias_path/SKILL.md"
-            fi
-        fi
-    done < <(workflow_wrapper_manifest)
-}
-
 cleanup_workflow_user_entries() {
     local claude_skills_dir="$HOME/.claude/skills"
     local codex_skills_dir="$HOME/.codex/skills"
@@ -553,6 +517,7 @@ install_workflow_host() {
         exit "$setup_status"
     fi
     normalize_workflow_runtime_install "$host"
+    create_repo_workflow_review_sidecar "$repo_dir"
     create_goldband_workflow_aliases
     cleanup_workflow_user_entries
     hide_workflow_root_skills "$host"
