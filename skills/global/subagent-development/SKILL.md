@@ -5,7 +5,6 @@ description: |
   or reviewed in two stages for spec compliance and code quality.
 
   Best fit for self-contained work, not shared-context debugging.
-priority: MEDIUM
 allowed-tools:
   - Task
   - Read

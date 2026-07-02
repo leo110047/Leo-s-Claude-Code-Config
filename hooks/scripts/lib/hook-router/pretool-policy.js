@@ -32,9 +32,11 @@ function buildModeUsageEvent(modeName, sessionId, rule, toolName, command) {
 
 function shouldBlockDocFile(filePath) {
   if (!/\.(md|txt)$/.test(filePath)) return false;
-  if (/(README|CLAUDE|AGENTS|CONTRIBUTING|SKILL)\.md$/.test(filePath)) return false;
+  if (/(README|CLAUDE|AGENTS|CONTRIBUTING|SKILL|ARCHITECTURE|DESIGN|CHANGELOG|WORKFLOW_VENDORING|LEARNING_PATH|OPERATIONS|VALIDATION|SECURITY|TODOS)\.md$/.test(filePath)) return false;
   if (/\.claude\//.test(filePath)) return false;
   if (/\.planning\//.test(filePath)) return false;
+  if (/\/scratchpad\//.test(filePath)) return false;
+  if (/\/scratchpads\//.test(filePath)) return false;
   if (/\/reference\//.test(filePath)) return false;
   if (/\/commands\//.test(filePath)) return false;
   if (/\/docs\//.test(filePath)) return false;

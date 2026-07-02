@@ -6,6 +6,12 @@ description: |
   Discord/report prompts, or handoff prompts for another AI agent.
 
   Best fit for prompt authoring before the prompt is delivered or installed.
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
+  - Edit
 ---
 
 # Prompt Hygiene

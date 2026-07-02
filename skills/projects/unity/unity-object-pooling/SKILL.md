@@ -7,6 +7,10 @@ description: |
   Use when: 需要對象池、減少 GC 分配、頻繁創建/銷毀物件、
   池化投射物/特效/音效、零分配模式、Switch 記憶體優化。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity 對象池指南

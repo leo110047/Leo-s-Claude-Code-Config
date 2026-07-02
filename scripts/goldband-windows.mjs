@@ -121,6 +121,9 @@ function createContext(rawOptions = {}) {
       codexDir,
       codexConfigFile: path.join(codexDir, 'config.toml'),
       codexAgentsFile: path.join(codexDir, 'AGENTS.md'),
+      codexCustomAgentsDir: path.join(codexDir, 'agents'),
+      codexHooksFile: path.join(codexDir, 'hooks.json'),
+      codexHooksDir: path.join(codexDir, 'hooks'),
       codexRulesDir: path.join(codexDir, 'rules'),
       codexRuntimeSkillsDir: path.join(codexDir, 'skills'),
       codexRuntimeWorkflowDir: path.join(codexDir, 'skills', 'workflow'),
@@ -1024,8 +1027,17 @@ function installCodexConfig(context) {
 
 function installCodexAgents(context) {
   ensureComponent(context, path.join(context.repoDir, 'codex', 'AGENTS.md'), context.paths.codexAgentsFile, 'Codex AGENTS.md', 'file');
+  ensureComponent(context, path.join(context.repoDir, 'codex', 'agents'), context.paths.codexCustomAgentsDir, 'Codex custom agents', 'dir');
   updateWindowsState(context, (state) => {
     state.codexComponents.agents = true;
+  });
+}
+
+function installCodexHooks(context) {
+  ensureComponent(context, path.join(context.repoDir, 'codex', 'hooks.json'), context.paths.codexHooksFile, 'Codex hooks.json', 'file');
+  ensureComponent(context, path.join(context.repoDir, 'codex', 'hooks'), context.paths.codexHooksDir, 'Codex hook scripts', 'dir');
+  updateWindowsState(context, (state) => {
+    state.codexComponents.hooks = true;
   });
 }
 
@@ -1177,6 +1189,11 @@ function refreshManagedRuntime(context) {
   }
   if (state.codexComponents.agents) {
     refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'AGENTS.md'), context.paths.codexAgentsFile, 'Codex AGENTS.md', 'file');
+    refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'agents'), context.paths.codexCustomAgentsDir, 'Codex custom agents', 'dir');
+  }
+  if (state.codexComponents.hooks) {
+    refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'hooks.json'), context.paths.codexHooksFile, 'Codex hooks.json', 'file');
+    refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'hooks'), context.paths.codexHooksDir, 'Codex hook scripts', 'dir');
   }
   if (state.codexComponents.rules) {
     installCodexRulesDirectory(context);
@@ -1263,6 +1280,9 @@ function uninstallWindows(context) {
     path.join(context.paths.claudeDir, 'statusline-command.sh'),
     context.paths.codexConfigFile,
     context.paths.codexAgentsFile,
+    context.paths.codexCustomAgentsDir,
+    context.paths.codexHooksFile,
+    context.paths.codexHooksDir,
     context.paths.codexRulesDir,
   ];
   for (const targetPath of componentPaths) {
@@ -1296,6 +1316,8 @@ function showWindowsStatus(context) {
   console.log(`  Claude rules: ${fs.existsSync(path.join(context.paths.claudeDir, 'rules')) ? 'installed' : 'missing'}`);
   console.log(`  Codex config: ${fs.existsSync(context.paths.codexConfigFile) ? 'installed' : 'missing'}`);
   console.log(`  Codex agents: ${fs.existsSync(context.paths.codexAgentsFile) ? 'installed' : 'missing'}`);
+  console.log(`  Codex custom agents: ${fs.existsSync(context.paths.codexCustomAgentsDir) ? 'installed' : 'missing'}`);
+  console.log(`  Codex hooks: ${fs.existsSync(context.paths.codexHooksFile) && fs.existsSync(context.paths.codexHooksDir) ? 'installed' : 'missing'}`);
   const codexRulesInstalled = fs.existsSync(path.join(context.paths.codexRulesDir, 'goldband.rules')) &&
     fs.existsSync(path.join(context.paths.codexRulesDir, 'default.rules'));
   console.log(`  Codex rules: ${codexRulesInstalled ? 'installed' : 'missing'}`);
@@ -1361,6 +1383,9 @@ function installForWindows(context, actions) {
       case 'codex-agents':
         installCodexAgents(context);
         break;
+      case 'codex-hooks':
+        installCodexHooks(context);
+        break;
       case 'codex-rules':
         installCodexRules(context);
         break;
@@ -1370,6 +1395,7 @@ function installForWindows(context, actions) {
       case 'codex-core':
         installCodexConfig(context);
         installCodexAgents(context);
+        installCodexHooks(context);
         installCodexRules(context);
         installCodexSkills(context, 'core');
         writeWindowsLauncherWrappers(context);
@@ -1378,6 +1404,7 @@ function installForWindows(context, actions) {
       case 'codex':
         installCodexConfig(context);
         installCodexAgents(context);
+        installCodexHooks(context);
         installCodexRules(context);
         installCodexSkills(context, 'full');
         writeWindowsLauncherWrappers(context);
@@ -1391,6 +1418,7 @@ function installForWindows(context, actions) {
         writeWindowsLauncherWrappers(context);
         installCodexConfig(context);
         installCodexAgents(context);
+        installCodexHooks(context);
         installCodexRules(context);
         installCodexSkills(context, 'full');
         break;

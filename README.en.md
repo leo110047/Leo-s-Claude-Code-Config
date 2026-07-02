@@ -72,6 +72,8 @@ If you only want to install specific parts, you can also run:
 
 ```bash
 ./install.sh codex-full     # Install Codex only
+./install.sh codex-agents   # Install Codex AGENTS.md and custom agents only
+./install.sh codex-hooks    # Install Codex hooks only
 ./install.sh workflow       # Install Claude-side workflow only
 ./install.sh workflow-codex # Install Codex-side workflow only
 ./install.sh launchers      # Reinstall claude/codex launchers
@@ -94,6 +96,15 @@ the ignored overlay:
 
 `./install.sh codex-full` combines the portable baseline and local overlay into
 `~/.codex/`.
+Codex custom agents are installed from `codex/agents/` to `~/.codex/agents/`.
+The current prototypes are `reviewer`, `explorer`, and `planner` for code
+review, read-only exploration, and planning.
+Codex hooks are installed from `codex/hooks.json` and `codex/hooks/` to
+`~/.codex/`, providing minimal SessionStart, PreToolUse, PostToolUse,
+PreCompact, PostCompact, and Stop parity.
+MCP templates and validation notes live in [mcp/README.md](mcp/README.md), and
+Codex modernization status lives in
+[docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md).
 
 If an older checkout wrote Codex approvals into `codex/rules/default.rules`, run:
 
@@ -150,7 +161,12 @@ If the current session does not pick up the new setting immediately, restart Cla
 
 ## Common Entry Points
 
-The most common entry points are `/plan`, `/verify`, `/goldband-investigate`, `/goldband-review`, and `/goldband-qa`. For stronger safety protection, use `careful-mode`. For read-only investigation, use `freeze-mode`.
+The most common entry points are `/plan`, `/verify`, `/goldband-investigate`,
+`/goldband-review`, `/goldband-cso`, `/goldband-design-review`,
+`/goldband-qa`, `/goldband-benchmark`, and `/goldband-skillify`. Matching or
+nearby portable skills now carry shared policy and handoff guidance instead of
+duplicating full workflow manuals. For stronger safety protection, use
+`careful-mode`. For read-only investigation, use `freeze-mode`.
 
 ## `workflow`
 

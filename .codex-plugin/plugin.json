@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "name": "goldband",
+  "version": "1.5.0",
+  "description": "Packaging placeholder for shared engineering guardrails, portable skills, Codex rules, hooks, agents, and workflow handoffs. Active installation is still handled by goldband installers.",
+  "author": "Leo",
+  "license": "MIT",
+  "homepage": "https://github.com/leo110047/goldband",
+  "repository": "https://github.com/leo110047/goldband",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "hooks",
+    "skills",
+    "agents",
+    "guardrails",
+    "workflow"
+  ]
+}

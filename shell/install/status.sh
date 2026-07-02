@@ -91,11 +91,41 @@ show_status() {
     if [ -L "$CODEX_AGENTS_FILE" ]; then
         local target
         target=$(readlink "$CODEX_AGENTS_FILE")
-        echo -e "  ${GREEN}[OK]${NC} codex-agents -> $target"
+        echo -e "  ${GREEN}[OK]${NC} codex AGENTS.md -> $target"
     elif [ -e "$CODEX_AGENTS_FILE" ]; then
-        echo -e "  ${YELLOW}[legacy copy]${NC} codex-agents — 建議重跑 ./install.sh codex-agents"
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex AGENTS.md — 建議重跑 ./install.sh codex-agents"
     else
-        echo -e "  ${RED}[未安裝]${NC} codex-agents"
+        echo -e "  ${RED}[未安裝]${NC} codex AGENTS.md"
+    fi
+
+    if [ -L "$CODEX_CUSTOM_AGENTS_DIR" ]; then
+        local target
+        target=$(readlink "$CODEX_CUSTOM_AGENTS_DIR")
+        echo -e "  ${GREEN}[OK]${NC} codex custom agents -> $target"
+    elif [ -e "$CODEX_CUSTOM_AGENTS_DIR" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex custom agents — 建議重跑 ./install.sh codex-agents"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex custom agents"
+    fi
+
+    if [ -L "$CODEX_HOOKS_FILE" ]; then
+        local target
+        target=$(readlink "$CODEX_HOOKS_FILE")
+        echo -e "  ${GREEN}[OK]${NC} codex hooks.json -> $target"
+    elif [ -e "$CODEX_HOOKS_FILE" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex hooks.json — 建議重跑 ./install.sh codex-hooks"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex hooks.json"
+    fi
+
+    if [ -L "$CODEX_HOOKS_DIR" ]; then
+        local target
+        target=$(readlink "$CODEX_HOOKS_DIR")
+        echo -e "  ${GREEN}[OK]${NC} codex hook scripts -> $target"
+    elif [ -e "$CODEX_HOOKS_DIR" ]; then
+        echo -e "  ${YELLOW}[legacy copy]${NC} codex hook scripts — 建議重跑 ./install.sh codex-hooks"
+    else
+        echo -e "  ${RED}[未安裝]${NC} codex hook scripts"
     fi
 
     if [ -L "$CODEX_RULES_DIR" ]; then

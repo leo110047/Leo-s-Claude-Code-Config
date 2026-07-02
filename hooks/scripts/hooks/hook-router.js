@@ -2,13 +2,14 @@
 /**
  * Unified hook router.
  *
- * Routes PreToolUse/PostToolUse/Stop/Notification through one command,
+ * Routes lifecycle and tool hooks through one command,
  * reducing process spawn and repeated JSON parsing.
  */
 
 const { evaluatePreToolUse } = require('../lib/hook-router/pretool-policy');
 const { evaluatePostToolUse } = require('../lib/hook-router/posttool-policy');
 const { evaluateStop, evaluateNotification } = require('../lib/hook-router/stop-policy');
+const { evaluateLifecycle } = require('../lib/hook-router/lifecycle-policy');
 const { appendMetric } = require('../lib/hook-router/metrics');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
 
@@ -65,6 +66,16 @@ function dispatchByEvent(input) {
 
   if (hookEventName === 'Notification') {
     return evaluateNotification(input);
+  }
+
+  if (
+    hookEventName === 'SessionStart'
+    || hookEventName === 'SessionEnd'
+    || hookEventName === 'PostToolUseFailure'
+    || hookEventName === 'PreCompact'
+    || hookEventName === 'PostCompact'
+  ) {
+    return evaluateLifecycle(input);
   }
 
   return defaultOutcome();

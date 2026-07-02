@@ -7,6 +7,10 @@ description: |
   Use when: 編寫 Unity 測試、設定 Test Assembly、使用 NUnit 特性、
   建立 EditMode/PlayMode 測試、Mock 依賴、CI/CD 測試整合。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Test Framework 指南

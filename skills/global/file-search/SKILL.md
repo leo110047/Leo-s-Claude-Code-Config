@@ -2,6 +2,11 @@
 name: file-search
 description: Use when you need to locate files, usages, symbols, text patterns, or structural code matches quickly with ripgrep first, and ast-grep only when it is actually available.
 license: MIT
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
 ---
 
 # File Search Skill

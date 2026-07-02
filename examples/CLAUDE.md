@@ -45,7 +45,8 @@ src/
 - `/plan` - 開始新功能前的規劃
 - `/verify` - 提交前的完整檢查
 - `/checkpoint` - 建立工作回復點
-- `/code-review` - 程式碼審查
+- `/goldband-review` - 完整程式碼審查
+- `/code-review` - legacy 相容入口；完整審查優先使用 `/goldband-review`
 
 ## Git Workflow
 

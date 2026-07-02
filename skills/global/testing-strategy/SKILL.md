@@ -5,6 +5,7 @@ description: |
   implementing TDD, or stabilizing flaky tests before they become debugging sessions.
 
   Best fit for test design and reliability, not investigating failing behavior.
+  Prefer `/goldband-qa` for browser, staging, or full workflow QA.
 allowed-tools:
   - Read
   - Grep

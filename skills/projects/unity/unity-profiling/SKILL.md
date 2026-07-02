@@ -7,6 +7,10 @@ description: |
   Use when: 效能分析、使用 Profiler、追蹤 GC 分配、偵測卡頓、
   設定效能預算、記憶體分析、Switch/PC 平台優化。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity 效能分析指南

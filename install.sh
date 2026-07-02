@@ -24,6 +24,9 @@ ZSHRC_FILE="${ZDOTDIR:-$HOME}/.zshrc"
 CODEX_DIR="$HOME/.codex"
 CODEX_CONFIG_FILE="$CODEX_DIR/config.toml"
 CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
+CODEX_CUSTOM_AGENTS_DIR="$CODEX_DIR/agents"
+CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
+CODEX_HOOKS_DIR="$CODEX_DIR/hooks"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
 CODEX_SKILLS_DIR="$HOME/.agents/skills"
 CODEX_SKILL_PROFILE_FILE="$CODEX_SKILLS_DIR/.goldband-profile"
@@ -47,7 +50,7 @@ show_help() {
     echo "  skills      安裝全域 skills（等同 skills-full）"
     echo "  skills-core 安裝核心常駐 skills（低 token）"
     echo "  skills-dev  安裝開發常用 skills（core + auto）"
-    echo "  skills-full 安裝全部全域 skills（23 個）"
+    echo "  skills-full 安裝全部全域 skills（22 個）"
     echo "  commands    只安裝 commands"
     echo "  contexts    只安裝 contexts"
     echo "  rules       只安裝 rules"
@@ -59,7 +62,8 @@ show_help() {
     echo "  codex-full  安裝 Codex 完整設定（global AGENTS/config/rules + portable skills）"
     echo "  codex       相容別名，等同 codex-full"
     echo "  codex-config 只安裝 ~/.codex/config.toml"
-    echo "  codex-agents 只安裝 ~/.codex/AGENTS.md"
+    echo "  codex-agents 安裝 ~/.codex/AGENTS.md + ~/.codex/agents"
+    echo "  codex-hooks  安裝 ~/.codex/hooks.json + ~/.codex/hooks"
     echo "  codex-rules  只安裝 ~/.codex/rules"
     echo "  repair-codex-rules 將本機 approvals 從 tracked rules 移到 ignored local overlay"
     echo "  codex-skills 安裝 Codex portable skills 到 ~/.agents/skills"
@@ -236,6 +240,9 @@ for arg in "$@"; do
         codex-agents)
             install_codex_agents
             ;;
+        codex-hooks)
+            install_codex_hooks
+            ;;
         codex-rules)
             install_codex_rules
             ;;
@@ -284,6 +291,6 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 echo -e "${YELLOW}下一步：${NC}"
 echo "  1. 重啟 Claude Code / Codex（若本次有安裝）"
-echo "  2. 試試 /plan、/verify、/code-review、/discuss、/map-codebase、/verify-config 等命令"
+echo "  2. 試試 /plan、/verify、/goldband-review、/goldband-investigate、/discuss、/verify-config 等命令"
 echo "  3. 查看 ./install.sh status 確認安裝狀態"
 echo ""

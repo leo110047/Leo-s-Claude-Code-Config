@@ -9,6 +9,10 @@ description: |
 
   Focus: 平台差異和最佳實踐，不是通用 Unity 開發。
 allowed-tools: Read, Grep, Glob
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Multiplatform Development

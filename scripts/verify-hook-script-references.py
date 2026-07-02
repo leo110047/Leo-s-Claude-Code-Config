@@ -6,10 +6,13 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-HOOKS_JSON = ROOT / "hooks" / "hooks.json"
+HOOK_FILES = [
+    ROOT / "hooks" / "hooks.json",
+    ROOT / "codex" / "hooks.json",
+]
 
 
-def iter_script_paths(data: dict):
+def iter_script_paths(data: dict, hook_file: Path):
     hooks = data.get("hooks", {})
     pattern = re.compile(r'node\s+"([^"]+)"')
 
@@ -22,22 +25,29 @@ def iter_script_paths(data: dict):
                 match = pattern.search(command)
                 if not match:
                     continue
-                raw_path = match.group(1).replace("${HOOKS_DIR}", "hooks")
+                raw_path = match.group(1)
+                raw_path = raw_path.replace("${HOOKS_DIR}", "hooks")
+                raw_path = raw_path.replace("$HOME/.codex", "codex")
+                raw_path = raw_path.replace("~/.codex", "codex")
+                if raw_path.startswith("/"):
+                    continue
                 yield phase, raw_path
 
 
 def main() -> int:
-    with HOOKS_JSON.open() as fh:
-        data = json.load(fh)
-
     errors = 0
-    for phase, rel_path in iter_script_paths(data):
-        path = ROOT / rel_path
-        if path.exists():
-            print(f"[OK] {phase}: {rel_path}")
-        else:
-            print(f"[FAIL] {phase}: {rel_path} not found")
-            errors += 1
+    for hook_file in HOOK_FILES:
+        with hook_file.open() as fh:
+            data = json.load(fh)
+
+        rel_hook_file = hook_file.relative_to(ROOT)
+        for phase, rel_path in iter_script_paths(data, hook_file):
+            path = ROOT / rel_path
+            if path.exists():
+                print(f"[OK] {rel_hook_file} {phase}: {rel_path}")
+            else:
+                print(f"[FAIL] {rel_hook_file} {phase}: {rel_path} not found")
+                errors += 1
 
     if errors:
         print(f"::error::{errors} hook script reference(s) missing")

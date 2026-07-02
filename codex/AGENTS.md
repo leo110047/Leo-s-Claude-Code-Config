@@ -55,13 +55,19 @@ Only prefer a narrower or temporary fix when the user has explicitly stated that
 - Prefer the `frontend-design` skill when producing new UI.
 - Avoid generic AI aesthetics such as gray card grids, default-looking UI with weak hierarchy, trend-driven styling used as a shortcut, and pill-heavy layouts with no clear focal point.
 
-## Recommended Portable Skills
+## Recommended Portable Skills and Workflow Entrypoints
 
 If goldband portable skills are installed, start with:
 
 - `$evidence-based-coding`
-- `$systematic-debugging`
 - `$file-search`
-- `$planning-workflow`
-- `$security-checklist`
+- `$implementation-contracts`
+- `$testing-strategy`
 - `$performance-optimization`
+
+For full review, investigation, planning, security review, design review, QA,
+benchmarking, and skill-authoring flows, prefer workflow entrypoints such as
+`/goldband-review`, `/goldband-investigate`, `/plan`, `/goldband-cso`,
+`/goldband-design-review`, `/goldband-qa`, `/goldband-benchmark`, and
+`/goldband-skillify`. The matching portable skills are thin policy/defer
+entrypoints, not duplicate workflow manuals.

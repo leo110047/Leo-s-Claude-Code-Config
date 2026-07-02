@@ -30,15 +30,21 @@ Keep shared engineering policy portable across tools while keeping tool-specific
 - Prefer the `frontend-design` skill for UI generation when available.
 - Do not ship generic AI aesthetics such as gray card mosaics, default-looking UI with weak hierarchy, trend-driven styling used as a shortcut, or pill-heavy layouts with no clear focal point.
 
-## Preferred Portable Skills
+## Preferred Portable Skills and Workflow Entrypoints
 
 If the portable goldband skills are installed for Codex, prefer:
 
 - `$evidence-based-coding`
-- `$systematic-debugging`
 - `$file-search`
-- `$planning-workflow`
-- `$security-checklist`
+- `$implementation-contracts`
+- `$testing-strategy`
 - `$performance-optimization`
+
+For full review, investigation, planning, security review, design review, QA,
+benchmarking, and skill-authoring flows, prefer workflow entrypoints such as
+`/goldband-review`, `/goldband-investigate`, `/plan`, `/goldband-cso`,
+`/goldband-design-review`, `/goldband-qa`, `/goldband-benchmark`, and
+`/goldband-skillify`. The matching portable skills are thin policy/defer
+entrypoints, not duplicate workflow manuals.
 
 Use repo-specific skills only when the task is actually about maintaining goldband itself.

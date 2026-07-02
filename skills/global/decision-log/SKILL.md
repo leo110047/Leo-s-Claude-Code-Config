@@ -1,8 +1,14 @@
 ---
-name: decision-logger
+name: decision-log
 description: |
   Use when making a significant architectural, tooling, or process decision
   that should be captured as an ADR in docs/DECISIONS.md.
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Write
+  - Edit
 ---
 
 # Decision Logger

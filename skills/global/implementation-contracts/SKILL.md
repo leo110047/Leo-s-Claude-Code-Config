@@ -6,6 +6,11 @@ description: |
   paid actions, shared workflow constants, or generic workflow behavior. Keeps
   contract failures explicit, avoids unsafe best-effort behavior, and prevents
   fake generic implementations.
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
 ---
 
 # Implementation Contracts

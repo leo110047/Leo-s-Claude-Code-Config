@@ -5,7 +5,6 @@ description: |
   especially before proposing changes or declaring work complete.
 
   CRITICAL: verify with actual code, tool output, or tests before you claim anything.
-priority: CRITICAL
 enforced-globally: true
 allowed-tools:
   - Read

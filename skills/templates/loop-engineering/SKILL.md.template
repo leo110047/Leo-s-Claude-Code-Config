@@ -1,0 +1,37 @@
+---
+name: loop-engineering-example
+description: Use when a bounded task benefits from repeated evaluate -> improve -> verify iterations with an explicit stop condition.
+---
+
+# Loop Engineering Template
+
+Use this as a starting point for a project-local skill only when the loop is
+specific enough to evaluate. Do not install this template as a global skill.
+
+## Contract
+
+- Outcome:
+- Evaluation signal:
+- Iteration cap:
+- Stop condition:
+- Cost or time budget:
+
+## Loop
+
+1. Capture baseline evidence.
+2. Pick one improvement axis.
+3. Make the smallest complete change for that axis.
+4. Run the evaluator.
+5. Record evidence and decide stop or continue.
+
+## Host Mapping
+
+- Claude: use workflow context fork or workflow review/design/qa entrypoints.
+- Codex: spawn bounded reviewer, explorer, or planner custom agents when parallel
+  critique or exploration helps.
+
+## Completion Check
+
+- The final evidence meets the outcome.
+- The iteration log explains what changed and why.
+- Remaining unknowns or stalled signals are reported.

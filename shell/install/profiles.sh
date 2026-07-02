@@ -67,6 +67,12 @@ install_codex_config() {
 
 install_codex_agents() {
     link_component "$REPO_DIR/codex/AGENTS.md" "$CODEX_AGENTS_FILE" "Codex AGENTS.md"
+    link_component "$REPO_DIR/codex/agents" "$CODEX_CUSTOM_AGENTS_DIR" "Codex custom agents"
+}
+
+install_codex_hooks() {
+    link_component "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" "Codex hooks.json"
+    link_component "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" "Codex hook scripts"
 }
 
 install_codex_rules() {
@@ -77,6 +83,7 @@ install_codex_rules() {
 install_codex_core() {
     install_codex_config
     install_codex_agents
+    install_codex_hooks
     install_codex_rules
     install_codex_skills_core
     install_shell_launchers
@@ -85,6 +92,7 @@ install_codex_core() {
 install_codex_full() {
     install_codex_config
     install_codex_agents
+    install_codex_hooks
     install_codex_rules
     install_codex_skills
     install_shell_launchers
@@ -110,11 +118,11 @@ install_commands() {
 }
 
 install_contexts() {
-    link_component "$REPO_DIR/contexts" "$CLAUDE_DIR/contexts" "Contexts (4 個)"
+    link_component "$REPO_DIR/contexts" "$CLAUDE_DIR/contexts" "Contexts (5 個)"
 }
 
 install_rules() {
-    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (4 個)"
+    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (5 個)"
 }
 
 merge_hooks_config() {
@@ -173,12 +181,17 @@ merge_hooks_config() {
             | map(last);
 
         {
+            SessionStart: merge_by_description("SessionStart"),
             UserPromptSubmit: merge_phase("UserPromptSubmit"),
             PreToolUse: merge_phase("PreToolUse"),
             PostToolUse: merge_phase("PostToolUse"),
+            PostToolUseFailure: merge_by_description("PostToolUseFailure"),
             Stop: merge_phase("Stop"),
             SubagentStop: merge_by_description("SubagentStop"),
-            Notification: merge_by_description("Notification")
+            Notification: merge_by_description("Notification"),
+            PreCompact: merge_by_description("PreCompact"),
+            PostCompact: merge_by_description("PostCompact"),
+            SessionEnd: merge_by_description("SessionEnd")
         }
         ')
 

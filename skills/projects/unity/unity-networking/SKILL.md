@@ -8,6 +8,10 @@ description: |
   Use when: 設定多人連線、狀態同步、寫 RPC、建立權限矩陣、
   網路架構設計、客戶端預測、確定性同步。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity NGO (Netcode for GameObjects) 網路指南

@@ -9,6 +9,10 @@ description: |
 
   CRITICAL: 必須先使用 Profiler 測量，不要猜測瓶頸。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Performance Optimization

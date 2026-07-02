@@ -9,6 +9,7 @@ allowed-tools:
   - Read
   - Grep
   - Bash
+disable-model-invocation: true
 ---
 
 # Careful Mode

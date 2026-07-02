@@ -353,6 +353,9 @@ function main() {
     assert.match(codexProfile.skills, /\bfrontend-design\b/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'commands')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'AGENTS.md')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'agents', 'reviewer.toml')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'hooks.json')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'hooks', 'hook-router.js')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'rules', 'goldband.rules')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'rules', 'default.rules')));
     assert.equal(
@@ -374,11 +377,17 @@ function main() {
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', '.goldband-windows-state.json')));
 
     fs.appendFileSync(path.join(tmpRoot, 'codex', 'AGENTS.md'), '\nwindows-copy-refresh\n', 'utf8');
+    fs.appendFileSync(path.join(tmpRoot, 'codex', 'agents', 'reviewer.toml'), '\n# windows-agent-refresh\n', 'utf8');
+    fs.appendFileSync(path.join(tmpRoot, 'codex', 'hooks', 'hook-router.js'), '\n// windows-hook-refresh\n', 'utf8');
     run(process.execPath, selfUpdateArgs(tmpRoot, tmpHome), {
       env: { ...process.env, GOLDBAND_TEST_FORCE_FILE_COPY: '1' },
     });
     const refreshedCodexAgents = fs.readFileSync(path.join(tmpHome, '.codex', 'AGENTS.md'), 'utf8');
     assert.match(refreshedCodexAgents, /windows-copy-refresh/);
+    const refreshedReviewerAgent = fs.readFileSync(path.join(tmpHome, '.codex', 'agents', 'reviewer.toml'), 'utf8');
+    assert.match(refreshedReviewerAgent, /windows-agent-refresh/);
+    const refreshedCodexHook = fs.readFileSync(path.join(tmpHome, '.codex', 'hooks', 'hook-router.js'), 'utf8');
+    assert.match(refreshedCodexHook, /windows-hook-refresh/);
 
     console.log('[2/7] windows-mode workflow');
     run(process.execPath, installArgs(tmpRoot, tmpHome, 'all-with-workflow'));

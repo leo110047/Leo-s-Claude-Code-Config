@@ -73,6 +73,8 @@ pwsh -File .\install.ps1 status            # 檢查安裝狀態
 
 ```bash
 ./install.sh codex-full        # 只安裝 Codex
+./install.sh codex-agents      # 只安裝 Codex AGENTS.md 與 custom agents
+./install.sh codex-hooks       # 只安裝 Codex hooks
 ./install.sh workflow          # 只安裝 Claude 端 workflow
 ./install.sh workflow-codex    # 只安裝 Codex 端 workflow
 ./install.sh launchers         # 重裝 claude/codex 啟動入口
@@ -92,6 +94,11 @@ Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted
 - `codex/local/rules/*.rules`
 
 `./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
+Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提供
+`reviewer`、`explorer`、`planner` 三個原型，對應 code review、唯讀探索與規劃分工。
+Codex hooks 由 `codex/hooks.json` 與 `codex/hooks/` 安裝到 `~/.codex/`，提供
+SessionStart、PreToolUse、PostToolUse、PreCompact、PostCompact、Stop 的最小 parity。
+MCP template 與驗證方式記錄在 [mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
 
 如果你的舊 checkout 曾經把 Codex approvals 寫進 `codex/rules/default.rules`，請跑：
 
@@ -144,7 +151,7 @@ goldband wrapper 支援 `zh-TW` 和 `en`，預設是 `zh-TW`。
 
 ## 常用入口
 
-日常最常用的入口是 `/plan`、`/verify`、`/goldband-investigate`、`/goldband-review` 和 `/goldband-qa`。如果你要開高風險保護，可以用 `careful-mode`；如果你只想做唯讀調查，可以用 `freeze-mode`。
+日常最常用的入口是 `/plan`、`/verify`、`/goldband-investigate`、`/goldband-review`、`/goldband-cso`、`/goldband-design-review`、`/goldband-qa`、`/goldband-benchmark` 和 `/goldband-skillify`。同名或相近的 portable skills 只保留 shared policy 與 handoff，不再複製完整 workflow。若要開高風險保護，可以用 `careful-mode`；如果你只想做唯讀調查，可以用 `freeze-mode`。
 
 ## `workflow`
 

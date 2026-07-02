@@ -76,7 +76,14 @@ do_uninstall() {
         echo -e "  ${GREEN}[移除] Codex skills${NC}"
     fi
 
-    local codex_paths=("$CODEX_CONFIG_FILE" "$CODEX_AGENTS_FILE" "$CODEX_RULES_DIR")
+    local codex_paths=(
+        "$CODEX_CONFIG_FILE"
+        "$CODEX_AGENTS_FILE"
+        "$CODEX_CUSTOM_AGENTS_DIR"
+        "$CODEX_HOOKS_FILE"
+        "$CODEX_HOOKS_DIR"
+        "$CODEX_RULES_DIR"
+    )
 
     for p in "${codex_paths[@]}"; do
         if [ -L "$p" ]; then

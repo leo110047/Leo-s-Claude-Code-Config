@@ -8,6 +8,7 @@ allowed-tools:
   - Read
   - Grep
   - Bash
+disable-model-invocation: true
 ---
 
 # Freeze Mode

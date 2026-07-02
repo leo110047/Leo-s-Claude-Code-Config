@@ -8,6 +8,10 @@ description: |
   Best fit for structural decisions, not active bug fixing or performance tuning.
   EXCLUDE: performance optimization (use performance-optimization skill instead)
   EXCLUDE: active debugging (use systematic-debugging skill instead)
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
 ---
 
 # Backend Development Patterns

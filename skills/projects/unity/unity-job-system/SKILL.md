@@ -9,6 +9,10 @@ description: |
   建立 Store/Ops/Manager、排程 Job、處理 NativeContainer Dispose、
   Sim/Render 分離、Switch ARM 效能優化。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Job System + Burst 開發指南

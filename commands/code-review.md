@@ -1,36 +1,44 @@
 ---
-description: Two-stage code review — spec compliance (--spec) and code quality. Security-first, blocks on CRITICAL/HIGH issues.
+description: Legacy compatibility entrypoint. Prefer /goldband-review for full workflow review.
 ---
 
 # Code Review
 
-Comprehensive security and quality review of uncommitted changes.
+Legacy compatibility entrypoint for code review.
+
+For full review passes, use `/goldband-review`. The portable
+`code-review-skill` is now a thin shared-policy entrypoint, and the complete
+review workflow belongs to workflow so Claude and Codex do not carry duplicate
+review playbooks.
 
 ## Arguments
 
 $ARGUMENTS can be:
-- (none) — Run Stage 2 only (Code Quality Review)
-- `--spec` — Run both Stage 1 (Spec Compliance) and Stage 2 (Code Quality)
-- `--spec <file>` — Run Stage 1 using a specific requirements file, then Stage 2
+- (none) — Review the current diff through the workflow review stance
+- `--spec` — Include explicit spec/requirements compliance if a spec is
+  available
+- `--spec <file>` — Read that file as the requirements source before reviewing
 
 ---
 
-## Stage 1: Spec Compliance Review (when `--spec` is provided)
+## Required Behavior
 
-**Core Principle: Do Not Trust the Report — Read the Actual Code.**
+1. Prefer `/goldband-review` when workflow is available.
+2. Start findings first, ordered by severity, with concrete file/line evidence.
+3. Separate patch-specific findings from repo baseline failures.
+4. If a concrete bug, failing command, or unexpected behavior appears, stop the
+   review stance and switch to debugging before proposing fixes.
+5. Block on CRITICAL/HIGH issues; otherwise clearly state residual risk and test
+   gaps.
 
-### Process
+## Spec Compliance
 
-1. Identify the spec/requirements source:
-   - If `--spec <file>` is given, read that file
-   - If `--spec` alone, look for: `.claude/plans/*.md`, PR description, or ask the user
-2. For EACH requirement in the spec:
-   - **Find**: Locate the implementation (Grep/Glob for relevant code)
-   - **Read**: Read the actual implementation code
-   - **Verify**: Does the code actually fulfill the requirement? Not "does it look like it does" — does it?
-   - **Note**: Record status (Implemented / Partial / Missing / Incorrect / Extra)
+When `$ARGUMENTS` includes `--spec`, identify the requirements source:
 
-3. Generate a requirements compliance table:
+- If `--spec <file>` is given, read that file.
+- If `--spec` alone, look for a nearby plan, PR description, or ask the user.
+
+For each requirement, verify against actual code and report:
 
 ```
 SPEC COMPLIANCE REVIEW
@@ -40,53 +48,13 @@ SPEC COMPLIANCE REVIEW
 | 1 | [req text]  | [status] | file:line | [detail] |
 ```
 
-4. Check for:
-   - **Missing**: Requirements that have no implementation
-   - **Incorrect**: Implementation that misunderstands the requirement
-   - **Extra**: Implementation that wasn't requested (scope creep)
-   - **Partial**: Implementation that covers only part of a requirement
+Block if any requirement is Missing or Incorrect.
 
-5. **BLOCK** if any requirement is Missing or Incorrect.
-
-See [spec-review-template.md](../skills/global/code-review-skill/reference/spec-review-template.md) for the full template and guidelines.
-
----
-
-## Stage 2: Code Quality Review
+## Review Checklist
 
 1. Get changed files: `git diff --name-only HEAD`
-
-2. For each changed file, check for:
-
-**Security Issues (CRITICAL):**
-- Hardcoded credentials, API keys, tokens
-- SQL injection vulnerabilities
-- XSS vulnerabilities
-- Missing input validation
-- Insecure dependencies
-- Path traversal risks
-
-**Code Quality (HIGH):**
-- Functions > 50 lines
-- Files > 800 lines
-- Nesting depth > 4 levels
-- Missing error handling
-- console.log statements
-- TODO/FIXME comments
-- Missing JSDoc for public APIs
-
-**Best Practices (MEDIUM):**
-- Mutation patterns (use immutable instead)
-- Emoji usage in code/comments
-- Missing tests for new code
-- Accessibility issues (a11y)
-
-3. Generate report with:
-   - Severity: CRITICAL, HIGH, MEDIUM, LOW
-   - File location and line numbers
-   - Issue description
-   - Suggested fix
-
-4. Block commit if CRITICAL or HIGH issues found
-
-Never approve code with security vulnerabilities!
+2. Read the changed files and relevant production paths.
+3. Check security, correctness, maintainability, performance, tests, and
+   migration safety.
+4. Report findings with severity, file location, evidence, and concrete fix
+   direction.

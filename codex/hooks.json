@@ -1,0 +1,87 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Loading goldband context hints"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Checking goldband Bash policy"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Recording goldband tool context"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Preparing compact continuity"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Restoring compact continuity"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Checking goldband stop policy"
+          }
+        ]
+      }
+    ]
+  }
+}

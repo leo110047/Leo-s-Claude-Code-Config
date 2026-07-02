@@ -107,18 +107,11 @@ const RULES = [
     patterns: [/\b(hook|skill|plugin|claude code config)\b.{0,24}\b(verify|validation|manifest|router)\b/i]
   },
   {
-    skill: 'new-skill-scaffold',
-    priority: 'low',
-    hint: 'Use to scaffold a new folder-based skill with templates and config stubs.',
-    keywords: ['new skill', 'create skill', 'skill scaffold', 'scaffold skill', 'skill template'],
-    patterns: [/\b(create|add|scaffold)\b.{0,24}\bskill\b/i]
-  },
-  {
     skill: 'skill-developer',
     priority: 'low',
-    hint: 'Use when editing triggers, progressive disclosure structure, or skill hooks.',
-    keywords: ['skill activation', 'progressive disclosure', 'skill rules', 'skill trigger', 'skill hook'],
-    patterns: [/\b(skill|skills)\b.{0,24}\b(trigger|activation|progressive disclosure|hook|rule)\b/i]
+    hint: 'Use for small skill trigger or structure edits; use /goldband-skillify for full scaffold or extraction.',
+    keywords: ['new skill', 'create skill', 'skill scaffold', 'skill activation', 'progressive disclosure', 'skill rules', 'skill trigger', 'skill hook'],
+    patterns: [/\b(create|add|scaffold)\b.{0,24}\bskill\b/i, /\b(skill|skills)\b.{0,24}\b(trigger|activation|progressive disclosure|hook|rule)\b/i]
   },
   {
     skill: 'commit-conventions',

@@ -7,6 +7,10 @@ description: |
   Use when: 準備上架 Google Play 或 App Store、處理包體過大問題、配置資產分發、
   設置簽名證書、TestFlight/內測發佈、處理應用審核、隱私政策配置。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity App Store 上架完整指南

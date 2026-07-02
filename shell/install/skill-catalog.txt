@@ -18,6 +18,5 @@ testing-strategy|dev|full
 ci-cd-integration|full|full
 commit-conventions|full|full
 decision-log|full|full
-new-skill-scaffold|full|
 skill-developer|full|
 subagent-development|full|full

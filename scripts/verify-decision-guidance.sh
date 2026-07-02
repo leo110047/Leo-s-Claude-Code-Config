@@ -62,7 +62,7 @@ check_contains "codex/AGENTS.md" "default to the most complete and maintainable 
 check_contains "codex/AGENTS.md" "default to the healthiest maintainable path" "codex guidance defaults non-debug direction work to healthiest path"
 check_contains "codex/AGENTS.md" "time pressure is the priority" "codex guidance allows narrower debugging fixes only under explicit time pressure"
 check_contains "contexts/debug.md" "clearest safe experiment" "debug context uses clear experiments instead of smallest-change language"
-check_contains "skills/global/systematic-debugging/SKILL.md" "clearest safe experiment" "systematic-debugging skill uses clear experiments instead of smallest-change language"
+check_contains "skills/global/systematic-debugging/SKILL.md" "healthiest complete fix" "systematic-debugging skill keeps healthiest complete fix policy"
 check_contains "vendor/workflow/investigate/SKILL.md" "healthiest complete fix" "workflow investigate skill defaults debugging toward the healthiest complete fix"
 check_contains "vendor/workflow/investigate/SKILL.md" "blast radius intentional" "workflow investigate skill constrains blast radius without minimal-fix bias"
 check_contains "vendor/workflow/investigate/SKILL.md.tmpl" "healthiest complete fix" "workflow investigate template defaults debugging toward the healthiest complete fix"
@@ -89,6 +89,9 @@ check_contains "commands/plan.md" "Fallback Path:" "plan command includes fallba
 check_contains "skills/global/backend-patterns/SKILL.md" "## Recommendation Standard" "backend-patterns recommendation standard"
 check_contains "skills/global/api-design/SKILL.md" "## Recommendation Standard" "api-design recommendation standard"
 check_contains "skills/global/planning-workflow/SKILL.md" "## Decision-Quality Block" "planning-workflow decision-quality block"
+check_contains "skills/global/planning-workflow/SKILL.md" "/plan" "planning-workflow defers full workflow planning"
+check_contains "skills/global/code-review-skill/SKILL.md" "/goldband-review" "code-review-skill defers full review workflow"
+check_contains "skills/global/security-checklist/SKILL.md" "/goldband-cso" "security-checklist defers deep security workflow"
 check_contains "skills/global/decision-log/SKILL.md" "### Failure Signals" "decision-log failure signals section"
 check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exit Criteria" "decision-log revisit triggers section"
 

@@ -27,18 +27,65 @@ check_skill_file() {
     return
   fi
 
-  if ! grep -q '^name:' "$skill_file"; then
+  local frontmatter
+  frontmatter="$(sed -n '1,/^---$/p' "$skill_file")"
+
+  local name
+  name="$(printf '%s\n' "$frontmatter" | awk -F': *' '/^name:/{print $2; exit}')"
+
+  if [ -z "$name" ]; then
     echo "[FAIL] $rel missing name:"
     EXIT_CODE=1
   fi
 
-  if ! grep -q '^description:' "$skill_file"; then
+  if ! printf '%s\n' "$frontmatter" | grep -q '^description:'; then
     echo "[FAIL] $rel missing description:"
     EXIT_CODE=1
   fi
 
+  if printf '%s\n' "$frontmatter" | grep -q '^priority:'; then
+    echo "[FAIL] $rel uses non-standard frontmatter priority:"
+    EXIT_CODE=1
+  fi
+
+  if [[ "$rel" == skills/global/*/SKILL.md ]] \
+    && ! printf '%s\n' "$frontmatter" | grep -q '^allowed-tools:'; then
+    echo "[FAIL] $rel missing allowed-tools:"
+    EXIT_CODE=1
+  fi
+
+  case "$rel" in
+    skills/global/careful-mode/SKILL.md|skills/global/freeze-mode/SKILL.md)
+      if ! printf '%s\n' "$frontmatter" | grep -q '^disable-model-invocation: true$'; then
+        echo "[FAIL] $rel missing disable-model-invocation: true"
+        EXIT_CODE=1
+      fi
+      ;;
+  esac
+
+  case "$rel" in
+    skills/global/frontend-design/SKILL.md|skills/projects/unity/*/SKILL.md)
+      if ! printf '%s\n' "$frontmatter" | grep -q '^paths:'; then
+        echo "[FAIL] $rel missing paths:"
+        EXIT_CODE=1
+      fi
+      ;;
+  esac
+
   local skill_dir
   skill_dir="$(dirname "$skill_file")"
+  local expected_name
+  expected_name="$(basename "$skill_dir")"
+
+  if [ -n "$name" ] && [ "$name" != "$expected_name" ]; then
+    echo "[FAIL] $rel name '$name' does not match directory '$expected_name'"
+    EXIT_CODE=1
+  fi
+
+  if [ -n "$name" ] && ! printf '%s\n' "$name" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'; then
+    echo "[FAIL] $rel name '$name' is not lowercase kebab-case"
+    EXIT_CODE=1
+  fi
 
   local ref
   while IFS= read -r ref; do

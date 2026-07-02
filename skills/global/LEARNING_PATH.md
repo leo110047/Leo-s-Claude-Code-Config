@@ -14,7 +14,7 @@
 目標：
 - 不憑印象回答
 - 實作 contract 壞掉時要明確失敗，不用猜測或非必要降級補洞
-- 知道 bug 要先重現、收證據、再修
+- 知道 bug 要先重現、收證據、再修；完整調查走 `/goldband-investigate`
 - 習慣先建 codebase map
 
 ## 第 2 階段：學會規劃與審查
@@ -27,7 +27,7 @@
 - `prompt-hygiene`
 
 目標：
-- 寫得出可執行 plan
+- 寫得出可執行 plan；完整規劃走 `/plan`
 - 知道怎麼設計 coverage 與 regression test
 - 知道 review 要先看 correctness、risk、missing tests
 - 寫 prompt 時能分清目標、背景、硬邊界與成果標準，不用模板或無根據禁令取代判斷
@@ -43,14 +43,13 @@
 
 目標：
 - recommendation 不是只講 tradeoff
-- 要能交代 assumptions、failure modes、switch criteria、best alternative
+- 要能交代 assumptions、failure modes、switch criteria、best alternative；深度安全審查走 `/goldband-cso`
 
 ## 第 4 階段：維護 skill 與流程本身
 
 加入：
 
 - `decision-log`
-- `new-skill-scaffold`
 - `skill-developer`
 - `claude-config-verification`
 

@@ -33,6 +33,10 @@ persistence = "save-all"
 memories = true
 shell_tool = true
 
+[otel]
+exporter = "none"
+log_user_prompt = false
+
 [profiles.fast]
 model_reasoning_effort = "low"
 
@@ -47,8 +51,21 @@ approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 approval_policy = "on-request"
 
-[notice.model_migrations]
-"gpt-5.3-codex" = "gpt-5.4"
+[agents]
+max_threads = 6
+max_depth = 1
+
+[agents.reviewer]
+description = "Focused code review agent for correctness, security, maintainability, and missing-test risks."
+config_file = "agents/reviewer.toml"
+
+[agents.explorer]
+description = "Read-heavy codebase exploration agent for mapping files, contracts, and current behavior without edits."
+config_file = "agents/explorer.toml"
+
+[agents.planner]
+description = "Planning agent for turning researched scope into phased, verifiable implementation tasks."
+config_file = "agents/planner.toml"
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"

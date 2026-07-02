@@ -60,7 +60,7 @@
       "then": {
         "primary_skill": "code-review-skill",
         "exclude_skills": ["systematic-debugging"],
-        "reason": "Review is for quality and standards, not active debugging"
+        "reason": "Review is for quality and standards, not active debugging; full review passes should use /goldband-review when workflow is available"
       }
     },
 
@@ -77,7 +77,7 @@
         "workflow": [
           "1. Invoke systematic-debugging to investigate bugs",
           "2. Fix bugs systematically",
-          "3. Resume code-review-skill after bugs are resolved"
+          "3. Resume code-review-skill or /goldband-review after bugs are resolved"
         ],
         "reason": "Cannot properly review code with active bugs; debugging must come first"
       }
@@ -163,7 +163,7 @@
     "code-review-skill": {
       "defers_to": ["systematic-debugging"],
       "collaborates_with": ["performance-optimization", "backend-patterns"],
-      "workflow": "Review can flag issues and recommend other skills, but should not attempt to fix bugs"
+      "workflow": "Thin review policy entrypoint; use /goldband-review for full workflow review. Review can flag issues and recommend other skills, but should not attempt to fix bugs"
     },
     "performance-optimization": {
       "requires_evidence": true,
@@ -204,14 +204,9 @@
       "reason": "When the goal is inspection without mutation, stronger session-wide friction is safer than relying on operator memory"
     },
     "planning-workflow": {
-      "focus": "structured task planning and breakdown",
+      "focus": "thin planning policy and decision-quality requirements",
       "collaborates_with": ["evidence-based-coding"],
-      "reason": "Plans must include verification steps and evidence-based file paths"
-    },
-    "new-skill-scaffold": {
-      "focus": "generate folder-based skills with progressive disclosure, scripts, and config stubs",
-      "collaborates_with": ["skill-developer", "claude-config-verification"],
-      "reason": "Skill scaffolding should encode repo conventions so new skills start structured instead of as ad-hoc markdown blobs"
+      "reason": "Plans must include verification steps and evidence-based file paths; full planning should use /plan when workflow is available"
     },
     "subagent-development": {
       "focus": "subagent dispatch and two-stage review patterns",

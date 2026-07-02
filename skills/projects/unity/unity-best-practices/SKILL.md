@@ -7,6 +7,10 @@ description: |
   Use when: 編寫 Unity C# 代碼、設計組件、架構 Unity 專案、重構 Unity 代碼、
   建立編碼規範、優化 Unity 工作流程。
 allowed-tools: Read, Grep, Glob, Bash
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Best Practices 指南

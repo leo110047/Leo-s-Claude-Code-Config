@@ -7,6 +7,10 @@ description: |
   Use when: 設計大型 Unity 專案架構、重構混亂的代碼、提高可測試性、
   解耦系統、選擇架構模式、組織團隊協作。
 allowed-tools: Read, Grep, Glob
+paths:
+  - "Assets/**"
+  - "Packages/**"
+  - "ProjectSettings/**"
 ---
 
 # Unity Architecture Patterns
