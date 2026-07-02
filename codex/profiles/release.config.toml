@@ -1,0 +1,6 @@
+# Slower review mode for release, deploy, and risky-change checks.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+web_search = "cached"
+model_reasoning_effort = "xhigh"
+

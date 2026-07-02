@@ -1,0 +1,6 @@
+# Read-heavy mode for repo mapping, audits, and status checks.
+sandbox_mode = "read-only"
+approval_policy = "on-request"
+web_search = "cached"
+model_reasoning_effort = "high"
+

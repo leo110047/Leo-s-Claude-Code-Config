@@ -1,0 +1,21 @@
+{
+  "servers": [
+    {
+      "name": "github",
+      "description": "GitHub MCP server using a personal access token.",
+      "requiredEnv": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+      "codexConfigTable": "mcp_servers.github",
+      "claudeConfigKey": "mcpServers.github",
+      "inspectorCommand": "npx @modelcontextprotocol/inspector npx -y @modelcontextprotocol/server-github"
+    },
+    {
+      "name": "sentry",
+      "description": "Sentry MCP server using a Sentry auth token.",
+      "requiredEnv": ["SENTRY_AUTH_TOKEN"],
+      "codexConfigTable": "mcp_servers.sentry",
+      "claudeConfigKey": "mcpServers.sentry",
+      "inspectorCommand": "npx @modelcontextprotocol/inspector npx -y @sentry/mcp-server"
+    }
+  ]
+}
+

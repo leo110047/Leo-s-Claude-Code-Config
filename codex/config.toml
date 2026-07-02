@@ -37,20 +37,6 @@ shell_tool = true
 exporter = "none"
 log_user_prompt = false
 
-[profiles.fast]
-model_reasoning_effort = "low"
-
-[profiles.thorough]
-model_reasoning_effort = "xhigh"
-
-[profiles.readonly]
-sandbox_mode = "read-only"
-approval_policy = "on-request"
-
-[profiles.full_auto]
-sandbox_mode = "workspace-write"
-approval_policy = "on-request"
-
 [agents]
 max_threads = 6
 max_depth = 1

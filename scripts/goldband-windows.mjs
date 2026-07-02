@@ -120,6 +120,7 @@ function createContext(rawOptions = {}) {
       shellLaunchersPs1: path.join(claudeDir, 'shell', 'goldband-launchers.ps1'),
       codexDir,
       codexConfigFile: path.join(codexDir, 'config.toml'),
+      codexRequirementsFile: path.join(codexDir, 'requirements.toml'),
       codexAgentsFile: path.join(codexDir, 'AGENTS.md'),
       codexCustomAgentsDir: path.join(codexDir, 'agents'),
       codexHooksFile: path.join(codexDir, 'hooks.json'),
@@ -154,7 +155,10 @@ function defaultWindowsState() {
     },
     codexComponents: {
       config: false,
+      profiles: false,
+      requirements: false,
       agents: false,
+      hooks: false,
       rules: false,
     },
     workflow: {
@@ -419,6 +423,48 @@ function writeGeneratedCodexConfig(context) {
   fs.writeFileSync(destPath, `${lines.join('\n')}\n`, 'utf8');
   const suffix = fs.existsSync(localConfig) ? 'base + local overlay' : 'base only';
   console.log(`  ${colorize(context.colorsEnabled, 'green', '[install]')} Codex config.toml (${suffix})`);
+}
+
+function installCodexProfileConfigs(context) {
+  const sourceDir = path.join(context.repoDir, 'codex', 'profiles');
+  if (!fs.existsSync(sourceDir)) {
+    console.log(`  ${colorize(context.colorsEnabled, 'yellow', '[skip]')} Codex profile configs — source missing`);
+    return;
+  }
+
+  for (const entry of fs.readdirSync(sourceDir).filter(name => name.endsWith('.config.toml')).sort()) {
+    ensureComponent(
+      context,
+      path.join(sourceDir, entry),
+      path.join(context.paths.codexDir, entry),
+      `Codex profile ${entry}`,
+      'file',
+    );
+  }
+}
+
+function installCodexRequirements(context) {
+  ensureComponent(
+    context,
+    path.join(context.repoDir, 'codex', 'requirements.toml'),
+    context.paths.codexRequirementsFile,
+    'Codex requirements template (Windows enforcement path unverified)',
+    'file',
+  );
+  updateWindowsState(context, (state) => {
+    state.codexComponents.requirements = true;
+  });
+}
+
+function removeCodexRequirements(context) {
+  const sourcePath = path.join(context.repoDir, 'codex', 'requirements.toml');
+  const targetPath = context.paths.codexRequirementsFile;
+  if (!fs.existsSync(targetPath)) {
+    return;
+  }
+  if (fs.existsSync(sourcePath) && fs.readFileSync(sourcePath, 'utf8') === fs.readFileSync(targetPath, 'utf8')) {
+    removePath(targetPath);
+  }
 }
 
 function isRepoCodexRuleLink(context, linkPath) {
@@ -1020,8 +1066,10 @@ function installHooks(context) {
 
 function installCodexConfig(context) {
   writeGeneratedCodexConfig(context);
+  installCodexProfileConfigs(context);
   updateWindowsState(context, (state) => {
     state.codexComponents.config = true;
+    state.codexComponents.profiles = true;
   });
 }
 
@@ -1187,6 +1235,12 @@ function refreshManagedRuntime(context) {
   if (state.codexComponents.config) {
     writeGeneratedCodexConfig(context);
   }
+  if (state.codexComponents.profiles) {
+    installCodexProfileConfigs(context);
+  }
+  if (state.codexComponents.requirements) {
+    installCodexRequirements(context);
+  }
   if (state.codexComponents.agents) {
     refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'AGENTS.md'), context.paths.codexAgentsFile, 'Codex AGENTS.md', 'file');
     refreshManagedComponent(context, path.join(context.repoDir, 'codex', 'agents'), context.paths.codexCustomAgentsDir, 'Codex custom agents', 'dir');
@@ -1272,6 +1326,13 @@ function uninstallWindows(context) {
   cleanupManagedEntries(context.paths.skillsDir, context.paths.skillProfileFile, ['README.md', 'skill-rules.json']);
   cleanupManagedEntries(context.paths.agentsSkillsDir, context.paths.codexSkillProfileFile, []);
 
+  const codexProfileDir = path.join(context.repoDir, 'codex', 'profiles');
+  const codexProfilePaths = fs.existsSync(codexProfileDir)
+    ? fs.readdirSync(codexProfileDir)
+      .filter(name => name.endsWith('.config.toml'))
+      .map(name => path.join(context.paths.codexDir, name))
+    : [];
+
   const componentPaths = [
     path.join(context.paths.claudeDir, 'commands'),
     path.join(context.paths.claudeDir, 'contexts'),
@@ -1279,6 +1340,7 @@ function uninstallWindows(context) {
     path.join(context.paths.claudeDir, 'hooks'),
     path.join(context.paths.claudeDir, 'statusline-command.sh'),
     context.paths.codexConfigFile,
+    ...codexProfilePaths,
     context.paths.codexAgentsFile,
     context.paths.codexCustomAgentsDir,
     context.paths.codexHooksFile,
@@ -1288,6 +1350,7 @@ function uninstallWindows(context) {
   for (const targetPath of componentPaths) {
     removePath(targetPath);
   }
+  removeCodexRequirements(context);
 
   removeHooksConfig(context);
   removeWindowsLauncherWrappers(context);
@@ -1315,6 +1378,13 @@ function showWindowsStatus(context) {
   console.log(`  Claude contexts: ${fs.existsSync(path.join(context.paths.claudeDir, 'contexts')) ? 'installed' : 'missing'}`);
   console.log(`  Claude rules: ${fs.existsSync(path.join(context.paths.claudeDir, 'rules')) ? 'installed' : 'missing'}`);
   console.log(`  Codex config: ${fs.existsSync(context.paths.codexConfigFile) ? 'installed' : 'missing'}`);
+  const profileDir = path.join(context.repoDir, 'codex', 'profiles');
+  const expectedProfiles = fs.existsSync(profileDir)
+    ? fs.readdirSync(profileDir).filter(name => name.endsWith('.config.toml'))
+    : [];
+  const installedProfiles = expectedProfiles.filter(name => fs.existsSync(path.join(context.paths.codexDir, name)));
+  console.log(`  Codex profiles: ${installedProfiles.length === expectedProfiles.length && expectedProfiles.length > 0 ? 'installed' : 'missing'} (${installedProfiles.length}/${expectedProfiles.length})`);
+  console.log(`  Codex requirements: ${fs.existsSync(context.paths.codexRequirementsFile) ? 'staged (Windows enforcement path unverified)' : 'missing'}`);
   console.log(`  Codex agents: ${fs.existsSync(context.paths.codexAgentsFile) ? 'installed' : 'missing'}`);
   console.log(`  Codex custom agents: ${fs.existsSync(context.paths.codexCustomAgentsDir) ? 'installed' : 'missing'}`);
   console.log(`  Codex hooks: ${fs.existsSync(context.paths.codexHooksFile) && fs.existsSync(context.paths.codexHooksDir) ? 'installed' : 'missing'}`);
@@ -1379,6 +1449,9 @@ function installForWindows(context, actions) {
         break;
       case 'codex-config':
         installCodexConfig(context);
+        break;
+      case 'codex-requirements':
+        installCodexRequirements(context);
         break;
       case 'codex-agents':
         installCodexAgents(context);

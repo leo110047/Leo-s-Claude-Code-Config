@@ -1,0 +1,7 @@
+# Opt-in experiment: automatic reviewer handles approval prompts.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+web_search = "cached"
+model_reasoning_effort = "high"
+

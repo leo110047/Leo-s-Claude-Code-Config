@@ -94,6 +94,18 @@ Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted
 - `codex/local/rules/*.rules`
 
 `./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
+`./install.sh codex-config` 也會安裝 `codex/profiles/*.config.toml` 到
+`~/.codex/*.config.toml`，用法是 `codex --profile readonly`、
+`codex --profile release` 或 `codex --profile auto_review_experiment`。`sandbox_mode`
+不會依任務自動切換，必須用 profile 或 CLI config 明確選。
+如果要讓 user config 不能切到更寬的安全模式，另外明確執行
+`./install.sh codex-requirements`，把 `codex/requirements.toml` 安裝到
+`/etc/codex/requirements.toml`。Windows installer 目前只會把同一份檔案 staged 到
+`~/.codex/requirements.toml`，不宣稱已由 Windows Codex runtime 強制載入，因為
+Windows managed requirements 讀取路徑尚未驗證。
+`codex/requirements.toml` 只限制 approval policy、approval reviewer、sandbox
+mode、web search mode；它不限制 `dangerous-local` profile 裡的
+`network_access = true`。
 Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提供
 `reviewer`、`explorer`、`planner` 三個 workflow-aligned 唯讀 helper：完整 review
 仍走 `/goldband-review`，完整 planning 仍走 `/plan` / `/goldband-plan-eng-review`；
@@ -103,7 +115,9 @@ UserPromptSubmit、SessionStart、PreToolUse、PermissionRequest、PostToolUse�
 SubagentStop、PreCompact、PostCompact、Stop 的 parity guardrails；
 只有高風險 Bash / patch 內容會 deny，其餘情況以 workflow hint 或 context reminder
 放行。
-MCP template 與驗證方式記錄在 [mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
+MCP template、token-backed 啟用流程與驗證方式記錄在
+[mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在
+[docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
 
 如果你的舊 checkout 曾經把 Codex approvals 寫進 `codex/rules/default.rules`，請跑：
 

@@ -5,13 +5,13 @@
 [mcp_servers.github]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-github"]
-env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_PERSONAL_ACCESS_TOKEN}" }
+env_vars = ["GITHUB_PERSONAL_ACCESS_TOKEN"]
 enabled = false
 
 [mcp_servers.sentry]
 command = "npx"
 args = ["-y", "@sentry/mcp-server"]
-env = { SENTRY_AUTH_TOKEN = "${SENTRY_AUTH_TOKEN}" }
+env_vars = ["SENTRY_AUTH_TOKEN"]
 enabled = false
 
 [mcp_servers.context7]

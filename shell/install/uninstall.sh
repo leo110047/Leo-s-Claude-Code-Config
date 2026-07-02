@@ -85,6 +85,15 @@ do_uninstall() {
         "$CODEX_RULES_DIR"
     )
 
+    local codex_profile_dir="$REPO_DIR/codex/profiles"
+    if [ -d "$codex_profile_dir" ]; then
+        local profile_file
+        for profile_file in "$codex_profile_dir"/*.config.toml; do
+            [ -f "$profile_file" ] || continue
+            codex_paths+=("$CODEX_DIR/$(basename "$profile_file")")
+        done
+    fi
+
     for p in "${codex_paths[@]}"; do
         if [ -L "$p" ]; then
             rm "$p"
@@ -94,6 +103,20 @@ do_uninstall() {
             echo -e "  ${GREEN}[移除] $p${NC}"
         fi
     done
+
+    local codex_requirements_src="$REPO_DIR/codex/requirements.toml"
+    if [ -f "$codex_requirements_src" ] && [ -f "$CODEX_REQUIREMENTS_FILE" ]; then
+        if cmp -s "$codex_requirements_src" "$CODEX_REQUIREMENTS_FILE" 2>/dev/null; then
+            if [ "$(id -u)" -eq 0 ]; then
+                rm "$CODEX_REQUIREMENTS_FILE"
+            else
+                sudo rm "$CODEX_REQUIREMENTS_FILE"
+            fi
+            echo -e "  ${GREEN}[移除] $CODEX_REQUIREMENTS_FILE${NC}"
+        else
+            echo -e "  ${YELLOW}[保留] Codex requirements 不同於 repo 版本: $CODEX_REQUIREMENTS_FILE${NC}"
+        fi
+    fi
 
     echo -e "${GREEN}完成${NC}"
 }

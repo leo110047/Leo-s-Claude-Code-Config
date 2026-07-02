@@ -104,6 +104,63 @@ install_generated_codex_config() {
     fi
 }
 
+install_codex_profile_configs() {
+    local profile_dir="$REPO_DIR/codex/profiles"
+
+    if [ ! -d "$profile_dir" ]; then
+        echo -e "  ${YELLOW}[跳過] Codex profile configs — 來源不存在${NC}"
+        return
+    fi
+
+    local profile_file
+    for profile_file in "$profile_dir"/*.config.toml; do
+        [ -f "$profile_file" ] || continue
+        link_component "$profile_file" "$CODEX_DIR/$(basename "$profile_file")" "Codex profile $(basename "$profile_file")"
+    done
+}
+
+install_codex_requirements_file() {
+    local src="$REPO_DIR/codex/requirements.toml"
+    local dest="$CODEX_REQUIREMENTS_FILE"
+
+    if [ ! -f "$src" ]; then
+        echo -e "  ${YELLOW}[跳過] Codex requirements.toml — 來源不存在${NC}"
+        return
+    fi
+
+    local dest_dir
+    dest_dir="$(dirname "$dest")"
+    local backup_suffix
+    backup_suffix="$(date +%s)"
+
+    local can_write_without_sudo=false
+    if [ "$(id -u)" -eq 0 ]; then
+        can_write_without_sudo=true
+    elif mkdir -p "$dest_dir" 2>/dev/null && [ -w "$dest_dir" ]; then
+        can_write_without_sudo=true
+    fi
+
+    if $can_write_without_sudo; then
+        mkdir -p "$dest_dir"
+        if [ -e "$dest" ] && ! cmp -s "$src" "$dest"; then
+            cp "$dest" "${dest}.bak.${backup_suffix}"
+            echo -e "  ${YELLOW}[備份] Codex requirements.toml -> ${dest}.bak.${backup_suffix}${NC}"
+        fi
+        cp "$src" "$dest"
+        chmod 0644 "$dest"
+    else
+        sudo mkdir -p "$dest_dir"
+        if sudo test -e "$dest" && ! sudo cmp -s "$src" "$dest"; then
+            sudo cp "$dest" "${dest}.bak.${backup_suffix}"
+            echo -e "  ${YELLOW}[備份] Codex requirements.toml -> ${dest}.bak.${backup_suffix}${NC}"
+        fi
+        sudo cp "$src" "$dest"
+        sudo chmod 0644 "$dest"
+    fi
+
+    echo -e "  ${GREEN}[安裝] Codex managed requirements -> $dest${NC}"
+}
+
 is_repo_codex_rule_link() {
     local link_path="$1"
     local base_rules="$REPO_DIR/codex/rules"

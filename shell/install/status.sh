@@ -88,6 +88,39 @@ show_status() {
         echo -e "  ${RED}[未安裝]${NC} codex-config"
     fi
 
+    local codex_profile_source_dir="$REPO_DIR/codex/profiles"
+    if [ -d "$codex_profile_source_dir" ]; then
+        local profile_total=0
+        local profile_installed=0
+        local profile_file
+        for profile_file in "$codex_profile_source_dir"/*.config.toml; do
+            [ -f "$profile_file" ] || continue
+            profile_total=$((profile_total + 1))
+            local profile_dest="$CODEX_DIR/$(basename "$profile_file")"
+            if [ -L "$profile_dest" ] && [ "$(readlink "$profile_dest")" = "$profile_file" ]; then
+                profile_installed=$((profile_installed + 1))
+            fi
+        done
+        if [ "$profile_total" -gt 0 ] && [ "$profile_installed" -eq "$profile_total" ]; then
+            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total})"
+        elif [ "$profile_installed" -gt 0 ]; then
+            echo -e "  ${YELLOW}[部分安裝]${NC} codex profiles (${profile_installed}/${profile_total}) — 建議重跑 ./install.sh codex-config"
+        else
+            echo -e "  ${RED}[未安裝]${NC} codex profiles"
+        fi
+    fi
+
+    local codex_requirements_src="$REPO_DIR/codex/requirements.toml"
+    if [ -f "$codex_requirements_src" ]; then
+        if [ -f "$CODEX_REQUIREMENTS_FILE" ] && cmp -s "$codex_requirements_src" "$CODEX_REQUIREMENTS_FILE" 2>/dev/null; then
+            echo -e "  ${GREEN}[OK]${NC} codex requirements -> $CODEX_REQUIREMENTS_FILE"
+        elif [ -f "$CODEX_REQUIREMENTS_FILE" ]; then
+            echo -e "  ${YELLOW}[存在]${NC} codex requirements 不同於 repo 版本 -> $CODEX_REQUIREMENTS_FILE"
+        else
+            echo -e "  ${YELLOW}[未安裝]${NC} codex requirements — 執行 ./install.sh codex-requirements"
+        fi
+    fi
+
     if [ -L "$CODEX_AGENTS_FILE" ]; then
         local target
         target=$(readlink "$CODEX_AGENTS_FILE")
@@ -166,6 +199,10 @@ show_status() {
         fi
     else
         echo -e "  ${RED}[未安裝]${NC} codex skills"
+    fi
+
+    if command -v node >/dev/null 2>&1 && [ -f "$REPO_DIR/scripts/check-mcp-token-status.mjs" ]; then
+        node "$REPO_DIR/scripts/check-mcp-token-status.mjs" --summary --mcp-env-file "$REPO_DIR/codex/local/mcp.env" 2>/dev/null || true
     fi
 
     echo ""

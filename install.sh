@@ -23,6 +23,7 @@ SHELL_LAUNCHERS_FILE="$CLAUDE_SHELL_DIR/goldband-launchers.sh"
 ZSHRC_FILE="${ZDOTDIR:-$HOME}/.zshrc"
 CODEX_DIR="$HOME/.codex"
 CODEX_CONFIG_FILE="$CODEX_DIR/config.toml"
+CODEX_REQUIREMENTS_FILE="${CODEX_REQUIREMENTS_FILE:-/etc/codex/requirements.toml}"
 CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
 CODEX_CUSTOM_AGENTS_DIR="$CODEX_DIR/agents"
 CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
@@ -61,7 +62,8 @@ show_help() {
     echo "  codex-core  安裝 Codex 核心設定（global AGENTS/config/rules + core skills）"
     echo "  codex-full  安裝 Codex 完整設定（global AGENTS/config/rules + portable skills）"
     echo "  codex       相容別名，等同 codex-full"
-    echo "  codex-config 只安裝 ~/.codex/config.toml"
+    echo "  codex-config 只安裝 ~/.codex/config.toml + profile config files"
+    echo "  codex-requirements 安裝 Codex managed requirements（需要 /etc 寫入權限）"
     echo "  codex-agents 安裝 ~/.codex/AGENTS.md + ~/.codex/agents"
     echo "  codex-hooks  安裝 ~/.codex/hooks.json + ~/.codex/hooks"
     echo "  codex-rules  只安裝 ~/.codex/rules"
@@ -236,6 +238,9 @@ for arg in "$@"; do
             ;;
         codex-config)
             install_codex_config
+            ;;
+        codex-requirements)
+            install_codex_requirements
             ;;
         codex-agents)
             install_codex_agents

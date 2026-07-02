@@ -63,6 +63,11 @@ install_codex_skills_core() {
 
 install_codex_config() {
     install_generated_codex_config
+    install_codex_profile_configs
+}
+
+install_codex_requirements() {
+    install_codex_requirements_file
 }
 
 install_codex_agents() {

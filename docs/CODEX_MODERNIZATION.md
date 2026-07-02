@@ -2,15 +2,16 @@
 
 ## P5 Status
 
-P5 is partially implemented and intentionally deferred at the runtime-adoption
-layer.
+P5 is mostly implemented with conservative runtime adoption.
 
 Implemented now: configuration cleanup, Codex agents/hooks installation,
-packaging placeholders, MCP templates, and operations documentation.
+packaging placeholders, MCP templates, opt-in Codex profile configs, managed
+requirements packaging, token-backed MCP setup/status flow, and operations
+documentation.
 
-Not completed yet: enabling `auto_review`, migrating to named permission
-profiles, enabling token-backed MCP servers, scheduled automations, and active
-plugin marketplace distribution.
+Not completed yet: migrating to beta `default_permissions` / `[permissions.*]`
+permission profiles, enabling token-backed MCP servers by default, scheduled
+automations, and active plugin marketplace distribution.
 
 ## Implemented
 
@@ -25,21 +26,39 @@ plugin marketplace distribution.
   commands or high-confidence secret/private-key patch content; non-risky
   cases continue with workflow hints or context reminders.
 - Telemetry baseline: `[otel] exporter = "none"` and `log_user_prompt = false`.
+- Codex profile files: `codex/profiles/*.config.toml` installs modern
+  `codex --profile <name>` layers, including `readonly`, `standard`, `release`,
+  `dangerous-local`, and `auto_review_experiment`.
+- Auto-review opt-in: `codex/profiles/auto_review_experiment.config.toml` sets
+  `approvals_reviewer = "auto_review"` while keeping
+  `approval_policy = "on-request"` and `sandbox_mode = "workspace-write"`.
+- Managed requirements packaging: `codex/requirements.toml` constrains
+  approval policies, approval reviewers, sandbox modes, and web search modes.
+  Install it explicitly with `./install.sh codex-requirements` on POSIX. The
+  Windows installer only stages the same file under `~/.codex/requirements.toml`
+  until the Windows Codex managed-requirements load path is verified.
 - Plugin packaging placeholder: `.codex-plugin/plugin.json` plus
   `codex/plugin-marketplace/`.
 - MCP templates: `mcp/claude.mcp.json.template` and
-  `mcp/codex.config.toml.template`.
+  `mcp/codex.config.toml.template`, plus token-backed inventory/status tooling
+  in `mcp/token-backed-servers.json` and
+  `scripts/check-mcp-token-status.mjs`.
 - Removed stale `notice.model_migrations` from `codex/config.toml`.
 
 ## Intentionally Not Enabled by Default
 
-- `approvals_reviewer = "auto_review"`: keep as a later experiment because it
-  changes who reviews approval prompts, even though it does not loosen sandboxing.
+- `approvals_reviewer = "auto_review"`: available only through the
+  `auto_review_experiment` profile because it changes who reviews approval
+  prompts, even though it does not loosen sandboxing.
 - `default_permissions` and custom `[permissions.<name>]` profiles: keep current
-  `sandbox_mode` + `profiles.*` until installer migration is tested on both POSIX
-  and Windows.
-- Token-backed MCP servers: templates exist, but users must provide credentials
-  and run MCP Inspector before enabling them.
+  `sandbox_mode` model because Codex does not compose the old sandbox settings
+  with beta permission profiles. `codex/requirements.toml` intentionally does
+  not set `allowed_permission_profiles` yet.
+- `codex/requirements.toml` does not constrain per-profile
+  `[sandbox_workspace_write].network_access`; `dangerous-local` remains an
+  explicit opt-in profile for network-enabled local work.
+- Token-backed MCP servers: setup flow exists, but users must provide
+  credentials and run MCP Inspector before enabling them.
 - Scheduled automations: documented in `OPERATIONS.md`; not installed by the repo.
 
 ## Verification Targets
@@ -47,6 +66,9 @@ plugin marketplace distribution.
 - `codex execpolicy check codex/rules/default.rules`
 - `bash scripts/check-codex-portability.sh`
 - temp-`HOME` installer run for `codex-full`
+- temp/system-path installer run for `codex-requirements`
 - JSON syntax checks for `codex/hooks.json`, plugin manifests, and marketplace
   prototype
+- TOML syntax checks for `codex/config.toml`, `codex/profiles/*.config.toml`,
+  and `codex/requirements.toml`
 - MCP Inspector smoke test for each MCP server before enabling it

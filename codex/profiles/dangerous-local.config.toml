@@ -1,0 +1,9 @@
+# Local integration mode for trusted repos that need sandboxed network access.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+web_search = "cached"
+model_reasoning_effort = "high"
+
+[sandbox_workspace_write]
+network_access = true
+

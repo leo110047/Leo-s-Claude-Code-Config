@@ -7,6 +7,29 @@ token-backed server by default.
 
 - `claude.mcp.json.template`: Claude-style `.mcp.json` template.
 - `codex.config.toml.template`: Codex `config.toml` MCP table template.
+- `token-backed-servers.json`: token-backed MCP inventory used by status
+  checks.
+- `../codex/local/mcp.env.example`: ignored local env template for token
+  presence checks.
+
+## Token-Backed Setup Flow
+
+Token-backed servers are still opt-in. Do not commit credentials.
+
+1. Copy `codex/local/mcp.env.example` to `codex/local/mcp.env`.
+2. Fill only the local env file, or export the same variables in the shell that
+   launches Codex/Claude.
+3. Copy the selected MCP table from `mcp/codex.config.toml.template` or
+   `mcp/claude.mcp.json.template` into the host config and set that server to
+   enabled.
+4. Check token presence without printing secrets:
+
+```bash
+node scripts/check-mcp-token-status.mjs --mcp-env-file codex/local/mcp.env --print-smoke
+```
+
+5. Run the printed MCP Inspector command before documenting the server as
+   supported.
 
 ## Validation
 

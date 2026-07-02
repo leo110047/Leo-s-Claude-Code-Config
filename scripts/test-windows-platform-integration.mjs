@@ -346,6 +346,9 @@ function main() {
     run(process.execPath, installArgs(tmpRoot, tmpHome, 'all-tools'), {
       env: { ...process.env, GOLDBAND_TEST_FORCE_FILE_COPY: '1' },
     });
+    run(process.execPath, installArgs(tmpRoot, tmpHome, 'codex-requirements'), {
+      env: { ...process.env, GOLDBAND_TEST_FORCE_FILE_COPY: '1' },
+    });
 
     const claudeProfile = readProfile(path.join(tmpHome, '.claude', 'skills', '.goldband-profile'));
     const codexProfile = readProfile(path.join(tmpHome, '.agents', 'skills', '.goldband-profile'));
@@ -353,6 +356,13 @@ function main() {
     assert.match(codexProfile.skills, /\bfrontend-design\b/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'commands')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'AGENTS.md')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'readonly.config.toml')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'release.config.toml')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'auto_review_experiment.config.toml')));
+    assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'requirements.toml')));
+    const externalRequirementsPath = path.join(tmpHome, 'ProgramData', 'OpenAI', 'Codex', 'requirements.toml');
+    fs.mkdirSync(path.dirname(externalRequirementsPath), { recursive: true });
+    fs.writeFileSync(externalRequirementsPath, 'admin-owned-policy = true\n', 'utf8');
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'agents', 'reviewer.toml')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'hooks.json')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'hooks', 'hook-router.js')));
@@ -414,6 +424,8 @@ function main() {
     console.log('[4/7] windows-mode status');
     const status = run(process.execPath, statusArgs(tmpRoot, tmpHome));
     assert.match(status.stdout, /PowerShell launchers: installed/);
+    assert.match(status.stdout, /Codex profiles: installed/);
+    assert.match(status.stdout, /Codex requirements: staged \(Windows enforcement path unverified\)/);
     assert.match(status.stdout, /Codex rules: installed/);
     assert.match(status.stdout, /Workflow Claude runtime: installed/);
 
@@ -472,6 +484,8 @@ function main() {
     assert.equal(settingsAfterUninstall.hooks, undefined);
     assert.equal(settingsAfterUninstall.statusLine, undefined);
     assert.ok(!(settingsAfterUninstall.permissions?.allow ?? []).includes('Bash(node *)'));
+    assert.ok(!fs.existsSync(path.join(tmpHome, '.codex', 'requirements.toml')));
+    assert.equal(fs.readFileSync(externalRequirementsPath, 'utf8'), 'admin-owned-policy = true\n');
 
     console.log('[OK] windows platform integration smoke test passed');
   } finally {

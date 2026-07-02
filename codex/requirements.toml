@@ -1,0 +1,13 @@
+# goldband Codex managed requirements.
+#
+# Install explicitly with:
+#   ./install.sh codex-requirements
+#
+# Do not add allowed_permission_profiles here while codex/config.toml still uses
+# sandbox_mode. Codex treats managed allowed_permission_profiles as a switch to
+# the newer permission-profile model.
+
+allowed_approval_policies = ["on-request"]
+allowed_approvals_reviewers = ["user", "auto_review"]
+allowed_sandbox_modes = ["read-only", "workspace-write"]
+allowed_web_search_modes = ["disabled", "cached"]

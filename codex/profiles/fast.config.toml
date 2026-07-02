@@ -1,0 +1,3 @@
+# Compatibility profile for quick, low-reasoning tasks.
+model_reasoning_effort = "low"
+
