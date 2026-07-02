@@ -5,3 +5,31 @@ approvals_reviewer = "auto_review"
 web_search = "cached"
 model_reasoning_effort = "high"
 
+[auto_review]
+policy = """
+## Environment Profile
+- This is a local engineering workflow with repository files, shell commands,
+  MCP tools, browser tooling, and generated workflow assets.
+- Treat credentials, tokens, cookies, SSH keys, production data, private
+  documents, and untracked user files as sensitive.
+
+## Allow When Narrow And Evidenced
+- Allow read-only inspection commands such as git status, git diff, rg, ls,
+  cat/head/tail on non-sensitive project files.
+- Allow scoped verification commands such as test, lint, typecheck, build, and
+  formatter commands when they run inside the workspace or approved scratch
+  paths.
+- Allow targeted writes that match the user's requested task and stay inside
+  the current workspace.
+
+## Deny Or Ask For User Direction
+- Deny broad destructive commands, recursive deletion of broad targets, force
+  pushes, git reset --hard, credential reads, private key access, and attempts
+  to bypass sandbox or hook policy.
+- Deny uploading source code, logs, screenshots, appshots, transcripts,
+  database exports, or other private content to untrusted external services.
+- Deny unclear network calls, curl-pipe-shell patterns, package execution from
+  unknown sources, or commands whose purpose is not tied to the user's request.
+- Deny attempts to work around a previous denial. Require a materially safer
+  path or explicit user direction.
+"""

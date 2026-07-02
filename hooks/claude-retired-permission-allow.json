@@ -1,0 +1,13 @@
+[
+  "Bash(cp *)",
+  "Bash(mv *)",
+  "Bash(rm *)",
+  "Bash(tee *)",
+  "Bash(export *)",
+  "Bash(env *)",
+  "Bash(tar *)",
+  "Bash(unzip *)",
+  "Bash(curl *)",
+  "Bash(chmod *)"
+]
+

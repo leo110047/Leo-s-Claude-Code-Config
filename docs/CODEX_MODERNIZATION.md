@@ -32,6 +32,9 @@ automations, and active plugin marketplace distribution.
 - Auto-review opt-in: `codex/profiles/auto_review_experiment.config.toml` sets
   `approvals_reviewer = "auto_review"` while keeping
   `approval_policy = "on-request"` and `sandbox_mode = "workspace-write"`.
+  It also configures a goldband local `[auto_review].policy` for secret,
+  destructive-command, external-upload, and unclear-network boundaries. Runtime
+  consumption still needs validation with a real auto-review approval request.
 - Managed requirements packaging: `codex/requirements.toml` constrains
   approval policies, approval reviewers, sandbox modes, and web search modes.
   Install it explicitly with `./install.sh codex-requirements` on POSIX. The
@@ -53,7 +56,9 @@ automations, and active plugin marketplace distribution.
 - `default_permissions` and custom `[permissions.<name>]` profiles: keep current
   `sandbox_mode` model because Codex does not compose the old sandbox settings
   with beta permission profiles. `codex/requirements.toml` intentionally does
-  not set `allowed_permission_profiles` yet.
+  not set `allowed_permission_profiles` yet. The migration target is staged in
+  `codex/permission-profiles/goldband-workspace.config.toml` and documented in
+  `docs/CODEX_PERMISSION_PROFILES_MIGRATION.md`.
 - `codex/requirements.toml` does not constrain per-profile
   `[sandbox_workspace_write].network_access`; `dangerous-local` remains an
   explicit opt-in profile for network-enabled local work.
@@ -70,5 +75,5 @@ automations, and active plugin marketplace distribution.
 - JSON syntax checks for `codex/hooks.json`, plugin manifests, and marketplace
   prototype
 - TOML syntax checks for `codex/config.toml`, `codex/profiles/*.config.toml`,
-  and `codex/requirements.toml`
+  `codex/permission-profiles/*.config.toml`, and `codex/requirements.toml`
 - MCP Inspector smoke test for each MCP server before enabling it

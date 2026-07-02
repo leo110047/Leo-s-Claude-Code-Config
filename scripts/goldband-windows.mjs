@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const REPO_DIR = path.resolve(__dirname, '..');
 const SKILL_CATALOG_FILE = path.join(REPO_DIR, 'shell', 'install', 'skill-catalog.txt');
 const HOOKS_CONFIG_FILE = path.join(REPO_DIR, 'hooks', 'hooks.json');
+const RETIRED_CLAUDE_PERMISSION_ALLOW_FILE = path.join(REPO_DIR, 'hooks', 'claude-retired-permission-allow.json');
 const WINDOWS_STATE_VERSION = 1;
 
 const DEFAULT_COLORS = {
@@ -257,6 +258,18 @@ function ensureDir(dirPath) {
 
 function removePath(targetPath) {
   fs.rmSync(targetPath, { recursive: true, force: true });
+}
+
+function readRetiredClaudePermissionAllow(context) {
+  const sourcePath = path.join(context.repoDir, 'hooks', 'claude-retired-permission-allow.json');
+  const fallbackPath = isSamePath(context.repoDir, REPO_DIR)
+    ? RETIRED_CLAUDE_PERMISSION_ALLOW_FILE
+    : sourcePath;
+  const targetPath = fs.existsSync(sourcePath) ? sourcePath : fallbackPath;
+  if (!fs.existsSync(targetPath)) {
+    return [];
+  }
+  return JSON.parse(fs.readFileSync(targetPath, 'utf8'));
 }
 
 function backupExistingPath(targetPath, context) {
@@ -760,10 +773,16 @@ function mergeHooksConfig(context) {
   const permissions = hooksConfig.permissions ?? null;
   if (permissions) {
     const existingPermissions = settings.permissions ?? {};
+    const retiredAllow = new Set(readRetiredClaudePermissionAllow(context));
     settings.permissions = {
       ...existingPermissions,
       defaultMode: permissions.defaultMode ?? existingPermissions.defaultMode ?? 'default',
-      allow: [...new Set([...(existingPermissions.allow ?? []), ...(permissions.allow ?? [])])],
+      allow: [
+        ...new Set([
+          ...(existingPermissions.allow ?? []).filter((entry) => !retiredAllow.has(entry)),
+          ...(permissions.allow ?? []),
+        ]),
+      ],
       deny: [...new Set([...(existingPermissions.deny ?? []), ...(permissions.deny ?? [])])],
     };
   }

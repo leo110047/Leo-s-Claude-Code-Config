@@ -1,0 +1,27 @@
+# Migration target for Codex permission profiles.
+#
+# Do not layer this file on top of the current codex/config.toml while that
+# file still sets sandbox_mode. Permission profiles and sandbox_mode are
+# separate models; migrate only after the active Codex clients are verified.
+
+default_permissions = "goldband_workspace"
+
+[permissions.goldband_workspace]
+description = "Edit the workspace while denying common secret files."
+extends = ":workspace"
+
+[permissions.goldband_workspace.filesystem]
+glob_scan_max_depth = 4
+
+[permissions.goldband_workspace.filesystem.":workspace_roots"]
+"." = "write"
+"**/.env" = "deny"
+"**/*.env" = "deny"
+"**/*.pem" = "deny"
+"**/*.key" = "deny"
+"**/.env.*" = "deny"
+"**/id_rsa" = "deny"
+"**/id_ed25519" = "deny"
+"**/credentials.json" = "deny"
+"**/secrets.json" = "deny"
+"**/service-account*.json" = "deny"

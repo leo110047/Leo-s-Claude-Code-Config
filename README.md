@@ -106,6 +106,11 @@ Windows managed requirements 讀取路徑尚未驗證。
 `codex/requirements.toml` 只限制 approval policy、approval reviewer、sandbox
 mode、web search mode；它不限制 `dangerous-local` profile 裡的
 `network_access = true`。
+`auto_review_experiment` 另外設定 goldband local review policy：窄範圍讀取與驗證可放行，secret access、廣泛破壞性操作、不明外連、資料上傳、繞過 denial 的嘗試應 deny 或要求使用者明確指示。這是 config-level policy；實際 reviewer runtime 是否完整消費仍需用登入後的 auto-review approval flow 驗證。
+新版 Codex permission profiles 的 migration target 放在
+`codex/permission-profiles/goldband-workspace.config.toml`，切換前請先按
+[docs/CODEX_PERMISSION_PROFILES_MIGRATION.md](docs/CODEX_PERMISSION_PROFILES_MIGRATION.md)
+驗證所有 Codex client 版本；目前 base config 仍維持 legacy `sandbox_mode`。
 Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提供
 `reviewer`、`explorer`、`planner` 三個 workflow-aligned 唯讀 helper：完整 review
 仍走 `/goldband-review`，完整 planning 仍走 `/plan` / `/goldband-plan-eng-review`；
@@ -115,6 +120,13 @@ UserPromptSubmit、SessionStart、PreToolUse、PermissionRequest、PostToolUse�
 SubagentStop、PreCompact、PostCompact、Stop 的 parity guardrails；
 只有高風險 Bash / patch 內容會 deny，其餘情況以 workflow hint 或 context reminder
 放行。
+Claude permissions 只預先 allow read-heavy、git inspection、常用 test/build
+與低風險 shell helper。`rm`、`curl`、`chmod`、`env`、`export`、`tee`、
+`tar`、`unzip`、`cp`、`mv` 這類 broad primitive 不再由 goldband 直接 allow，
+會回到 Claude permission / hook 流程處理。retired 清單由
+`hooks/claude-retired-permission-allow.json` 管理；重跑 installer 會移除這些
+goldband retired entries。若你確實需要保留某個操作，請加更精確的 command
+pattern，而不是 broad primitive。
 MCP template、token-backed 啟用流程與驗證方式記錄在
 [mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在
 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。

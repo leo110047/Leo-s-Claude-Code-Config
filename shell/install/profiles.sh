@@ -159,6 +159,13 @@ merge_hooks_config() {
 
     local permissions_content
     permissions_content=$(jq '.permissions // null' "$hooks_json")
+    local retired_permissions_file="$REPO_DIR/hooks/claude-retired-permission-allow.json"
+    local retired_permissions_allow
+    if [ -f "$retired_permissions_file" ]; then
+        retired_permissions_allow=$(jq '.' "$retired_permissions_file")
+    else
+        retired_permissions_allow='[]'
+    fi
 
     if [ ! -f "$settings_json" ]; then
         echo '{}' > "$settings_json"
@@ -218,9 +225,9 @@ merge_hooks_config() {
     fi
 
     if [ "$permissions_content" != "null" ] && [ -n "$permissions_content" ]; then
-        jq --argjson new_perms "$permissions_content" '
+        jq --argjson new_perms "$permissions_content" --argjson retired_allow "$retired_permissions_allow" '
             .permissions.defaultMode = ($new_perms.defaultMode // .permissions.defaultMode // "default") |
-            .permissions.allow = ((.permissions.allow // []) + ($new_perms.allow // []) | unique) |
+            .permissions.allow = (((.permissions.allow // []) - $retired_allow) + ($new_perms.allow // []) | unique) |
             .permissions.deny = ((.permissions.deny // []) + ($new_perms.deny // []) | unique)
         ' "$settings_json" > "${settings_json}.tmp" \
             && mv "${settings_json}.tmp" "$settings_json"

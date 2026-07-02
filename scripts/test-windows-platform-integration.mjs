@@ -385,6 +385,12 @@ function main() {
     );
     assert.match(pwsh7Profile, /goldband-launchers\.ps1/);
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', '.goldband-windows-state.json')));
+    const settingsAfterInstall = JSON.parse(fs.readFileSync(path.join(tmpHome, '.claude', 'settings.json'), 'utf8'));
+    const installedAllow = settingsAfterInstall.permissions?.allow ?? [];
+    const retiredAllow = JSON.parse(fs.readFileSync(path.join(tmpRoot, 'hooks', 'claude-retired-permission-allow.json'), 'utf8'));
+    for (const retired of retiredAllow) {
+      assert.ok(!installedAllow.includes(retired), `${retired} should not be installed`);
+    }
 
     fs.appendFileSync(path.join(tmpRoot, 'codex', 'AGENTS.md'), '\nwindows-copy-refresh\n', 'utf8');
     fs.appendFileSync(path.join(tmpRoot, 'codex', 'agents', 'reviewer.toml'), '\n# windows-agent-refresh\n', 'utf8');

@@ -230,6 +230,13 @@ test -f "$TMP_HOME/.claude/commands/goldband-language.md"
 test -f "$TMP_HOME/.claude/commands/scripts/set-goldband-language.sh"
 grep -q '^# >>> goldband shell launchers >>>$' "$TMP_HOME/.zshrc"
 grep -q 'source "\$HOME/.claude/shell/goldband-launchers.sh"' "$TMP_HOME/.zshrc"
+if jq -e --slurpfile retired "$TMP_ROOT/hooks/claude-retired-permission-allow.json" '
+    (.permissions.allow // []) as $allow
+    | any($retired[0][]; . as $entry | $allow | index($entry))
+' "$TMP_HOME/.claude/settings.json" >/dev/null; then
+    echo "retired broad Claude permission allow patterns should not be installed" >&2
+    exit 1
+fi
 test ! -e "$TMP_HOME/.claude/skills/review"
 test ! -e "$TMP_HOME/.claude/skills/goldband-upgrade"
 test ! -e "$TMP_HOME/.codex/skills/workflow-review"
