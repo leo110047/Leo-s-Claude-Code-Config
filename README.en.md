@@ -102,8 +102,10 @@ The current workflow-aligned read-only helpers are `reviewer`, `explorer`, and
 belongs to `/plan` / `/goldband-plan-eng-review`. The agents are for bounded
 second passes, current-state mapping, or plan drafts.
 Codex hooks are installed from `codex/hooks.json` and `codex/hooks/` to
-`~/.codex/`, providing minimal SessionStart, PreToolUse, PostToolUse,
-PreCompact, PostCompact, and Stop parity.
+`~/.codex/`, providing parity guardrails for UserPromptSubmit, SessionStart,
+PreToolUse, PermissionRequest, PostToolUse, SubagentStop, PreCompact,
+PostCompact, and Stop. Only high-risk Bash or patch content is
+denied; other cases continue with workflow hints or context reminders.
 MCP templates and validation notes live in [mcp/README.md](mcp/README.md), and
 Codex modernization status lives in
 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md).

@@ -174,8 +174,9 @@ cp -R "$TMP_WORKFLOW" "$TMP_ROOT/vendor/workflow"
 chmod +x "$TMP_ROOT/install.sh"
 chmod +x "$TMP_ROOT/shell/goldband-self-update.sh" "$TMP_ROOT/shell/goldband-sync-skills.sh"
 
-echo "[1/5] skill checks"
+echo "[1/5] skill and Codex hook checks"
 "$ROOT_DIR/scripts/check-skills.sh"
+node "$ROOT_DIR/scripts/test-codex-hook-router.mjs"
 
 echo "[2/5] installer smoke"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-workflow-install.log

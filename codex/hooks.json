@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Checking goldband workflow hints"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",
@@ -16,7 +29,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|apply_patch|mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -24,6 +37,20 @@
             "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
             "timeout": 5,
             "statusMessage": "Checking goldband Bash policy"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Checking goldband approval policy"
           }
         ]
       }
@@ -38,6 +65,20 @@
             "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
             "timeout": 5,
             "statusMessage": "Recording goldband tool context"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
+            "commandWindows": "node \"%USERPROFILE%\\.codex\\hooks\\hook-router.js\"",
+            "timeout": 5,
+            "statusMessage": "Checking goldband subagent evidence"
           }
         ]
       }

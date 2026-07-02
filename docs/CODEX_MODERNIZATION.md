@@ -18,9 +18,12 @@ plugin marketplace distribution.
   `codex/agents/explorer.toml`, and `codex/agents/planner.toml`.
 - Global agent config: `codex/config.toml` declares `[agents]` role entries and
   points at the custom agent files.
-- Hooks parity: `codex/hooks.json` installs a minimal Codex-specific hook router
-  for `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact`,
-  `PostCompact`, and `Stop`.
+- Hooks parity: `codex/hooks.json` installs a Codex-specific hook router for
+  `UserPromptSubmit`, `SessionStart`, `PreToolUse`, `PermissionRequest`,
+  `PostToolUse`, `SubagentStop`, `PreCompact`, `PostCompact`, and `Stop`.
+  Deny behavior is limited to high-risk Bash
+  commands or high-confidence secret/private-key patch content; non-risky
+  cases continue with workflow hints or context reminders.
 - Telemetry baseline: `[otel] exporter = "none"` and `log_user_prompt = false`.
 - Plugin packaging placeholder: `.codex-plugin/plugin.json` plus
   `codex/plugin-marketplace/`.

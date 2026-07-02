@@ -99,7 +99,10 @@ Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提
 仍走 `/goldband-review`，完整 planning 仍走 `/plan` / `/goldband-plan-eng-review`；
 agent 只負責 bounded second pass、current-state mapping 或 plan draft。
 Codex hooks 由 `codex/hooks.json` 與 `codex/hooks/` 安裝到 `~/.codex/`，提供
-SessionStart、PreToolUse、PostToolUse、PreCompact、PostCompact、Stop 的最小 parity。
+UserPromptSubmit、SessionStart、PreToolUse、PermissionRequest、PostToolUse、
+SubagentStop、PreCompact、PostCompact、Stop 的 parity guardrails；
+只有高風險 Bash / patch 內容會 deny，其餘情況以 workflow hint 或 context reminder
+放行。
 MCP template 與驗證方式記錄在 [mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
 
 如果你的舊 checkout 曾經把 Codex approvals 寫進 `codex/rules/default.rules`，請跑：
