@@ -1,8 +1,8 @@
-# Codex Global Instructions
+# Claude Global Instructions
 
-This file is the lightweight Codex behavior adapter managed by goldband.
-Keep durable workflow policy in skills, commands, hooks, or project-level
-`AGENTS.md` files instead of expanding this file into a full manual.
+This file is the lightweight Claude behavior adapter managed by goldband.
+Keep durable workflow policy in skills, commands, hooks, rules, or project-level
+`CLAUDE.md` files instead of expanding this file into a full manual.
 
 ## Response Style
 
@@ -26,8 +26,8 @@ Keep durable workflow policy in skills, commands, hooks, or project-level
 - Keep edits focused, maintainable, and production-ready.
 - Ask before destructive or shared-environment operations unless the user has
   already authorized them.
-- Put enforceable safety policy in Codex hooks, rules, or profiles rather than
-  long prose here.
+- Put enforceable safety policy in Claude hooks, rules, permissions, or commands
+  rather than long prose here.
 - Use workflow entrypoints and portable skills only when the task actually calls
   for them.
 

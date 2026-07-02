@@ -25,6 +25,7 @@
         "description": "Blocking guardrails + essential quality controls with minimal token footprint.",
         "install": [
           "skills-core",
+          "claude-guidance",
           "rules",
           "hooks"
         ]
@@ -33,6 +34,7 @@
         "description": "Core security plus development-quality skills and workflow commands.",
         "install": [
           "skills-dev",
+          "claude-guidance",
           "commands",
           "contexts",
           "rules",

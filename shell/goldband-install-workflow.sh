@@ -25,6 +25,7 @@ main() {
 
   REPO_DIR="$repo_dir"
   CLAUDE_DIR="$HOME/.claude"
+  CLAUDE_GLOBAL_INSTRUCTIONS_FILE="$CLAUDE_DIR/CLAUDE.md"
   SKILLS_DIR="$CLAUDE_DIR/skills"
   SKILL_PROFILE_FILE="$SKILLS_DIR/.goldband-profile"
   CLAUDE_BIN_DIR="$CLAUDE_DIR/bin"

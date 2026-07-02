@@ -40,6 +40,7 @@ function copyRepoSubset(targetDir) {
     'shell',
     'skills',
     'hooks',
+    'claude',
     'commands',
     'contexts',
     'rules',
@@ -354,6 +355,7 @@ function main() {
     const codexProfile = readProfile(path.join(tmpHome, '.agents', 'skills', '.goldband-profile'));
     assert.match(claudeProfile.skills, /\bfrontend-design\b/);
     assert.match(codexProfile.skills, /\bfrontend-design\b/);
+    assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'CLAUDE.md')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'commands')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'AGENTS.md')));
     assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'readonly.config.toml')));
@@ -429,6 +431,7 @@ function main() {
 
     console.log('[4/7] windows-mode status');
     const status = run(process.execPath, statusArgs(tmpRoot, tmpHome));
+    assert.match(status.stdout, /Claude CLAUDE\.md: installed/);
     assert.match(status.stdout, /PowerShell launchers: installed/);
     assert.match(status.stdout, /Codex profiles: installed/);
     assert.match(status.stdout, /Codex requirements: staged \(Windows enforcement path unverified\)/);
@@ -484,6 +487,7 @@ function main() {
     console.log('[7/7] windows-mode uninstall');
     run(process.execPath, uninstallArgs(tmpRoot, tmpHome));
     assert.ok(!fs.existsSync(path.join(tmpHome, '.claude', '.goldband-windows-state.json')));
+    assert.ok(!fs.existsSync(path.join(tmpHome, '.claude', 'CLAUDE.md')));
     assert.ok(!fs.existsSync(path.join(tmpHome, '.claude', 'bin', 'goldband-self-update.ps1')));
     assert.ok(!fs.existsSync(path.join(tmpHome, '.claude', 'shell', 'goldband-launchers.ps1')));
     const settingsAfterUninstall = JSON.parse(fs.readFileSync(path.join(tmpHome, '.claude', 'settings.json'), 'utf8'));
@@ -492,6 +496,16 @@ function main() {
     assert.ok(!(settingsAfterUninstall.permissions?.allow ?? []).includes('Bash(node *)'));
     assert.ok(!fs.existsSync(path.join(tmpHome, '.codex', 'requirements.toml')));
     assert.equal(fs.readFileSync(externalRequirementsPath, 'utf8'), 'admin-owned-policy = true\n');
+
+    const userOwnedClaudeHome = mktemp('goldband-win-user-claude.');
+    fs.mkdirSync(path.join(userOwnedClaudeHome, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(userOwnedClaudeHome, '.claude', 'CLAUDE.md'), 'user-owned claude guidance\n', 'utf8');
+    run(process.execPath, uninstallArgs(tmpRoot, userOwnedClaudeHome));
+    assert.equal(
+      fs.readFileSync(path.join(userOwnedClaudeHome, '.claude', 'CLAUDE.md'), 'utf8'),
+      'user-owned claude guidance\n',
+    );
+    fs.rmSync(userOwnedClaudeHome, { recursive: true, force: true });
 
     console.log('[OK] windows platform integration smoke test passed');
   } finally {

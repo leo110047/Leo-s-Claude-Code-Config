@@ -115,6 +115,7 @@ function createContext(rawOptions = {}) {
       skillProfileFile: path.join(claudeDir, 'skills', '.goldband-profile'),
       claudeBinDir: path.join(claudeDir, 'bin'),
       claudeShellDir: path.join(claudeDir, 'shell'),
+      claudeGlobalInstructionsFile: path.join(claudeDir, 'CLAUDE.md'),
       settingsJson: path.join(claudeDir, 'settings.json'),
       windowsStateFile: path.join(claudeDir, '.goldband-windows-state.json'),
       shellUpdateBinPs1: path.join(claudeDir, 'bin', 'goldband-self-update.ps1'),
@@ -148,6 +149,7 @@ function defaultWindowsState() {
     claudeSkillsProfile: null,
     codexSkillsProfile: null,
     claudeComponents: {
+      guidance: false,
       commands: false,
       contexts: false,
       rules: false,
@@ -329,6 +331,24 @@ function lstatOrNull(targetPath) {
   }
 }
 
+function isRepoSymlink(targetPath, sourcePath) {
+  const stat = lstatOrNull(targetPath);
+  if (!stat?.isSymbolicLink()) {
+    return false;
+  }
+  const currentTarget = path.resolve(path.dirname(targetPath), fs.readlinkSync(targetPath));
+  return isSamePath(currentTarget, sourcePath);
+}
+
+function fileContentsMatch(leftPath, rightPath) {
+  if (!fs.existsSync(leftPath) || !fs.existsSync(rightPath)) {
+    return false;
+  }
+  const left = fs.readFileSync(leftPath);
+  const right = fs.readFileSync(rightPath);
+  return left.equals(right);
+}
+
 function ensureComponent(context, sourcePath, destPath, label, kind) {
   if (!fs.existsSync(sourcePath)) {
     console.log(`  ${colorize(context.colorsEnabled, 'yellow', '[skip]')} ${label} — source missing`);
@@ -478,6 +498,26 @@ function removeCodexRequirements(context) {
   if (fs.existsSync(sourcePath) && fs.readFileSync(sourcePath, 'utf8') === fs.readFileSync(targetPath, 'utf8')) {
     removePath(targetPath);
   }
+}
+
+function removeManagedClaudeGuidance(context, state) {
+  const sourcePath = path.join(context.repoDir, 'claude', 'CLAUDE.md');
+  const targetPath = context.paths.claudeGlobalInstructionsFile;
+  if (!fs.existsSync(targetPath)) {
+    return;
+  }
+
+  if (isRepoSymlink(targetPath, sourcePath)) {
+    removePath(targetPath);
+    return;
+  }
+
+  if (state.claudeComponents.guidance && fileContentsMatch(sourcePath, targetPath)) {
+    removePath(targetPath);
+    return;
+  }
+
+  console.log(`  ${colorize(context.colorsEnabled, 'yellow', '[preserve]')} Claude CLAUDE.md is not a goldband-managed file`);
 }
 
 function isRepoCodexRuleLink(context, linkPath) {
@@ -1059,6 +1099,13 @@ function installCommands(context) {
   });
 }
 
+function installClaudeGuidance(context) {
+  ensureComponent(context, path.join(context.repoDir, 'claude', 'CLAUDE.md'), context.paths.claudeGlobalInstructionsFile, 'Claude CLAUDE.md', 'file');
+  updateWindowsState(context, (state) => {
+    state.claudeComponents.guidance = true;
+  });
+}
+
 function installContexts(context) {
   ensureComponent(context, path.join(context.repoDir, 'contexts'), path.join(context.paths.claudeDir, 'contexts'), 'Contexts', 'dir');
   updateWindowsState(context, (state) => {
@@ -1237,6 +1284,9 @@ function refreshManagedRuntime(context) {
   if (state.claudeComponents.commands) {
     refreshManagedComponent(context, path.join(context.repoDir, 'commands'), path.join(context.paths.claudeDir, 'commands'), 'Commands', 'dir');
   }
+  if (state.claudeComponents.guidance) {
+    refreshManagedComponent(context, path.join(context.repoDir, 'claude', 'CLAUDE.md'), context.paths.claudeGlobalInstructionsFile, 'Claude CLAUDE.md', 'file');
+  }
   if (state.claudeComponents.contexts) {
     refreshManagedComponent(context, path.join(context.repoDir, 'contexts'), path.join(context.paths.claudeDir, 'contexts'), 'Contexts', 'dir');
   }
@@ -1342,6 +1392,7 @@ function selfUpdate(context) {
 }
 
 function uninstallWindows(context) {
+  const state = readWindowsState(context);
   cleanupManagedEntries(context.paths.skillsDir, context.paths.skillProfileFile, ['README.md', 'skill-rules.json']);
   cleanupManagedEntries(context.paths.agentsSkillsDir, context.paths.codexSkillProfileFile, []);
 
@@ -1369,6 +1420,7 @@ function uninstallWindows(context) {
   for (const targetPath of componentPaths) {
     removePath(targetPath);
   }
+  removeManagedClaudeGuidance(context, state);
   removeCodexRequirements(context);
 
   removeHooksConfig(context);
@@ -1393,6 +1445,7 @@ function showWindowsStatus(context) {
   console.log('');
   console.log(`  Claude skills profile: ${claudeProfile?.profile ?? 'missing'} (${claudeProfile?.skills?.split(',').filter(Boolean).length ?? 0})`);
   console.log(`  Codex skills profile: ${codexProfile?.profile ?? 'missing'} (${codexProfile?.skills?.split(',').filter(Boolean).length ?? 0})`);
+  console.log(`  Claude CLAUDE.md: ${fs.existsSync(context.paths.claudeGlobalInstructionsFile) ? 'installed' : 'missing'}`);
   console.log(`  Claude commands: ${fs.existsSync(path.join(context.paths.claudeDir, 'commands')) ? 'installed' : 'missing'}`);
   console.log(`  Claude contexts: ${fs.existsSync(path.join(context.paths.claudeDir, 'contexts')) ? 'installed' : 'missing'}`);
   console.log(`  Claude rules: ${fs.existsSync(path.join(context.paths.claudeDir, 'rules')) ? 'installed' : 'missing'}`);
@@ -1420,6 +1473,7 @@ function installForWindows(context, actions) {
     switch (action) {
       case 'pack-core':
         installSkills(context, 'core');
+        installClaudeGuidance(context);
         installRules(context);
         installHooks(context);
         writeWindowsLauncherWrappers(context);
@@ -1427,6 +1481,7 @@ function installForWindows(context, actions) {
       case 'pack-quality':
       case 'all':
         installSkills(context, 'dev');
+        installClaudeGuidance(context);
         installCommands(context);
         installContexts(context);
         installRules(context);
@@ -1435,6 +1490,7 @@ function installForWindows(context, actions) {
         break;
       case 'all-full':
         installSkills(context, 'full');
+        installClaudeGuidance(context);
         installCommands(context);
         installContexts(context);
         installRules(context);
@@ -1450,6 +1506,9 @@ function installForWindows(context, actions) {
         break;
       case 'skills-dev':
         installSkills(context, 'dev');
+        break;
+      case 'claude-guidance':
+        installClaudeGuidance(context);
         break;
       case 'commands':
         installCommands(context);
@@ -1503,6 +1562,7 @@ function installForWindows(context, actions) {
         break;
       case 'all-tools':
         installSkills(context, 'full');
+        installClaudeGuidance(context);
         installCommands(context);
         installContexts(context);
         installRules(context);

@@ -14,6 +14,7 @@ NC='\033[0m'
 
 REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CLAUDE_DIR="$HOME/.claude"
+CLAUDE_GLOBAL_INSTRUCTIONS_FILE="$CLAUDE_DIR/CLAUDE.md"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 SKILL_PROFILE_FILE="$SKILLS_DIR/.goldband-profile"
 CLAUDE_BIN_DIR="$CLAUDE_DIR/bin"
@@ -52,6 +53,7 @@ show_help() {
     echo "  skills-core 安裝核心常駐 skills（低 token）"
     echo "  skills-dev  安裝開發常用 skills（core + auto）"
     echo "  skills-full 安裝全部全域 skills（22 個）"
+    echo "  claude-guidance 安裝 Claude 全域 CLAUDE.md"
     echo "  commands    只安裝 commands"
     echo "  contexts    只安裝 contexts"
     echo "  rules       只安裝 rules"
@@ -193,6 +195,7 @@ for arg in "$@"; do
             echo -e "${GREEN}安裝所有組件（full profile）...${NC}"
             echo ""
             install_skills
+            install_claude_guidance
             install_commands
             install_contexts
             install_rules
@@ -210,6 +213,9 @@ for arg in "$@"; do
             ;;
         skills-full)
             install_skills
+            ;;
+        claude-guidance)
+            install_claude_guidance
             ;;
         commands)
             install_commands

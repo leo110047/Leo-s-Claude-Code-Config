@@ -28,7 +28,7 @@ show_status() {
         echo -e "  ${RED}[未安裝]${NC} skills"
     fi
 
-    local components=("commands:$CLAUDE_DIR/commands" "contexts:$CLAUDE_DIR/contexts" "rules:$CLAUDE_DIR/rules" "hooks:$CLAUDE_DIR/hooks/scripts" "statusline:$CLAUDE_DIR/statusline-command.sh")
+    local components=("claude CLAUDE.md:$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" "commands:$CLAUDE_DIR/commands" "contexts:$CLAUDE_DIR/contexts" "rules:$CLAUDE_DIR/rules" "hooks:$CLAUDE_DIR/hooks/scripts" "statusline:$CLAUDE_DIR/statusline-command.sh")
 
     for item in "${components[@]}"; do
         local name="${item%%:*}"

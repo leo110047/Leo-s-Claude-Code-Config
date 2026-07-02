@@ -2,7 +2,7 @@
 name: claude-config-verification
 description: |
   Use when modifying the goldband config repo across Claude Code or Codex
-  assets (`skills/`, `hooks/`, `commands/`, `contexts/`, `rules/`,
+  assets (`skills/`, `hooks/`, `commands/`, `contexts/`, `rules/`, `claude/`,
   `.claude-plugin/`, `.codex/`, `codex/`, or install scripts) and you need a
   concrete health check before claiming the change is safe.
 
@@ -21,7 +21,7 @@ allowed-tools:
 ## When to Use
 
 - After changing hook router logic, hook policies, or worker behavior
-- After changing Codex global templates, execpolicy rules, or portable-skill install logic
+- After changing Claude/Codex global templates, execpolicy rules, or portable-skill install logic
 - After editing `hooks/hooks.json`, `skill-rules.json`, or `.claude-plugin/plugin.json`
 - After editing `.codex/config.toml`, `codex/config.toml`, `codex/rules/default.rules`, or `AGENTS.md`
 - After adding/removing skills, commands, contexts, or rules

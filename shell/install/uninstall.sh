@@ -23,6 +23,20 @@ do_uninstall() {
         echo -e "  ${GREEN}[移除] skills${NC}"
     fi
 
+    local claude_guidance_src="$REPO_DIR/claude/CLAUDE.md"
+    if [ -L "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" ]; then
+        local claude_guidance_target
+        claude_guidance_target=$(readlink "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE")
+        if [ "$claude_guidance_target" = "$claude_guidance_src" ]; then
+            rm "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE"
+            echo -e "  ${GREEN}[移除] $CLAUDE_GLOBAL_INSTRUCTIONS_FILE${NC}"
+        else
+            echo -e "  ${YELLOW}[保留] Claude CLAUDE.md — 不是 goldband 管理的連結: $CLAUDE_GLOBAL_INSTRUCTIONS_FILE${NC}"
+        fi
+    elif [ -e "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" ]; then
+        echo -e "  ${YELLOW}[保留] Claude CLAUDE.md — 不是 goldband 管理的連結: $CLAUDE_GLOBAL_INSTRUCTIONS_FILE${NC}"
+    fi
+
     local paths=("$CLAUDE_DIR/commands" "$CLAUDE_DIR/contexts" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/hooks/scripts" "$SHELL_UPDATE_BIN" "$SHELL_LAUNCHERS_FILE")
 
     for p in "${paths[@]}"; do

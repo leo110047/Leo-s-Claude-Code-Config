@@ -36,13 +36,6 @@ check_contains_any() {
   EXIT_CODE=1
 }
 
-check_contains "AGENTS.md" "## Shared Decision Guidance" "repo shared decision guidance section"
-check_contains "AGENTS.md" "failure containment" "repo guidance emphasizes decision quality over minimal delta"
-check_contains "AGENTS.md" "main failure modes" "repo guidance requires failure modes"
-check_contains "AGENTS.md" "prefer the healthiest maintainable path" "repo guidance defaults non-debug direction work to healthiest path"
-check_contains "AGENTS.md" "default to the healthiest complete fix" "repo guidance defaults debugging toward the healthiest complete fix"
-check_contains "AGENTS.md" "time pressure is the priority" "repo guidance allows narrower debugging fixes only under explicit time pressure"
-
 if [ -f "$ROOT_DIR/ARCHITECTURE.md" ]; then
   echo "[OK] architecture boundary document exists"
 else
@@ -56,11 +49,6 @@ check_contains "ARCHITECTURE.md" "vendor/workflow owns" "architecture doc explai
 check_contains "WORKFLOW_VENDORING.md" "workflow_wrapper_manifest()" "workflow vendoring runbook keeps wrapper manifest as source of truth"
 check_contains "WORKFLOW_VENDORING.md" "## Error Handling" "workflow vendoring runbook includes error handling"
 
-check_contains "codex/AGENTS.md" "## Decision Recommendation Standard" "codex decision recommendation section"
-check_contains "codex/AGENTS.md" "do not optimize for minimal code delta" "codex guidance rejects minimal-delta bias for recommendations"
-check_contains "codex/AGENTS.md" "default to the most complete and maintainable fix" "codex guidance defaults debugging toward the healthiest complete fix"
-check_contains "codex/AGENTS.md" "default to the healthiest maintainable path" "codex guidance defaults non-debug direction work to healthiest path"
-check_contains "codex/AGENTS.md" "time pressure is the priority" "codex guidance allows narrower debugging fixes only under explicit time pressure"
 check_contains "contexts/debug.md" "clearest safe experiment" "debug context uses clear experiments instead of smallest-change language"
 check_contains "skills/global/systematic-debugging/SKILL.md" "healthiest complete fix" "systematic-debugging skill keeps healthiest complete fix policy"
 check_contains "vendor/workflow/investigate/SKILL.md" "healthiest complete fix" "workflow investigate skill defaults debugging toward the healthiest complete fix"

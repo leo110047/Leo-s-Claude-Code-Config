@@ -8,209 +8,158 @@
 
 ## goldband 是什麼
 
-goldband 是一套給 Claude Code 和 Codex 共用的 engineering guardrails，目標是把 AI coding agent 的工作方式收斂成比較穩定、可驗證、可維護的流程。
+goldband 是一套 Claude Code / Codex 本機設定包。它把常用工作守則、hooks、
+commands、rules、contexts、portable skills 和 workflow runtime 接到你的本機環境。
 
-goldband 主要扮演三個角色：
+它主要解三件事：
 
-- 管 shared policy：commands、hooks、rules、contexts、portable skills
-- 管安裝與更新：把 Claude Code / Codex 的本地設定接到這個 repo，並在啟動前做安全的 self-update / skill sync
-- bundle `workflow` runtime：安裝後對外提供 `goldband-*` 入口
-- 方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數；方向判斷預設優先健康且可維護的路徑
+- 讓 Claude 和 Codex 使用同一套基本工程守則。
+- 把高風險操作交給 hooks / permissions / rules 控制。
+- 提供 `goldband-*` workflow 入口做 review、debug、QA、planning 等重流程。
+
+方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數；方向判斷預設優先健康且可維護的路徑。
 
 ## goldband 與 workflow 的邊界
 
-這個 repo 同時包含 goldband 本身，以及 vendored 的 `workflow` runtime source，但兩者責任不同：
+- goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、contexts、rules 和 portable skills。
+- `vendor/workflow/` 是被 bundle 進來的高階 workflow runtime。
+- 安裝時 goldband 會把 workflow runtime 轉成 `goldband-*` 入口。
 
-- goldband 負責 shared policy、installer、Claude/Codex adapter、repo-linked hooks/commands/contexts/rules，以及 portable skills。
-- `vendor/workflow/` 是被 bundle 進來的高階 runtime 原始碼，自己有獨立的 packaging、changelog、architecture 與 runtime docs。
-- 安裝時是 goldband 透過 [`shell/install/workflow.sh`](shell/install/workflow.sh) 把 workflow runtime 轉成 `goldband-*` 對外入口與 host-specific install layout。
-
-如果你想看更明確的邊界與維護規則，請讀 [ARCHITECTURE.md](ARCHITECTURE.md)。如果你要看 runtime 自己的產品與內部設計，請讀 [vendor/workflow/README.md](vendor/workflow/README.md) 與 [vendor/workflow/ARCHITECTURE.md](vendor/workflow/ARCHITECTURE.md)。
-更新 vendored runtime 時，照 [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md) 做，避免 wrapper、語言同步和驗證鏈分岔。
-
+維護細節看 [ARCHITECTURE.md](ARCHITECTURE.md) 和 [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md)。
+workflow runtime 自己的說明看 [vendor/workflow/README.md](vendor/workflow/README.md)。
 
 ## 安裝
 
-### 支援平台
-
-目前正式支援：
-
-- macOS / 其他 POSIX shell 環境：`install.sh`
-- Windows PowerShell：`install.ps1`
-
-Windows 路徑預設使用 PowerShell 啟動整合；workflow 安裝則需要可用的 `bash`（建議 Git for Windows 內建的 Git Bash）。
-
-### 快速開始
-
-要用 `git clone` 抓完整 repo：
+請用完整 git checkout，不要只複製 `install.sh`：
 
 ```bash
 git clone https://github.com/leo110047/goldband.git
 cd goldband
 ```
 
-不要只複製 `install.sh`，也不要用沒有 `.git` 的下載方式。goldband 是 `repo-linked install`，啟動前自動更新也依賴 git metadata。
-
-macOS / POSIX shell：
+macOS / POSIX：
 
 ```bash
 ./install.sh pack-quality      # Claude Code 日常推薦
 ./install.sh all-tools         # Claude Code + Codex
 ./install.sh all-with-workflow # Claude Code + Codex + 內建 workflow
+./install.sh status            # 檢查狀態
 ```
 
 Windows PowerShell：
 
 ```powershell
-pwsh -File .\install.ps1 all-tools         # Claude Code + Codex
-pwsh -File .\install.ps1 all-with-workflow # Claude Code + Codex + 內建 workflow
-pwsh -File .\install.ps1 status            # 檢查安裝狀態
+pwsh -File .\install.ps1 all-tools
+pwsh -File .\install.ps1 all-with-workflow
+pwsh -File .\install.ps1 status
 ```
 
-### 進階安裝選項
-
-如果你只想補裝特定項目，也可以直接跑：
+補裝特定項目：
 
 ```bash
-./install.sh codex-full        # 只安裝 Codex
-./install.sh codex-agents      # 只安裝 Codex AGENTS.md 與 custom agents
-./install.sh codex-hooks       # 只安裝 Codex hooks
-./install.sh workflow          # 只安裝 Claude 端 workflow
-./install.sh workflow-codex    # 只安裝 Codex 端 workflow
-./install.sh launchers         # 重裝 claude/codex 啟動入口
-./install.sh repair-codex-rules # 修復誤寫進 tracked rules 的本機 approvals
-./install.sh status            # 檢查安裝狀態
-./install.sh uninstall         # 移除安裝
+./install.sh claude-guidance    # Claude 全域 CLAUDE.md
+./install.sh codex-full         # Codex 全量設定
+./install.sh codex-agents       # Codex AGENTS.md + custom agents
+./install.sh codex-hooks        # Codex hooks
+./install.sh codex-requirements # Codex managed requirements
+./install.sh workflow           # Claude 端 workflow
+./install.sh workflow-codex     # Codex 端 workflow
+./install.sh launchers          # shell 啟動整合
+./install.sh uninstall          # 移除安裝
 ```
 
-依賴補充：
+依賴：
 
-- `hooks` 合併需要 `jq`。macOS 可用 `brew install jq`
-- Windows workflow 路徑另外需要 `bash`，建議直接安裝 Git for Windows
+- hooks 合併需要 `jq`。
+- Windows workflow 需要可用的 `bash`，建議 Git for Windows。
 
-Codex 的 tracked config/rules 只放 portable baseline。本機路徑、trusted projects、plugin runtime state、一次性 command approvals 放在 ignored overlay：
+## 裝了什麼
+
+- Claude 全域守則：`claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
+- Codex 全域守則：`codex/AGENTS.md` -> `~/.codex/AGENTS.md`
+- Claude assets：`commands/`、`contexts/`、`rules/`、`hooks/`、portable skills
+- Codex assets：config、profiles、rules、hooks、custom agents、portable skills
+- workflow runtime：Claude 在 `~/.claude/skills/workflow`，Codex 在 `~/.codex/skills/workflow`
+
+全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 `goldband-*` workflow、commands、skills、hooks 和 rules。
+
+## Codex 補充
+
+Codex tracked config/rules 只放 portable baseline。本機路徑、trusted projects、plugin state 和一次性 approvals 放在 ignored overlay：
 
 - `codex/local/config.toml`
 - `codex/local/rules/*.rules`
 
-`./install.sh codex-full` 會把 portable baseline 和本機 overlay 組合到 `~/.codex/`。
-`./install.sh codex-config` 也會安裝 `codex/profiles/*.config.toml` 到
-`~/.codex/*.config.toml`，用法是 `codex --profile readonly`、
-`codex --profile release` 或 `codex --profile auto_review_experiment`。`sandbox_mode`
-不會依任務自動切換，必須用 profile 或 CLI config 明確選。
-如果要讓 user config 不能切到更寬的安全模式，另外明確執行
-`./install.sh codex-requirements`，把 `codex/requirements.toml` 安裝到
-`/etc/codex/requirements.toml`。Windows installer 目前只會把同一份檔案 staged 到
-`~/.codex/requirements.toml`，不宣稱已由 Windows Codex runtime 強制載入，因為
-Windows managed requirements 讀取路徑尚未驗證。
-`codex/requirements.toml` 只限制 approval policy、approval reviewer、sandbox
-mode、web search mode；它不限制 `dangerous-local` profile 裡的
-`network_access = true`。
-`auto_review_experiment` 另外設定 goldband local review policy：窄範圍讀取與驗證可放行，secret access、廣泛破壞性操作、不明外連、資料上傳、繞過 denial 的嘗試應 deny 或要求使用者明確指示。這是 config-level policy；實際 reviewer runtime 是否完整消費仍需用登入後的 auto-review approval flow 驗證。
-新版 Codex permission profiles 的 migration target 放在
-`codex/permission-profiles/goldband-workspace.config.toml`，切換前請先按
-[docs/CODEX_PERMISSION_PROFILES_MIGRATION.md](docs/CODEX_PERMISSION_PROFILES_MIGRATION.md)
-驗證所有 Codex client 版本；目前 base config 仍維持 legacy `sandbox_mode`。
-Codex custom agents 由 `codex/agents/` 安裝到 `~/.codex/agents/`，目前提供
-`reviewer`、`explorer`、`planner` 三個 workflow-aligned 唯讀 helper：完整 review
-仍走 `/goldband-review`，完整 planning 仍走 `/plan` / `/goldband-plan-eng-review`；
-agent 只負責 bounded second pass、current-state mapping 或 plan draft。
-Codex hooks 由 `codex/hooks.json` 與 `codex/hooks/` 安裝到 `~/.codex/`，提供
-UserPromptSubmit、SessionStart、PreToolUse、PermissionRequest、PostToolUse、
-SubagentStop、PreCompact、PostCompact、Stop 的 parity guardrails；
-只有高風險 Bash / patch 內容會 deny，其餘情況以 workflow hint 或 context reminder
-放行。
-Claude permissions 只預先 allow read-heavy、git inspection、常用 test/build
-與低風險 shell helper。`rm`、`curl`、`chmod`、`env`、`export`、`tee`、
-`tar`、`unzip`、`cp`、`mv` 這類 broad primitive 不再由 goldband 直接 allow，
-會回到 Claude permission / hook 流程處理。retired 清單由
-`hooks/claude-retired-permission-allow.json` 管理；重跑 installer 會移除這些
-goldband retired entries。若你確實需要保留某個操作，請加更精確的 command
-pattern，而不是 broad primitive。
-MCP template、token-backed 啟用流程與驗證方式記錄在
-[mcp/README.md](mcp/README.md)，Codex 現代化狀態記錄在
-[docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
-
-如果你的舊 checkout 曾經把 Codex approvals 寫進 `codex/rules/default.rules`，請跑：
+如果舊 checkout 曾把 approvals 寫進 `codex/rules/default.rules`：
 
 ```bash
 ./install.sh repair-codex-rules
 ```
 
-這會把一行式本機 approvals 搬到 `codex/local/rules/default.rules`，保留本機授權，同時讓 tracked baseline 回到可自動更新的狀態。之後 installer 會把 portable rules 裝成 `goldband.rules`，把 ignored local overlay 裝成 writable `default.rules`，避免新的 approvals 再寫回 tracked 檔。
+`codex-requirements` 會安裝 managed requirements。POSIX 預設寫到 `/etc/codex/requirements.toml`；Windows 目前只 staged 到 `~/.codex/requirements.toml`，不宣稱 runtime 已強制載入。
+
+MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。Codex 現代化狀態看 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
+
+## 常用入口
+
+- `/plan`
+- `/verify`
+- `/goldband-review`
+- `/goldband-investigate`
+- `/goldband-cso`
+- `/goldband-design-review`
+- `/goldband-qa`
+- `/goldband-benchmark`
+- `/goldband-skillify`
+
+`/code-review` 是 legacy compatibility；完整 review 優先用 `/goldband-review`。
 
 ## 更新
 
-手動更新方式很簡單：
-
 ```bash
-cd /path/to/goldband
 git pull --ff-only
+./install.sh status
 ```
 
-更新後，重跑你原本使用的安裝組合即可。例如只裝 Claude Code 就重跑 `./install.sh pack-quality`，有裝 Codex 就重跑 `./install.sh all-tools`，有裝 workflow 就重跑 `./install.sh all-with-workflow`。
+更新後重跑原本的安裝組合即可，例如 `pack-quality`、`all-tools` 或 `all-with-workflow`。
 
-如果你平常直接輸入 `claude` 或 `codex`，goldband 也會在啟動前做一次安全的 self-update 檢查。macOS / POSIX 走 shell launcher，Windows 走 PowerShell launcher。不過它只會在 repo 乾淨、branch 是 `main`、tracking `origin/main`，而且可以安全 `git pull --ff-only` 的情況下才自動 fast-forward；不符合條件時會直接跳過。
+如果你透過 goldband launcher 啟動 `claude` 或 `codex`，它會在 repo 乾淨、位於 `main`、tracking `origin/main` 且可 fast-forward 時自動更新。
 
 ## 語言
-
-goldband wrapper 支援 `zh-TW` 和 `en`，預設是 `zh-TW`。
-
-在 Claude Code 裡最簡單的方式是：
-
-```text
-/goldband-language
-```
-
-如果你已經知道目標，也可以直接輸入：
 
 ```text
 /goldband-language zh-TW
 /goldband-language en
 ```
 
-如果你在 Codex 或想直接改設定，也可以用：
+也可以直接設定：
 
 ```bash
 ~/.codex/skills/workflow/bin/gstack-config set goldband_language zh-TW
 ~/.codex/skills/workflow/bin/gstack-config set goldband_language en
 ```
 
-舊的 `workflow-config` wrapper 仍保留相容性；新安裝優先使用 `gstack-config`。
-
-切換後如果目前 session 還沒吃到新設定，重開 Claude Code 或 Codex 一次即可。
-
-## 常用入口
-
-日常最常用的入口是 `/plan`、`/verify`、`/goldband-investigate`、`/goldband-review`、`/goldband-cso`、`/goldband-design-review`、`/goldband-qa`、`/goldband-benchmark` 和 `/goldband-skillify`。同名或相近的 portable skills 只保留 shared policy 與 handoff，不再複製完整 workflow。若要開高風險保護，可以用 `careful-mode`；如果你只想做唯讀調查，可以用 `freeze-mode`。
-
-## `workflow`
-
-`workflow` 是 goldband 內建的高階流程 runtime。安裝方式是 `./install.sh workflow`、`./install.sh workflow-codex` 或 `./install.sh all-with-workflow`。
-
-安裝後，Claude runtime 會在 `~/.claude/skills/workflow`，Codex runtime 會在 `~/.codex/skills/workflow`，共享 state 會在 `~/.workflow/`，對外入口則是 `goldband-*`。如果你要測試別的 runtime checkout，才需要用 `WORKFLOW_REPO_DIR=/path/to/runtime ./install.sh all-with-workflow` 覆寫來源。
+切換後若目前 session 沒吃到設定，重開 Claude Code 或 Codex。
 
 ## 什麼情況下不適合用
 
-下列情境通常不值得導入整套 goldband：
+- 你不用 Claude Code 或 Codex。
+- 你只想要普通專案模板。
+- 你不想要 hooks、permissions、repo-linked install 或啟動前 self-update。
+- 你只想要 workflow runtime 本身。
 
-- 你不用 Claude Code 或 Codex，只想要一份普通專案模板
-- 你現在只是做一次性的 solo prototype，而且不想承受 hooks、wrappers、repo-linked install 的管理成本
-- 團隊不接受自訂 hooks、repo-linked user config、或 `goldband-*` 命令入口
-- 你只想要 workflow runtime 本身，不需要 goldband 的 shared policy、adapter、installer 與雙工具對齊
-
-如果你只需要 bundled runtime，直接看 [vendor/workflow/README.md](vendor/workflow/README.md) 會比較準。
+只需要 runtime 時，直接看 [vendor/workflow/README.md](vendor/workflow/README.md)。
 
 ## 疑難排解
 
 | 問題 | 解法 |
 |------|------|
-| Hook 沒有執行 | 跑 `./install.sh hooks`，並確認 `jq` 已安裝 |
-| 安裝看起來不完整 | 先用 `./install.sh status` 檢查 |
+| 安裝看起來不完整 | 跑 `./install.sh status` |
+| hooks 沒有執行 | 跑 `./install.sh hooks`，並確認 `jq` 已安裝 |
 | `/verify-config` 報錯 | 重跑 `./install.sh all-tools` 或 `./install.sh all-with-workflow` |
-| 語言切換後說明沒變 | 重開 Claude Code 或 Codex 一次 |
-| 啟動時沒有自動更新 | 確認這是用 `git clone` 抓下來的 repo，而且目前在 `main`、工作樹乾淨，並且 tracking `origin/main` |
-| `codex/rules/default.rules` 因 approvals 變髒 | 跑 `./install.sh repair-codex-rules`，把本機 approvals 搬到 ignored local overlay |
+| 語言切換後說明沒變 | 重開 Claude Code 或 Codex |
+| 啟動時沒有自動更新 | 確認 repo 是 git clone、在 `main`、工作樹乾淨、tracking `origin/main` |
+| Codex approvals 寫進 tracked rules | 跑 `./install.sh repair-codex-rules` |
 
 ## 授權
 

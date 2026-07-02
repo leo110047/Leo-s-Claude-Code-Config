@@ -26,6 +26,7 @@ install_skills_dev() {
 
 install_pack_core() {
     install_skills_core
+    install_claude_guidance
     install_rules
     install_hooks
     install_shell_launchers
@@ -33,6 +34,7 @@ install_pack_core() {
 
 install_pack_quality() {
     install_skills_dev
+    install_claude_guidance
     install_commands
     install_contexts
     install_rules
@@ -85,6 +87,10 @@ install_codex_rules() {
     install_codex_rules_dir
 }
 
+install_claude_guidance() {
+    link_component "$REPO_DIR/claude/CLAUDE.md" "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" "Claude CLAUDE.md"
+}
+
 install_codex_core() {
     install_codex_config
     install_codex_agents
@@ -105,6 +111,7 @@ install_codex_full() {
 
 install_all_tools() {
     install_skills
+    install_claude_guidance
     install_commands
     install_contexts
     install_rules

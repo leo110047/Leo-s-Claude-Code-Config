@@ -526,6 +526,7 @@ function buildSummary(rootDir, args) {
   ];
   const requiredFileChecks = [
     validateRequiredFile(rootDir, 'AGENTS.md'),
+    validateRequiredFile(rootDir, path.join('claude', 'CLAUDE.md')),
     validateRequiredFile(rootDir, path.join('codex', 'AGENTS.md')),
     validateRequiredFile(rootDir, path.join('codex', 'rules', 'default.rules'))
   ];

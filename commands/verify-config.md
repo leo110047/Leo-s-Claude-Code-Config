@@ -29,6 +29,7 @@ Check these paths exist and point to valid targets:
 - `~/.claude/skills` → either:
   - legacy symlink to this repo's `skills/global`, OR
   - managed directory with `.goldband-profile` file and per-skill symlinks
+- `~/.claude/CLAUDE.md` → should point to this repo's `claude/CLAUDE.md`
 - `~/.claude/commands` → should point to this repo's `commands`
 - `~/.claude/contexts` → should point to this repo's `contexts`
 - `~/.claude/rules` → should point to this repo's `rules`
