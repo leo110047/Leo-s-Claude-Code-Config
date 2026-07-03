@@ -33,6 +33,7 @@ def iter_script_paths(data: dict, hook_file: Path):
                     raw_path = raw_path.replace("${HOOKS_DIR}", "hooks")
                     raw_path = raw_path.replace("$HOME/.codex", "codex")
                     raw_path = raw_path.replace("~/.codex", "codex")
+                    raw_path = raw_path.replace("$env:USERPROFILE\\.codex", "codex")
                     raw_path = raw_path.replace("%USERPROFILE%\\.codex", "codex")
                     raw_path = raw_path.replace("\\", "/")
                     if raw_path.startswith("/"):
@@ -52,7 +53,7 @@ def main() -> int:
     errors = 0
     referenced_paths = set()
     for hook_file in HOOK_FILES:
-        with hook_file.open() as fh:
+        with hook_file.open(encoding="utf-8") as fh:
             data = json.load(fh)
 
         rel_hook_file = hook_file.relative_to(ROOT)

@@ -137,6 +137,7 @@ function setupFixtureRepo(context) {
 function allToolsScenario(context) {
   const { tmpHome, tmpRoot } = context;
   console.log('[1/7] windows-mode all-tools');
+  seedSignedPowerShellProfile(tmpHome);
   run(process.execPath, installArgs(tmpRoot, tmpHome, 'all-tools'), copyEnv());
   run(
     process.execPath,
@@ -148,6 +149,23 @@ function allToolsScenario(context) {
   assertInstalledArtifacts(tmpHome, tmpRoot);
   assertRetiredPermissionsRemoved(tmpHome, tmpRoot);
   return externalRequirementsPath;
+}
+
+function seedSignedPowerShellProfile(tmpHome) {
+  const profilePath = powershellProfilePath(tmpHome);
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true });
+  fs.writeFileSync(
+    profilePath,
+    [
+      '$env:GOLDBAND_TEST_PROFILE = "before"',
+      '',
+      '# SIG # Begin signature block',
+      '# fake test signature',
+      '# SIG # End signature block',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
 }
 
 function copyEnv() {
@@ -196,6 +214,18 @@ function assertInstalledArtifacts(tmpHome, tmpRoot) {
   );
   const pwsh7Profile = fs.readFileSync(powershellProfilePath(tmpHome), 'utf8');
   assert.match(pwsh7Profile, /goldband-launchers\.ps1/);
+  assert.match(pwsh7Profile, /\$env:GOLDBAND_TEST_PROFILE = "before"/);
+  assert.doesNotMatch(pwsh7Profile, /# SIG # Begin signature block/);
+  assertCodexHooksUsePowerShellEnv(tmpHome);
+}
+
+function assertCodexHooksUsePowerShellEnv(tmpHome) {
+  const hooksJson = fs.readFileSync(
+    path.join(tmpHome, '.codex', 'hooks.json'),
+    'utf8',
+  );
+  assert.match(hooksJson, /\$env:USERPROFILE/);
+  assert.doesNotMatch(hooksJson, /%USERPROFILE%/);
 }
 
 function assertInstalledFileMatches(installedPath, sourcePath) {

@@ -228,6 +228,22 @@ function stripProfileBlock(contents, beginMarker, endMarker) {
     .replace(/\s+$/, '');
 }
 
+function stripAuthenticodeSignatureBlock(contents) {
+  const beginMarker = '# SIG # Begin signature block';
+  const beginIndex = contents.indexOf(beginMarker);
+  if (beginIndex === -1) {
+    return contents;
+  }
+
+  const beforeSignature = contents.slice(0, beginIndex);
+  return beforeSignature.replace(/\s+$/, '');
+}
+
+function addProfileBlock(contents, block) {
+  const unsigned = stripAuthenticodeSignatureBlock(contents);
+  return unsigned.length > 0 ? `${unsigned}\n\n${block}\n` : `${block}\n`;
+}
+
 function writeWindowsLauncherWrappers(context) {
   ensureDir(context.paths.claudeBinDir);
   ensureDir(context.paths.claudeShellDir);
@@ -328,8 +344,7 @@ function writePowerShellProfileBlocks(context) {
       ? fs.readFileSync(profilePath, 'utf8')
       : '';
     const stripped = stripProfileBlock(current, beginMarker, endMarker);
-    const next =
-      stripped.length > 0 ? `${stripped}\n\n${block}\n` : `${block}\n`;
+    const next = addProfileBlock(stripped, block);
     fs.writeFileSync(profilePath, next, 'utf8');
   }
 }
