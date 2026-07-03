@@ -46,7 +46,9 @@ dedupe_skill_list() {
             seen+=" $skill "
         fi
     done
-    printf '%s\n' "${output[@]}"
+    if [ "${#output[@]}" -gt 0 ]; then
+        printf '%s\n' "${output[@]}"
+    fi
 }
 
 read_profile_value() {
@@ -154,6 +156,9 @@ skill_list_is_subset_of() {
 
     eval "local installed=(\"\${${installed_list_name}[@]}\")"
     eval "local expected=(\"\${${expected_list_name}[@]}\")"
+
+    [ "${#installed[@]}" -eq 0 ] && return 0
+    [ "${#expected[@]}" -eq 0 ] && return 1
 
     local skill expected_skill found
     for skill in "${installed[@]}"; do
@@ -298,19 +303,23 @@ install_skills_profile() {
     local profile="$1"
     shift
     local selected_skills=("$@")
+    local install_args=(
+        "$SKILLS_DIR"
+        "$SKILL_PROFILE_FILE"
+        "$profile"
+        "全域 Skills Profile"
+        "skill"
+        "write_skill_profile_file"
+        "$REPO_DIR/skills/global/README.md:README.md"
+        "$REPO_DIR/skills/global/skill-rules.json:skill-rules.json"
+        --
+    )
 
     prepare_skills_directory
-    install_managed_skill_profile \
-        "$SKILLS_DIR" \
-        "$SKILL_PROFILE_FILE" \
-        "$profile" \
-        "全域 Skills Profile" \
-        "skill" \
-        "write_skill_profile_file" \
-        "$REPO_DIR/skills/global/README.md:README.md" \
-        "$REPO_DIR/skills/global/skill-rules.json:skill-rules.json" \
-        -- \
-        "${selected_skills[@]}"
+    if [ "${#selected_skills[@]}" -gt 0 ]; then
+        install_args+=("${selected_skills[@]}")
+    fi
+    install_managed_skill_profile "${install_args[@]}"
 }
 
 build_codex_skill_profile_list() {

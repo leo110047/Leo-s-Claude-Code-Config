@@ -83,3 +83,14 @@ jobs:
           echo "  Contexts:     $context_count"
           echo "  Rules:        $rule_count"
           echo "  Hook Scripts: $hook_script_count"
+
+  macos-workflow-installer:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Bash version
+        run: bash --version
+
+      - name: Test workflow installer integration on macOS Bash
+        run: bash scripts/test-workflow-integration.sh

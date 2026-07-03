@@ -5,12 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_HOME="$(mktemp -d /tmp/goldband-workflow-home.XXXXXX)"
 TMP_WORKFLOW="$(mktemp -d /tmp/goldband-workflow-repo.XXXXXX)"
 TMP_ROOT="$(mktemp -d /tmp/goldband-workflow-root.XXXXXX)"
+TMP_EMPTY_HOME="$(mktemp -d /tmp/goldband-empty-home.XXXXXX)"
+TMP_EMPTY_ROOT="$(mktemp -d /tmp/goldband-empty-root.XXXXXX)"
 TMP_UPDATE_ORIGIN="$(mktemp -d /tmp/goldband-update-origin.XXXXXX)"
 TMP_UPDATE_SEED="$(mktemp -d /tmp/goldband-update-seed.XXXXXX)"
 TMP_UPDATE_WORK="$(mktemp -d /tmp/goldband-update-work.XXXXXX)"
 LEGACY_RUNTIME_NAME="g""stack"
 LEGACY_GOLDBAND_UPGRADE="goldband-${LEGACY_RUNTIME_NAME}-upgrade"
-trap 'rm -rf "$TMP_HOME" "$TMP_WORKFLOW" "$TMP_ROOT" "$TMP_UPDATE_ORIGIN" "$TMP_UPDATE_SEED" "$TMP_UPDATE_WORK"' EXIT
+trap 'rm -rf "$TMP_HOME" "$TMP_WORKFLOW" "$TMP_ROOT" "$TMP_EMPTY_HOME" "$TMP_EMPTY_ROOT" "$TMP_UPDATE_ORIGIN" "$TMP_UPDATE_SEED" "$TMP_UPDATE_WORK"' EXIT
 
 mkdir -p \
   "$TMP_WORKFLOW/bin" \
@@ -403,6 +405,17 @@ grep -q 'dummy-ui-skill' "$TMP_HOME/.claude/skills/.goldband-profile"
 grep -q 'dummy-ui-skill' "$TMP_HOME/.agents/skills/.goldband-profile"
 grep -q '\[goldband\] synced Claude skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
 grep -q '\[goldband\] synced Codex skills profile from repo catalog\.' /tmp/goldband-skill-sync.log
+HOME="$TMP_HOME" GOLDBAND_SELF_UPDATE_REPO_DIR="$TMP_ROOT" "$TMP_HOME/.claude/bin/goldband-self-update" >/tmp/goldband-skill-sync-idempotent.log 2>&1
+if [ -s /tmp/goldband-skill-sync-idempotent.log ]; then
+  cat /tmp/goldband-skill-sync-idempotent.log >&2
+  exit 1
+fi
+cp -R "$TMP_ROOT/." "$TMP_EMPTY_ROOT"
+: > "$TMP_EMPTY_ROOT/shell/install/skill-catalog.txt"
+HOME="$TMP_EMPTY_HOME" "$TMP_EMPTY_ROOT/install.sh" skills-full >/tmp/goldband-empty-skills.log
+HOME="$TMP_EMPTY_HOME" "$TMP_EMPTY_ROOT/install.sh" codex-skills >/tmp/goldband-empty-codex-skills.log
+grep -q '^skills=$' "$TMP_EMPTY_HOME/.claude/skills/.goldband-profile"
+grep -q '^skills=$' "$TMP_EMPTY_HOME/.agents/skills/.goldband-profile"
 
 echo "[6/8] status output"
 STATUS_OUTPUT="$(CODEX_REQUIREMENTS_FILE="$TMP_HOME/.codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"

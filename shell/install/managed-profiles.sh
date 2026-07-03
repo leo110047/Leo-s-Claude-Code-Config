@@ -50,17 +50,21 @@ install_codex_skills_profile() {
     local profile="$1"
     shift
     local selected_skills=("$@")
+    local install_args=(
+        "$CODEX_SKILLS_DIR"
+        "$CODEX_SKILL_PROFILE_FILE"
+        "$profile"
+        "Codex Skills Profile"
+        "Codex skill"
+        "write_codex_skill_profile_file"
+        --
+    )
 
     prepare_codex_skills_directory
-    install_managed_skill_profile \
-        "$CODEX_SKILLS_DIR" \
-        "$CODEX_SKILL_PROFILE_FILE" \
-        "$profile" \
-        "Codex Skills Profile" \
-        "Codex skill" \
-        "write_codex_skill_profile_file" \
-        -- \
-        "${selected_skills[@]}"
+    if [ "${#selected_skills[@]}" -gt 0 ]; then
+        install_args+=("${selected_skills[@]}")
+    fi
+    install_managed_skill_profile "${install_args[@]}"
 }
 
 cleanup_managed_profile_entries() {
@@ -135,8 +139,12 @@ install_managed_skill_profile() {
     cleanup_managed_profile_entries "$target_dir" "$profile_file"
 
     local installed=0
-    install_selected_profile_skills "$target_dir" "$missing_label" "${selected_skills[@]}"
-    installed="$SELECTED_PROFILE_SKILLS_INSTALLED"
+    if [ "${#selected_skills[@]}" -gt 0 ]; then
+        install_selected_profile_skills "$target_dir" "$missing_label" "${selected_skills[@]}"
+        installed="$SELECTED_PROFILE_SKILLS_INSTALLED"
+    else
+        SELECTED_PROFILE_SKILLS_INSTALLED=0
+    fi
     if [ "${#extra_links[@]}" -gt 0 ]; then
         install_profile_extra_links "$target_dir" "${extra_links[@]}"
     fi
@@ -196,14 +204,22 @@ managed_profile_needs_sync() {
     done < <(build_managed_skill_profile_list "$tool" "$profile")
 
     local desired_csv
-    desired_csv=$(join_by_comma "${desired_skills[@]}")
+    if [ "${#desired_skills[@]}" -gt 0 ]; then
+        desired_csv=$(join_by_comma "${desired_skills[@]}")
+    else
+        desired_csv=""
+    fi
     local current_csv
     current_csv=$(read_profile_value "$profile_file" "skills" 2>/dev/null || true)
 
     [ "$desired_csv" = "$current_csv" ] || return 0
 
-    managed_profile_skills_synced "$target_dir" "${desired_skills[@]}" || return 0
-    managed_profile_extra_links_synced "$target_dir" "${extra_links[@]}" || return 0
+    if [ "${#desired_skills[@]}" -gt 0 ]; then
+        managed_profile_skills_synced "$target_dir" "${desired_skills[@]}" || return 0
+    fi
+    if [ "${#extra_links[@]}" -gt 0 ]; then
+        managed_profile_extra_links_synced "$target_dir" "${extra_links[@]}" || return 0
+    fi
 
     return 1
 }
