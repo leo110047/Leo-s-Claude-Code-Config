@@ -290,8 +290,13 @@ function selfUpdate(context) {
   const oldHead =
     gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
   if (!pullFastForward(context, repoDir)) return;
+  const newHead =
+    gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
+  if (newHead === oldHead) return;
   refreshManagedRuntime(context);
-  reportSelfUpdateIfChanged(context, repoDir, oldHead);
+  console.error(
+    `[goldband] updated ${oldHead} -> ${newHead}; new sessions will use the latest config.`,
+  );
 }
 
 function canFastForward(context, repoDir) {
@@ -338,17 +343,6 @@ function pullFastForward(context, repoDir) {
     'main',
   ]);
   return pull.status === 0;
-}
-
-function reportSelfUpdateIfChanged(context, repoDir, oldHead) {
-  const newHead =
-    gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
-  if (newHead === oldHead) return;
-  syncSkills(context);
-  refreshManagedRuntime(context);
-  console.error(
-    `[goldband] updated ${oldHead} -> ${newHead}; new sessions will use the latest config.`,
-  );
 }
 
 export { refreshManagedRuntime, selfUpdate, syncSkills };

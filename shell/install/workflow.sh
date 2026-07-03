@@ -542,7 +542,9 @@ create_workflow_vendor_mutation_snapshot() {
     (
         cd "$repo_dir" || exit 1
         find . -name SKILL.md -type f -print
-        [ -f ./gstack/llms.txt ] && printf '%s\n' './gstack/llms.txt'
+        if [ -f ./gstack/llms.txt ]; then
+            printf '%s\n' './gstack/llms.txt'
+        fi
     ) > "$manifest"
 
     while IFS= read -r rel; do
@@ -558,11 +560,28 @@ restore_workflow_vendor_mutation_snapshot() {
     local repo_dir="$1"
     local snapshot_dir="$2"
     local manifest
+    local current_manifest
     local rel
 
     [ -n "$snapshot_dir" ] || return 0
     manifest="$snapshot_dir/manifest"
     [ -f "$manifest" ] || return 0
+
+    current_manifest="$snapshot_dir/current-manifest"
+    (
+        cd "$repo_dir" || exit 1
+        find . -name SKILL.md -type f -print
+        if [ -f ./gstack/llms.txt ]; then
+            printf '%s\n' './gstack/llms.txt'
+        fi
+    ) > "$current_manifest"
+
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        if ! grep -Fxq "$rel" "$manifest"; then
+            rm -f "$repo_dir/$rel"
+        fi
+    done < "$current_manifest"
 
     while IFS= read -r rel; do
         [ -n "$rel" ] || continue

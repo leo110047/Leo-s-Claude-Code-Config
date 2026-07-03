@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -138,7 +139,15 @@ function allToolsScenario(context) {
   const { tmpHome, tmpRoot } = context;
   console.log('[1/7] windows-mode all-tools');
   seedSignedPowerShellProfile(tmpHome);
-  run(process.execPath, installArgs(tmpRoot, tmpHome, 'all-tools'), copyEnv());
+  const install = run(
+    process.execPath,
+    installArgs(tmpRoot, tmpHome, 'all-tools'),
+    copyEnv(),
+  );
+  assert.match(
+    install.stderr,
+    /removed Authenticode signature block from PowerShell profile/,
+  );
   run(
     process.execPath,
     installArgs(tmpRoot, tmpHome, 'codex-requirements'),
@@ -220,12 +229,72 @@ function assertInstalledArtifacts(tmpHome, tmpRoot) {
 }
 
 function assertCodexHooksUsePowerShellEnv(tmpHome) {
-  const hooksJson = fs.readFileSync(
-    path.join(tmpHome, '.codex', 'hooks.json'),
-    'utf8',
-  );
+  const hooksPath = path.join(tmpHome, '.codex', 'hooks.json');
+  const hooksJson = fs.readFileSync(hooksPath, 'utf8');
   assert.match(hooksJson, /\$env:USERPROFILE/);
   assert.doesNotMatch(hooksJson, /%USERPROFILE%/);
+  assertCodexHookCommandsRunUnderPowerShell(tmpHome, hooksPath);
+}
+
+function assertCodexHookCommandsRunUnderPowerShell(tmpHome, hooksPath) {
+  const powershell = findPowerShellExecutable();
+  if (!powershell && process.platform === 'win32') {
+    assert.fail('PowerShell executable is required on Windows');
+  }
+  if (!powershell) {
+    return;
+  }
+
+  const hooksConfig = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
+  const commands = [
+    ...new Set(
+      Object.values(hooksConfig.hooks ?? {})
+        .flat()
+        .flatMap((group) => group.hooks ?? [])
+        .map((hook) => hook.commandWindows)
+        .filter(Boolean),
+    ),
+  ];
+  assert.ok(commands.length > 0);
+
+  for (const command of commands) {
+    const result = spawnSync(powershell, ['-NoProfile', '-Command', command], {
+      cwd: path.dirname(hooksPath),
+      env: { ...process.env, USERPROFILE: tmpHome },
+      input: JSON.stringify({ hook_event_name: 'SessionStart' }),
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    assert.equal(
+      result.status,
+      0,
+      [
+        `Codex commandWindows failed under PowerShell: ${command}`,
+        result.stdout?.trim() ?? '',
+        result.stderr?.trim() ?? '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+}
+
+function findPowerShellExecutable() {
+  for (const candidate of ['pwsh', 'powershell.exe', 'powershell']) {
+    const result = spawnSync(
+      candidate,
+      ['-NoProfile', '-Command', '$PSVersionTable.PSVersion'],
+      {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        windowsHide: true,
+      },
+    );
+    if (result.status === 0) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function assertInstalledFileMatches(installedPath, sourcePath) {

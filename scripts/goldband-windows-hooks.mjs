@@ -232,16 +232,23 @@ function stripAuthenticodeSignatureBlock(contents) {
   const beginMarker = '# SIG # Begin signature block';
   const beginIndex = contents.indexOf(beginMarker);
   if (beginIndex === -1) {
-    return contents;
+    return { contents, removedSignature: false };
   }
 
   const beforeSignature = contents.slice(0, beginIndex);
-  return beforeSignature.replace(/\s+$/, '');
+  return {
+    contents: beforeSignature.replace(/\s+$/, ''),
+    removedSignature: true,
+  };
 }
 
 function addProfileBlock(contents, block) {
-  const unsigned = stripAuthenticodeSignatureBlock(contents);
-  return unsigned.length > 0 ? `${unsigned}\n\n${block}\n` : `${block}\n`;
+  const { contents: unsigned, removedSignature } =
+    stripAuthenticodeSignatureBlock(contents);
+  return {
+    contents: unsigned.length > 0 ? `${unsigned}\n\n${block}\n` : `${block}\n`,
+    removedSignature,
+  };
 }
 
 function writeWindowsLauncherWrappers(context) {
@@ -344,7 +351,15 @@ function writePowerShellProfileBlocks(context) {
       ? fs.readFileSync(profilePath, 'utf8')
       : '';
     const stripped = stripProfileBlock(current, beginMarker, endMarker);
-    const next = addProfileBlock(stripped, block);
+    const { contents: next, removedSignature } = addProfileBlock(
+      stripped,
+      block,
+    );
+    if (removedSignature) {
+      console.warn(
+        `[goldband] removed Authenticode signature block from PowerShell profile: ${profilePath}. Re-sign the profile if your execution policy requires signed scripts.`,
+      );
+    }
     fs.writeFileSync(profilePath, next, 'utf8');
   }
 }

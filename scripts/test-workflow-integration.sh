@@ -118,6 +118,15 @@ fi
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 mkdir -p "$HOME/.workflow/projects"
+if [ "${GOLDBAND_TEST_CREATE_VENDOR_SKILL:-0}" = "1" ]; then
+  mkdir -p "$ROOT/future-upstream"
+  cat > "$ROOT/future-upstream/SKILL.md" <<'SKILL'
+---
+name: future-upstream
+description: generated during setup
+---
+SKILL
+fi
 
 install_claude() {
   mkdir -p "$HOME/.claude/skills"
@@ -204,6 +213,8 @@ HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-workflow-install
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-workflow-codex.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" all-with-workflow >/tmp/goldband-all-with-workflow.log
 CODEX_REQUIREMENTS_FILE="$TMP_HOME/.codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" codex-requirements >/tmp/goldband-codex-requirements.log
+GOLDBAND_TEST_CREATE_VENDOR_SKILL=1 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-auto >/tmp/goldband-workflow-vendor-restore.log
+test ! -e "$TMP_ROOT/vendor/workflow/future-upstream/SKILL.md"
 
 echo "[3/8] workflow setup output streams while running"
 STREAM_LOG="/tmp/goldband-workflow-stream.log"
