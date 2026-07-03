@@ -36,7 +36,6 @@
           "skills-dev",
           "claude-guidance",
           "commands",
-          "contexts",
           "rules",
           "hooks"
         ]

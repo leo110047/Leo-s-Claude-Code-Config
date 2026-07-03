@@ -33,7 +33,6 @@ show_claude_install_status() {
     show_claude_skills_status
     show_repo_path_status "claude CLAUDE.md" "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" "$REPO_DIR/claude/CLAUDE.md" "claude-guidance"
     show_repo_path_status "commands" "$CLAUDE_DIR/commands" "$REPO_DIR/commands" "commands"
-    show_repo_path_status "contexts" "$CLAUDE_DIR/contexts" "$REPO_DIR/contexts" "contexts"
     show_repo_path_status "rules" "$CLAUDE_DIR/rules" "$REPO_DIR/rules" "rules"
     show_repo_path_status "hooks" "$CLAUDE_DIR/hooks/scripts" "$REPO_DIR/hooks/scripts" "hooks"
     show_repo_path_status "statusline" "$CLAUDE_DIR/statusline-command.sh" "$REPO_DIR/hooks/statusline-command.sh" "hooks"

@@ -156,7 +156,7 @@ ln -s /path/to/claude-code-skills/projects/unity .claude/skills
 | systematic-debugging | unity-best-practices | 調試 Unity 特定問題時結合 |
 | testing-strategy | unity-best-practices | Unity Test Framework 結合 |
 | performance-optimization | unity-performance | 通用性能 + Unity 特定 |
-| code-review-skill | unity-best-practices | C# review + Unity 規範 |
+| goldband-review | unity-best-practices | C# review + Unity 規範 |
 
 ## 🔧 配置說明
 

@@ -186,7 +186,6 @@ function defaultWindowsState() {
     claudeComponents: {
       guidance: false,
       commands: false,
-      contexts: false,
       rules: false,
       hooks: false,
       launchers: false,

@@ -20,14 +20,11 @@ bash scripts/check-skills.sh
 建議至少用這些場景做人工 spot check：
 
 ```text
-這個 API 查詢很慢，幫我優化
+這個查詢很慢，幫我優化
 → 應偏向 performance-optimization
 
-設計一個 API 架構來處理大量請求
-→ 應偏向 backend-patterns
-
 Review 這個 PR
-→ 應偏向 code-review-skill
+→ 應偏向 /goldband-review workflow
 
 Review 這個 PR，測試一直失敗
 → 應先偏向 systematic-debugging

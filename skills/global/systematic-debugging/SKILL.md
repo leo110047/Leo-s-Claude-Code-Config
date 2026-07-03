@@ -29,8 +29,8 @@ you are not ready to propose a fix.
 
 ## Conflict Rules
 
-- Overrides `code-review-skill`, `performance-optimization`, and
-  `backend-patterns` when a concrete bug or failing command is present.
+- Overrides review and optimization work when a concrete bug or failing command
+  is present.
 - When bugs are found during review or optimization, stop and debug first.
 - Resume other skills only after the defect is systematically investigated and
   fixed or explicitly scoped as out of the current change.

@@ -25,10 +25,6 @@ function statusLines(context, claudeProfile, codexProfile) {
       'Claude commands',
       path.join(context.paths.claudeDir, 'commands'),
     ),
-    installedLine(
-      'Claude contexts',
-      path.join(context.paths.claudeDir, 'contexts'),
-    ),
     installedLine('Claude rules', path.join(context.paths.claudeDir, 'rules')),
     installedLine('Codex config', context.paths.codexConfigFile),
     codexProfilesLine(context),

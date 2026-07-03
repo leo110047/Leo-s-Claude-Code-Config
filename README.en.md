@@ -9,7 +9,7 @@ English | [中文](README.md)
 ## What Is goldband
 
 goldband is a local configuration pack for Claude Code and Codex. It connects
-shared working guidance, hooks, commands, rules, contexts, portable skills, and
+shared working guidance, hooks, commands, rules, portable skills, and
 the bundled workflow runtime to your local environment.
 
 It does three main jobs:
@@ -24,7 +24,7 @@ directional recommendations are expected to surface assumptions, failure modes, 
 ## goldband vs workflow
 
 - goldband owns shared policy, installer behavior, Claude/Codex adapters, global
-  guidance, hooks, commands, contexts, rules, and portable skills.
+  guidance, hooks, commands, rules, and portable skills.
 - `vendor/workflow/` is the bundled high-level workflow runtime.
 - At install time, goldband exposes workflow runtime content as `goldband-*`
   entry points.
@@ -45,9 +45,9 @@ cd goldband
 macOS / POSIX:
 
 ```bash
-./install.sh pack-quality      # Recommended for Claude Code
+./install.sh pack-quality      # Claude Code quality baseline, no workflow
 ./install.sh all-tools         # Claude Code + Codex
-./install.sh all-with-workflow # Claude Code + Codex + bundled workflow
+./install.sh all-with-workflow # Claude Code + Codex + bundled workflow; recommended for review/QA
 ./install.sh status            # Check status
 ```
 
@@ -82,7 +82,7 @@ Dependencies:
 
 - Claude global guidance: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
-- Claude assets: `commands/`, `contexts/`, `rules/`, `hooks/`, portable skills
+- Claude assets: `commands/`, `rules/`, `hooks/`, portable skills
 - Codex assets: config, profiles, rules, hooks, custom agents, portable skills
 - Workflow runtime: Claude uses `~/.claude/skills/workflow`; Codex uses `~/.codex/skills/workflow`
 
@@ -125,6 +125,9 @@ Codex modernization status lives in
 
 ## Common Entry Points
 
+These workflow entry points require `workflow`, `workflow-codex`, or
+`all-with-workflow` first:
+
 - `/plan`
 - `/verify`
 - `/goldband-review`
@@ -135,8 +138,8 @@ Codex modernization status lives in
 - `/goldband-benchmark`
 - `/goldband-skillify`
 
-`/code-review` is a legacy compatibility entry point. Prefer
-`/goldband-review` for full reviews.
+Full reviews use the `/goldband-review` workflow. A `pack-quality`-only install
+does not expose a review entry point.
 
 ## Updates
 

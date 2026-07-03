@@ -87,19 +87,6 @@ function installClaudeGuidance(context) {
   });
 }
 
-function installContexts(context) {
-  ensureComponent(
-    context,
-    path.join(context.repoDir, 'contexts'),
-    path.join(context.paths.claudeDir, 'contexts'),
-    'Contexts',
-    'dir',
-  );
-  updateWindowsState(context, (state) => {
-    state.claudeComponents.contexts = true;
-  });
-}
-
 function installRules(context) {
   ensureComponent(
     context,
@@ -213,7 +200,6 @@ export {
   installCodexRules,
   installCodexSkills,
   installCommands,
-  installContexts,
   installHooks,
   installRules,
   installSkills,

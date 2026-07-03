@@ -8,11 +8,6 @@ const PRIORITY_ORDER = {
   low: 3,
 };
 
-const ARCHITECTURE_TERMS_PATTERN =
-  /\b(design|architecture|structure|pattern)\b/i;
-const PERFORMANCE_TERMS_PATTERN =
-  /\b(slow|performance|optimi[sz]e|latency|bottleneck)\b/i;
-
 const RULES = [
   {
     skill: 'systematic-debugging',
@@ -52,53 +47,6 @@ const RULES = [
       'n+1',
     ],
     patterns: [/\b(core web vitals|profil(e|ing)|render perf)\b/i],
-  },
-  {
-    skill: 'backend-patterns',
-    priority: 'medium',
-    hint: 'Use for service or API architecture decisions, not active bugfixing.',
-    keywords: [
-      'backend architecture',
-      'service design',
-      'repository pattern',
-      'microservice',
-      'domain model',
-      'api architecture',
-    ],
-    patterns: [
-      /\b(design|architect|structure|pattern)\b.{0,24}\b(api|service|backend)\b/i,
-    ],
-  },
-  {
-    skill: 'api-design',
-    priority: 'medium',
-    hint: 'Use for REST semantics, pagination, error formats, and versioning.',
-    keywords: [
-      'rest',
-      'pagination',
-      'openapi',
-      'error format',
-      'http method',
-      'api versioning',
-    ],
-    patterns: [
-      /\b(api|endpoint)\b.{0,24}\b(design|contract|pagination|versioning)\b/i,
-    ],
-  },
-  {
-    skill: 'database-patterns',
-    priority: 'medium',
-    hint: 'Use for schema design, queries, indexes, migrations, and transactions.',
-    keywords: [
-      'schema',
-      'migration',
-      'index',
-      'sql',
-      'query optimization',
-      'orm',
-      'transaction',
-    ],
-    patterns: [/\b(database|query|schema|migration)\b/i],
   },
   {
     skill: 'testing-strategy',
@@ -151,13 +99,6 @@ const RULES = [
       /\b(ci|cd|pipeline|github actions|deploy)\b/i,
       /\bworkflow\b.{0,24}\b(yaml|github|deploy|ci|cd)\b/i,
     ],
-  },
-  {
-    skill: 'code-review-skill',
-    priority: 'medium',
-    hint: 'Use for PR reviews when there is no active bug investigation blocking review.',
-    keywords: ['review pr', 'code review', 'pull request', 'review this diff'],
-    patterns: [/\b(review|pr|pull request)\b/i],
   },
   {
     skill: 'file-search',
@@ -233,13 +174,6 @@ const RULES = [
       /\b(create|add|scaffold)\b.{0,24}\bskill\b/i,
       /\b(skill|skills)\b.{0,24}\b(trigger|activation|progressive disclosure|hook|rule)\b/i,
     ],
-  },
-  {
-    skill: 'commit-conventions',
-    priority: 'low',
-    hint: 'Use when writing or reviewing commit messages.',
-    keywords: ['commit message', 'conventional commits', 'commit format'],
-    patterns: [/\b(commit|git)\b.{0,24}\b(message|convention)\b/i],
   },
   {
     skill: 'decision-log',
@@ -431,32 +365,13 @@ function compareMatches(left, right) {
   return left.skill.localeCompare(right.skill);
 }
 
-function applyConflictRules(matches, normalizedPrompt) {
+function applyConflictRules(matches) {
   const names = new Set(matches.map((match) => match.skill));
   const hasBugSignal = names.has('systematic-debugging');
   const hasIntegratedInvestigate = names.has('goldband-investigate');
 
   if (hasIntegratedInvestigate && hasBugSignal) {
     return matches.filter((match) => match.skill !== 'systematic-debugging');
-  }
-
-  if (hasBugSignal) {
-    return matches.filter((match) => match.skill !== 'code-review-skill');
-  }
-
-  if (names.has('performance-optimization') && names.has('backend-patterns')) {
-    const architectureTerms = ARCHITECTURE_TERMS_PATTERN.test(normalizedPrompt);
-    const performanceTerms = PERFORMANCE_TERMS_PATTERN.test(normalizedPrompt);
-
-    if (architectureTerms && !performanceTerms) {
-      return matches.filter(
-        (match) => match.skill !== 'performance-optimization',
-      );
-    }
-
-    if (performanceTerms && !architectureTerms) {
-      return matches.filter((match) => match.skill !== 'backend-patterns');
-    }
   }
 
   return matches;
@@ -488,7 +403,7 @@ function matchPrompt(prompt) {
     });
   }
 
-  return applyConflictRules(matches, normalizedPrompt).sort(compareMatches);
+  return applyConflictRules(matches).sort(compareMatches);
 }
 
 function formatSuggestions(matches, limit = 3) {

@@ -52,17 +52,16 @@ show_help() {
 show_help_claude_options() {
     echo "  ----- Claude Code -----"
     echo "  pack-core   安裝核心包（預設，最小 token）"
-    echo "  pack-quality 安裝品質開發包（core + commands/contexts）"
+    echo "  pack-quality 安裝品質開發包（core + commands）"
     echo "  pack-unity  安裝 Unity 包（quality + unity skills）"
     echo "  all         安裝所有組件（相容舊用法，等同 pack-quality）"
     echo "  all-full    安裝所有組件（skills 使用 full profile）"
     echo "  skills      安裝全域 skills（等同 skills-full）"
     echo "  skills-core 安裝核心常駐 skills（低 token）"
     echo "  skills-dev  安裝開發常用 skills（core + auto）"
-    echo "  skills-full 安裝全部全域 skills（22 個）"
+    echo "  skills-full 安裝全部全域 skills（17 個）"
     echo "  claude-guidance 安裝 Claude 全域 CLAUDE.md"
     echo "  commands    只安裝 commands"
-    echo "  contexts    只安裝 contexts"
     echo "  rules       只安裝 rules"
     echo "  hooks       只安裝 hooks"
     echo "  style-gate  安裝全域 git style gate（pre-commit + commit-msg）"
@@ -213,7 +212,6 @@ for arg in "$@"; do
             install_skills
             install_claude_guidance
             install_commands
-            install_contexts
             install_rules
             install_hooks
             install_shell_launchers
@@ -235,9 +233,6 @@ for arg in "$@"; do
             ;;
         commands)
             install_commands
-            ;;
-        contexts)
-            install_contexts
             ;;
         rules)
             install_rules

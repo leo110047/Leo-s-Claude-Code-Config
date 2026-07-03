@@ -20,7 +20,6 @@ import {
   installCodexRules,
   installCodexSkills,
   installCommands,
-  installContexts,
   installHooks,
   installRules,
   installSkills,
@@ -48,7 +47,6 @@ const actionHandlers = {
   'skills-dev': (context) => installSkills(context, 'dev'),
   'claude-guidance': installClaudeGuidance,
   commands: installCommands,
-  contexts: installContexts,
   rules: installRules,
   hooks: installHooks,
   launchers: writeWindowsLauncherWrappers,
@@ -95,7 +93,6 @@ function installClaudePack(context, profile) {
   installSkills(context, profile);
   installClaudeGuidance(context);
   installCommands(context);
-  installContexts(context);
   installRules(context);
   installHooks(context);
   writeWindowsLauncherWrappers(context);
@@ -162,7 +159,6 @@ function uninstallWindows(context) {
 function uninstallComponentPaths(context) {
   return [
     path.join(context.paths.claudeDir, 'commands'),
-    path.join(context.paths.claudeDir, 'contexts'),
     path.join(context.paths.claudeDir, 'rules'),
     path.join(context.paths.claudeDir, 'hooks'),
     path.join(context.paths.claudeDir, 'statusline-command.sh'),

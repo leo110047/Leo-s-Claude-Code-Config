@@ -186,11 +186,11 @@ Phase 4 對應審查優先級 3;Phase 5 對應審查優先級 4 與 buzzword 清
 
 ### Phase 1 — 入口與 skill 瘦身(便宜、與整合無關,可並行)
 
-- [ ] 刪 legacy commands(`code-review`、`checkpoint`、`map-codebase` 等已標 legacy 者)。
-- [ ] review 入口收斂到一個。
-- [ ] 通用知識 skills 裁剪:`api-design`、`backend-patterns`、`database-patterns`、`commit-conventions` 等候選刪除;只留「綁 enforcement 的」(careful/freeze)與「個人/組織特有 policy」。
-- [ ] 檢查 `contexts/` 五個檔案的實際使用,死資產刪除。
-- [ ] 量測 before/after:乾淨 session 的 skill 清單 token 成本。
+- [x] 刪 legacy commands(`code-review`、`checkpoint`、`map-codebase` 等已標 legacy 者)。
+- [x] review 入口收斂到一個。
+- [x] 通用知識 skills 裁剪:`api-design`、`backend-patterns`、`database-patterns`、`commit-conventions` 等候選刪除;只留「綁 enforcement 的」(careful/freeze)與「個人/組織特有 policy」。
+- [x] 檢查 `contexts/` 五個檔案的實際使用,死資產刪除。
+- [x] 量測 before/after:乾淨 session 的 skill 清單 token 成本。
 
 完成條件:session 可見入口數與 token 成本顯著下降,且無重複入口。
 

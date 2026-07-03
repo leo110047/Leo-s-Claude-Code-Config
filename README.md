@@ -9,7 +9,7 @@
 ## goldband 是什麼
 
 goldband 是一套 Claude Code / Codex 本機設定包。它把常用工作守則、hooks、
-commands、rules、contexts、portable skills 和 workflow runtime 接到你的本機環境。
+commands、rules、portable skills 和 workflow runtime 接到你的本機環境。
 
 它主要解三件事：
 
@@ -21,7 +21,7 @@ commands、rules、contexts、portable skills 和 workflow runtime 接到你的�
 
 ## goldband 與 workflow 的邊界
 
-- goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、contexts、rules 和 portable skills。
+- goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、rules 和 portable skills。
 - `vendor/workflow/` 是被 bundle 進來的高階 workflow runtime。
 - 安裝時 goldband 會把 workflow runtime 轉成 `goldband-*` 入口。
 
@@ -40,9 +40,9 @@ cd goldband
 macOS / POSIX：
 
 ```bash
-./install.sh pack-quality      # Claude Code 日常推薦
+./install.sh pack-quality      # Claude Code 基礎品質包（不含 workflow）
 ./install.sh all-tools         # Claude Code + Codex
-./install.sh all-with-workflow # Claude Code + Codex + 內建 workflow
+./install.sh all-with-workflow # Claude Code + Codex + 內建 workflow（review/QA 推薦）
 ./install.sh status            # 檢查狀態
 ```
 
@@ -78,7 +78,7 @@ pwsh -File .\install.ps1 status
 
 - Claude 全域守則：`claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex 全域守則：`codex/AGENTS.md` -> `~/.codex/AGENTS.md`
-- Claude assets：`commands/`、`contexts/`、`rules/`、`hooks/`、portable skills
+- Claude assets：`commands/`、`rules/`、`hooks/`、portable skills
 - Codex assets：config、profiles、rules、hooks、custom agents、portable skills
 - Git style gate（選配）：`git-hooks/` -> global `core.hooksPath`
 - workflow runtime：Claude 在 `~/.claude/skills/workflow`，Codex 在 `~/.codex/skills/workflow`
@@ -137,6 +137,8 @@ node scripts/check-code-style.mjs --staged
 
 ## 常用入口
 
+以下 workflow 入口需要先安裝 `workflow`、`workflow-codex` 或 `all-with-workflow`：
+
 - `/plan`
 - `/verify`
 - `/goldband-review`
@@ -147,7 +149,7 @@ node scripts/check-code-style.mjs --staged
 - `/goldband-benchmark`
 - `/goldband-skillify`
 
-`/code-review` 是 legacy compatibility；完整 review 優先用 `/goldband-review`。
+完整 review 只走 `/goldband-review` workflow；只裝 `pack-quality` 時不會暴露 review 入口。
 
 ## 更新
 

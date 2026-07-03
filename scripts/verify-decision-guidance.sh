@@ -49,7 +49,6 @@ check_contains "ARCHITECTURE.md" "vendor/workflow owns" "architecture doc explai
 check_contains "WORKFLOW_VENDORING.md" "workflow_wrapper_manifest()" "workflow vendoring runbook keeps wrapper manifest as source of truth"
 check_contains "WORKFLOW_VENDORING.md" "## Error Handling" "workflow vendoring runbook includes error handling"
 
-check_contains "contexts/debug.md" "clearest safe experiment" "debug context uses clear experiments instead of smallest-change language"
 check_contains "skills/global/systematic-debugging/SKILL.md" "healthiest complete fix" "systematic-debugging skill keeps healthiest complete fix policy"
 check_contains "vendor/workflow/investigate/SKILL.md" "healthiest complete fix" "workflow investigate skill defaults debugging toward the healthiest complete fix"
 check_contains "vendor/workflow/investigate/SKILL.md" "blast radius intentional" "workflow investigate skill constrains blast radius without minimal-fix bias"
@@ -74,16 +73,12 @@ check_contains "commands/plan.md" "## Decision Check" "plan command includes dec
 check_contains "commands/plan.md" "## Pre-Mortem" "plan command includes pre-mortem"
 check_contains "commands/plan.md" "Fallback Path:" "plan command includes fallback path"
 
-check_contains "skills/global/backend-patterns/SKILL.md" "## Recommendation Standard" "backend-patterns recommendation standard"
-check_contains "skills/global/api-design/SKILL.md" "## Recommendation Standard" "api-design recommendation standard"
 check_contains "skills/global/planning-workflow/SKILL.md" "## Decision-Quality Block" "planning-workflow decision-quality block"
 check_contains "skills/global/planning-workflow/SKILL.md" "/plan" "planning-workflow defers full workflow planning"
-check_contains "skills/global/code-review-skill/SKILL.md" "/goldband-review" "code-review-skill defers full review workflow"
 check_contains "skills/global/security-checklist/SKILL.md" "/goldband-cso" "security-checklist defers deep security workflow"
 check_contains "skills/global/decision-log/SKILL.md" "### Failure Signals" "decision-log failure signals section"
 check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exit Criteria" "decision-log revisit triggers section"
 
-check_contains "contexts/research.md" "When you recommend a direction" "research context recommendation guidance"
 check_contains "README.md" "## goldband 與 workflow 的邊界" "README documents goldband workflow boundary"
 check_contains_any "README.md" "README mentions decision recommendation guidance" \
   "decision recommendation standard" \

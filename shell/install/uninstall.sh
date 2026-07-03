@@ -65,7 +65,6 @@ uninstall_claude_guidance() {
 uninstall_claude_paths() {
     local paths=(
         "$CLAUDE_DIR/commands"
-        "$CLAUDE_DIR/contexts"
         "$CLAUDE_DIR/rules"
         "$CLAUDE_DIR/hooks/scripts"
         "$SHELL_UPDATE_BIN"

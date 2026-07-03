@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKFLOW_DIR="$ROOT_DIR/vendor/workflow"
-INSTALLER="$ROOT_DIR/shell/install/workflow.sh"
+MANIFEST="$ROOT_DIR/shell/install/workflow-wrapper-manifest.txt"
 LANGUAGE_SCRIPT="$ROOT_DIR/commands/scripts/set-goldband-language.sh"
 RUNBOOK="$ROOT_DIR/WORKFLOW_VENDORING.md"
 PATCH_DIR="$ROOT_DIR/patches/workflow"
@@ -29,6 +29,11 @@ if [ ! -f "$WORKFLOW_DIR/package.json" ]; then
   exit "$EXIT_CODE"
 fi
 
+if [ ! -f "$MANIFEST" ]; then
+  fail "workflow wrapper manifest missing: $MANIFEST"
+  exit "$EXIT_CODE"
+fi
+
 version="$(tr -d '\n' < "$WORKFLOW_DIR/VERSION")"
 package_version="$(
   node -e 'const fs = require("fs"); process.stdout.write(JSON.parse(fs.readFileSync("vendor/workflow/package.json", "utf8")).version)' \
@@ -41,9 +46,7 @@ else
 fi
 
 manifest_lines="$(
-  awk '
-    /^[a-zA-Z0-9-]+\|/ { print }
-  ' "$INSTALLER"
+  cat "$MANIFEST"
 )"
 
 manifest_targets="$(

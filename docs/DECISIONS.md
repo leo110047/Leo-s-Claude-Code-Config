@@ -69,10 +69,9 @@ entrypoints such as `/goldband-review`, `/goldband-investigate`, `/plan`,
 
 **Neutral:**
 
-- Domain skills such as `api-design`, `backend-patterns`,
-  `database-patterns`, `testing-strategy`, and `performance-optimization` can
-  still keep focused references when workflow does not provide equivalent
-  domain material.
+- Remaining policy skills such as `testing-strategy` and
+  `performance-optimization` can still keep focused references when workflow
+  does not provide equivalent domain material.
 
 ### Alternatives Considered
 

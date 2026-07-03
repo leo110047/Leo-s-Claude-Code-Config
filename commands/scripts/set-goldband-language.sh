@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
-INSTALLER="$REPO_DIR/shell/install/workflow.sh"
+MANIFEST="$REPO_DIR/shell/install/workflow-wrapper-manifest.txt"
 
 find_workflow_config_bin() {
   local candidate
@@ -44,14 +44,12 @@ read_language() {
 }
 
 workflow_manifest_lines() {
-  if [ ! -f "$INSTALLER" ]; then
-    echo "workflow installer manifest not found: $INSTALLER" >&2
+  if [ ! -f "$MANIFEST" ]; then
+    echo "workflow wrapper manifest not found: $MANIFEST" >&2
     return 1
   fi
 
-  awk '
-    /^[a-zA-Z0-9-]+\|/ { print }
-  ' "$INSTALLER"
+  cat "$MANIFEST"
 }
 
 wrapper_description() {

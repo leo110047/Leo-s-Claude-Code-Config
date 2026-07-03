@@ -36,7 +36,6 @@ install_pack_quality() {
     install_skills_dev
     install_claude_guidance
     install_commands
-    install_contexts
     install_rules
     install_hooks
     install_shell_launchers
@@ -113,7 +112,6 @@ install_all_tools() {
     install_skills
     install_claude_guidance
     install_commands
-    install_contexts
     install_rules
     install_hooks
     install_shell_launchers
@@ -126,11 +124,7 @@ install_all_with_workflow() {
 }
 
 install_commands() {
-    link_component "$REPO_DIR/commands" "$CLAUDE_DIR/commands" "Commands (8 個)"
-}
-
-install_contexts() {
-    link_component "$REPO_DIR/contexts" "$CLAUDE_DIR/contexts" "Contexts (5 個)"
+    link_component "$REPO_DIR/commands" "$CLAUDE_DIR/commands" "Commands (5 個)"
 }
 
 install_rules() {

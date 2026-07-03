@@ -129,7 +129,6 @@ function claudeRefreshComponents(context) {
       'Claude CLAUDE.md',
       'file',
     ),
-    component('contexts', context, 'contexts', 'contexts', 'Contexts', 'dir'),
     component('rules', context, 'rules', 'rules', 'Rules', 'dir'),
     component(
       'hooks',
@@ -203,13 +202,7 @@ function component(...args) {
   const destPath = path.isAbsolute(dest)
     ? dest
     : path.join(context.paths.claudeDir, ...dest.split('/'));
-  return directComponent(
-    key,
-    sourcePath,
-    destPath,
-    label,
-    kind,
-  );
+  return directComponent(key, sourcePath, destPath, label, kind);
 }
 
 function directComponent(...args) {

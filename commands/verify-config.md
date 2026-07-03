@@ -31,7 +31,6 @@ Check these paths exist and point to valid targets:
   - managed directory with `.goldband-profile` file and per-skill symlinks
 - `~/.claude/CLAUDE.md` → should point to this repo's `claude/CLAUDE.md`
 - `~/.claude/commands` → should point to this repo's `commands`
-- `~/.claude/contexts` → should point to this repo's `contexts`
 - `~/.claude/rules` → should point to this repo's `rules`
 - `~/.claude/hooks/scripts` → should point to this repo's `hooks/scripts`
 - POSIX shell integration:
@@ -108,15 +107,11 @@ Also report Claude profile metadata when `~/.claude/skills/.goldband-profile` ex
 - active profile (`core` / `dev` / `full`)
 - installed skill count
 
-### 5. Context Checks
-
-Count `.md` files in the contexts directory. Verify each is non-empty. Report count.
-
-### 6. Rule Checks
+### 5. Rule Checks
 
 Count `.md` files in the rules directory. Verify each is non-empty. Report count.
 
-### 7. Repo Syntax and Policy Validation
+### 6. Repo Syntax and Policy Validation
 
 Validate these repo files:
 
@@ -189,12 +184,8 @@ Hooks:
   [OK]      All hook scripts exist
 
 Skills:
-  [OK]      20 installed Claude skills found
-  [WARNING] backend-patterns/SKILL.md: 520 lines (>500)
+  [OK]      17 installed Claude skills found
   ...
-
-Contexts:
-  [OK]      4 contexts found
 
 Rules:
   [OK]      4 rules found

@@ -17,7 +17,7 @@
       "then": {
         "primary_skill": "systematic-debugging",
         "priority": "CRITICAL",
-        "defer_skills": ["code-review-skill", "backend-patterns", "performance-optimization"],
+        "defer_skills": ["performance-optimization"],
         "reason": "Bugs must be investigated systematically before review, optimization, or architectural changes"
       }
     },
@@ -31,36 +31,7 @@
       },
       "then": {
         "primary_skill": "performance-optimization",
-        "exclude_skills": ["backend-patterns"],
         "reason": "Performance problems need specialized measurement and optimization, not architectural redesign"
-      }
-    },
-
-    {
-      "name": "architecture-without-performance",
-      "description": "Pure architectural design without performance concerns",
-      "when": {
-        "user_mentions_any": ["design", "architecture", "structure", "pattern", "implement", "create"],
-        "not_mentions": ["slow", "optimize", "performance", "bottleneck"]
-      },
-      "then": {
-        "primary_skill": "backend-patterns",
-        "exclude_skills": ["performance-optimization"],
-        "reason": "Architectural decisions should be made based on design principles, not premature optimization"
-      }
-    },
-
-    {
-      "name": "review-without-bugs",
-      "description": "Code review should only proceed when no active bugs exist",
-      "when": {
-        "user_mentions_any": ["review", "PR", "pull request", "code review"],
-        "not_mentions": ["bug", "error", "fail", "test fail", "broken"]
-      },
-      "then": {
-        "primary_skill": "code-review-skill",
-        "exclude_skills": ["systematic-debugging"],
-        "reason": "Review is for quality and standards, not active debugging; full review passes should use /goldband-review when workflow is available"
       }
     },
 
@@ -73,11 +44,10 @@
       },
       "then": {
         "primary_skill": "systematic-debugging",
-        "defer_skills": ["code-review-skill"],
         "workflow": [
           "1. Invoke systematic-debugging to investigate bugs",
           "2. Fix bugs systematically",
-          "3. Resume code-review-skill or /goldband-review after bugs are resolved"
+          "3. Resume /goldband-review after bugs are resolved"
         ],
         "reason": "Cannot properly review code with active bugs; debugging must come first"
       }
@@ -85,19 +55,10 @@
   ],
 
   "conflict_resolution": {
-    "backend-patterns_vs_performance-optimization": {
-      "trigger_keywords": {
-        "performance-optimization": ["slow", "optimize", "performance", "bottleneck"],
-        "backend-patterns": ["design", "architecture", "implement", "create"]
-      },
-      "resolution": "If user mentions BOTH, ask clarifying question: 'Are you designing a new system (architecture) or fixing an existing slow system (optimization)?'",
-      "default": "performance-optimization (if 'slow' or 'optimize' present)"
-    },
-
-    "code-review_vs_systematic-debugging": {
+    "review_vs_systematic-debugging": {
       "trigger_keywords": {
         "systematic-debugging": ["bug", "error", "fail", "broken"],
-        "code-review-skill": ["review", "PR", "code quality"]
+        "goldband-review": ["review", "PR", "code quality"]
       },
       "resolution": "systematic-debugging ALWAYS takes priority when bugs are present",
       "workflow": "Debug first, review later"
@@ -156,36 +117,14 @@
 
   "skill_collaboration": {
     "systematic-debugging": {
-      "overrides": ["code-review-skill", "backend-patterns", "performance-optimization"],
+      "overrides": ["performance-optimization"],
       "priority": "CRITICAL",
       "reason": "Bugs must be fixed before review, optimization, or redesign"
-    },
-    "code-review-skill": {
-      "defers_to": ["systematic-debugging"],
-      "collaborates_with": ["performance-optimization", "backend-patterns"],
-      "workflow": "Thin review policy entrypoint; use /goldband-review for full workflow review. Review can flag issues and recommend other skills, but should not attempt to fix bugs"
     },
     "performance-optimization": {
       "requires_evidence": true,
       "must_use": ["profiling", "measurement", "baseline establishment"],
       "reason": "Never optimize without measuring first (Measure First, Optimize Second)"
-    },
-    "backend-patterns": {
-      "focus": "design and architecture",
-      "excludes": ["performance fixes", "bug fixes"],
-      "reason": "Architecture is about structure, not fixing existing problems"
-    },
-    "database-patterns": {
-      "focus": "schema design, query optimization, migrations",
-      "collaborates_with": ["backend-patterns", "performance-optimization"],
-      "excludes": ["API design", "bug fixes"],
-      "reason": "Database patterns focus on data layer design and optimization"
-    },
-    "api-design": {
-      "focus": "REST conventions, error formats, pagination, versioning",
-      "collaborates_with": ["backend-patterns", "security-checklist"],
-      "excludes": ["database design", "implementation details"],
-      "reason": "API design focuses on interface contracts, not implementation"
     },
     "ci-cd-integration": {
       "focus": "pipeline design, deployment strategies, automation",
@@ -210,7 +149,7 @@
     },
     "subagent-development": {
       "focus": "subagent dispatch and two-stage review patterns",
-      "collaborates_with": ["code-review-skill", "evidence-based-coding"],
+      "collaborates_with": ["evidence-based-coding"],
       "requires_evidence": true,
       "reason": "Subagent work must pass spec compliance and quality review"
     }

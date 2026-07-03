@@ -41,9 +41,6 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 
 | Skill | 作用 |
 |------|------|
-| `backend-patterns` | service boundary、architecture、backend shape |
-| `api-design` | endpoint contract、pagination、versioning、error format |
-| `database-patterns` | schema、migration、index、query 結構 |
 | `testing-strategy` | coverage、TDD、integration / E2E test strategy |
 | `performance-optimization` | profiling、bottleneck、latency / throughput |
 | `security-checklist` | auth、input validation、secret handling 的防守檢查；深度審查 defer `/goldband-cso` |
@@ -54,9 +51,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 
 | Skill | 作用 |
 |------|------|
-| `code-review-skill` | PR / diff review |
 | `ci-cd-integration` | GitHub Actions、CI/CD、cache、deploy gate |
-| `commit-conventions` | commit message / changelog 規範 |
 | `decision-log` | ADR / 決策記錄 |
 
 ### 模式與工具

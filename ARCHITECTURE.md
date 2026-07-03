@@ -7,7 +7,7 @@ This document explains the responsibility boundary between goldband and the vend
 goldband is not the `workflow` product itself. It is the integration and policy layer that:
 
 - defines shared engineering guidance for Claude Code and Codex
-- installs repo-linked commands, contexts, rules, hooks, and portable skills
+- installs repo-linked commands, rules, hooks, and portable skills
 - adapts the vendored `workflow` runtime into `goldband-*` user-facing entry points
 - keeps Claude-side and Codex-side behavior aligned
 
@@ -25,7 +25,6 @@ goldband is not the `workflow` product itself. It is the integration and policy 
   - `shell/install/*.sh`
 - Claude-side integration surfaces:
   - `commands/`
-  - `contexts/`
   - `rules/`
   - `hooks/`
 - portable shared skills:

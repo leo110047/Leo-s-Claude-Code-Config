@@ -8,7 +8,7 @@ Keep shared engineering policy portable across tools while keeping tool-specific
 
 ## When Editing This Repo
 
-- Keep Claude assets (`hooks/`, `commands/`, `contexts/`, `rules/`, `.claude-plugin/`) and Codex assets (`codex/`, `.codex/`, `AGENTS.md`) in sync when a shared policy changes.
+- Keep Claude assets (`hooks/`, `commands/`, `rules/`, `.claude-plugin/`) and Codex assets (`codex/`, `.codex/`, `AGENTS.md`) in sync when a shared policy changes.
 - Do not claim dual-tool parity until the installer, README, and inventory documentation all reflect the same change.
 - Use the shared, portable skills when possible. Treat Claude-specific hooks and Codex-specific rules as adapters, not as sources of truth.
 - When changing Claude hook or installer behavior, run the Claude config verification workflow before claiming the change is safe.

@@ -6,7 +6,7 @@ description: |
 
   PRIORITY: takes precedence when the request is about slowness, lag, bottlenecks, or optimization.
   Prefer `/goldband-benchmark` for repeatable benchmark workflow and regression tracking.
-  EXCLUDE: architectural design without a measured performance problem (use backend-patterns skill instead)
+  EXCLUDE: architectural design without a measured performance problem.
 allowed-tools:
   - Read
   - Grep
@@ -42,7 +42,7 @@ allowed-tools:
 ## Priority and Conflict Rules
 
 - **Scope**: Solving existing performance problems through measurement
-- **Separate from**: Architecture discussions (use `backend-patterns` skill)
+- **Separate from**: Architecture discussions without measured slowness
 - **Defers to**: `systematic-debugging` when bugs are present
 - Always measure before optimizing -- evidence over intuition
 
