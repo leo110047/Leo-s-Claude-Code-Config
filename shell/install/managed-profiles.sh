@@ -232,7 +232,7 @@ managed_profile_skills_synced() {
         local dest="$target_dir/$skill"
         local src="$REPO_DIR/skills/global/$skill"
         [ -d "$src" ] || return 1
-        [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ] || return 1
+        repo_path_installed_from "$src" "$dest" || return 1
     done
 }
 
@@ -245,7 +245,7 @@ managed_profile_extra_links_synced() {
         local extra_dest_name="${link_spec##*:}"
         local dest="$target_dir/$extra_dest_name"
         [ -e "$extra_src" ] || return 1
-        [ -L "$dest" ] && [ "$(readlink "$dest")" = "$extra_src" ] || return 1
+        repo_path_installed_from "$extra_src" "$dest" || return 1
     done
 }
 

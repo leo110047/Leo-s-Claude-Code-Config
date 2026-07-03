@@ -46,8 +46,7 @@ create_repo_workflow_review_sidecar() {
     link_workflow_review_asset "$repo_dir" "$sidecar_dir" "TODOS-format.md"
 
     if [ -d "$repo_dir/review/specialists" ]; then
-        rm -rf "$sidecar_dir/specialists"
-        create_repo_link "$repo_dir/review/specialists" "$sidecar_dir/specialists"
+        link_workflow_review_directory_asset "$repo_dir" "$sidecar_dir" "specialists"
     fi
 }
 
@@ -66,6 +65,23 @@ link_workflow_review_asset() {
     fi
     rm -f "$sidecar_dir/$asset"
     cp "$repo_dir/review/$asset" "$sidecar_dir/$asset"
+}
+
+link_workflow_review_directory_asset() {
+    local repo_dir="$1"
+    local sidecar_dir="$2"
+    local asset="$3"
+    local target
+
+    [ -d "$repo_dir/review/$asset" ] || return 0
+    target="$(workflow_review_asset_link_target "$repo_dir" "$asset")"
+    rm -rf "$sidecar_dir/$asset"
+    ln -snf "$target" "$sidecar_dir/$asset" 2>/dev/null || true
+    if [ -L "$sidecar_dir/$asset" ]; then
+        return 0
+    fi
+    rm -rf "$sidecar_dir/$asset"
+    cp -R "$repo_dir/review/$asset" "$sidecar_dir/$asset"
 }
 
 workflow_review_asset_link_target() {
