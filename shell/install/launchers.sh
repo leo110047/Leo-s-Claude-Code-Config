@@ -71,8 +71,8 @@ install_shell_launchers() {
 }
 
 shell_launchers_installed() {
-    [ -L "$SHELL_UPDATE_BIN" ] || return 1
-    [ -L "$SHELL_LAUNCHERS_FILE" ] || return 1
+    repo_path_installed_from "$REPO_DIR/shell/goldband-self-update.sh" "$SHELL_UPDATE_BIN" || return 1
+    repo_path_installed_from "$REPO_DIR/shell/goldband-launchers.sh" "$SHELL_LAUNCHERS_FILE" || return 1
     [ -f "$ZSHRC_FILE" ] || return 1
     grep -q '^# >>> goldband shell launchers >>>$' "$ZSHRC_FILE"
 }

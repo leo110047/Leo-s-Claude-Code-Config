@@ -31,12 +31,12 @@ show_status() {
 
 show_claude_install_status() {
     show_claude_skills_status
-    show_link_status "claude CLAUDE.md" "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE"
-    show_link_status "commands" "$CLAUDE_DIR/commands"
-    show_link_status "contexts" "$CLAUDE_DIR/contexts"
-    show_link_status "rules" "$CLAUDE_DIR/rules"
-    show_link_status "hooks" "$CLAUDE_DIR/hooks/scripts"
-    show_link_status "statusline" "$CLAUDE_DIR/statusline-command.sh"
+    show_repo_path_status "claude CLAUDE.md" "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" "$REPO_DIR/claude/CLAUDE.md" "claude-guidance"
+    show_repo_path_status "commands" "$CLAUDE_DIR/commands" "$REPO_DIR/commands" "commands"
+    show_repo_path_status "contexts" "$CLAUDE_DIR/contexts" "$REPO_DIR/contexts" "contexts"
+    show_repo_path_status "rules" "$CLAUDE_DIR/rules" "$REPO_DIR/rules" "rules"
+    show_repo_path_status "hooks" "$CLAUDE_DIR/hooks/scripts" "$REPO_DIR/hooks/scripts" "hooks"
+    show_repo_path_status "statusline" "$CLAUDE_DIR/statusline-command.sh" "$REPO_DIR/hooks/statusline-command.sh" "hooks"
     show_shell_launcher_status
 }
 
@@ -58,13 +58,21 @@ show_claude_skills_status() {
     fi
 }
 
-show_link_status() {
+show_repo_path_status() {
     local name="$1"
     local path="$2"
-    if [ -L "$path" ]; then
+    local src="$3"
+    local install_target="$4"
+    if repo_link_points_to "$path" "$src"; then
         local target
         target=$(readlink "$path")
         echo -e "  ${GREEN}[OK]${NC} $name -> $target"
+    elif [ -f "$src" ] && [ -f "$path" ] && cmp -s "$src" "$path" 2>/dev/null; then
+        echo -e "  ${GREEN}[OK]${NC} $name (copy fallback)"
+    elif [ -L "$path" ]; then
+        local target
+        target=$(readlink "$path")
+        echo -e "  ${YELLOW}[legacy symlink]${NC} $name -> $target — 建議重跑 ./install.sh $install_target"
     elif [ -e "$path" ]; then
         echo -e "  ${YELLOW}[legacy copy]${NC} $name — 建議重跑 ./install.sh 轉成 repo-linked"
     else
@@ -103,10 +111,10 @@ show_codex_install_status() {
     show_codex_config_status
     show_codex_profiles_status
     show_codex_requirements_status
-    show_codex_link_status "codex AGENTS.md" "$CODEX_AGENTS_FILE" "codex-agents"
-    show_codex_link_status "codex custom agents" "$CODEX_CUSTOM_AGENTS_DIR" "codex-agents"
-    show_codex_link_status "codex hooks.json" "$CODEX_HOOKS_FILE" "codex-hooks"
-    show_codex_link_status "codex hook scripts" "$CODEX_HOOKS_DIR" "codex-hooks"
+    show_repo_path_status "codex AGENTS.md" "$CODEX_AGENTS_FILE" "$REPO_DIR/codex/AGENTS.md" "codex-agents"
+    show_repo_path_status "codex custom agents" "$CODEX_CUSTOM_AGENTS_DIR" "$REPO_DIR/codex/agents" "codex-agents"
+    show_repo_path_status "codex hooks.json" "$CODEX_HOOKS_FILE" "$REPO_DIR/codex/hooks.json" "codex-hooks"
+    show_repo_path_status "codex hook scripts" "$CODEX_HOOKS_DIR" "$REPO_DIR/codex/hooks" "codex-hooks"
     show_codex_rules_status
     show_codex_skills_status
     show_mcp_token_status
@@ -133,17 +141,24 @@ show_codex_config_status() {
 show_codex_profiles_status() {
     local profile_source_dir="$REPO_DIR/codex/profiles"
     [ -d "$profile_source_dir" ] || return 0
-    local profile_total=0 profile_installed=0 profile_file
+    local profile_total=0 profile_installed=0 profile_copy_count=0 profile_file
     for profile_file in "$profile_source_dir"/*.config.toml; do
         [ -f "$profile_file" ] || continue
         profile_total=$((profile_total + 1))
         local profile_dest="$CODEX_DIR/$(basename "$profile_file")"
-        if [ -L "$profile_dest" ] && [ "$(readlink "$profile_dest")" = "$profile_file" ]; then
+        if repo_path_installed_from "$profile_file" "$profile_dest"; then
             profile_installed=$((profile_installed + 1))
+            if [ ! -L "$profile_dest" ]; then
+                profile_copy_count=$((profile_copy_count + 1))
+            fi
         fi
     done
     if [ "$profile_total" -gt 0 ] && [ "$profile_installed" -eq "$profile_total" ]; then
-        echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total})"
+        if [ "$profile_copy_count" -gt 0 ]; then
+            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total}, copy fallback)"
+        else
+            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total})"
+        fi
     elif [ "$profile_installed" -gt 0 ]; then
         echo -e "  ${YELLOW}[部分安裝]${NC} codex profiles (${profile_installed}/${profile_total}) — 建議重跑 ./install.sh codex-config"
     else
@@ -163,21 +178,6 @@ show_codex_requirements_status() {
     fi
 }
 
-show_codex_link_status() {
-    local name="$1"
-    local path="$2"
-    local install_target="$3"
-    if [ -L "$path" ]; then
-        local target
-        target=$(readlink "$path")
-        echo -e "  ${GREEN}[OK]${NC} $name -> $target"
-    elif [ -e "$path" ]; then
-        echo -e "  ${YELLOW}[legacy copy]${NC} $name — 建議重跑 ./install.sh $install_target"
-    else
-        echo -e "  ${RED}[未安裝]${NC} $name"
-    fi
-}
-
 show_codex_rules_status() {
     if [ -L "$CODEX_RULES_DIR" ]; then
         local target
@@ -193,11 +193,14 @@ show_codex_rules_status() {
 }
 
 show_codex_rules_dir_status() {
-    if [ -L "$CODEX_RULES_DIR/default.rules" ] && [ -L "$CODEX_RULES_DIR/goldband.rules" ]; then
+    local local_default="$REPO_DIR/codex/local/rules/default.rules"
+    local goldband_default="$REPO_DIR/codex/rules/default.rules"
+    if repo_path_installed_from "$local_default" "$CODEX_RULES_DIR/default.rules" &&
+        repo_path_installed_from "$goldband_default" "$CODEX_RULES_DIR/goldband.rules"; then
         local rule_count
         rule_count=$(find "$CODEX_RULES_DIR" -name '*.rules' 2>/dev/null | wc -l | tr -d ' ')
         echo -e "  ${GREEN}[OK]${NC} codex-rules (${rule_count} 個 rule file)"
-    elif [ ! -L "$CODEX_RULES_DIR/goldband.rules" ]; then
+    elif ! repo_path_installed_from "$goldband_default" "$CODEX_RULES_DIR/goldband.rules"; then
         echo -e "  ${YELLOW}[存在]${NC} codex-rules 目錄存在，但缺少 goldband.rules portable link"
     else
         echo -e "  ${YELLOW}[存在]${NC} codex-rules 目錄存在，但缺少 default.rules link"
@@ -228,7 +231,7 @@ show_git_style_gate_status() {
     if command -v git >/dev/null 2>&1; then
         local current_hooks_path
         current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
-        if [ "$current_hooks_path" = "$GIT_HOOKS_DIR" ]; then
+        if paths_equivalent "$current_hooks_path" "$GIT_HOOKS_DIR"; then
             echo -e "  ${GREEN}[OK]${NC} global core.hooksPath -> $GIT_HOOKS_DIR"
         elif [ -n "$current_hooks_path" ]; then
             echo -e "  ${YELLOW}[外部設定]${NC} global core.hooksPath -> $current_hooks_path"

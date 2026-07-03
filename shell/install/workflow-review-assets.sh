@@ -10,7 +10,7 @@ install_goldband_review_runtime_assets() {
     [ -d "$source_review_dir" ] || return 0
 
     rm -rf "$alias_path/review"
-    ln -snf "$source_review_dir" "$alias_path/review"
+    create_repo_link "$source_review_dir" "$alias_path/review"
     rewrite_goldband_review_asset_paths "$alias_path/SKILL.md" "$visible_review_dir"
 }
 
@@ -47,9 +47,7 @@ create_repo_workflow_review_sidecar() {
 
     if [ -d "$repo_dir/review/specialists" ]; then
         rm -rf "$sidecar_dir/specialists"
-        ln -snf \
-            "$(workflow_review_asset_link_target "$repo_dir" "specialists")" \
-            "$sidecar_dir/specialists"
+        create_repo_link "$repo_dir/review/specialists" "$sidecar_dir/specialists"
     fi
 }
 
@@ -62,7 +60,12 @@ link_workflow_review_asset() {
     [ -f "$repo_dir/review/$asset" ] || return 0
     target="$(workflow_review_asset_link_target "$repo_dir" "$asset")"
     rm -rf "$sidecar_dir/$asset"
-    ln -snf "$target" "$sidecar_dir/$asset"
+    ln -snf "$target" "$sidecar_dir/$asset" 2>/dev/null || true
+    if [ -L "$sidecar_dir/$asset" ]; then
+        return 0
+    fi
+    rm -f "$sidecar_dir/$asset"
+    cp "$repo_dir/review/$asset" "$sidecar_dir/$asset"
 }
 
 workflow_review_asset_link_target() {

@@ -10,13 +10,16 @@ link_component() {
         return
     fi
 
-    if [ -L "$dest" ]; then
-        local current_target
-        current_target=$(readlink "$dest")
-        if [ "$current_target" = "$src" ]; then
+    if repo_path_installed_from "$src" "$dest"; then
+        if [ -L "$dest" ]; then
             echo -e "  ${GREEN}[已安裝] $name${NC}"
-            return
+        else
+            echo -e "  ${GREEN}[已安裝 (copy fallback)] $name${NC}"
         fi
+        return
+    fi
+
+    if [ -L "$dest" ]; then
         rm "$dest"
     elif [ -e "$dest" ]; then
         echo -e "  ${YELLOW}[備份] $name — 備份現有到 ${dest}.bak${NC}"
@@ -24,8 +27,91 @@ link_component() {
     fi
 
     mkdir -p "$(dirname "$dest")"
-    ln -s "$src" "$dest"
-    echo -e "  ${GREEN}[安裝 (repo-linked)] $name${NC}"
+    create_repo_link "$src" "$dest"
+    if [ "$CREATE_REPO_LINK_MODE" = "copy" ]; then
+        echo -e "  ${YELLOW}[安裝 (copy fallback)] $name — 此環境無法建立檔案 symlink${NC}"
+    else
+        echo -e "  ${GREEN}[安裝 (repo-linked)] $name${NC}"
+    fi
+}
+
+create_repo_link() {
+    local src="$1"
+    local dest="$2"
+    CREATE_REPO_LINK_MODE=""
+
+    ln -s "$src" "$dest" 2>/dev/null || true
+    if repo_link_points_to "$dest" "$src"; then
+        CREATE_REPO_LINK_MODE="link"
+        return 0
+    fi
+
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        rm -rf "$dest"
+    fi
+
+    if [ -d "$src" ] && create_windows_directory_junction "$src" "$dest"; then
+        if repo_link_points_to "$dest" "$src"; then
+            CREATE_REPO_LINK_MODE="link"
+            return 0
+        fi
+        rm -rf "$dest"
+    fi
+
+    if [ -d "$src" ]; then
+        cp -R "$src" "$dest"
+    else
+        cp "$src" "$dest"
+    fi
+    CREATE_REPO_LINK_MODE="copy"
+}
+
+repo_link_points_to() {
+    local link_path="$1"
+    local expected_target="$2"
+
+    [ -L "$link_path" ] || return 1
+    [ "$(readlink "$link_path")" = "$expected_target" ]
+}
+
+repo_path_installed_from() {
+    local src="$1"
+    local dest="$2"
+
+    repo_link_points_to "$dest" "$src" && return 0
+    [ -f "$src" ] && [ -f "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null
+}
+
+create_windows_directory_junction() {
+    local src="$1"
+    local dest="$2"
+
+    command -v cygpath >/dev/null 2>&1 || return 1
+    command -v cmd >/dev/null 2>&1 || return 1
+
+    local win_src
+    local win_dest
+    win_src="$(cygpath -w "$src")" || return 1
+    win_dest="$(cygpath -w "$dest")" || return 1
+
+    cmd //c mklink //J "$win_dest" "$win_src" >/dev/null 2>&1
+}
+
+normalize_path_for_compare() {
+    local path_value="$1"
+
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$path_value" 2>/dev/null && return 0
+    fi
+    printf '%s\n' "$path_value"
+}
+
+paths_equivalent() {
+    local left="$1"
+    local right="$2"
+
+    [ "$left" = "$right" ] && return 0
+    [ "$(normalize_path_for_compare "$left")" = "$(normalize_path_for_compare "$right")" ]
 }
 
 timestamp_suffix() {
@@ -283,7 +369,7 @@ link_skill_entry() {
         backup_existing_path "$dest"
     fi
 
-    ln -s "$source" "$dest"
+    create_repo_link "$source" "$dest"
 }
 
 write_skill_profile_file() {

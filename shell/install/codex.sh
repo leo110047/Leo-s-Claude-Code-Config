@@ -164,14 +164,16 @@ link_codex_rule_file() {
     local dest="$2"
     local label="$3"
 
-    if [ -L "$dest" ]; then
-        local current_target
-        current_target=$(readlink "$dest")
-        if [ "$current_target" = "$src" ]; then
+    if repo_path_installed_from "$src" "$dest"; then
+        if [ -L "$dest" ]; then
             echo -e "  ${GREEN}[已安裝] $label${NC}"
-            return
+        else
+            echo -e "  ${GREEN}[已安裝 (copy fallback)] $label${NC}"
         fi
+        return
+    fi
 
+    if [ -L "$dest" ]; then
         if is_repo_codex_rule_link "$dest"; then
             rm "$dest"
         else
@@ -182,8 +184,12 @@ link_codex_rule_file() {
         return
     fi
 
-    ln -s "$src" "$dest"
-    echo -e "  ${GREEN}[安裝 (repo-linked)] $label${NC}"
+    create_repo_link "$src" "$dest"
+    if [ "$CREATE_REPO_LINK_MODE" = "copy" ]; then
+        echo -e "  ${YELLOW}[安裝 (copy fallback)] $label — 此環境無法建立檔案 symlink${NC}"
+    else
+        echo -e "  ${GREEN}[安裝 (repo-linked)] $label${NC}"
+    fi
 }
 
 ensure_codex_local_default_rules() {

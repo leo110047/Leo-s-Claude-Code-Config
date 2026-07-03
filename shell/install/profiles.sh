@@ -284,7 +284,7 @@ install_style_gate() {
 
     local current_hooks_path
     current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
-    if [ -n "$current_hooks_path" ] && [ "$current_hooks_path" != "$GIT_HOOKS_DIR" ]; then
+    if [ -n "$current_hooks_path" ] && ! paths_equivalent "$current_hooks_path" "$GIT_HOOKS_DIR"; then
         echo -e "  ${YELLOW}[保留] global core.hooksPath 已設定為 $current_hooks_path${NC}"
         echo -e "  ${CYAN}  若要啟用 goldband style gate，請先確認既有 hook 後手動設定:${NC}"
         echo -e "  ${CYAN}  git config --global core.hooksPath \"$GIT_HOOKS_DIR\"${NC}"

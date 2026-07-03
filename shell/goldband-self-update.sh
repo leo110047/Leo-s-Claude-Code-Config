@@ -38,6 +38,14 @@ run_git_with_timeout() {
   shift
   local timeout_seconds="${GOLDBAND_SELF_UPDATE_TIMEOUT:-4}"
 
+  if command -v timeout >/dev/null 2>&1; then
+    (
+      cd "$repo_dir" &&
+      GIT_TERMINAL_PROMPT=0 timeout "$timeout_seconds" "$@" >/dev/null 2>&1
+    )
+    return $?
+  fi
+
   if ! command -v python3 >/dev/null 2>&1; then
     (
       cd "$repo_dir" &&
@@ -46,7 +54,12 @@ run_git_with_timeout() {
     return $?
   fi
 
-  python3 - "$timeout_seconds" "$repo_dir" "$@" <<'PY'
+  local python_cwd="$repo_dir"
+  if command -v cygpath >/dev/null 2>&1; then
+    python_cwd="$(cygpath -w "$repo_dir" 2>/dev/null || printf '%s' "$repo_dir")"
+  fi
+
+  python3 - "$timeout_seconds" "$python_cwd" "$@" <<'PY'
 import os
 import subprocess
 import sys
