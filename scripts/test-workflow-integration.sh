@@ -24,6 +24,24 @@ mkdir -p \
   "$TMP_WORKFLOW/ship" \
   "$TMP_WORKFLOW/browse"
 
+. "$ROOT_DIR/shell/install/workflow-wrapper-aliases.sh"
+
+cat > "$TMP_ROOT/harden-wrapper.md" <<'EOF'
+[ -n "$_ROOT" ]&&[ -d "$_ROOT/.agents/skills/workflow" ]&&WORKFLOW_ROOT="$_ROOT/.agents/skills/workflow"
+EOF
+harden_goldband_wrapper_repo_runtime_detection "$TMP_ROOT/harden-wrapper.md"
+grep -q '\.agents/skills/workflow/bin/workflow-config' "$TMP_ROOT/harden-wrapper.md"
+if grep -Eq '\[[[:space:]]+-d[[:space:]]+"?\$_ROOT/\.agents/skills/workflow' "$TMP_ROOT/harden-wrapper.md"; then
+  exit 1
+fi
+
+cat > "$TMP_ROOT/harden-wrapper-unsafe.md" <<'EOF'
+test -d "$_ROOT/.agents/skills/workflow" && WORKFLOW_ROOT="$_ROOT/.agents/skills/workflow"
+EOF
+if harden_goldband_wrapper_repo_runtime_detection "$TMP_ROOT/harden-wrapper-unsafe.md" 2>/dev/null; then
+  exit 1
+fi
+
 cat > "$TMP_WORKFLOW/VERSION" <<'EOF'
 0.0.0-test
 EOF
@@ -415,6 +433,10 @@ grep -q 'GOLDBAND_LANGUAGE:' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL
 grep -q '支援 `zh-TW` 與 `en`' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q '\$HOME/.codex/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
 grep -q '\.agents/skills/workflow' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+grep -Eq '\.agents/skills/workflow/bin/(gstack-config|workflow-config)' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"
+if grep -q '\[ -d "\$_ROOT/.agents/skills/workflow" \]' "$TMP_HOME/.codex/skills/goldband-investigate/SKILL.md"; then
+  exit 1
+fi
 if grep -q "~/.claude/skills/$LEGACY_RUNTIME_NAME" "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"; then
   exit 1
 fi

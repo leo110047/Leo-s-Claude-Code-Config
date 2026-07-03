@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +16,7 @@ const hooksConfigPath = path.join(repoDir, 'codex', 'hooks.json');
 
 function runHook(input) {
   const result = spawnSync(process.execPath, [routerPath], {
+    cwd: repoDir,
     input: JSON.stringify(input),
     encoding: 'utf8',
   });
@@ -216,6 +218,19 @@ function testPostToolUseStyleGateAdvisory() {
   }
 }
 
+function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
+  const originalCwd = process.cwd();
+  const externalRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-cwd-'));
+  try {
+    spawnSync('git', ['init', '--quiet'], { cwd: externalRepo });
+    process.chdir(externalRepo);
+    testPostToolUseStyleGateAdvisory();
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(externalRepo, { recursive: true, force: true });
+  }
+}
+
 function testLifecycleContexts() {
   const output = runHook({ hook_event_name: 'SessionStart' });
   assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
@@ -294,6 +309,7 @@ testPatchAdvisorySecretWarnsOnly();
 testGitPatchDenied();
 testPostToolUseFailureContext();
 testPostToolUseStyleGateAdvisory();
+testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
 testLifecycleContexts();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();

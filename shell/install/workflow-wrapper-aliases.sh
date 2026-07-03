@@ -74,5 +74,51 @@ finalize_goldband_workflow_alias() {
     localize_goldband_wrapper_description "$skill_file" "$alias_name" "$goldband_language"
     inject_goldband_wrapper_language_runtime "$skill_file"
     localize_goldband_wrapper_language_policy "$skill_file"
+    # Runtime path rewrite must run first; the hardener guards the normalized
+    # `.agents/skills/workflow` form, not the legacy gstack spelling.
     rewrite_goldband_wrapper_runtime_paths "$skill_file"
+    harden_goldband_wrapper_repo_runtime_detection "$skill_file"
+}
+
+harden_goldband_wrapper_repo_runtime_detection() {
+    local skill_file="$1"
+    local tmp_file
+
+    [ -f "$skill_file" ] || return 0
+    tmp_file="$(mktemp)"
+
+    if ! awk '
+        function hardened_runtime_line(variable_name) {
+            print "[ -n \"$_ROOT\" ] && { [ -x \"$_ROOT/.agents/skills/workflow/bin/gstack-config\" ] || [ -x \"$_ROOT/.agents/skills/workflow/bin/workflow-config\" ]; } && " variable_name "=\"$_ROOT/.agents/skills/workflow\""
+        }
+        /^[[:space:]]*#/ {
+            print
+            next
+        }
+        /\.agents\/skills\/workflow/ && /\$_ROOT/ && /(^|[^[:alnum:]_])(GSTACK_ROOT|WORKFLOW_ROOT)=/ {
+            if (/\.agents\/skills\/workflow\/bin\/(gstack-config|workflow-config)/) {
+                print
+                next
+            }
+            if (/\[[[:space:]]+-d[[:space:]]+"?\$_ROOT\/\.agents\/skills\/workflow"?[[:space:]]*\]/) {
+                if (/GSTACK_ROOT=/) {
+                    hardened_runtime_line("GSTACK_ROOT")
+                    next
+                }
+                if (/WORKFLOW_ROOT=/) {
+                    hardened_runtime_line("WORKFLOW_ROOT")
+                    next
+                }
+            }
+            failed = 1
+        }
+        { print }
+        END { exit failed ? 2 : 0 }
+    ' "$skill_file" > "$tmp_file"; then
+        rm -f "$tmp_file"
+        echo "failed to harden workflow runtime detection in $skill_file" >&2
+        return 1
+    fi
+
+    mv "$tmp_file" "$skill_file"
 }
