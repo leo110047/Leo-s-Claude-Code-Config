@@ -17,7 +17,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
-
 function readProfile(profilePath) {
   const raw = fs.readFileSync(profilePath, 'utf8');
   return Object.fromEntries(
@@ -32,65 +31,28 @@ function readProfile(profilePath) {
 }
 
 function installArgs(repoDir, homeDir, ...actions) {
-  return [
-    path.join(repoDir, 'scripts', 'goldband-windows.mjs'),
-    'install',
-    ...actions,
-    '--platform',
-    'win32',
-    '--home',
-    homeDir,
-    '--repo',
-    repoDir,
-  ];
+  return goldbandWindowsArgs(repoDir, homeDir, 'install', ...actions);
 }
 
 function syncArgs(repoDir, homeDir, ...extraArgs) {
-  return [
-    path.join(repoDir, 'scripts', 'goldband-windows.mjs'),
-    'sync-skills',
-    '--platform',
-    'win32',
-    '--home',
-    homeDir,
-    '--repo',
-    repoDir,
-    ...extraArgs,
-  ];
+  return goldbandWindowsArgs(repoDir, homeDir, 'sync-skills', ...extraArgs);
 }
 
 function statusArgs(repoDir, homeDir, ...extraArgs) {
-  return [
-    path.join(repoDir, 'scripts', 'goldband-windows.mjs'),
-    'status',
-    '--platform',
-    'win32',
-    '--home',
-    homeDir,
-    '--repo',
-    repoDir,
-    ...extraArgs,
-  ];
+  return goldbandWindowsArgs(repoDir, homeDir, 'status', ...extraArgs);
 }
 
 function selfUpdateArgs(repoDir, homeDir, ...extraArgs) {
-  return [
-    path.join(repoDir, 'scripts', 'goldband-windows.mjs'),
-    'self-update',
-    '--platform',
-    'win32',
-    '--home',
-    homeDir,
-    '--repo',
-    repoDir,
-    ...extraArgs,
-  ];
+  return goldbandWindowsArgs(repoDir, homeDir, 'self-update', ...extraArgs);
 }
 
 function uninstallArgs(repoDir, homeDir, ...extraArgs) {
+  return goldbandWindowsArgs(repoDir, homeDir, 'uninstall', ...extraArgs);
+}
+function goldbandWindowsArgs(repoDir, homeDir, command, ...extraArgs) {
   return [
     path.join(repoDir, 'scripts', 'goldband-windows.mjs'),
-    'uninstall',
+    command,
     '--platform',
     'win32',
     '--home',
@@ -129,7 +91,6 @@ function createTestContext() {
     tmpWork: mktemp('goldband-win-work.'),
   };
 }
-
 function setupFixtureRepo(context) {
   copyRepoSubset(ROOT_DIR, context.tmpRoot);
   createFakeWorkflow(context.tmpRoot);
@@ -180,7 +141,6 @@ function seedSignedPowerShellProfile(tmpHome) {
 function copyEnv() {
   return { env: { ...process.env, GOLDBAND_TEST_FORCE_FILE_COPY: '1' } };
 }
-
 function assertInstalledProfiles(tmpHome) {
   const claudeProfile = readProfile(
     path.join(tmpHome, '.claude', 'skills', '.goldband-profile'),
@@ -315,7 +275,9 @@ function expectedInstalledPaths(tmpHome) {
     path.join(tmpHome, '.codex', 'requirements.toml'),
     path.join(tmpHome, '.codex', 'agents', 'reviewer.toml'),
     path.join(tmpHome, '.codex', 'hooks.json'),
+    path.join(tmpHome, '.codex', 'hooks', 'high-risk-policy.js'),
     path.join(tmpHome, '.codex', 'hooks', 'hook-router.js'),
+    path.join(tmpHome, '.codex', 'hooks', 'telemetry.js'),
     path.join(tmpHome, '.codex', 'rules', 'goldband.rules'),
     path.join(tmpHome, '.codex', 'rules', 'default.rules'),
     path.join(tmpHome, '.claude', 'bin', 'goldband-self-update.ps1'),
@@ -367,6 +329,10 @@ function refreshCopyScenario(context) {
     readText(tmpHome, '.codex', 'hooks', 'hook-router.js'),
     /windows-hook-refresh/,
   );
+  assert.match(
+    readText(tmpHome, '.codex', 'hooks', 'telemetry.js'),
+    /windows-telemetry-refresh/,
+  );
 }
 
 function appendRefreshMarkers(tmpRoot) {
@@ -383,6 +349,11 @@ function appendRefreshMarkers(tmpRoot) {
   fs.appendFileSync(
     path.join(tmpRoot, 'codex', 'hooks', 'hook-router.js'),
     '\n// windows-hook-refresh\n',
+    'utf8',
+  );
+  fs.appendFileSync(
+    path.join(tmpRoot, 'codex', 'hooks', 'telemetry.js'),
+    '\n// windows-telemetry-refresh\n',
     'utf8',
   );
 }

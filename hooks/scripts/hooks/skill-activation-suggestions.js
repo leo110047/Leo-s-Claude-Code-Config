@@ -3,6 +3,9 @@
 const { readStdinJson } = require('../lib/utils');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
 const {
+  buildWorkflowUsageEvents,
+} = require('../lib/hook-router/workflow-telemetry');
+const {
   formatSuggestions,
   matchPrompt,
 } = require('../lib/skill-activation/activation-rules');
@@ -50,6 +53,14 @@ async function main() {
   const prompt = String(input.prompt || '');
   const sessionId = input.session_id || process.env.CLAUDE_SESSION_ID || null;
   const matches = matchPrompt(prompt);
+
+  for (const event of buildWorkflowUsageEvents(
+    input,
+    'claude',
+    'hooks/scripts/hooks/skill-activation-suggestions.js',
+  )) {
+    appendUsageEvent(event);
+  }
 
   for (const event of buildMatchUsageEvents(matches, sessionId, prompt)) {
     appendUsageEvent(event);

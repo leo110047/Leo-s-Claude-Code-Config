@@ -291,6 +291,7 @@ assert_contains() {
 echo "[1/8] skill and Codex hook checks"
 "$ROOT_DIR/scripts/check-skills.sh"
 node "$ROOT_DIR/scripts/test-codex-hook-router.mjs"
+node "$ROOT_DIR/scripts/test-telemetry.mjs"
 test_windows_junction_detection
 
 echo "[2/8] installer smoke"

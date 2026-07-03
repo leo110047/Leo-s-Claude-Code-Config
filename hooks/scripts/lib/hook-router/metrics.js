@@ -12,7 +12,7 @@ function parsePositiveInt(value, fallback) {
 
 function metricsEnabled() {
   const flag = String(
-    process.env.HOOK_ROUTER_METRICS_ENABLED || '0',
+    process.env.HOOK_ROUTER_METRICS_ENABLED ?? '1',
   ).toLowerCase();
   return flag === '1' || flag === 'true' || flag === 'yes';
 }

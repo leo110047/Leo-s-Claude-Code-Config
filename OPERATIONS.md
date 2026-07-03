@@ -82,6 +82,71 @@ Temporary bypasses print a warning and write a local log under
 If a repo uses Husky or another local `core.hooksPath`, git uses the local value
 instead of the global goldband hook. That is expected.
 
+## Goldband Telemetry
+
+Goldband telemetry is local-only. It writes JSONL files on this machine and does
+not upload to an external service.
+
+Usage events:
+
+```bash
+node -e 'const t = require("./hooks/scripts/lib/hook-router/usage-telemetry"); console.log(t.getUsageFile())'
+```
+
+Metrics events:
+
+```bash
+node -e 'const m = require("./hooks/scripts/lib/hook-router/metrics"); console.log(m.getMetricsFile())'
+```
+
+Path resolution order:
+
+1. `CLAUDE_PLUGIN_DATA/<namespace>` when Claude exposes stable plugin data.
+2. `GOLDBAND_DATA_DIR/<namespace>` when explicitly configured.
+3. `${XDG_DATA_HOME}/goldband/<namespace>` when `XDG_DATA_HOME` is set.
+4. `~/.local/share/goldband/<namespace>`.
+5. System temp only if the durable paths cannot be created.
+
+Default files are `hook-router/usage-events.jsonl` and
+`hook-router/metrics.jsonl` under that resolved data root. Usage telemetry is
+enabled by default and can be disabled with
+`GOLDBAND_USAGE_TELEMETRY_ENABLED=0`. Hook metrics are enabled by default and
+can be disabled with `HOOK_ROUTER_METRICS_ENABLED=0`.
+
+Weekly usage and hook report:
+
+```bash
+node hooks/scripts/tools/report-usage-summary.js --days 7
+node hooks/scripts/tools/report-usage-summary.js --days 7 --json
+```
+
+The human report answers, in the first screen, which `goldband-*` workflow
+entries were used and how often, separated into `confirmed` and `inferred`
+signals, plus hook deny and advisory counts. `confirmed` means a hook payload
+explicitly reported a `Skill` tool invocation with a `goldband-*` skill name.
+`inferred` is used for slash-command prompts and Bash wrapper commands such as
+`goldband-review`; do not treat inferred signals as real workflow completion.
+Phase 2 keep/delete decisions should use confirmed workflow counts as the
+primary signal. Inferred workflow signals and hook advisories are secondary
+triage data and can be noisy.
+
+Current hook discovery boundary:
+
+- Claude installed hooks can observe `hook_event_name`, `tool_name`,
+  `tool_input`, `tool_response`, `error`, `prompt`, `session_id`, and lifecycle
+  fields exposed to the configured hook phase. Claude `UserPromptSubmit` runs
+  `skill-activation-suggestions.js`; tool phases run the unified router.
+- Codex installed hooks can observe the same tested fields used by
+  `codex/hooks/hook-router.js`: `hook_event_name`, `tool_name`, `tool_input`,
+  `tool_response`, `prompt`, `last_assistant_message`, and `session_id` when the
+  runtime provides it.
+- Both hosts record confirmed workflow entry usage only from `PreToolUse`
+  payloads where `tool_name` is `Skill` and the tool input contains a
+  `goldband-*` name. Prompt signals are recorded as inferred. Bash wrapper
+  signals are inferred only when a `goldband-*` executable appears in shell
+  command position, not when search, docs, or test output merely mention the
+  workflow name.
+
 ## MCP Templates
 
 MCP templates live under `mcp/` and are disabled by default. Before documenting a

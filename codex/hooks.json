@@ -29,7 +29,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|apply_patch|mcp__.*",
+        "matcher": "Bash|apply_patch|mcp__.*|Skill",
         "hooks": [
           {
             "type": "command",

@@ -40,9 +40,24 @@ function getPluginDataDir() {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function getGoldbandDataRoot() {
+  const explicit = process.env.GOLDBAND_DATA_DIR;
+  if (typeof explicit === 'string' && explicit.trim().length > 0) {
+    return explicit.trim();
+  }
+
+  const xdgDataHome = process.env.XDG_DATA_HOME;
+  if (typeof xdgDataHome === 'string' && xdgDataHome.trim().length > 0) {
+    return path.join(xdgDataHome.trim(), 'goldband');
+  }
+
+  return path.join(getHomeDir(), '.local', 'share', 'goldband');
+}
+
 /**
  * Get a persistent data directory for this plugin namespace.
- * Prefers CLAUDE_PLUGIN_DATA when available, falls back to temp storage.
+ * Prefers CLAUDE_PLUGIN_DATA when available, then stable local data storage.
+ * Temp storage is only a last resort when durable paths cannot be created.
  */
 function getPersistentDataDir(namespace = 'goldband') {
   const safeNamespace = String(namespace || 'goldband')
@@ -55,12 +70,11 @@ function getPersistentDataDir(namespace = 'goldband') {
     safeNamespace.length > 0 ? safeNamespace : ['goldband'];
 
   const pluginDataDir = getPluginDataDir();
-  const candidates = pluginDataDir
-    ? [
-        path.join(pluginDataDir, ...normalizedNamespace),
-        path.join(getTempDir(), ...normalizedNamespace),
-      ]
-    : [path.join(getTempDir(), ...normalizedNamespace)];
+  const candidates = [
+    pluginDataDir ? path.join(pluginDataDir, ...normalizedNamespace) : null,
+    path.join(getGoldbandDataRoot(), ...normalizedNamespace),
+    path.join(getTempDir(), ...normalizedNamespace),
+  ].filter(Boolean);
 
   for (const candidate of candidates) {
     try {
@@ -548,6 +562,7 @@ module.exports = {
   getSessionsDir,
   getLearnedSkillsDir,
   getTempDir,
+  getGoldbandDataRoot,
   getPluginDataDir,
   getPersistentDataDir,
   getPersistentDataPath,

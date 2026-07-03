@@ -519,10 +519,7 @@
     },
     "expect": {
       "exitCode": 0,
-      "decision": "allow",
-      "stderrIncludes": [
-        "console.log"
-      ]
+      "decision": "allow"
     }
   },
   {

@@ -13,12 +13,22 @@ const repoDir = path.resolve(
 );
 const routerPath = path.join(repoDir, 'codex', 'hooks', 'hook-router.js');
 const hooksConfigPath = path.join(repoDir, 'codex', 'hooks.json');
+const telemetryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-hook-'));
+const usageFile = path.join(telemetryDir, 'usage-events.jsonl');
+
+process.on('exit', () => {
+  fs.rmSync(telemetryDir, { recursive: true, force: true });
+});
 
 function runHook(input) {
   const result = spawnSync(process.execPath, [routerPath], {
     cwd: repoDir,
     input: JSON.stringify(input),
     encoding: 'utf8',
+    env: {
+      ...process.env,
+      GOLDBAND_USAGE_FILE: usageFile,
+    },
   });
 
   assert.equal(result.status, 0, result.stderr);
@@ -30,16 +40,20 @@ function runHook(input) {
 
 function testHighRiskBashDenied() {
   const commands = [
-    ['rm -rf /', /Recursive force deletion/],
-    ['rm -rf ./*', /Recursive force deletion/],
-    ['rm -rf ~/Documents', /Recursive force deletion/],
-    ['git clean -fd', /git clean/],
-    ['git clean -f -d', /git clean/],
-    ['git clean -x -f -d', /git clean/],
-    ['git clean -f', /git clean/],
+    ['rm -rf /', /Recursive force deletion/, 'recursive-force-delete'],
+    ['rm -rf ./*', /Recursive force deletion/, 'recursive-force-delete'],
+    [
+      'rm -rf ~/Documents',
+      /Recursive force deletion/,
+      'recursive-force-delete',
+    ],
+    ['git clean -fd', /git clean/, 'destructive-git-clean'],
+    ['git clean -f -d', /git clean/, 'destructive-git-clean'],
+    ['git clean -x -f -d', /git clean/, 'destructive-git-clean'],
+    ['git clean -f', /git clean/, 'destructive-git-clean'],
   ];
 
-  for (const [command, reasonPattern] of commands) {
+  for (const [command, reasonPattern, telemetryName] of commands) {
     const output = runHook({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
@@ -57,6 +71,7 @@ function testHighRiskBashDenied() {
       reasonPattern,
       command,
     );
+    assert.equal(output.hookSpecificOutput.telemetryName, telemetryName);
   }
 }
 
@@ -110,6 +125,10 @@ function testPermissionRequestOnlyDeniesHighRisk() {
     'PermissionRequest',
   );
   assert.equal(riskyOutput.hookSpecificOutput.decision.behavior, 'deny');
+  assert.equal(
+    riskyOutput.hookSpecificOutput.telemetryName,
+    'destructive-git-history',
+  );
 }
 
 function testPatchSecretDenied() {
@@ -271,6 +290,42 @@ function testPromptWorkflowHint() {
   );
 }
 
+function testWorkflowTelemetry() {
+  runHook({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Skill',
+    tool_input: { name: 'goldband-review' },
+  });
+  runHook({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_input: { command: 'rm -rf /' },
+  });
+
+  const events = fs
+    .readFileSync(usageFile, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.ok(
+    events.some(
+      (event) =>
+        event.category === 'workflow-entry' &&
+        event.name === 'goldband-review' &&
+        event.host === 'codex' &&
+        event.confidence === 'confirmed',
+    ),
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.category === 'hook-decision' &&
+        event.name === 'recursive-force-delete' &&
+        event.detail?.host === 'codex',
+    ),
+  );
+}
+
 function testSubagentCompletionNeedsEvidence() {
   const unsupportedClaims = [
     'Done, everything is complete.',
@@ -314,6 +369,7 @@ testLifecycleContexts();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
+testWorkflowTelemetry();
 testSubagentCompletionNeedsEvidence();
 
 console.log('[OK] Codex hook router behavior verified');

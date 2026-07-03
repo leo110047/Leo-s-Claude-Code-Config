@@ -15,6 +15,10 @@ const {
 const { evaluateLifecycle } = require('../lib/hook-router/lifecycle-policy');
 const { appendMetric } = require('../lib/hook-router/metrics');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
+const {
+  buildHookOutcomeUsageEvents,
+  buildWorkflowUsageEvents,
+} = require('../lib/hook-router/workflow-telemetry');
 
 const MAX_STDIN_BYTES = 1024 * 1024;
 
@@ -131,7 +135,21 @@ async function main() {
 
   writeLogs(outcome.logs);
   appendMetric(metric);
-  for (const usageEvent of outcome.usageEvents || []) {
+  const usageEvents = [
+    ...buildWorkflowUsageEvents(
+      input,
+      'claude',
+      'hooks/scripts/hooks/hook-router.js',
+    ),
+    ...buildHookOutcomeUsageEvents(
+      input,
+      outcome,
+      'claude',
+      'hooks/scripts/hooks/hook-router.js',
+    ),
+    ...(outcome.usageEvents || []),
+  ];
+  for (const usageEvent of usageEvents) {
     appendUsageEvent(usageEvent);
   }
 
