@@ -83,34 +83,6 @@
         ]
       }
     ],
-    "PreCompact": [
-      {
-        "matcher": "manual|auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
-            "commandWindows": "node \"$env:USERPROFILE\\.codex\\hooks\\hook-router.js\"",
-            "timeout": 5,
-            "statusMessage": "Preparing compact continuity"
-          }
-        ]
-      }
-    ],
-    "PostCompact": [
-      {
-        "matcher": "manual|auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.codex/hooks/hook-router.js\"",
-            "commandWindows": "node \"$env:USERPROFILE\\.codex\\hooks\\hook-router.js\"",
-            "timeout": 5,
-            "statusMessage": "Restoring compact continuity"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

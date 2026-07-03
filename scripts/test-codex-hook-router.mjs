@@ -11,6 +11,7 @@ const repoDir = path.resolve(
   '..',
 );
 const routerPath = path.join(repoDir, 'codex', 'hooks', 'hook-router.js');
+const hooksConfigPath = path.join(repoDir, 'codex', 'hooks.json');
 
 function runHook(input) {
   const result = spawnSync(process.execPath, [routerPath], {
@@ -216,17 +217,17 @@ function testPostToolUseStyleGateAdvisory() {
 }
 
 function testLifecycleContexts() {
-  const cases = [
-    ['SessionStart', /context-restore/],
-    ['PreCompact', /Preserve goal/],
-    ['PostCompact', /Re-check current files/],
-  ];
+  const output = runHook({ hook_event_name: 'SessionStart' });
+  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(output.hookSpecificOutput.additionalContext, /context-restore/);
+}
 
-  for (const [hookEventName, contextPattern] of cases) {
-    const output = runHook({ hook_event_name: hookEventName });
-    assert.equal(output.hookSpecificOutput.hookEventName, hookEventName);
-    assert.match(output.hookSpecificOutput.additionalContext, contextPattern);
-  }
+function testCompactHooksAreNotRegistered() {
+  const hooksConfig = JSON.parse(fs.readFileSync(hooksConfigPath, 'utf8'));
+  assert.equal(hooksConfig.hooks.PreCompact, undefined);
+  assert.equal(hooksConfig.hooks.PostCompact, undefined);
+  assert.equal(runHook({ hook_event_name: 'PreCompact' }), null);
+  assert.equal(runHook({ hook_event_name: 'PostCompact' }), null);
 }
 
 function testMutatingMcpWarnsOnly() {
@@ -294,6 +295,7 @@ testGitPatchDenied();
 testPostToolUseFailureContext();
 testPostToolUseStyleGateAdvisory();
 testLifecycleContexts();
+testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testSubagentCompletionNeedsEvidence();

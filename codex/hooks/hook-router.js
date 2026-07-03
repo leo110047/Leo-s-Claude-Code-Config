@@ -252,18 +252,6 @@ function evaluateLifecycleResult(input) {
       'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.',
     );
   }
-  if (eventName === 'PreCompact') {
-    return resultAdditionalContext(
-      'PreCompact',
-      'Preserve goal, verification state, and blockers in the compact summary.',
-    );
-  }
-  if (eventName === 'PostCompact') {
-    return resultAdditionalContext(
-      'PostCompact',
-      'Re-check current files before making completion claims after compaction.',
-    );
-  }
   if (eventName === 'Stop') {
     return evaluateStopResult(input);
   }
