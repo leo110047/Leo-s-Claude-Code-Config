@@ -24,7 +24,7 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { startTestServer } from './test-server';
+import { canStartTestServer, startTestServer } from './test-server';
 import { BrowserManager } from '../src/browser-manager';
 import {
   markHiddenElements,
@@ -43,8 +43,10 @@ const MODEL_CACHE = path.join(
   'model.onnx',
 );
 const ML_AVAILABLE = fs.existsSync(MODEL_CACHE);
+const LOCALHOST_BIND_AVAILABLE = canStartTestServer();
+const describeLive = LOCALHOST_BIND_AVAILABLE ? describe : describe.skip;
 
-describe('defense-in-depth — live Playwright fixture', () => {
+describeLive('defense-in-depth — live Playwright fixture', () => {
   let testServer: ReturnType<typeof startTestServer>;
   let bm: BrowserManager;
   let baseUrl: string;

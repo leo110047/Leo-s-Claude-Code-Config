@@ -14,7 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { startTestServer } from './test-server';
+import { canStartTestServer, startTestServer } from './test-server';
 import { BrowserManager } from '../src/browser-manager';
 import {
   datamarkContent, getSessionMarker, resetSessionMarker,
@@ -31,6 +31,8 @@ const CLI_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/cli.ts'), 'ut
 const COMMANDS_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/commands.ts'), 'utf-8');
 const META_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/meta-commands.ts'), 'utf-8');
 const SNAPSHOT_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/snapshot.ts'), 'utf-8');
+const LOCALHOST_BIND_AVAILABLE = canStartTestServer();
+const describeWithLocalhost = LOCALHOST_BIND_AVAILABLE ? describe : describe.skip;
 
 // ─── 1. Datamarking ────────────────────────────────────────────
 
@@ -410,7 +412,7 @@ describe('Chain security', () => {
 
 // ─── 7. Hidden Element Stripping (functional) ───────────────────
 
-describe('Hidden element stripping', () => {
+describeWithLocalhost('Hidden element stripping', () => {
   let testServer: ReturnType<typeof startTestServer>;
   let bm: BrowserManager;
   let baseUrl: string;

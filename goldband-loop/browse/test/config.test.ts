@@ -3,6 +3,10 @@ import { resolveConfig, ensureStateDir, readVersionHash, getGitRoot, getRemoteSl
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { canStartTestServer } from './test-server';
+
+const LOCALHOST_BIND_AVAILABLE = canStartTestServer();
+const describeWithLocalhost = LOCALHOST_BIND_AVAILABLE ? describe : describe.skip;
 
 describe('config', () => {
   describe('getGitRoot', () => {
@@ -249,7 +253,7 @@ describe('version mismatch detection', () => {
   });
 });
 
-describe('isServerHealthy', () => {
+describeWithLocalhost('isServerHealthy', () => {
   const { isServerHealthy } = require('../src/cli');
   const http = require('http');
 

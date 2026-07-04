@@ -48,6 +48,22 @@ export function startTestServer(port: number = 0): { server: ReturnType<typeof B
   return { server, url };
 }
 
+export function canStartTestServer(): boolean {
+  try {
+    const { server } = startTestServer(0);
+    server.stop();
+    return true;
+  } catch (err) {
+    if (isBindDeniedError(err)) return false;
+    throw err;
+  }
+}
+
+export function isBindDeniedError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | undefined)?.code;
+  return code === 'EADDRINUSE' || code === 'EPERM' || code === 'EACCES';
+}
+
 // If run directly, start and print URL
 if (import.meta.main) {
   const { server, url } = startTestServer(9450);
