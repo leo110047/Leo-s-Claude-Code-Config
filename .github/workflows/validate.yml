@@ -61,6 +61,12 @@ jobs:
       - name: Test eval budget cap checker
         run: npm run test:eval-budget-cap
 
+      - name: Test goldband MCP server
+        run: |
+          npm ci --prefix mcp/server
+          npm run test:mcp-server
+          npm run smoke:mcp-server
+
       - name: Verify hook script references
         run: |
           echo "=== Verifying hook script references ==="

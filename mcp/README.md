@@ -1,16 +1,44 @@
 # MCP Templates
 
 These templates provide dual-host MCP starting points without enabling any
-token-backed server by default.
+server by default.
 
 ## Files
 
+- `server/`: first-party zero-token `goldband-mcp` stdio server.
+- `first-party-servers.json`: first-party MCP inventory.
 - `claude.mcp.json.template`: Claude-style `.mcp.json` template.
 - `codex.config.toml.template`: Codex `config.toml` MCP table template.
 - `token-backed-servers.json`: token-backed MCP inventory used by status
   checks.
 - `../codex/local/mcp.env.example`: ignored local env template for token
   presence checks.
+
+## First-Party Goldband Server
+
+`goldband-mcp` exposes three read-only tools:
+
+- `goldband_policy_check`: dry-runs Claude `PreToolUse` policy through the
+  existing hook-router `evaluatePreToolUse` module. It does not execute shell
+  commands and does not include Codex-only high-risk policy.
+- `goldband_telemetry_query`: reads hook-router usage telemetry and aggregates
+  counts by rule or skill through the shared usage summary module.
+- `goldband_health_check`: runs only the fixed repo-validation allowlist:
+  JSON/TOML syntax, hook script references, Goldband Loop inventory, and
+  decision guidance parity.
+
+Build and test it from a full checkout:
+
+```bash
+npm ci --prefix mcp/server
+npm run test:mcp-server
+npm run smoke:mcp-server
+```
+
+The installer does not enable this server by default. To opt in, build the
+server, copy the `goldband` entry from the relevant template into your host MCP
+config, replace `/path/to/goldband` with this checkout path, and set the entry
+to enabled.
 
 ## Token-Backed Setup Flow
 
@@ -37,6 +65,7 @@ First validate local syntax:
 
 ```bash
 python3 -m json.tool mcp/claude.mcp.json.template
+python3 scripts/check-json-toml-syntax.py
 ```
 
 For any server a user actually enables, run an MCP Inspector smoke test before
@@ -51,6 +80,20 @@ list. Token-backed servers such as GitHub or Sentry require user-provided
 credentials and must not be enabled by default.
 
 ## Current Smoke Test Status
+
+Verified with MCP Inspector CLI on 2026-07-04 using:
+
+```bash
+npx -y @modelcontextprotocol/inspector@0.22.0 --cli --method tools/list -- node /path/to/goldband/mcp/server/dist/index.js
+```
+
+- `goldband`: starts from `node mcp/server/dist/index.js` and exposes
+  `goldband_policy_check`, `goldband_telemetry_query`, and
+  `goldband_health_check`.
+
+The repo smoke gate also runs `npm run smoke:mcp-server`, which starts the
+server from a separate temporary git repo cwd and calls `tools/list` plus
+`goldband_policy_check`.
 
 Verified with MCP Inspector on 2026-07-02:
 

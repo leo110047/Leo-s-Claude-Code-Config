@@ -89,6 +89,7 @@ show_help_codex_options() {
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
+    echo "  注意: MCP server 位於 mcp/server；installer 不會預設啟用"
 }
 
 show_help_examples() {

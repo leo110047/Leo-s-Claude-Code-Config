@@ -31,6 +31,10 @@ result against a machine-readable inventory.
   - `commands/`
   - `rules/`
   - `hooks/`
+- first-party MCP surface:
+  - `mcp/server/`
+  - `mcp/first-party-servers.json`
+  - `mcp/*.template`
 - portable shared skills:
   - `skills/global/`
   - `skills/projects/`
@@ -79,6 +83,9 @@ toolchains and file-shape rules.
 
 - Root policy, installer, hooks, commands, and portable skills are covered by
   `node scripts/check-code-style.mjs` and the root validation scripts.
+- The first-party stdio MCP server is a separate TypeScript package under
+  `mcp/server/`; it uses the official `@modelcontextprotocol/sdk`, stays
+  read-only, and is opt-in in Claude/Codex MCP templates.
 - `goldband-loop/` is excluded from the root code-style scanner because it owns
   a runtime-specific Bun test suite and generated skill/docs surfaces.
 - CI still treats `goldband-loop/` as first-party code: it installs the runtime

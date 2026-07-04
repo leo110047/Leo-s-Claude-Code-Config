@@ -116,6 +116,8 @@ Codex tracked config/rules 只放 portable baseline。本機路徑、trusted pro
 Windows managed requirements。
 
 MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。
+第一方零 token `goldband-mcp` server 位於 `mcp/server/`，installer 不會預設啟用；
+需要先 build，再把 `mcp/` template 裡的 `goldband` 條目改成你的 checkout 路徑。
 
 ## Git style gate
 
