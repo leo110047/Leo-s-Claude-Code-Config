@@ -99,7 +99,7 @@ replaceable from disk on each Mac.
 
 - **Read a specific page:**
   ```bash
-  gbrain get_page transcripts/claude-code/garrytan-goldband/2026-05-01-abc123
+  gbrain get_page transcripts/claude-code/example-goldband/2026-05-01-abc123
   ```
 
 - **Delete a page:**
@@ -267,7 +267,7 @@ and the per-repo trust policy.
 - Setup date: 2026-05-06
 - MCP registered: yes (user scope)
 - Token: stored in ~/.claude.json (do not commit; never written to CLAUDE.md)
-- Artifacts repo: github.com/garrytan/goldband-artifacts-garrytan (private)
+- Artifacts repo: github.com/example-owner/goldband-artifacts-example (private)
 - Artifacts sync: artifacts-only
 - Current repo policy: read-write
 ```

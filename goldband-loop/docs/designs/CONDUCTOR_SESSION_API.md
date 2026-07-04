@@ -55,7 +55,7 @@ Discovery endpoint listing active workspaces.
     {
       "id": "abc123",
       "name": "goldband",
-      "branch": "garrytan/chrome-extension-ctrl",
+      "branch": "project-owner/chrome-extension-ctrl",
       "directory": "/Users/garry/goldband",
       "pid": 12345,
       "active": true

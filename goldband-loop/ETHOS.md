@@ -31,13 +31,13 @@ The last 10% of completeness that teams used to skip? It costs seconds now.
 
 ---
 
-## 1. Boil the Lake
+## 1. Completeness Principle
 
 AI-assisted coding makes the marginal cost of completeness near-zero. When
 the complete implementation costs minutes more than the shortcut — do the
 complete thing. Every time.
 
-**Lake vs. ocean:** A "lake" is boilable — 100% test coverage for a module,
+**Lake vs. ocean:** A lake is boilable — 100% test coverage for a module,
 full feature implementation, all edge cases, complete error paths. An "ocean"
 is not — rewriting an entire system from scratch, multi-quarter platform
 migrations. Boil lakes. Flag oceans as out of scope.
@@ -51,8 +51,6 @@ human engineering time was the bottleneck.
 - "Choose B — it covers 90% with less code." (If A is 70 lines more, choose A.)
 - "Let's defer tests to a follow-up PR." (Tests are the cheapest lake to boil.)
 - "This would take 2 weeks." (Say: "2 weeks human / ~1 hour AI-assisted.")
-
-Read more: https://garryslist.org/posts/boil-the-ocean
 
 ---
 
@@ -144,7 +142,7 @@ think it's better, state what context you might be missing, and ask. Never act.
 
 ## How They Work Together
 
-Boil the Lake says: **do the complete thing.**
+The Completeness Principle says: **do the complete thing.**
 Search Before Building says: **know what exists before you decide what to build.**
 
 Together: search first, then build the complete version of the right thing.

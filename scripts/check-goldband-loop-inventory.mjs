@@ -20,6 +20,7 @@ function main() {
   assert.equal(inventory.schema, 1);
   assertSourceSymlinksResolve(LOOP_DIR);
   assertLegacyNameMentionsAreAllowlisted();
+  assertPublicIdentityMentionsAreAbsent();
   assertLegacyConfigMigration();
   assertSourceInventory(inventory);
 
@@ -223,9 +224,7 @@ function assertLegacyConfigMigration() {
 
 function assertLegacyNameMentionsAreAllowlisted() {
   const allowedFiles = new Set([
-    'ARCHITECTURE.md',
     'goldband-loop/LICENSE',
-    'goldband-loop/UPSTREAM_ATTRIBUTION.md',
     'goldband-loop/bin/goldband-config',
     'goldband-loop/browse/test/goldband-config.test.ts',
     'scripts/check-goldband-loop-inventory.mjs',
@@ -263,7 +262,80 @@ function assertLegacyNameMentionsAreAllowlisted() {
   assert.deepEqual(
     violations.sort(),
     [],
-    'legacy runtime names must be limited to attribution, migration, and this phase plan',
+    'legacy runtime names must be limited to migration code and tests',
+  );
+}
+
+function assertPublicIdentityMentionsAreAbsent() {
+  const forbiddenPatterns = [
+    /UPSTREAM_ATTRIBUTION/,
+    /upstream attribution/i,
+    /absorbed upstream/i,
+    /upstream author/i,
+    /vendored upstream/i,
+    /github\.com\/garrytan\/goldband/i,
+    /raw\.githubusercontent\.com\/garrytan\/goldband/i,
+    /\/Users\/garrytan/i,
+    /\bgarrytan\b/i,
+    /\bGarry\b/,
+    /Garry-shaped/,
+    /Goldband Loop\/Garry/,
+    /garryslist/i,
+    /Boil the Lake/,
+    /boil-the-ocean/i,
+  ];
+
+  const violations = [];
+  for (const relPath of gitTrackedAndUntrackedFiles()) {
+    if (!isPublicIdentitySurface(relPath)) {
+      continue;
+    }
+    const absPath = path.join(ROOT_DIR, relPath);
+    if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) {
+      continue;
+    }
+    const raw = fs.readFileSync(absPath);
+    if (raw.includes(0)) {
+      continue;
+    }
+    const text = raw.toString('utf8');
+    const matched = forbiddenPatterns.filter((pattern) => pattern.test(text));
+    if (matched.length > 0) {
+      violations.push(relPath);
+    }
+  }
+
+  assert.deepEqual(
+    violations.sort(),
+    [],
+    'public docs and skill surfaces must not expose legacy upstream identity',
+  );
+}
+
+function isPublicIdentitySurface(relPath) {
+  if (
+    relPath === 'README.md' ||
+    relPath === 'README.en.md' ||
+    relPath === 'ARCHITECTURE.md' ||
+    relPath.startsWith('docs/')
+  ) {
+    return true;
+  }
+
+  if (!relPath.startsWith('goldband-loop/')) {
+    return false;
+  }
+  if (relPath.startsWith('goldband-loop/test/')) {
+    return false;
+  }
+  if (relPath.includes('/node_modules/')) {
+    return false;
+  }
+
+  return (
+    relPath.endsWith('.md') ||
+    relPath.endsWith('.md.tmpl') ||
+    relPath === 'goldband-loop/goldband/llms.txt'
   );
 }
 

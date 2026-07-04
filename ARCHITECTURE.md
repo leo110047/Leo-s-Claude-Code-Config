@@ -12,9 +12,9 @@ Codex. It has two first-party layers:
 - Goldband Loop runtime, owned by `goldband-loop/`
 - optional local sandbox execution, owned by `sandbox/`
 
-The user-facing workflow surface is `goldband-*`. The installer no longer wraps
-or hides an upstream runtime; it installs Goldband Loop directly and verifies the
-result against a machine-readable inventory.
+The user-facing workflow surface is `goldband-*`. The installer installs
+Goldband Loop directly and verifies the result against a machine-readable
+inventory.
 
 ## Responsibility Boundary
 
@@ -51,7 +51,6 @@ result against a machine-readable inventory.
 - workflow-native docs, build metadata, tests, browser/PDF/design/iOS tooling
 - runtime binaries under `goldband-loop/bin/goldband-*`
 - the Goldband Loop inventory at `goldband-loop/inventory.json`
-- inherited upstream MIT license text and attribution
 
 Concrete ownership signals include:
 
@@ -72,8 +71,8 @@ That installer is responsible for:
 - exposing workflow skills as `goldband-*`
 - cleaning legacy runtime roots and generated entries from older installs
 - preserving `~/.goldband` as the runtime state directory
-- migrating legacy `~/.workflow` and `~/.gstack` config/state into
-  `~/.goldband` without overwriting newer Goldband Loop files
+- migrating legacy workflow config/state into `~/.goldband` without overwriting
+  newer Goldband Loop files
 
 The inventory gate proves the contract. It runs a clean-home install, lists the
 actual Claude/Codex skill entries and runtime binaries, and fails on missing
@@ -142,12 +141,11 @@ toolchains and file-shape rules.
 
 ## Maintenance Rules
 
-- Treat `goldband-loop/` as first-party source, not a vendored upstream snapshot.
+- Treat `goldband-loop/` as first-party source.
 - Do not recreate wrapper manifests or hidden-name installer behavior.
 - When adding or removing a Goldband Loop entry, update `goldband-loop/inventory.json`
   and run `node scripts/check-goldband-loop-inventory.mjs`.
 - Keep Claude and Codex install paths aligned before claiming dual-tool parity.
-- Keep attribution for the absorbed upstream runtime in the Goldband Loop docs.
 - Keep sandbox claims limited to the boundaries verified in
   [sandbox/THREAT-MODEL.md](sandbox/THREAT-MODEL.md). Do not present the
   container as host-complete security or network isolation unless a matching

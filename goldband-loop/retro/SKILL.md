@@ -162,14 +162,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 
@@ -516,7 +515,7 @@ equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
 
 ## Voice
 
-Goldband Loop voice: Garry-shaped product and engineering judgment, compressed for runtime.
+Goldband Loop voice: product and engineering judgment, compressed for runtime.
 
 - Lead with the point. Say what it does, why it matters, and what changes for the builder.
 - Be concrete. Name files, functions, line numbers, commands, outputs, evals, and real numbers.
@@ -647,7 +646,7 @@ Jargon list, gloss on first use if the term appears:
 - buffer overflow
 
 
-## Completeness Principle — Boil the Lake
+## Completeness Principle
 
 AI makes completeness cheap. Recommend complete lakes (tests, edge cases, error paths); flag oceans (rewrites, multi-quarter migrations).
 
@@ -1075,8 +1074,8 @@ If the JSONL file doesn't exist or has no entries in the window, skip the Skill 
 
 If moments exist, list them:
 ```
-  EUREKA /office-hours (branch: garrytan/auth-rethink): "Session tokens don't need server storage — browser crypto API makes client-side JWT validation viable"
-  EUREKA /plan-eng-review (branch: garrytan/cache-layer): "Redis isn't needed here — Bun's built-in LRU cache handles this workload"
+  EUREKA /office-hours (branch: project-owner/auth-rethink): "Session tokens don't need server storage — browser crypto API makes client-side JWT validation viable"
+  EUREKA /plan-eng-review (branch: project-owner/cache-layer): "Redis isn't needed here — Bun's built-in LRU cache handles this workload"
 ```
 
 If the JSONL file doesn't exist or has no entries in the window, skip the Eureka Moments row.
@@ -1290,7 +1289,7 @@ Use the Write tool to save the JSON file with this schema:
     "ai_assisted_commits": 32
   },
   "authors": {
-    "Garry Tan": { "commits": 32, "insertions": 2400, "deletions": 300, "test_ratio": 0.41, "top_area": "browse/" },
+    "project maintainer": { "commits": 32, "insertions": 2400, "deletions": 300, "test_ratio": 0.41, "top_area": "browse/" },
     "Alice": { "commits": 12, "insertions": 800, "deletions": 150, "test_ratio": 0.35, "top_area": "app/services/" }
   },
   "version_range": ["1.16.0.0", "1.16.1.0"],

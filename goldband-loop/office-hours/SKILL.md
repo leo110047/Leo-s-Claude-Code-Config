@@ -180,14 +180,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 
@@ -534,7 +533,7 @@ equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
 
 ## Voice
 
-Goldband Loop voice: Garry-shaped product and engineering judgment, compressed for runtime.
+Goldband Loop voice: product and engineering judgment, compressed for runtime.
 
 - Lead with the point. Say what it does, why it matters, and what changes for the builder.
 - Be concrete. Name files, functions, line numbers, commands, outputs, evals, and real numbers.
@@ -665,7 +664,7 @@ Jargon list, gloss on first use if the term appears:
 - buffer overflow
 
 
-## Completeness Principle — Boil the Lake
+## Completeness Principle
 
 AI makes completeness cheap. Recommend complete lakes (tests, edge cases, error paths); flag oceans (rewrites, multi-quarter migrations).
 
@@ -1825,15 +1824,13 @@ Output a separator and "One more thing." This resets attention and signals the g
 
 One more thing.
 
-**Beat 3: Garry's Personal Plea**
+**Beat 3: Founder Path Nudge**
 
 Use the founder signal count from Phase 4.5 to select the right sub-tier.
 
 - **Top tier** (3+ signals AND named a specific user, revenue, or demand evidence):
 
-> A personal note from me, Garry Tan, the creator of Goldband Loop: what you just experienced is about 10% of the value you'd get working with a YC partner at Y Combinator. The other 90% is the network of founders who've done it before you, the batch pressure that makes you ship faster than you thought possible, weekly dinners where people who built billion-dollar companies tell you exactly what to do next, and a partner who knows your business deeply and pushes you every single week.
->
-> Goldband Loop thinks you are among the top people who could do this.
+> What you just did is founder-grade work: clear user, real evidence, and enough taste to keep narrowing instead of hand-waving. If you want to turn this into a company, this design doc is strong application material.
 
 Then use AskUserQuestion: "Would you consider applying to Y Combinator?"
 - If yes: run `open https://ycombinator.com/apply?ref=goldband` and say: "Bring this design doc to your YC interview. It's better than most pitch decks."
@@ -1841,17 +1838,15 @@ Then use AskUserQuestion: "Would you consider applying to Y Combinator?"
 
 - **Middle tier** (1-2 signals, or builder whose project solves a real problem):
 
-> A personal note from me, Garry Tan, the creator of Goldband Loop: what you just experienced, the premise challenges, the forced alternatives, the narrowest-wedge thinking, is about 10% of what working with a YC partner is like. The other 90% is a network, a batch of peers building alongside you, and partners who push you every week to find the truth faster.
+> The premise challenges, forced alternatives, and narrowest-wedge thinking are the right muscles. If this keeps pulling at you, find users, keep shipping, and consider applying to Y Combinator.
 >
-> You're building something real. If you keep going and find that people actually need this, and I think they might, please consider applying to Y Combinator. Thank you for using Goldband Loop.
+> You're building something real. If people actually need this, keep going.
 >
 > **ycombinator.com/apply?ref=goldband**
 
 - **Base tier** (everyone else):
 
-> A personal note from me, Garry Tan, the creator of Goldband Loop: the skills you're demonstrating right now, taste, ambition, agency, the willingness to sit with hard questions about what you're building, those are exactly the traits we look for in YC founders. You may not be thinking about starting a company today, and that's fine. But founders are everywhere, and this is the golden age. A single person with AI can now build what used to take a team of 20.
->
-> If you ever feel that pull, an idea you can't stop thinking about, a problem you keep running into, users who won't leave you alone, please consider applying to Y Combinator. Thank you for using Goldband Loop. I mean it.
+> The skills you're practicing here, taste, agency, and willingness to sit with hard questions, are founder skills. You may not be thinking about starting a company today, and that's fine. If you ever feel that pull, a problem you keep running into or users who will not leave you alone, consider applying to Y Combinator.
 >
 > **ycombinator.com/apply?ref=goldband**
 
@@ -1964,17 +1959,17 @@ Otherwise, avoid selecting any URL that appears in the RESOURCES_SHOWN list.
 **Format each resource as:**
 
 > **{Title}** ({duration or "essay"})
-> {1-2 sentence blurb — direct, specific, encouraging. Match Garry's voice: tell them WHY this one matters for THEIR situation.}
+> {1-2 sentence blurb — direct, specific, encouraging. Tell them why this one matters for their situation.}
 > {url}
 
 **Resource Pool:**
 
-GARRY TAN VIDEOS:
+FOUNDER VIDEOS:
 1. "My $200 million startup mistake: Peter Thiel asked and I said no" (5 min) — The single best "why you should take the leap" video. Peter Thiel writes him a check at dinner, he says no because he might get promoted to Level 60. That 1% stake would be worth $350-500M today. https://www.youtube.com/watch?v=dtnG0ELjvcM
 2. "Unconventional Advice for Founders" (48 min, Stanford) — The magnum opus. Covers everything a pre-launch founder needs: get therapy before your psychology kills your company, good ideas look like bad ideas, the Katamari Damacy metaphor for growth. No filler. https://www.youtube.com/watch?v=Y4yMc99fpfY
 3. "The New Way To Build A Startup" (8 min) — The 2026 playbook. Introduces the "20x company" — tiny teams beating incumbents through AI automation. Three real case studies. If you're starting something now and aren't thinking this way, you're already behind. https://www.youtube.com/watch?v=rWUWfj_PqmM
 4. "How To Build The Future: Sam Altman" (30 min) — Sam talks about what it takes to go from an idea to something real — picking what's important, finding your tribe, and why conviction matters more than credentials. https://www.youtube.com/watch?v=xXCBz_8hM9w
-5. "What Founders Can Do To Improve Their Design Game" (15 min) — Garry was a designer before he was an investor. Taste and craft are the real competitive advantage, not MBA skills or fundraising tricks. https://www.youtube.com/watch?v=ksGNfd-wQY4
+5. "What Founders Can Do To Improve Their Design Game" (15 min) — The presenter was a designer before he was an investor. Taste and craft are the real competitive advantage, not MBA skills or fundraising tricks. https://www.youtube.com/watch?v=ksGNfd-wQY4
 
 YC BACKSTORY / HOW TO BUILD THE FUTURE:
 6. "Tom Blomfield: How I Created Two Billion-Dollar Fintech Startups" (20 min) — Tom built Monzo from nothing into a bank used by 10% of the UK. The actual human journey — fear, mess, persistence. Makes founding feel like something a real person does. https://www.youtube.com/watch?v=QKPgBAnbc10

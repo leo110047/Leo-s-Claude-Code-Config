@@ -136,8 +136,8 @@ describe('welcome page served via HTTP', () => {
 
   // ─── Footer ───────────────────────────────────────────────────────
 
-  test('has footer with attribution', () => {
-    expect(html).toContain('Garry Tan');
-    expect(html).toContain('github.com/garrytan/goldband');
+  test('has footer with current repository link', () => {
+    expect(html).toContain('github.com/leo110047/goldband');
+    expect(html).not.toContain(['UPSTREAM', 'ATTRIBUTION'].join('_'));
   });
 });

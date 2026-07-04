@@ -221,20 +221,20 @@ describe('goldband_artifacts_remote', () => {
   test('reads ~/.goldband-artifacts-remote.txt when present', () => {
     fs.writeFileSync(
       path.join(tmpHome, '.goldband-artifacts-remote.txt'),
-      'https://github.com/garrytan/goldband-artifacts-garrytan\n'
+      'https://github.com/example-org/goldband-artifacts-example\n'
     );
     expect(runDetect().json.goldband_artifacts_remote).toBe(
-      'https://github.com/garrytan/goldband-artifacts-garrytan'
+      'https://github.com/example-org/goldband-artifacts-example'
     );
   });
 
   test('migration-window fallback: reads ~/.goldband-brain-remote.txt if artifacts file is missing', () => {
     fs.writeFileSync(
       path.join(tmpHome, '.goldband-brain-remote.txt'),
-      'git@github.com:garrytan/goldband-brain-garrytan.git\n'
+      'git@github.com:example-org/goldband-brain-example.git\n'
     );
     expect(runDetect().json.goldband_artifacts_remote).toBe(
-      'git@github.com:garrytan/goldband-brain-garrytan.git'
+      'git@github.com:example-org/goldband-brain-example.git'
     );
   });
 

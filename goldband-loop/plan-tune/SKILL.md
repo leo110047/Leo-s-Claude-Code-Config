@@ -156,14 +156,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 
@@ -510,7 +509,7 @@ equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
 
 ## Voice
 
-Goldband Loop voice: Garry-shaped product and engineering judgment, compressed for runtime.
+Goldband Loop voice: product and engineering judgment, compressed for runtime.
 
 - Lead with the point. Say what it does, why it matters, and what changes for the builder.
 - Be concrete. Name files, functions, line numbers, commands, outputs, evals, and real numbers.
@@ -641,7 +640,7 @@ Jargon list, gloss on first use if the term appears:
 - buffer overflow
 
 
-## Completeness Principle — Boil the Lake
+## Completeness Principle
 
 AI makes completeness cheap. Recommend complete lakes (tests, edge cases, error paths); flag oceans (rewrites, multi-quarter migrations).
 
@@ -782,7 +781,7 @@ Read the user's message. Route based on plain-English intent, not keywords:
    run `Review question log`.
 4. **"Stop asking me about X" / "never ask about Y" / "tune: ..."** →
    run `Set a preference`.
-5. **"Update my profile" / "I'm more boil-the-ocean than that" / "I've changed
+5. **"Update my profile" / "I'm more high-scope than that" / "I've changed
    my mind"** → run `Edit declared profile` (confirm before writing).
 6. **"Show the gap" / "how far off is my profile"** → run `Show gap`.
 7. **"Turn it off" / "disable"** → `~/.claude/skills/goldband/bin/goldband-config set question_tuning false`
@@ -901,15 +900,15 @@ Parse the JSON. Present in **plain English**, not raw floats:
   statement. Use these bands:
   - 0.0-0.3 → "low" (e.g., `scope_appetite` low = "small scope, ship fast")
   - 0.3-0.7 → "balanced"
-  - 0.7-1.0 → "high" (e.g., `scope_appetite` high = "boil the ocean")
+  - 0.7-1.0 → "high" (e.g., `scope_appetite` high = "go high-scope")
 
-  Format: "**scope_appetite:** 0.8 (boil the ocean — you prefer the complete
+  Format: "**scope_appetite:** 0.8 (go high-scope — you prefer the complete
   version with edge cases covered)"
 
 - If `inferred.diversity` passes the calibration gate (`sample_size >= 20 AND
   skills_covered >= 3 AND question_ids_covered >= 8 AND days_span >= 7`), show
   the inferred column next to declared:
-  "**scope_appetite:** declared 0.8 (boil the ocean) ↔ observed 0.72 (close)"
+  "**scope_appetite:** declared 0.8 (go high-scope) ↔ observed 0.72 (close)"
   Use words for the gap: 0.0-0.1 "close", 0.1-0.3 "drift", 0.3+ "mismatch".
 
 - If the calibration gate isn't met, say: "Not enough observed data yet —
@@ -1001,14 +1000,14 @@ scope expansion comes up", etc).
 ## Edit declared profile
 
 The user wants to update their self-declaration. Examples: "I'm more
-boil-the-ocean than 0.5 suggests", "I've gotten more careful about architecture",
+high-scope than 0.5 suggests", "I've gotten more careful about architecture",
 "bump detail_preference up".
 
 **Always confirm before writing.** Free-form input + direct profile mutation
 is a trust boundary (Codex #15 in the design doc).
 
 1. Parse the user's intent. Translate to `(dimension, new_value)`.
-   - "more boil-the-ocean" → `scope_appetite` → pick a value 0.15 higher than
+   - "more high-scope" → `scope_appetite` → pick a value 0.15 higher than
      current, clamped to [0, 1]
    - "more careful" / "more principled" / "more rigorous" → `architecture_care`
      up

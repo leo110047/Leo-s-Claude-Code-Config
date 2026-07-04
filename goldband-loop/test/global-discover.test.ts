@@ -43,9 +43,9 @@ describe("goldband-global-discover", () => {
     });
 
     test("SSH and HTTPS for same repo normalize to same URL", () => {
-      const ssh = normalizeRemoteUrl("git@github.com:garrytan/goldband.git");
-      const https = normalizeRemoteUrl("https://github.com/garrytan/goldband.git");
-      const httpsNoDotGit = normalizeRemoteUrl("https://github.com/garrytan/goldband");
+      const ssh = normalizeRemoteUrl("git@github.com:example-owner/example-repo.git");
+      const https = normalizeRemoteUrl("https://github.com/example-owner/example-repo.git");
+      const httpsNoDotGit = normalizeRemoteUrl("https://github.com/example-owner/example-repo");
       expect(ssh).toBe(https);
       expect(https).toBe(httpsNoDotGit);
     });

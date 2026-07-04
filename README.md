@@ -22,7 +22,7 @@ commands、rules、portable skills 和 workflow runtime 接到你的本機環境
 ## goldband 與 Goldband Loop 的邊界
 
 - goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、rules 和 portable skills。
-- `goldband-loop/` 是 first-party workflow runtime,不是 vendored upstream。
+- `goldband-loop/` 是 first-party workflow runtime。
 - 安裝時 goldband 會直接安裝 Goldband Loop,暴露 `goldband-*` 入口。
 
 維護細節看 [ARCHITECTURE.md](ARCHITECTURE.md)。
@@ -249,4 +249,3 @@ git pull --ff-only
 ## 授權
 
 MIT License.
-Goldband Loop 的原上游 attribution 保留在 [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md)。

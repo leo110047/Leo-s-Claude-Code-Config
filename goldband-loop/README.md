@@ -5,10 +5,8 @@ It provides the heavier `goldband-*` workflows used for planning, review,
 debugging, QA, browser automation, release checks, documentation, and team
 maintenance.
 
-This directory is not treated as a vendored upstream subtree. It is maintained
-as first-party source inside the goldband repository. The absorbed upstream
-snapshot and MIT license attribution are documented in
-[UPSTREAM_ATTRIBUTION.md](UPSTREAM_ATTRIBUTION.md).
+This directory is maintained as first-party source inside the goldband
+repository.
 
 ## What It Provides
 
@@ -134,7 +132,6 @@ bash scripts/verify-decision-guidance.sh
 | [USING_GBRAIN_WITH_GOLDBAND.md](USING_GBRAIN_WITH_GOLDBAND.md) | GBrain integration |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Runtime development workflow |
 | [CHANGELOG.md](CHANGELOG.md) | Runtime history |
-| [UPSTREAM_ATTRIBUTION.md](UPSTREAM_ATTRIBUTION.md) | Absorbed upstream attribution |
 
 ## Privacy And Telemetry
 

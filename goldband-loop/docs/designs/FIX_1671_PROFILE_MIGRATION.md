@@ -3,8 +3,8 @@
 **Status:** SHIPPED
 **Branch:** fix-1671-profile-migration
 **Date:** 2026-05-23
-**Issue:** https://github.com/garrytan/goldband/issues/1671
-**Original PR that introduced the bug:** garrytan/goldband#1039 / commit `0a803f9` / v1.0.0.0 / 2026-04-18
+**Issue:** https://github.com/project-owner/goldband/issues/1671
+**Original PR that introduced the bug:** project-owner/goldband#1039 / commit `0a803f9` / v1.0.0.0 / 2026-04-18
 
 ## The problem
 
@@ -14,7 +14,7 @@
 
 The v1.0.0.0 migration moved the read path to `~/.goldband/developer-profile.json` but left the writer in `office-hours/SKILL.md.tmpl` writing to the legacy `~/.goldband/builder-profile.jsonl`. The `ensure_profile` stub created on first read has `sessions: []`; subsequent writes go to a file the reader never re-reads. Reader and writer disagree on storage.
 
-Full root-cause analysis (including RC2/RC3 follow-ups): https://github.com/garrytan/goldband/issues/1671
+Full root-cause analysis (including RC2/RC3 follow-ups): https://github.com/project-owner/goldband/issues/1671
 
 ## The fix
 
@@ -41,7 +41,7 @@ Make the writer use the same file the reader does.
 - **No new binary.** The owner binary for `developer-profile.json` is `goldband-developer-profile`; the writer belongs there as a subcommand. `--log-session` joins the binary's existing `--migrate` / `--derive` write-side subcommand boundary, not the `goldband-*-log` event-writer family. Verb name still matches `goldband-*-log`.
 - **No mkdir-locks.** Concurrent /office-hours calls have a read-modify-write race on `developer-profile.json`. The codebase accepts the same race in `goldband-config` (r-m-w on YAML, no lock). Not introduced by this fix; out of scope.
 - **No schema bump.** Schema stays at `schema_version: 1`. The fix doesn't change the schema, just makes the writer use it.
-- **No auto-reconcile for affected users.** Existing users with stranded `builder-profile.jsonl` entries don't get their past history auto-merged into `developer-profile.json`. On their next /office-hours run, the first new session lands in `welcome_back`; past data stays in the legacy file (still readable by other tools during deprecation). Most affected users have only a handful of stranded sessions so the loss is mostly aesthetic. Dropped the one-release-only reconcile pathway as net noise — Garry's "right-sized diff" voice.
+- **No auto-reconcile for affected users.** Existing users with stranded `builder-profile.jsonl` entries don't get their past history auto-merged into `developer-profile.json`. On their next /office-hours run, the first new session lands in `welcome_back`; past data stays in the legacy file (still readable by other tools during deprecation). Most affected users have only a handful of stranded sessions so the loss is mostly aesthetic. Dropped the one-release-only reconcile pathway as net noise — the maintainer's "right-sized diff" voice.
 - **No autoplan timeline rollup (RC2).** Separate concern, separate PR.
 - **No project-scope opt-in (RC3).** Separate concern, separate PR.
 - **No gbrain glob change.** The office-hours manifest still globs `~/.goldband/builder-profile.jsonl` for context; once new writes stop landing there, the snapshot goes cold. Update in a follow-up if it becomes a UX issue.

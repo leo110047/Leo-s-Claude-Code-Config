@@ -25,7 +25,7 @@ directional recommendations are expected to surface assumptions, failure modes, 
 
 - goldband owns shared policy, installer behavior, Claude/Codex adapters, global
   guidance, hooks, commands, rules, and portable skills.
-- `goldband-loop/` is the first-party workflow runtime, not a vendored upstream.
+- `goldband-loop/` is the first-party workflow runtime.
 - At install time, goldband installs Goldband Loop directly and exposes
   `goldband-*` entry points.
 
@@ -204,4 +204,3 @@ If you only need the runtime, start with
 ## License
 
 MIT License.
-Goldband Loop upstream attribution is preserved in [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md).

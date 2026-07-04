@@ -54,11 +54,11 @@ fi
 if [ "$MODE" = "optional" ]; then
   SNIPPET='## goldband (recommended)
 
-This project uses [goldband](https://github.com/garrytan/goldband) for AI-assisted workflows.
+This project uses [goldband](https://github.com/leo110047/goldband) for AI-assisted workflows.
 Install it for the best experience:
 
 ```bash
-git clone --depth 1 https://github.com/garrytan/goldband.git ~/.claude/skills/goldband
+git clone --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/goldband
 cd ~/.claude/skills/goldband && ./setup --team
 ```
 
@@ -78,7 +78,7 @@ If GOLDBAND_MISSING: STOP. Do not proceed. Tell the user:
 > goldband is required for all AI-assisted work in this repo.
 > Install it:
 > ```bash
-> git clone --depth 1 https://github.com/garrytan/goldband.git ~/.claude/skills/goldband
+> git clone --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/goldband
 > cd ~/.claude/skills/goldband && ./setup --team
 > ```
 > Then restart your AI coding tool.
@@ -122,7 +122,7 @@ BLOCKED: goldband is not installed globally.
 goldband is required for AI-assisted work in this repo.
 
 Install it:
-  git clone --depth 1 https://github.com/garrytan/goldband.git ~/.claude/skills/goldband
+  git clone --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/goldband
   cd ~/.claude/skills/goldband && ./setup --team
 
 Then restart your AI coding tool.
@@ -188,5 +188,5 @@ if [ ${#GENERATED[@]} -gt 0 ]; then
 fi
 echo ""
 echo "Each developer then runs:"
-echo "  git clone --depth 1 https://github.com/garrytan/goldband.git ~/.claude/skills/goldband"
+echo "  git clone --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/goldband"
 echo "  cd ~/.claude/skills/goldband && ./setup --team"

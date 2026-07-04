@@ -175,12 +175,12 @@ describe("render (end-to-end)", () => {
       markdown: `# Doc\n\nBody.`,
       cover: true,
       subtitle: "A subtitle",
-      author: "Garry Tan",
+      author: "Alex Chen",
     });
     expect(result.html).toContain(`class="cover"`);
     expect(result.html).toContain(`class="cover-title"`);
     expect(result.html).toContain("A subtitle");
-    expect(result.html).toContain("Garry Tan");
+    expect(result.html).toContain("Alex Chen");
   });
 
   test("omits cover block when cover=false", () => {
