@@ -1,10 +1,10 @@
 ---
-description: 切換或查詢 goldband workflow wrappers 的提問與說明語言。
+description: 切換或查詢 Goldband Loop 的提問與說明語言。
 ---
 
 # Goldband Language
 
-切換 `goldband-*` workflow wrappers 對使用者顯示的提問、建議、選項、摘要與指令說明語言。
+切換 Goldband Loop 對使用者顯示的提問、建議、選項、摘要與指令說明語言。
 
 ## Arguments
 
@@ -15,16 +15,13 @@ description: 切換或查詢 goldband workflow wrappers 的提問與說明語言
 
 ## Process
 
-1. 找 workflow config binary，依序檢查：
-   - `~/.codex/skills/workflow/bin/gstack-config`
-   - `~/.claude/skills/workflow/bin/gstack-config`
-   - `vendor/workflow/bin/gstack-config`（只有在 repo 內且前兩者不存在時）
-   - `~/.codex/skills/workflow/bin/workflow-config`
-   - `~/.claude/skills/workflow/bin/workflow-config`
-   - `vendor/workflow/bin/workflow-config`（只有在 repo 內且前面不存在時）
+1. 找 Goldband Loop config binary，依序檢查：
+   - `~/.codex/skills/goldband/bin/goldband-config`
+   - `~/.claude/skills/goldband/bin/goldband-config`
+   - `goldband-loop/bin/goldband-config`（只有在 repo 內且前兩者不存在時）
 
-2. 如果找不到 workflow config binary：
-   - 明確說 workflow runtime 尚未安裝
+2. 如果找不到 Goldband Loop config binary：
+   - 明確說 Goldband Loop 尚未安裝
    - 提示使用者先跑 `./install.sh workflow-auto` 或 `./install.sh all-with-workflow`
    - 停止，不要假裝切換成功
 
@@ -43,13 +40,10 @@ description: 切換或查詢 goldband workflow wrappers 的提問與說明語言
 
 5. 如果有合法參數：
    - 執行 `~/.claude/commands/scripts/set-goldband-language.sh set <normalized>`
-   - 這一步會同時更新：
-     - `goldband_language` config
-     - `~/.claude/skills/goldband-*` 與 `~/.codex/skills/goldband-*` 的 skill description
-     - description 來源必須是 repo 內 `shell/install/workflow.sh` 的 `workflow_wrapper_manifest()`，不要維護第二份清單
+   - 這一步會更新 `goldband_language` config
    - 再執行一次 `~/.claude/commands/scripts/set-goldband-language.sh get` 驗證
    - 根據新語言回報切換結果
-   - 補一句：若當前 session 還在吃舊 wrapper 狀態，重開 Claude Code / Codex 一次
+   - 補一句：若當前 session 還在吃舊狀態，重開 Claude Code / Codex 一次
 
 ## Output Style
 

@@ -67,7 +67,7 @@ Phase 0,那份文件是 source of truth,先讀它再動手。
 
 ## 邊界
 
-- 不動 `vendor/workflow/` 內任何檔案。
+- 不動後續 Phase 3 會吸收的 workflow runtime 原始碼。
 - 不新增外部服務或網路上傳;telemetry 一律留在本機檔案。
 - 不改 hook 的 allow/deny 行為本身,本 Phase 只做量測。
 

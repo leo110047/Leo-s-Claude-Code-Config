@@ -59,27 +59,26 @@ Also report Codex profile metadata when `~/.agents/skills/.goldband-profile` exi
 - active profile (`core` / `full`)
 - installed skill count
 
-### 2.5. Optional Workflow Runtime Checks
+### 2.5. Optional Goldband Loop Runtime Checks
 
-If the workflow runtime is installed, also check:
+If Goldband Loop is installed, also check:
 
-- `~/.claude/skills/workflow`
+- `~/.claude/skills/goldband`
   - `VERSION`
   - `setup`
-  - `careful/SKILL.md`
-  - `freeze/SKILL.md`
+  - `investigate/SKILL.md`
   - `review/SKILL.md`
   - `qa/SKILL.md`
-- `~/.codex/skills/workflow`
+- `~/.codex/skills/goldband`
   - `VERSION`
-- generated Codex workflow wrappers under `~/.codex/skills/` (`goldband-*`)
+- generated Codex Goldband Loop skills under `~/.codex/skills/` (`goldband-*`)
 
-If the workflow runtime is not installed, report INFO and continue.
+If Goldband Loop is not installed, report INFO and continue.
 
-If both goldband `careful-mode` / `freeze-mode` and workflow safety skills are available,
+If both goldband `careful-mode` / `freeze-mode` and Goldband Loop safety skills are available,
 report a WARNING with integration guidance:
 - use goldband for hard global guardrails
-- use workflow skills for task-local guardrails
+- use Goldband Loop skills for task-local guardrails
 
 ### 3. Hook Checks
 
@@ -129,9 +128,8 @@ Required files:
 - `ARCHITECTURE.md`
 - `codex/AGENTS.md`
 - `codex/rules/default.rules`
-- `WORKFLOW_VENDORING.md`
 - `scripts/verify-decision-guidance.sh`
-- `scripts/check-workflow-vendor-integration.sh`
+- `scripts/check-goldband-loop-inventory.mjs`
 - `scripts/verify-hook-script-references.py`
 
 Codex execpolicy:
@@ -142,8 +140,8 @@ Codex execpolicy:
 Decision guidance parity:
 - `bash scripts/verify-decision-guidance.sh` → should report `[OK]` for guidance, architecture boundary docs, commands, skills, docs, and context markers
 
-Workflow vendor integration:
-- `bash scripts/check-workflow-vendor-integration.sh` → should report `[OK]` for vendor version parity, complete goldband wrapper coverage, language-description manifest parity, workflow compatibility binaries, and the vendoring runbook
+Goldband Loop inventory:
+- `node scripts/check-goldband-loop-inventory.mjs` → should report `[OK]` for clean-home install inventory, runtime binaries, legacy command absence, and source symlink integrity
 
 Hook script references:
 - `python3 scripts/verify-hook-script-references.py` → should report `[OK]` for every hook script path referenced by `hooks/hooks.json`

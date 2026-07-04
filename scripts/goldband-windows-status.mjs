@@ -35,11 +35,11 @@ function statusLines(context, claudeProfile, codexProfile) {
     codexRulesLine(context),
     `  PowerShell launchers: ${powershellProfilesInstalled(context) ? 'installed' : 'missing'}`,
     installedLine(
-      'Workflow Claude runtime',
-      path.join(context.paths.claudeDir, 'skills', 'workflow'),
+      'Goldband Loop Claude runtime',
+      path.join(context.paths.claudeDir, 'skills', 'goldband'),
     ),
     installedLine(
-      'Workflow Codex runtime',
+      'Goldband Loop Codex runtime',
       context.paths.codexRuntimeWorkflowDir,
     ),
   ];

@@ -52,106 +52,73 @@ function repoSubsetEntries() {
 }
 
 function createFakeWorkflow(targetDir) {
-  const workflowDir = path.join(targetDir, 'vendor', 'workflow');
-  createWorkflowDirectories(workflowDir);
-  writeWorkflowMetadata(workflowDir);
-  writeWorkflowSkillFiles(workflowDir);
-  writeWorkflowBinFiles(workflowDir);
-  writeWorkflowSetup(workflowDir);
+  const loopDir = path.join(targetDir, 'goldband-loop');
+  createLoopDirectories(loopDir);
+  writeLoopMetadata(loopDir);
+  writeLoopSkillFiles(loopDir);
+  writeLoopBinFiles(loopDir);
+  writeLoopSetup(loopDir);
 }
 
-function createWorkflowDirectories(workflowDir) {
-  for (const dir of [
-    'bin',
-    'careful',
-    'freeze',
-    'investigate',
-    'review',
-    'qa',
-    'ship',
-    'browse',
-  ]) {
-    fs.mkdirSync(path.join(workflowDir, dir), { recursive: true });
+function createLoopDirectories(loopDir) {
+  for (const dir of ['bin', 'review', '.agents/skills', ...loopSkills()]) {
+    fs.mkdirSync(path.join(loopDir, dir), { recursive: true });
   }
 }
 
-function writeWorkflowMetadata(workflowDir) {
-  fs.writeFileSync(path.join(workflowDir, 'VERSION'), '0.0.0-test\n', 'utf8');
+function writeLoopMetadata(loopDir) {
+  fs.writeFileSync(path.join(loopDir, 'VERSION'), '0.0.0-test\n', 'utf8');
+  writeSkillFile(loopDir, 'goldband');
+}
+
+function writeLoopSkillFiles(loopDir) {
+  for (const skill of loopSkills()) {
+    writeSkillFile(path.join(loopDir, skill), `goldband-${skill}`);
+    writeSkillFile(
+      path.join(loopDir, '.agents', 'skills', `goldband-${skill}`),
+      `goldband-${skill}`,
+    );
+  }
   fs.writeFileSync(
-    path.join(workflowDir, 'SKILL.md'),
-    ['---', 'name: workflow', 'description: test fixture', '---', ''].join(
+    path.join(loopDir, 'review', 'checklist.md'),
+    '# test checklist\n',
+    'utf8',
+  );
+}
+
+function loopSkills() {
+  return ['investigate', 'review', 'qa', 'ship', 'browse', 'goldband-upgrade'];
+}
+
+function writeSkillFile(skillDir, skillName) {
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, 'SKILL.md'),
+    ['---', `name: ${skillName}`, 'description: test fixture', '---', ''].join(
       '\n',
     ),
     'utf8',
   );
 }
 
-function writeWorkflowSkillFiles(workflowDir) {
-  for (const skill of workflowSkills()) {
-    fs.writeFileSync(
-      path.join(workflowDir, skill, 'SKILL.md'),
-      skillFileContents(skill),
-      'utf8',
-    );
-  }
+function writeLoopBinFiles(loopDir) {
   fs.writeFileSync(
-    path.join(workflowDir, 'review', 'checklist.md'),
-    '# test checklist\n',
-    'utf8',
-  );
-}
-
-function workflowSkills() {
-  return ['careful', 'freeze', 'investigate', 'review', 'qa', 'ship', 'browse'];
-}
-
-function skillFileContents(skill) {
-  return [
-    '---',
-    `name: ${skill}`,
-    'description: test fixture',
-    '---',
-    skill === 'investigate' ? investigateSkillBody() : '',
-    skill === 'review' ? reviewSkillBody() : '',
-    '',
-  ].join('\n');
-}
-
-function investigateSkillBody() {
-  return [
-    '```bash',
-    'WORKFLOW_BIN="$HOME/.codex/skills/workflow/bin"',
-    '_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")',
-    'source <(~/.claude/skills/workflow/bin/workflow-repo-mode 2>/dev/null) || true',
-    '```',
-  ].join('\n');
-}
-
-function reviewSkillBody() {
-  return [
-    'Read `.claude/skills/review/checklist.md`.',
-    'Read `.agents/skills/workflow/review/checklist.md`.',
-  ].join('\n');
-}
-
-function writeWorkflowBinFiles(workflowDir) {
-  fs.writeFileSync(
-    path.join(workflowDir, 'bin', 'workflow-repo-mode'),
-    '#!/usr/bin/env bash\nexit 0\n',
+    path.join(loopDir, 'bin', 'goldband-repo-mode'),
+    '#!/usr/bin/env bash\nprintf "REPO_MODE=solo\\n"\n',
     { mode: 0o755 },
   );
   fs.writeFileSync(
-    path.join(workflowDir, 'bin', 'workflow-config'),
-    workflowConfigScript(),
+    path.join(loopDir, 'bin', 'goldband-config'),
+    goldbandConfigScript(),
     { mode: 0o755 },
   );
 }
 
-function workflowConfigScript() {
+function goldbandConfigScript() {
   return [
     '#!/usr/bin/env bash',
     'set -euo pipefail',
-    'STATE_DIR="${WORKFLOW_STATE_DIR:-$HOME/.workflow}"',
+    'STATE_DIR="${GOLDBAND_HOME:-$HOME/.goldband}"',
     'CONFIG_FILE="$STATE_DIR/config.yaml"',
     'case "${1:-}" in',
     '  get)',
@@ -162,19 +129,13 @@ function workflowConfigScript() {
     '    KEY="${2:?missing key}"',
     '    VALUE="${3:?missing value}"',
     '    mkdir -p "$STATE_DIR"',
-    '    if grep -qE "^${KEY}:" "$CONFIG_FILE" 2>/dev/null; then',
-    '      python3 - "$CONFIG_FILE" "$KEY" "$VALUE" <<\'PY\'',
-    ...pythonConfigUpdaterLines(),
-    'PY',
-    '    else',
-    '      echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"',
-    '    fi',
+    '    echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"',
     '    ;;',
     '  list)',
     '    cat "$CONFIG_FILE" 2>/dev/null || true',
     '    ;;',
     '  *)',
-    '    echo "Usage: workflow-config {get|set|list} [key] [value]" >&2',
+    '    echo "Usage: goldband-config {get|set|list} [key] [value]" >&2',
     '    exit 1',
     '    ;;',
     'esac',
@@ -182,47 +143,21 @@ function workflowConfigScript() {
   ].join('\n');
 }
 
-function pythonConfigUpdaterLines() {
-  return [
-    'from pathlib import Path',
-    'import sys',
-    'config_file = Path(sys.argv[1])',
-    'key = sys.argv[2]',
-    'value = sys.argv[3]',
-    'lines = config_file.read_text().splitlines() if config_file.exists() else []',
-    'updated = []',
-    'replaced = False',
-    'for line in lines:',
-    '    if line.startswith(f"{key}:"):',
-    '        updated.append(f"{key}: {value}")',
-    '        replaced = True',
-    '    else:',
-    '        updated.append(line)',
-    'if not replaced:',
-    '    updated.append(f"{key}: {value}")',
-    'config_file.write_text("\\n".join(updated) + "\\n")',
-  ];
-}
-
-function writeWorkflowSetup(workflowDir) {
-  fs.writeFileSync(path.join(workflowDir, 'setup'), workflowSetupScript(), {
+function writeLoopSetup(loopDir) {
+  fs.writeFileSync(path.join(loopDir, 'setup'), loopSetupScript(), {
     mode: 0o755,
   });
 }
 
-function workflowSetupScript() {
+function loopSetupScript() {
   return [
     '#!/usr/bin/env bash',
     'set -euo pipefail',
     'HOST="claude"',
-    'SKILL_PREFIX=0',
     ...setupArgParserLines(),
     'ROOT="$(cd "$(dirname "$0")" && pwd)"',
     'VERSION="$(cat "$ROOT/VERSION")"',
-    'mkdir -p "$HOME/.workflow/projects"',
-    'if [ "$SKILL_PREFIX" -eq 1 ]; then',
-    '  sed -i \'s/^name: review$/name: gstack-review/\' "$ROOT/review/SKILL.md"',
-    'fi',
+    'mkdir -p "$HOME/.goldband/projects"',
     '',
     ...installClaudeLines(),
     '',
@@ -239,8 +174,6 @@ function setupArgParserLines() {
     '  case "$1" in',
     '    --host) HOST="$2"; shift 2 ;;',
     '    --host=*) HOST="${1#--host=}"; shift ;;',
-    '    --prefix) SKILL_PREFIX=1; shift ;;',
-    '    --no-prefix) SKILL_PREFIX=0; shift ;;',
     '    *) shift ;;',
     '  esac',
     'done',
@@ -252,8 +185,19 @@ function installClaudeLines() {
   return [
     'install_claude() {',
     '  mkdir -p "$HOME/.claude/skills"',
-    '  rm -rf "$HOME/.claude/skills/workflow"',
-    '  ln -s "$ROOT" "$HOME/.claude/skills/workflow"',
+    '  rm -rf "$HOME/.claude/skills/goldband"',
+    '  cp -R "$ROOT" "$HOME/.claude/skills/goldband"',
+    '  rm -rf "$HOME/.claude/skills/_goldband-command"',
+    '  mkdir -p "$HOME/.claude/skills/_goldband-command"',
+    '  cp "$ROOT/SKILL.md" "$HOME/.claude/skills/_goldband-command/SKILL.md"',
+    '  for skill_dir in "$ROOT"/*; do',
+    '    [ -f "$skill_dir/SKILL.md" ] || continue',
+    '    skill_name="$(sed -n \'s/^name:[[:space:]]*//p\' "$skill_dir/SKILL.md" | head -1)"',
+    '    [ "$skill_name" = "goldband" ] && continue',
+    '    rm -rf "$HOME/.claude/skills/$skill_name"',
+    '    cp -R "$skill_dir" "$HOME/.claude/skills/$skill_name"',
+    '  done',
+    '  printf \'%s\\n\' "$VERSION" > "$HOME/.claude/skills/goldband/.installed-version"',
     '}',
   ];
 }
@@ -262,40 +206,20 @@ function installCodexLines() {
   return [
     'install_codex() {',
     '  mkdir -p "$HOME/.codex/skills"',
-    '  rm -rf "$HOME/.codex/skills/workflow"',
-    '  ln -s "$ROOT" "$HOME/.codex/skills/workflow"',
-    '  for skill in investigate review qa ship careful freeze; do',
-    ...generatedCodexSkillLines(),
+    '  rm -rf "$HOME/.codex/skills/goldband"',
+    '  mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/review"',
+    '  cp "$ROOT/SKILL.md" "$HOME/.codex/skills/goldband/SKILL.md"',
+    '  cp "$ROOT/bin/goldband-config" "$HOME/.codex/skills/goldband/bin/goldband-config"',
+    '  cp "$ROOT/bin/goldband-repo-mode" "$HOME/.codex/skills/goldband/bin/goldband-repo-mode"',
+    '  cp "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"',
+    '  for skill_dir in "$ROOT/.agents/skills"/goldband-*; do',
+    '    [ -f "$skill_dir/SKILL.md" ] || continue',
+    '    skill_name="$(basename "$skill_dir")"',
+    '    rm -rf "$HOME/.codex/skills/$skill_name"',
+    '    cp -R "$skill_dir" "$HOME/.codex/skills/$skill_name"',
     '  done',
-    '  printf \'%s\\n\' "$VERSION" > "$HOME/.codex/skills/workflow/.installed-version"',
+    '  printf \'%s\\n\' "$VERSION" > "$HOME/.codex/skills/goldband/.installed-version"',
     '}',
-  ];
-}
-
-function generatedCodexSkillLines() {
-  return [
-    '    target="$HOME/.codex/skills/workflow-$skill"',
-    '    rm -rf "$target"',
-    '    mkdir -p "$target"',
-    '    cat > "$target/SKILL.md" <<SKILL',
-    '---',
-    'name: workflow-$skill',
-    'description: generated test fixture',
-    '---',
-    '$(if [ "$skill" = "investigate" ]; then cat <<\'SKILL_BODY\'',
-    '```bash',
-    'WORKFLOW_ROOT="$HOME/.codex/skills/workflow"',
-    '[ -n "$_ROOT" ] && [ -d "$_ROOT/.agents/skills/workflow" ] && WORKFLOW_ROOT="$_ROOT/.agents/skills/workflow"',
-    'WORKFLOW_BIN="$WORKFLOW_ROOT/bin"',
-    '_PROACTIVE=$($WORKFLOW_BIN/workflow-config get proactive 2>/dev/null || echo "true")',
-    '```',
-    'SKILL_BODY',
-    'fi)',
-    '$(if [ "$skill" = "review" ]; then cat <<\'SKILL_BODY\'',
-    'Read `.agents/skills/workflow/review/checklist.md`.',
-    'SKILL_BODY',
-    'fi)',
-    'SKILL',
   ];
 }
 

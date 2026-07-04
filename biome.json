@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!vendor/**",
+      "!goldband-loop/**",
       "!node_modules/**",
       "!dist/**",
       "!build/**"

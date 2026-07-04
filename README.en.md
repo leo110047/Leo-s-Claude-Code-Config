@@ -10,7 +10,7 @@ English | [中文](README.md)
 
 goldband is a local configuration pack for Claude Code and Codex. It connects
 shared working guidance, hooks, commands, rules, portable skills, and
-the bundled workflow runtime to your local environment.
+Goldband Loop to your local environment.
 
 It does three main jobs:
 
@@ -21,17 +21,16 @@ It does three main jobs:
 
 directional recommendations are expected to surface assumptions, failure modes, alternatives, and unknowns, and directional work defaults to the healthiest maintainable path.
 
-## goldband vs workflow
+## goldband vs Goldband Loop
 
 - goldband owns shared policy, installer behavior, Claude/Codex adapters, global
   guidance, hooks, commands, rules, and portable skills.
-- `vendor/workflow/` is the bundled high-level workflow runtime.
-- At install time, goldband exposes workflow runtime content as `goldband-*`
-  entry points.
+- `goldband-loop/` is the first-party workflow runtime, not a vendored upstream.
+- At install time, goldband installs Goldband Loop directly and exposes
+  `goldband-*` entry points.
 
-Maintenance details live in [ARCHITECTURE.md](ARCHITECTURE.md) and
-[WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md). Runtime-specific docs live in
-[vendor/workflow/README.md](vendor/workflow/README.md).
+Maintenance details live in [ARCHITECTURE.md](ARCHITECTURE.md). Runtime-specific
+docs live in [goldband-loop/README.md](goldband-loop/README.md).
 
 ## Installation
 
@@ -84,7 +83,7 @@ Dependencies:
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
 - Claude assets: `commands/`, `rules/`, `hooks/`, portable skills
 - Codex assets: config, profiles, rules, hooks, custom agents, portable skills
-- Workflow runtime: Claude uses `~/.claude/skills/workflow`; Codex uses `~/.codex/skills/workflow`
+- Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
 
 Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
@@ -165,8 +164,8 @@ safe to fast-forward.
 Direct config:
 
 ```bash
-~/.codex/skills/workflow/bin/gstack-config set goldband_language zh-TW
-~/.codex/skills/workflow/bin/gstack-config set goldband_language en
+~/.codex/skills/goldband/bin/goldband-config set goldband_language zh-TW
+~/.codex/skills/goldband/bin/goldband-config set goldband_language en
 ```
 
 Restart Claude Code or Codex if the current session does not pick up the change.
@@ -176,10 +175,10 @@ Restart Claude Code or Codex if the current session does not pick up the change.
 - You do not use Claude Code or Codex.
 - You only want a generic project template.
 - You do not want hooks, permissions, repo-linked install, or startup self-update.
-- You only want the workflow runtime.
+- You only want the Goldband Loop runtime.
 
 If you only need the runtime, start with
-[vendor/workflow/README.md](vendor/workflow/README.md).
+[goldband-loop/README.md](goldband-loop/README.md).
 
 ## Troubleshooting
 
@@ -195,3 +194,4 @@ If you only need the runtime, start with
 ## License
 
 MIT License.
+Goldband Loop upstream attribution is preserved in [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md).

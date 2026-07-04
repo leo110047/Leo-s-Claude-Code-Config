@@ -41,6 +41,10 @@ jobs:
       - name: Check Codex portable baseline
         run: bash scripts/check-codex-portability.sh
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
       - name: Install Node dependencies
         run: npm install
 
@@ -60,8 +64,17 @@ jobs:
           echo "=== Verifying decision guidance parity ==="
           bash scripts/verify-decision-guidance.sh
 
-      - name: Check workflow vendor integration
-        run: bash scripts/check-workflow-vendor-integration.sh
+      - name: Install Goldband Loop dependencies
+        run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Install Goldband Loop Playwright browser
+        run: cd goldband-loop && bunx playwright install --with-deps chromium
+
+      - name: Check Goldband Loop inventory
+        run: node scripts/check-goldband-loop-inventory.mjs
+
+      - name: Test Goldband Loop free suite
+        run: cd goldband-loop && bun run test:free
 
       - name: Test workflow installer integration
         run: bash scripts/test-workflow-integration.sh

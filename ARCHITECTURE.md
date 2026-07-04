@@ -1,19 +1,23 @@
 # goldband Architecture
 
-This document explains the responsibility boundary between goldband and the vendored `workflow` runtime.
+This document explains the boundary between goldband shared policy and
+Goldband Loop, the first-party workflow runtime in this repository.
 
 ## System Shape
 
-goldband is not the `workflow` product itself. It is the integration and policy layer that:
+goldband is a local configuration and workflow distribution for Claude Code and
+Codex. It has two first-party layers:
 
-- defines shared engineering guidance for Claude Code and Codex
-- installs repo-linked commands, rules, hooks, and portable skills
-- adapts the vendored `workflow` runtime into `goldband-*` user-facing entry points
-- keeps Claude-side and Codex-side behavior aligned
+- shared policy and host adapters, owned by the root repo
+- Goldband Loop runtime, owned by `goldband-loop/`
+
+The user-facing workflow surface is `goldband-*`. The installer no longer wraps
+or hides an upstream runtime; it installs Goldband Loop directly and verifies the
+result against a machine-readable inventory.
 
 ## Responsibility Boundary
 
-### goldband owns
+### Root goldband owns
 
 - repository-level guidance and adapter docs:
   - `AGENTS.md`
@@ -30,52 +34,63 @@ goldband is not the `workflow` product itself. It is the integration and policy 
 - portable shared skills:
   - `skills/global/`
   - `skills/projects/`
+- validation gates:
+  - `scripts/check-goldband-loop-inventory.mjs`
+  - `.github/workflows/validate.yml`
 
-### vendor/workflow owns
+### goldband-loop owns
 
-- the bundled high-level runtime source tree
-- workflow-native docs, packaging, release notes, and build metadata
-- workflow-native skill implementations and runtime binaries
-- workflow-specific architecture and product philosophy
+- workflow runtime source and generated host skill surfaces
+- workflow-native docs, build metadata, tests, browser/PDF/design/iOS tooling
+- runtime binaries under `goldband-loop/bin/goldband-*`
+- the Goldband Loop inventory at `goldband-loop/inventory.json`
+- inherited upstream MIT license text and attribution
 
-Concrete signals that `vendor/workflow` is a self-contained upstream project include:
+Concrete ownership signals include:
 
-- [vendor/workflow/package.json](vendor/workflow/package.json)
-- [vendor/workflow/bun.lock](vendor/workflow/bun.lock)
-- [vendor/workflow/README.md](vendor/workflow/README.md)
-- [vendor/workflow/ARCHITECTURE.md](vendor/workflow/ARCHITECTURE.md)
-- [vendor/workflow/CHANGELOG.md](vendor/workflow/CHANGELOG.md)
+- [goldband-loop/package.json](goldband-loop/package.json)
+- [goldband-loop/bun.lock](goldband-loop/bun.lock)
+- [goldband-loop/README.md](goldband-loop/README.md)
+- [goldband-loop/ARCHITECTURE.md](goldband-loop/ARCHITECTURE.md)
+- [goldband-loop/inventory.json](goldband-loop/inventory.json)
 
 ## Integration Contract
 
-goldband consumes the vendored runtime through the installer layer, primarily in [shell/install/workflow.sh](shell/install/workflow.sh).
-
+goldband installs Goldband Loop through [shell/install/workflow.sh](shell/install/workflow.sh).
 That installer is responsible for:
 
-- locating the runtime source
-- installing it into Claude / Codex runtime locations
-- generating `goldband-*` wrappers from workflow skills
-- hiding workflow root entries when goldband wants curated user-facing names
-- keeping wrapper language and runtime path rewrites consistent
+- locating `goldband-loop/` or an explicit `GOLDBAND_LOOP_DIR`
+- installing Claude runtime assets at `~/.claude/skills/goldband`
+- installing Codex runtime assets at `~/.codex/skills/goldband`
+- exposing workflow skills as `goldband-*`
+- cleaning legacy runtime roots and generated entries from older installs
+- preserving `~/.goldband` as the runtime state directory
+- migrating legacy `~/.workflow` and `~/.gstack` config/state into
+  `~/.goldband` without overwriting newer Goldband Loop files
 
-The key point is:
+The inventory gate proves the contract. It runs a clean-home install, lists the
+actual Claude/Codex skill entries and runtime binaries, and fails on missing
+entries, extra entries, legacy commands, or old runtime prefixes.
 
-- `workflow` provides the runtime and skill source
-- goldband provides the curated installation, naming, policy, and host integration
+## Validation Gates
 
-## Why the runtime is vendored
+Root goldband and Goldband Loop use separate gates because they have different
+toolchains and file-shape rules.
 
-`vendor/workflow` lives inside this repo so goldband can:
-
-- ship one repo that installs both shared policy and bundled runtime
-- pin a tested runtime snapshot
-- apply integration-layer wrapper generation without making the end user manage a second checkout
-
-This makes the repository boundary more important, not less. The vendored runtime should be treated as an upstream subtree/source snapshot, while goldband-specific policy and adapters should remain outside it.
+- Root policy, installer, hooks, commands, and portable skills are covered by
+  `node scripts/check-code-style.mjs` and the root validation scripts.
+- `goldband-loop/` is excluded from the root code-style scanner because it owns
+  a runtime-specific Bun test suite and generated skill/docs surfaces.
+- CI still treats `goldband-loop/` as first-party code: it installs the runtime
+  dependencies, installs the Playwright browser asset, runs
+  `node scripts/check-goldband-loop-inventory.mjs`, and then runs
+  `cd goldband-loop && bun run test:free`.
 
 ## Maintenance Rules
 
-- Do not duplicate workflow product docs in root README; link to `vendor/workflow/README.md` or this file instead.
-- Do not treat workflow internals as goldband policy sources of truth.
-- When changing wrapper behavior or install paths, document the change in root docs and keep the boundary explicit.
-- When updating `vendor/workflow`, follow [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md) and keep `workflow_wrapper_manifest()` as the single source of truth for goldband wrapper aliases and descriptions.
+- Treat `goldband-loop/` as first-party source, not a vendored upstream snapshot.
+- Do not recreate wrapper manifests or hidden-name installer behavior.
+- When adding or removing a Goldband Loop entry, update `goldband-loop/inventory.json`
+  and run `node scripts/check-goldband-loop-inventory.mjs`.
+- Keep Claude and Codex install paths aligned before claiming dual-tool parity.
+- Keep attribution for the absorbed upstream runtime in the Goldband Loop docs.

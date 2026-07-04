@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# goldband-builder-profile — LEGACY SHIM.
+#
+# Superseded by bin/goldband-developer-profile. This binary now delegates to
+# `goldband-developer-profile --read` to keep /office-hours working during the
+# transition. When all call sites have been updated, this file can be removed.
+#
+# The migration from ~/.goldband/builder-profile.jsonl to the unified
+# ~/.goldband/developer-profile.json happens automatically on first read —
+# see bin/goldband-developer-profile --migrate for details.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/goldband-developer-profile" --read "$@"

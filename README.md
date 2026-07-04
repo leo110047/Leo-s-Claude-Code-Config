@@ -19,14 +19,14 @@ commands、rules、portable skills 和 workflow runtime 接到你的本機環境
 
 方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數；方向判斷預設優先健康且可維護的路徑。
 
-## goldband 與 workflow 的邊界
+## goldband 與 Goldband Loop 的邊界
 
 - goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、rules 和 portable skills。
-- `vendor/workflow/` 是被 bundle 進來的高階 workflow runtime。
-- 安裝時 goldband 會把 workflow runtime 轉成 `goldband-*` 入口。
+- `goldband-loop/` 是 first-party workflow runtime,不是 vendored upstream。
+- 安裝時 goldband 會直接安裝 Goldband Loop,暴露 `goldband-*` 入口。
 
-維護細節看 [ARCHITECTURE.md](ARCHITECTURE.md) 和 [WORKFLOW_VENDORING.md](WORKFLOW_VENDORING.md)。
-workflow runtime 自己的說明看 [vendor/workflow/README.md](vendor/workflow/README.md)。
+維護細節看 [ARCHITECTURE.md](ARCHITECTURE.md)。
+Goldband Loop 自己的說明看 [goldband-loop/README.md](goldband-loop/README.md)。
 
 ## 安裝
 
@@ -81,7 +81,7 @@ pwsh -File .\install.ps1 status
 - Claude assets：`commands/`、`rules/`、`hooks/`、portable skills
 - Codex assets：config、profiles、rules、hooks、custom agents、portable skills
 - Git style gate（選配）：`git-hooks/` -> global `core.hooksPath`
-- workflow runtime：Claude 在 `~/.claude/skills/workflow`，Codex 在 `~/.codex/skills/workflow`
+- Goldband Loop runtime：Claude 在 `~/.claude/skills/goldband`，Codex 在 `~/.codex/skills/goldband`
 
 全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 `goldband-*` workflow、commands、skills、hooks 和 rules。
 
@@ -172,8 +172,8 @@ git pull --ff-only
 也可以直接設定：
 
 ```bash
-~/.codex/skills/workflow/bin/gstack-config set goldband_language zh-TW
-~/.codex/skills/workflow/bin/gstack-config set goldband_language en
+~/.codex/skills/goldband/bin/goldband-config set goldband_language zh-TW
+~/.codex/skills/goldband/bin/goldband-config set goldband_language en
 ```
 
 切換後若目前 session 沒吃到設定，重開 Claude Code 或 Codex。
@@ -183,9 +183,9 @@ git pull --ff-only
 - 你不用 Claude Code 或 Codex。
 - 你只想要普通專案模板。
 - 你不想要 hooks、permissions、repo-linked install 或啟動前 self-update。
-- 你只想要 workflow runtime 本身。
+- 你只想要 Goldband Loop runtime 本身。
 
-只需要 runtime 時，直接看 [vendor/workflow/README.md](vendor/workflow/README.md)。
+只需要 runtime 時，直接看 [goldband-loop/README.md](goldband-loop/README.md)。
 
 ## 疑難排解
 
@@ -201,3 +201,4 @@ git pull --ff-only
 ## 授權
 
 MIT License.
+Goldband Loop 的原上游 attribution 保留在 [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md)。

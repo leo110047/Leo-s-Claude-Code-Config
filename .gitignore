@@ -35,5 +35,4 @@ codex/local/rules/*
 # Node
 node_modules/
 .agents/
-.gstack/
-.workflow/
+.goldband/

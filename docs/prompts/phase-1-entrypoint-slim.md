@@ -2,7 +2,7 @@
 
 你是在 goldband repo 工作的實作 agent。計畫背景:
 `docs/ARCHITECTURE_REVIEW_2026_07.md` 第三部分 Phase 1(source of truth,
-先讀)。本 Phase 與 gstack 整合無關,可獨立進行。
+先讀)。本 Phase 與後續 Goldband Loop 整合無關,可獨立進行。
 
 ## 任務目標
 
@@ -12,9 +12,10 @@ review 入口收斂到一個、裁剪通用知識 skills、清 `contexts/` 死�
 
 ## 現況(已驗證)
 
-- 實際 session 同時暴露六個 review 入口:`gstack-review`、`goldband-review`、
-  `code-review`(legacy command)、`code-review-skill`(portable skill)、
-  `review`、加上 wrapper。`gstack-*` 的露出問題屬於 Phase 3,本 Phase 不處理。
+- 實際 session 同時暴露六個 review 入口:舊 runtime review 入口、
+  `goldband-review`、`code-review`(legacy command)、
+  `code-review-skill`(portable skill)、`review`、加上 wrapper。舊 runtime
+  前綴的露出問題屬於 Phase 3,本 Phase 不處理。
 - legacy commands 在 `commands/`:`code-review.md`、`checkpoint.md`、
   `map-codebase.md` 自己標注為 legacy。
 - 通用知識 skills 在 `skills/global/`。
@@ -46,7 +47,7 @@ review 入口收斂到一個、裁剪通用知識 skills、清 `contexts/` 死�
 
 ## 邊界
 
-- 不動 `vendor/workflow/`。
+- 不動後續 Phase 3 會吸收的 workflow runtime 原始碼。
 - 不改 hook 的 allow/deny 行為。
 - 刪除只用 git rm,不留改名殘骸。
 

@@ -365,8 +365,8 @@ function readText(root, ...parts) {
 function workflowScenario({ tmpHome, tmpRoot }) {
   console.log('[2/7] windows-mode workflow');
   run(process.execPath, installArgs(tmpRoot, tmpHome, 'all-with-workflow'));
-  assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'skills', 'workflow')));
-  assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'skills', 'workflow')));
+  assert.ok(fs.existsSync(path.join(tmpHome, '.claude', 'skills', 'goldband')));
+  assert.ok(fs.existsSync(path.join(tmpHome, '.codex', 'skills', 'goldband')));
   assert.ok(
     fs.existsSync(
       path.join(
@@ -379,8 +379,8 @@ function workflowScenario({ tmpHome, tmpRoot }) {
     ),
   );
   assert.match(
-    readText(tmpRoot, 'vendor', 'workflow', 'review', 'SKILL.md'),
-    /^name: review$/m,
+    readText(tmpRoot, 'goldband-loop', 'review', 'SKILL.md'),
+    /^name: goldband-review$/m,
   );
 }
 
@@ -424,7 +424,7 @@ function statusScenario({ tmpHome, tmpRoot }) {
     /Codex requirements: staged \(Windows enforcement path unverified\)/,
   );
   assert.match(status.stdout, /Codex rules: installed/);
-  assert.match(status.stdout, /Workflow Claude runtime: installed/);
+  assert.match(status.stdout, /Goldband Loop Claude runtime: installed/);
 }
 
 function selfUpdateGuardrailScenario({ tmpHome, tmpRoot }) {

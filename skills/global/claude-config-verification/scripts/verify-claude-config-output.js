@@ -44,7 +44,7 @@ function printWorkflowSummary(summary) {
     return;
   }
   console.log(
-    `workflow:  Claude=${yesNo(summary.workflowInstall.claudeInstalled)} Codex=${yesNo(summary.workflowInstall.codexInstalled)} State=${yesNo(summary.workflowInstall.stateInstalled)}`,
+    `Goldband Loop: Claude=${yesNo(summary.workflowInstall.claudeInstalled)} Codex=${yesNo(summary.workflowInstall.codexInstalled)} State=${yesNo(summary.workflowInstall.stateInstalled)}`,
   );
 }
 
@@ -87,8 +87,8 @@ function printWorkflow(summary) {
   }
 
   console.log('');
-  console.log('workflow:');
-  printWorkflowRuntime('Claude install', summary.workflowInstall, 'claude');
+  console.log('Goldband Loop:');
+  printWorkflowRuntime('Claude runtime', summary.workflowInstall, 'claude');
   printWorkflowRuntime('Codex runtime', summary.workflowInstall, 'codex');
 }
 

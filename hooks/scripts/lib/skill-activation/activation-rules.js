@@ -213,7 +213,7 @@ const RULES = [
   },
 ];
 
-const GSTACK_RULES = [
+const GOLDBAND_LOOP_RULES = [
   {
     skill: 'goldband-investigate',
     priority: 'high',
@@ -307,10 +307,10 @@ function isWorkflowPackAvailable() {
   const cwd = process.cwd();
   const home = process.env.HOME || '';
   return Boolean(
-    findUpward(cwd, path.join('.claude', 'skills', 'workflow', 'SKILL.md')) ||
+    findUpward(cwd, path.join('.claude', 'skills', 'goldband', 'SKILL.md')) ||
       (home &&
         fs.existsSync(
-          path.join(home, '.claude', 'skills', 'workflow', 'SKILL.md'),
+          path.join(home, '.claude', 'skills', 'goldband', 'SKILL.md'),
         )),
   );
 }
@@ -383,7 +383,7 @@ function matchPrompt(prompt) {
   if (!normalizedPrompt) return [];
 
   const activeRules = isWorkflowPackAvailable()
-    ? [...RULES, ...GSTACK_RULES]
+    ? [...RULES, ...GOLDBAND_LOOP_RULES]
     : RULES;
   const matches = [];
   for (const rule of activeRules) {

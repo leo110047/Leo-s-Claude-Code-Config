@@ -1,11 +1,12 @@
 # Phase 4 實作交辦:eval 與 failure taxonomy 接 CI
 
 你是在 goldband repo 工作的實作 agent。Source of truth:
-`docs/ARCHITECTURE_REVIEW_2026_07.md` Phase 4 與 ADR-002/ADR-003。
+`docs/ARCHITECTURE_REVIEW_2026_07.md` Phase 4 與 ADR-002。
 
 ## 前置條件(不滿足就停止並回報)
 
-- Phase 3 已合入:gstack 已成為第一方程式碼,保留清單確定。
+- Phase 3 已合入:Goldband Loop 已成為 first-party workflow runtime,
+  Goldband Loop inventory 確定。
 
 ## 任務目標
 
@@ -16,7 +17,7 @@ eval、hook policy 的 golden dataset 回歸、failure taxonomy 與 regression
 
 ## 現況(已驗證)
 
-- 繼承自 gstack 的 eval harness 在原 `package.json` scripts:`test:evals`、
+- 繼承自原 runtime 的 eval harness 在原 `package.json` scripts:`test:evals`、
   `test:e2e`、`test:gate`、`test:periodic` 等(LLM eval、routing e2e、
   codex/gemini e2e),需要 API 金鑰與費用。
 - `hooks/scripts/tools/replay-hook-router.js` 已存在,可重放 hook 輸入,
@@ -27,7 +28,8 @@ eval、hook policy 的 golden dataset 回歸、failure taxonomy 與 regression
 ## 實作範圍
 
 1. **eval 接 CI**:
-   - 把 eval 範圍縮到 ADR-003 keep 清單,刪除或停用指向已刪元件的 eval。
+   - 把 eval 指向改名後的 Goldband Loop runtime;若某些 eval
+     需要外部服務、API 金鑰或高成本環境,明確標成 gated/optional,不要假裝 CI 已覆蓋。
    - 設計 CI 觸發策略(考量費用:例如 PR 上跑 gate 子集、排程跑完整集),
      寫進 workflow 檔並在文件說明。
    - **金鑰與預算是維護者決策**:先盤點需要哪些金鑰、估每次執行費用,

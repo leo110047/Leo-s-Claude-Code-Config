@@ -25,7 +25,7 @@ show_status() {
     echo -e "${BLUE}Git style gate 狀態${NC}"
     show_git_style_gate_status
     echo ""
-    echo -e "${BLUE}workflow 狀態${NC}"
+    echo -e "${BLUE}Goldband Loop 狀態${NC}"
     show_workflow_status
 }
 
@@ -243,14 +243,14 @@ show_git_style_gate_status() {
 }
 
 show_workflow_status() {
-    local workflow_claude_dir="$HOME/.claude/skills/workflow"
-    local workflow_codex_dir="$HOME/.codex/skills/workflow"
-    show_workflow_runtime_status "Claude install" "$workflow_claude_dir"
+    local workflow_claude_dir="$HOME/.claude/skills/goldband"
+    local workflow_codex_dir="$HOME/.codex/skills/goldband"
+    show_workflow_runtime_status "Claude runtime" "$workflow_claude_dir"
     show_workflow_runtime_status "Codex runtime" "$workflow_codex_dir"
     if [ -d "$workflow_codex_dir" ]; then
         local generated_count
         generated_count=$(find "$HOME/.codex/skills" -maxdepth 1 -name 'goldband-*' 2>/dev/null | wc -l | tr -d ' ')
-        echo -e "  ${GREEN}[OK]${NC} workflow Codex generated skills: ${generated_count:-0}"
+        echo -e "  ${GREEN}[OK]${NC} Goldband Loop Codex skills: ${generated_count:-0}"
     fi
     show_workflow_state_dir_status
     show_goldband_wrapper_language_status
@@ -262,17 +262,17 @@ show_workflow_runtime_status() {
     local workflow_version
     if [ -d "$workflow_dir" ]; then
         workflow_version="$(read_workflow_version "$workflow_dir" 2>/dev/null || echo "unknown")"
-        echo -e "  ${GREEN}[OK]${NC} workflow $label (${workflow_version})"
+        echo -e "  ${GREEN}[OK]${NC} Goldband Loop $label (${workflow_version})"
     else
-        echo -e "  ${YELLOW}[未安裝]${NC} workflow $label"
+        echo -e "  ${YELLOW}[未安裝]${NC} Goldband Loop $label"
     fi
 }
 
 show_workflow_state_dir_status() {
-    if [ -d "$HOME/.workflow/projects" ]; then
-        echo -e "  ${GREEN}[OK]${NC} workflow state dir (~/.workflow/projects)"
+    if [ -d "$HOME/.goldband/projects" ]; then
+        echo -e "  ${GREEN}[OK]${NC} Goldband Loop state dir (~/.goldband/projects)"
     else
-        echo -e "  ${YELLOW}[未安裝]${NC} workflow state dir (~/.workflow/projects)"
+        echo -e "  ${YELLOW}[未安裝]${NC} Goldband Loop state dir (~/.goldband/projects)"
     fi
 }
 
@@ -280,6 +280,6 @@ show_goldband_wrapper_language_status() {
     local workflow_config_bin goldband_language
     if workflow_config_bin="$(find_workflow_config_bin 2>/dev/null)"; then
         goldband_language="$(read_goldband_wrapper_language "$workflow_config_bin")"
-        echo -e "  ${GREEN}[OK]${NC} goldband wrapper language (${goldband_language})"
+        echo -e "  ${GREEN}[OK]${NC} Goldband Loop language (${goldband_language})"
     fi
 }

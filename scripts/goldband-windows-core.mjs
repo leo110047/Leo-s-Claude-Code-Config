@@ -148,11 +148,11 @@ function buildContextPaths(homeDir) {
     codexHooksDir: path.join(codexDir, 'hooks'),
     codexRulesDir: path.join(codexDir, 'rules'),
     codexRuntimeSkillsDir: path.join(codexDir, 'skills'),
-    codexRuntimeWorkflowDir: path.join(codexDir, 'skills', 'workflow'),
+    codexRuntimeWorkflowDir: path.join(codexDir, 'skills', 'goldband'),
     agentsDir,
     agentsSkillsDir: path.join(agentsDir, 'skills'),
     codexSkillProfileFile: path.join(agentsDir, 'skills', '.goldband-profile'),
-    workflowStateDir: path.join(homeDir, '.workflow'),
+    workflowStateDir: path.join(homeDir, '.goldband'),
     powershellProfiles: buildPowerShellProfiles(homeDir),
   };
 }

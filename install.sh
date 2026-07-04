@@ -81,11 +81,11 @@ show_help_codex_options() {
     echo "  codex-rules  只安裝 ~/.codex/rules"
     echo "  repair-codex-rules 將本機 approvals 從 tracked rules 移到 ignored local overlay"
     echo "  codex-skills 安裝 Codex portable skills 到 ~/.agents/skills"
-    echo "  workflow      安裝內建 workflow 到 Claude Code"
-    echo "  workflow-codex 安裝內建 workflow 到 Codex"
-    echo "  workflow-auto 安裝 workflow 到自動偵測到的 host"
+    echo "  workflow      安裝 Goldband Loop 到 Claude Code"
+    echo "  workflow-codex 安裝 Goldband Loop 到 Codex"
+    echo "  workflow-auto 安裝 Goldband Loop 到自動偵測到的 host"
     echo "  all-tools   安裝 Claude all-full + Codex full"
-    echo "  all-with-workflow 安裝 Claude + Codex 全組件，並安裝 workflow runtime"
+    echo "  all-with-workflow 安裝 Claude + Codex 全組件，並安裝 Goldband Loop"
     echo "  uninstall   移除所有安裝項目（含 profile links）"
     echo "  status      檢查安裝狀態"
     echo "  help        顯示此幫助"
@@ -101,9 +101,9 @@ show_help_examples() {
     echo "  ./install.sh skills-core  # 只裝核心 skills（建議日常）"
     echo "  ./install.sh skills-full  # 全量 skills"
     echo "  ./install.sh codex-full   # Codex 全量設定"
-    echo "  ./install.sh workflow       # 安裝 workflow 到 Claude Code"
-    echo "  ./install.sh workflow-codex # 安裝 workflow 到 Codex"
-    echo "  WORKFLOW_REPO_DIR=../runtime ./install.sh all-with-workflow"
+    echo "  ./install.sh workflow       # 安裝 Goldband Loop 到 Claude Code"
+    echo "  ./install.sh workflow-codex # 安裝 Goldband Loop 到 Codex"
+    echo "  GOLDBAND_LOOP_DIR=../goldband-loop ./install.sh all-with-workflow"
     echo "  ./install.sh all-tools    # Claude + Codex 全部安裝"
     echo "  ./install.sh unity        # 在 Unity 專案中安裝"
     echo "  ./install.sh status       # 檢查狀態"
@@ -294,7 +294,7 @@ for arg in "$@"; do
             install_all_tools
             ;;
         all-with-workflow)
-            echo -e "${GREEN}安裝 Claude + Codex 全組件 + workflow...${NC}"
+            echo -e "${GREEN}安裝 Claude + Codex 全組件 + Goldband Loop...${NC}"
             echo ""
             install_all_with_workflow
             ;;

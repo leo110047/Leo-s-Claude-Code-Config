@@ -45,25 +45,25 @@ fi
 
 check_contains "ARCHITECTURE.md" "## Responsibility Boundary" "architecture doc defines responsibility boundary"
 check_contains "ARCHITECTURE.md" "## Integration Contract" "architecture doc defines integration contract"
-check_contains "ARCHITECTURE.md" "vendor/workflow owns" "architecture doc explains workflow ownership"
-check_contains "WORKFLOW_VENDORING.md" "workflow_wrapper_manifest()" "workflow vendoring runbook keeps wrapper manifest as source of truth"
-check_contains "WORKFLOW_VENDORING.md" "## Error Handling" "workflow vendoring runbook includes error handling"
+check_contains "ARCHITECTURE.md" "goldband-loop owns" "architecture doc explains Goldband Loop ownership"
+check_contains "ARCHITECTURE.md" "inventory gate" "architecture doc explains inventory gate"
+check_contains "goldband-loop/inventory.json" "\"runtimeRoot\": \"goldband\"" "Goldband Loop inventory declares runtime root"
 
 check_contains "skills/global/systematic-debugging/SKILL.md" "healthiest complete fix" "systematic-debugging skill keeps healthiest complete fix policy"
-check_contains "vendor/workflow/investigate/SKILL.md" "healthiest complete fix" "workflow investigate skill defaults debugging toward the healthiest complete fix"
-check_contains "vendor/workflow/investigate/SKILL.md" "blast radius intentional" "workflow investigate skill constrains blast radius without minimal-fix bias"
-check_contains "vendor/workflow/investigate/SKILL.md.tmpl" "healthiest complete fix" "workflow investigate template defaults debugging toward the healthiest complete fix"
-check_contains "vendor/workflow/investigate/SKILL.md.tmpl" "blast radius intentional" "workflow investigate template constrains blast radius without minimal-fix bias"
-check_contains "vendor/workflow/plan-eng-review/SKILL.md" "Healthiest maintainable path" "plan-eng-review defaults recommendations toward the healthiest maintainable path"
-check_contains "vendor/workflow/plan-eng-review/SKILL.md.tmpl" "Healthiest maintainable path" "plan-eng-review template defaults recommendations toward the healthiest maintainable path"
-check_contains "vendor/workflow/plan-ceo-review/SKILL.md" "Healthiest maintainable path" "plan-ceo-review defaults recommendations toward the healthiest maintainable path"
-check_contains "vendor/workflow/plan-ceo-review/SKILL.md.tmpl" "Healthiest maintainable path" "plan-ceo-review template defaults recommendations toward the healthiest maintainable path"
-check_contains "vendor/workflow/qa/SKILL.md" "healthiest complete fix" "workflow qa uses healthiest complete fix wording"
-check_contains "vendor/workflow/qa/SKILL.md.tmpl" "healthiest complete fix" "workflow qa template uses healthiest complete fix wording"
-check_contains "vendor/workflow/design-review/SKILL.md" "healthiest complete fix" "workflow design-review uses healthiest complete fix wording"
-check_contains "vendor/workflow/design-review/SKILL.md.tmpl" "healthiest complete fix" "workflow design-review template uses healthiest complete fix wording"
-check_contains "vendor/workflow/ship/SKILL.md" "healthiest complete fix" "workflow ship handoff points to the healthiest complete fix"
-check_contains "vendor/workflow/scripts/resolvers/preamble.ts" "healthiest complete fix" "workflow preamble points investigate handoff to the healthiest complete fix"
+check_contains "goldband-loop/investigate/SKILL.md" "healthiest complete fix" "Goldband Loop investigate skill defaults debugging toward the healthiest complete fix"
+check_contains "goldband-loop/investigate/SKILL.md" "blast radius intentional" "Goldband Loop investigate skill constrains blast radius without minimal-fix bias"
+check_contains "goldband-loop/investigate/SKILL.md.tmpl" "healthiest complete fix" "Goldband Loop investigate template defaults debugging toward the healthiest complete fix"
+check_contains "goldband-loop/investigate/SKILL.md.tmpl" "blast radius intentional" "Goldband Loop investigate template constrains blast radius without minimal-fix bias"
+check_contains "goldband-loop/plan-eng-review/SKILL.md" "Healthiest maintainable path" "plan-eng-review defaults recommendations toward the healthiest maintainable path"
+check_contains "goldband-loop/plan-eng-review/SKILL.md.tmpl" "Healthiest maintainable path" "plan-eng-review template defaults recommendations toward the healthiest maintainable path"
+check_contains "goldband-loop/plan-ceo-review/SKILL.md" "Healthiest maintainable path" "plan-ceo-review defaults recommendations toward the healthiest maintainable path"
+check_contains "goldband-loop/plan-ceo-review/SKILL.md.tmpl" "Healthiest maintainable path" "plan-ceo-review template defaults recommendations toward the healthiest maintainable path"
+check_contains "goldband-loop/qa/SKILL.md" "healthiest complete fix" "Goldband Loop qa uses healthiest complete fix wording"
+check_contains "goldband-loop/qa/SKILL.md.tmpl" "healthiest complete fix" "Goldband Loop qa template uses healthiest complete fix wording"
+check_contains "goldband-loop/design-review/SKILL.md" "healthiest complete fix" "Goldband Loop design-review uses healthiest complete fix wording"
+check_contains "goldband-loop/design-review/SKILL.md.tmpl" "healthiest complete fix" "Goldband Loop design-review template uses healthiest complete fix wording"
+check_contains "goldband-loop/ship/SKILL.md" "healthiest complete fix" "Goldband Loop ship handoff points to the healthiest complete fix"
+check_contains "goldband-loop/scripts/resolvers/preamble.ts" "healthiest complete fix" "Goldband Loop preamble points investigate handoff to the healthiest complete fix"
 
 check_contains "commands/discuss.md" "Failure Modes:" "discuss command requires failure modes"
 check_contains "commands/discuss.md" "Switch Criteria:" "discuss command requires switch criteria"
@@ -79,14 +79,14 @@ check_contains "skills/global/security-checklist/SKILL.md" "/goldband-cso" "secu
 check_contains "skills/global/decision-log/SKILL.md" "### Failure Signals" "decision-log failure signals section"
 check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exit Criteria" "decision-log revisit triggers section"
 
-check_contains "README.md" "## goldband 與 workflow 的邊界" "README documents goldband workflow boundary"
+check_contains "README.md" "## goldband 與 Goldband Loop 的邊界" "README documents Goldband Loop boundary"
 check_contains_any "README.md" "README mentions decision recommendation guidance" \
   "decision recommendation standard" \
   "方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數"
 check_contains_any "README.md" "README documents healthiest-path default" \
   "預設優先健康且可維護的路徑" \
   "方向判斷預設優先健康且可維護的路徑"
-check_contains "README.en.md" "## goldband vs workflow" "README.en documents goldband workflow boundary"
+check_contains "README.en.md" "## goldband vs Goldband Loop" "README.en documents Goldband Loop boundary"
 check_contains_any "README.en.md" "README.en mentions decision recommendation guidance" \
   "decision recommendation standard" \
   "directional recommendations are expected to surface assumptions, failure modes, alternatives, and unknowns"

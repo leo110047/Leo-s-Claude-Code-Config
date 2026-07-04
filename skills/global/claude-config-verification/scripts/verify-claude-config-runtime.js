@@ -193,13 +193,13 @@ function emptyWorkflowResult() {
 }
 
 function checkClaudeWorkflow(homeDir, result) {
-  const claudeDir = path.join(homeDir, '.claude', 'skills', 'workflow');
+  const claudeDir = path.join(homeDir, '.claude', 'skills', 'goldband');
   if (!fs.existsSync(claudeDir)) return;
   result.claudeInstalled = true;
   result.claudeVersion = readWorkflowVersion(claudeDir);
   result.claudeChecks = [
     'setup',
-    path.join('bin', 'workflow-repo-mode'),
+    path.join('bin', 'goldband-repo-mode'),
     path.join('careful', 'SKILL.md'),
     path.join('freeze', 'SKILL.md'),
     path.join('review', 'SKILL.md'),
@@ -211,7 +211,7 @@ function checkClaudeWorkflow(homeDir, result) {
 }
 
 function checkCodexWorkflow(homeDir, result) {
-  const codexDir = path.join(homeDir, '.codex', 'skills', 'workflow');
+  const codexDir = path.join(homeDir, '.codex', 'skills', 'goldband');
   if (!fs.existsSync(codexDir)) return;
   result.codexInstalled = true;
   result.codexVersion = readWorkflowVersion(codexDir);
@@ -220,7 +220,7 @@ function checkCodexWorkflow(homeDir, result) {
 
 function codexRuntimeChecks(homeDir, codexDir) {
   const required = [
-    path.join('bin', 'workflow-config'),
+    path.join('bin', 'goldband-config'),
     path.join('review', 'checklist.md'),
   ].map((relativePath) => ({
     file: relativePath,
@@ -242,7 +242,7 @@ function generatedCodexSkillCheck(homeDir) {
 }
 
 function checkWorkflowState(homeDir, result) {
-  const stateDir = path.join(homeDir, '.workflow');
+  const stateDir = path.join(homeDir, '.goldband');
   if (!fs.existsSync(stateDir)) return;
   result.stateInstalled = true;
   result.stateChecks = ['projects'].map((relativePath) => ({
@@ -262,7 +262,7 @@ function checkGoldbandWorkflowOverlap(homeDir, result) {
     .filter(Boolean);
   if (hasSafetyOverlap(installedSkills)) {
     result.warnings.push(
-      'goldband careful-mode/freeze-mode and workflow safety skills are both available; use goldband for hard global guardrails, workflow skills for task-local guardrails.',
+      'goldband careful-mode/freeze-mode and Goldband Loop safety skills are both available; use goldband for hard global guardrails, Goldband Loop skills for task-local guardrails.',
     );
   }
 }
