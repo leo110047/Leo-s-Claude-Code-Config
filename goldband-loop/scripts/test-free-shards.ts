@@ -98,7 +98,7 @@ const WINDOWS_FRAGILE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 const KNOWN_WINDOWS_INCOMPATIBLE: Array<{ file: string; reason: string }> = [
   {
     file: 'test/host-config.test.ts',
-    reason: 'asserts "claude" binary on PATH (only true when running inside Claude Code, not on bare CI runner)',
+    reason: 'host detection uses POSIX command-v and executable mock PATH semantics',
   },
   {
     file: 'browse/test/findport.test.ts',

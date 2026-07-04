@@ -5,6 +5,7 @@
 
 import { describe, test, expect } from 'bun:test';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { validateHostConfig, validateAllConfigs, type HostConfig } from '../scripts/host-config';
 import {
@@ -293,15 +294,25 @@ describe('HOST_PATHS derivation from configs', () => {
 describe('host-config-export.ts CLI', () => {
   const EXPORT_SCRIPT = path.join(ROOT, 'scripts', 'host-config-export.ts');
 
-  function run(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
-    const result = Bun.spawnSync(['bun', 'run', EXPORT_SCRIPT, ...args], {
-      cwd: ROOT, stdout: 'pipe', stderr: 'pipe',
+  function runWithEnv(
+    env: Record<string, string>,
+    ...args: string[]
+  ): { stdout: string; stderr: string; exitCode: number } {
+    const result = Bun.spawnSync([process.execPath, 'run', EXPORT_SCRIPT, ...args], {
+      cwd: ROOT,
+      env: { ...process.env, ...env },
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
     return {
       stdout: result.stdout.toString().trim(),
       stderr: result.stderr.toString().trim(),
       exitCode: result.exitCode,
     };
+  }
+
+  function run(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    return runWithEnv({}, ...args);
   }
 
   test('list prints all host names', () => {
@@ -374,11 +385,22 @@ describe('host-config-export.ts CLI', () => {
     expect(exitCode).toBe(1);
   });
 
-  test('detect finds claude (since we are running in claude)', () => {
-    const { stdout, exitCode } = run('detect');
-    expect(exitCode).toBe(0);
-    // claude binary should be on PATH in this environment
-    expect(stdout).toContain('claude');
+  test('detect finds a host when its CLI binary is on PATH', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-detect-test-'));
+    try {
+      const binPath = path.join(tmpDir, 'claude');
+      fs.writeFileSync(binPath, '#!/bin/sh\nexit 0\n');
+      fs.chmodSync(binPath, 0o755);
+
+      const { stdout, exitCode } = runWithEnv(
+        { PATH: `${tmpDir}${path.delimiter}${process.env.PATH || ''}` },
+        'detect',
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout.split('\n')).toContain('claude');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   test('unknown command exits 1', () => {
