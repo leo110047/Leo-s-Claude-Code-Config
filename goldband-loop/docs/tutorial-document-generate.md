@@ -4,7 +4,7 @@ You'll run `/document-generate` against a project you already have, watch it wri
 
 ## What you'll need
 
-- goldband installed (`git clone --single-branch --depth 1 https://github.com/garrytan/goldband.git ~/.claude/skills/goldband && cd ~/.claude/skills/goldband && ./setup`)
+- goldband installed (`git clone --single-branch --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/goldband && cd ~/.claude/skills/goldband && ./setup`)
 - Claude Code running in any project that has at least one piece of public surface (a CLI command, an exported function, a config option, a skill, an API endpoint)
 - About 90 seconds
 

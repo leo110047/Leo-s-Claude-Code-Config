@@ -9,7 +9,7 @@ goldband skills are Markdown files that Claude Code discovers from a `skills/` d
 That's what dev mode does. It symlinks your repo into the local `.claude/skills/` directory so Claude Code reads skills straight from your checkout.
 
 ```bash
-git clone https://github.com/garrytan/goldband.git && cd goldband
+git clone https://github.com/leo110047/goldband.git && cd goldband
 bun install                    # install dependencies
 bin/dev-setup                  # activate dev mode
 ```

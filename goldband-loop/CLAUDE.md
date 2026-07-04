@@ -468,49 +468,49 @@ After cleanup: 90 findings, 358.1 score, 1.96 score/file.
 Don't chase the number. Fix patterns that represent actual code quality problems.
 Accept findings where the "sloppy" pattern is the correct engineering choice.
 
-## Community PR guardrails
+## Public identity guardrails
 
-When reviewing or merging community PRs, **always AskUserQuestion** before accepting
-any commit that:
+Goldband Loop is first-party source in this repository. Public docs and install
+instructions should present Goldband Loop as a goldband-maintained runtime, not
+as the upstream author's personal project.
 
-1. **Touches ETHOS.md** — this file is Garry's personal builder philosophy. No edits
-   from external contributors or AI agents, period.
-2. **Removes or softens promotional material** — YC references, founder perspective,
-   and product voice are intentional. PRs that frame these as "unnecessary" or
-   "too promotional" must be rejected.
-3. **Changes Garry's voice** — the tone, humor, directness, and perspective in skill
-   templates, CHANGELOG, and docs are not generic. PRs that rewrite voice to be
-   more "neutral" or "professional" must be rejected.
+When reviewing or merging PRs:
 
-Even if the agent strongly believes a change improves the project, these three
-categories require explicit user approval via AskUserQuestion. No exceptions.
-No auto-merging. No "I'll just clean this up."
+1. **Preserve upstream attribution** in `UPSTREAM_ATTRIBUTION.md`, `LICENSE`, and
+   any legally meaningful notice files.
+2. **Do not put upstream clone URLs in user-facing install docs.** Use the current
+   goldband repository URL or root `install.sh` workflow.
+3. **Do not reintroduce upstream personal marketing as the README or install
+   path.** Personal history, hiring copy, and upstream promotional language
+   belong in attribution/history material only when they are needed for context.
+4. **Keep product voice first-party.** It is fine for individual skills to carry
+   inherited method names or historical concepts, but public entrypoints should
+   make ownership and maintenance responsibility clear.
 
-## Checking out PRs from garrytan-agents
+## Checking out PRs from external forks
 
-When the user says "check out <PR link>" and the PR is from `garrytan-agents/goldband`
-(or any other fork that is NOT a collaborator on `garrytan/goldband`), do NOT just
-`gh pr checkout`. Fork PRs don't receive base-repo secrets (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, etc.), so the eval/E2E CI jobs fail with empty-env auth errors
-regardless of what's set on the base repo.
+When the user says "check out <PR link>" and the PR is from an external fork that
+is not a collaborator on the current base repository, do NOT assume CI secrets
+will be available. Fork PRs usually do not receive base-repo secrets
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.), so eval/E2E CI jobs can fail with
+empty-env auth errors regardless of what is configured on the base repo.
 
-**Workflow:** push the branch to `garrytan/goldband` (the base repo) and re-target
-the PR from there.
+**Workflow:** if secret-backed CI is required and the user approves, push the
+branch to the current base repository and re-target the PR from there.
 
 Concretely, after `gh pr checkout <N>`:
 
 1. Note the original PR number and head branch name.
 2. Push the same branch to the base repo: `git push origin HEAD:<branch-name>`
-   (origin = `garrytan/goldband`, since the worktree is set up with that remote).
+   after verifying `origin` is the intended base repo.
 3. Close the fork PR (`gh pr close <N> --comment "moving to base-repo branch for secret access"`).
 4. Open a new PR from the base-repo branch: `gh pr create --base main --head <branch-name>`.
 5. New PR's workflows will get secrets automatically.
 
-Why not fix it on the fork side? `garrytan-agents` isn't a collaborator on
-`garrytan/goldband`. Adding it as a collaborator (option A) or flipping the
-repo-wide "send secrets to fork PRs" toggle (option B) would let secrets reach
-fork PRs from anyone — broader blast radius than just moving this one branch.
-Option C (this section) keeps secret-distribution scope tight.
+Why not fix it on the fork side? Adding a broad collaborator or flipping the
+repo-wide "send secrets to fork PRs" toggle can expose secrets to a wider set of
+contributors than intended. Moving one reviewed branch into the base repo keeps
+secret-distribution scope tighter.
 
 If the user asks you to skip the move (e.g., "just leave it as a fork PR"),
 respect that — eval CI will fail with empty-env auth, but check-freshness,
