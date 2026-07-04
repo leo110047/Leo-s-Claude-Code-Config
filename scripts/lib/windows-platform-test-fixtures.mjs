@@ -38,6 +38,7 @@ function copyRepoSubset(rootDir, targetDir) {
 
 function repoSubsetEntries() {
   return [
+    '.gitignore',
     'AGENTS.md',
     'install.ps1',
     'scripts',

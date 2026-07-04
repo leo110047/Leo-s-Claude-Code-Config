@@ -276,20 +276,24 @@ function currentUpstream(context, repoDir) {
 }
 
 function selfUpdate(context) {
-  syncSkills(context);
-  refreshManagedRuntime(context, { workflow: false });
   const repoDir = context.repoDir;
-  if (!canFastForward(context, repoDir)) return;
+  const update = fastForwardRepo(context, repoDir);
+  syncSkills(context);
+  refreshManagedRuntime(context, update.updated ? {} : { workflow: false });
+  if (!update.updated) return;
+  console.error(
+    `[goldband] updated ${update.oldHead} -> ${update.newHead}; new sessions will use the latest config.`,
+  );
+}
+
+function fastForwardRepo(context, repoDir) {
+  if (!canFastForward(context, repoDir)) return { updated: false };
   const oldHead =
     gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
-  if (!pullFastForward(context, repoDir)) return;
+  if (!pullFastForward(context, repoDir)) return { updated: false };
   const newHead =
     gitStdout(context, repoDir, ['rev-parse', '--short', 'HEAD']) ?? 'unknown';
-  if (newHead === oldHead) return;
-  refreshManagedRuntime(context);
-  console.error(
-    `[goldband] updated ${oldHead} -> ${newHead}; new sessions will use the latest config.`,
-  );
+  return { updated: newHead !== oldHead, oldHead, newHead };
 }
 
 function canFastForward(context, repoDir) {
