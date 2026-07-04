@@ -11,6 +11,7 @@ import {
   createFakeWorkflow,
   mktemp,
   run,
+  runWindowsSelfUpdateScenario,
   writeFakeGitScript,
 } from './lib/windows-platform-test-fixtures.mjs';
 
@@ -73,7 +74,12 @@ function main() {
     syncSkillsScenario(context);
     statusScenario(context);
     selfUpdateGuardrailScenario(context);
-    selfUpdateScenario(context);
+    runWindowsSelfUpdateScenario({
+      context,
+      rootDir: ROOT_DIR,
+      selfUpdateArgs,
+      nodePath: process.execPath,
+    });
     uninstallScenario(context, externalRequirementsPath);
     userOwnedGuidanceScenario(context);
     console.log('[OK] windows platform integration smoke test passed');
@@ -463,80 +469,6 @@ function runSelfUpdateWithFakeGit(tmpRoot, tmpHome, fakeGitLog) {
       },
     },
   );
-}
-
-function selfUpdateScenario(context) {
-  console.log('[6/7] windows-mode self-update');
-  seedOriginRepo(context);
-  const oldHead = cloneWorkRepo(context);
-  pushNextCommit(context);
-  run(
-    process.execPath,
-    selfUpdateArgs(path.join(context.tmpWork, 'repo'), context.tmpHome),
-  );
-  const newHead = gitHead(path.join(context.tmpWork, 'repo'));
-  assert.notStrictEqual(oldHead, newHead);
-}
-
-function seedOriginRepo({ tmpOrigin, tmpSeed }) {
-  run('git', [
-    'init',
-    '--bare',
-    '--initial-branch=main',
-    path.join(tmpOrigin, 'origin.git'),
-  ]);
-  run('git', [
-    'clone',
-    path.join(tmpOrigin, 'origin.git'),
-    path.join(tmpSeed, 'repo'),
-  ]);
-  configureGitUser(path.join(tmpSeed, 'repo'));
-  copyRepoSubset(ROOT_DIR, path.join(tmpSeed, 'repo'));
-  run('git', ['-C', path.join(tmpSeed, 'repo'), 'add', '.']);
-  gitCommitNoHooks(path.join(tmpSeed, 'repo'), ['-m', 'seed']);
-  run('git', [
-    '-C',
-    path.join(tmpSeed, 'repo'),
-    'push',
-    '-u',
-    'origin',
-    'main',
-  ]);
-}
-
-function configureGitUser(repoDir) {
-  run('git', ['-C', repoDir, 'config', 'user.name', 'goldband-test']);
-  run('git', ['-C', repoDir, 'config', 'user.email', 'goldband@example.com']);
-}
-
-function gitCommitNoHooks(repoDir, args) {
-  run('git', ['-c', 'core.hooksPath=', '-C', repoDir, 'commit', ...args]);
-}
-
-function cloneWorkRepo({ tmpOrigin, tmpWork }) {
-  run('git', [
-    'clone',
-    path.join(tmpOrigin, 'origin.git'),
-    path.join(tmpWork, 'repo'),
-  ]);
-  return gitHead(path.join(tmpWork, 'repo'));
-}
-
-function gitHead(repoDir) {
-  return run('git', ['-C', repoDir, 'rev-parse', 'HEAD']).stdout.trim();
-}
-
-function pushNextCommit({ tmpOrigin, tmpSeed }) {
-  const repoNext = path.join(tmpSeed, 'repo-next');
-  run('git', ['clone', path.join(tmpOrigin, 'origin.git'), repoNext]);
-  configureGitUser(repoNext);
-  fs.appendFileSync(
-    path.join(repoNext, 'AGENTS.md'),
-    '\nwindows-update\n',
-    'utf8',
-  );
-  gitCommitNoHooks(repoNext, ['-am', 'update']);
-  run('git', ['-C', repoNext, 'push', 'origin', 'main']);
 }
 
 function uninstallScenario({ tmpHome, tmpRoot }, externalRequirementsPath) {

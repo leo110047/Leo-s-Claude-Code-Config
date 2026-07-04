@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -250,6 +251,147 @@ function writeFakeGitScript(targetDir) {
   return scriptPath;
 }
 
+function runWindowsSelfUpdateScenario({
+  context,
+  rootDir,
+  selfUpdateArgs,
+  nodePath,
+}) {
+  console.log('[6/7] windows-mode self-update');
+  seedOriginRepo(context, rootDir);
+  const repoDir = path.join(context.tmpWork, 'repo');
+  const oldHead = cloneWorkRepo(context);
+  pushNextCommit(context);
+  const beforeSelfUpdate = gitDiagnostics(repoDir);
+  const selfUpdate = run(nodePath, selfUpdateArgs(repoDir, context.tmpHome));
+  const afterSelfUpdate = gitDiagnostics(repoDir);
+  const newHead = gitHead(repoDir);
+  assert.notStrictEqual(
+    oldHead,
+    newHead,
+    selfUpdateFailureMessage({
+      oldHead,
+      newHead,
+      selfUpdate,
+      beforeSelfUpdate,
+      afterSelfUpdate,
+    }),
+  );
+}
+
+function seedOriginRepo({ tmpOrigin, tmpSeed }, rootDir) {
+  run('git', [
+    'init',
+    '--bare',
+    '--initial-branch=main',
+    path.join(tmpOrigin, 'origin.git'),
+  ]);
+  run('git', [
+    'clone',
+    path.join(tmpOrigin, 'origin.git'),
+    path.join(tmpSeed, 'repo'),
+  ]);
+  configureGitUser(path.join(tmpSeed, 'repo'));
+  copyRepoSubset(rootDir, path.join(tmpSeed, 'repo'));
+  run('git', ['-C', path.join(tmpSeed, 'repo'), 'add', '.']);
+  gitCommitNoHooks(path.join(tmpSeed, 'repo'), ['-m', 'seed']);
+  run('git', [
+    '-C',
+    path.join(tmpSeed, 'repo'),
+    'push',
+    '-u',
+    'origin',
+    'main',
+  ]);
+}
+
+function configureGitUser(repoDir) {
+  run('git', ['-C', repoDir, 'config', 'user.name', 'goldband-test']);
+  run('git', ['-C', repoDir, 'config', 'user.email', 'goldband@example.com']);
+}
+
+function gitCommitNoHooks(repoDir, args) {
+  run('git', ['-c', 'core.hooksPath=', '-C', repoDir, 'commit', ...args]);
+}
+
+function cloneWorkRepo({ tmpOrigin, tmpWork }) {
+  run('git', [
+    'clone',
+    path.join(tmpOrigin, 'origin.git'),
+    path.join(tmpWork, 'repo'),
+  ]);
+  return gitHead(path.join(tmpWork, 'repo'));
+}
+
+function gitHead(repoDir) {
+  return run('git', ['-C', repoDir, 'rev-parse', 'HEAD']).stdout.trim();
+}
+
+function pushNextCommit({ tmpOrigin, tmpSeed }) {
+  const repoNext = path.join(tmpSeed, 'repo-next');
+  run('git', ['clone', path.join(tmpOrigin, 'origin.git'), repoNext]);
+  configureGitUser(repoNext);
+  fs.appendFileSync(
+    path.join(repoNext, 'AGENTS.md'),
+    '\nwindows-update\n',
+    'utf8',
+  );
+  gitCommitNoHooks(repoNext, ['-am', 'update']);
+  run('git', ['-C', repoNext, 'push', 'origin', 'main']);
+}
+
+function gitDiagnostics(repoDir) {
+  return {
+    head: gitProbe(repoDir, ['rev-parse', 'HEAD']),
+    branch: gitProbe(repoDir, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    upstream: gitProbe(repoDir, [
+      'rev-parse',
+      '--abbrev-ref',
+      '--symbolic-full-name',
+      '@{upstream}',
+    ]),
+    status: gitProbe(repoDir, ['status', '--porcelain']),
+    aheadBehind: gitProbe(repoDir, [
+      'rev-list',
+      '--left-right',
+      '--count',
+      'HEAD...origin/main',
+    ]),
+    originMain: gitProbe(repoDir, ['rev-parse', 'origin/main']),
+    remoteMain: gitProbe(repoDir, ['ls-remote', 'origin', 'refs/heads/main']),
+  };
+}
+
+function gitProbe(repoDir, args) {
+  const result = spawnSync('git', ['-C', repoDir, ...args], {
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout.trim(),
+    stderr: result.stderr.trim(),
+  };
+}
+
+function selfUpdateFailureMessage({
+  oldHead,
+  newHead,
+  selfUpdate,
+  beforeSelfUpdate,
+  afterSelfUpdate,
+}) {
+  return [
+    'self-update did not fast-forward the test repo',
+    `oldHead=${oldHead}`,
+    `newHead=${newHead}`,
+    `selfUpdate.stdout=${JSON.stringify(selfUpdate.stdout.trim())}`,
+    `selfUpdate.stderr=${JSON.stringify(selfUpdate.stderr.trim())}`,
+    `before=${JSON.stringify(beforeSelfUpdate, null, 2)}`,
+    `after=${JSON.stringify(afterSelfUpdate, null, 2)}`,
+  ].join('\n');
+}
+
 function fakeGitScript() {
   return [
     '#!/usr/bin/env bash',
@@ -306,4 +448,11 @@ function fakeGitCaseLines() {
   ];
 }
 
-export { copyRepoSubset, createFakeWorkflow, mktemp, run, writeFakeGitScript };
+export {
+  copyRepoSubset,
+  createFakeWorkflow,
+  mktemp,
+  run,
+  runWindowsSelfUpdateScenario,
+  writeFakeGitScript,
+};
