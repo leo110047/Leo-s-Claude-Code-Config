@@ -37,7 +37,12 @@ function runHook(input, extraEnv = {}) {
   assert.equal(result.stderr, '');
 
   const stdout = result.stdout.trim();
-  return stdout ? JSON.parse(stdout) : null;
+  assert.notEqual(stdout, '', 'hook must emit valid JSON on stdout');
+  return JSON.parse(stdout);
+}
+
+function assertNoopOutput(output) {
+  assert.deepEqual(output, {});
 }
 
 function sessionStartMarkerPath(sessionId) {
@@ -103,17 +108,17 @@ function testGitCleanDryRunAllowed() {
     tool_input: { command: 'git clean -n -fd' },
   });
 
-  assert.equal(output, null);
+  assertNoopOutput(output);
 }
 
-function testNormalBashAllowedSilently() {
+function testNormalBashAllowedWithNoopJson() {
   const output = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
     tool_input: { command: 'npm test' },
   });
 
-  assert.equal(output, null);
+  assertNoopOutput(output);
 }
 
 function testDevServerWarnsWithoutDeny() {
@@ -134,7 +139,7 @@ function testPermissionRequestOnlyDeniesHighRisk() {
     tool_name: 'Bash',
     tool_input: { command: 'git status' },
   });
-  assert.equal(safeOutput, null);
+  assertNoopOutput(safeOutput);
 
   const riskyOutput = runHook({
     hook_event_name: 'PermissionRequest',
@@ -227,6 +232,35 @@ function testPostToolUseFailureContext() {
   );
 }
 
+function testRegisteredNoopHooksEmitJson() {
+  assertNoopOutput(
+    runHook({
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'please explain this file',
+    }),
+  );
+  assertNoopOutput(
+    runHook({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_response: { exit_code: 0 },
+    }),
+  );
+  assertNoopOutput(
+    runHook({
+      hook_event_name: 'Stop',
+      last_assistant_message: 'I checked the current files.',
+    }),
+  );
+  assertNoopOutput(
+    runHook({
+      hook_event_name: 'SubagentStop',
+      last_assistant_message:
+        'Checked. Evidence: node scripts/test-codex-hook-router.mjs passed.',
+    }),
+  );
+}
+
 function testPostToolUseStyleGateAdvisory() {
   const fixtureDir = fs.mkdtempSync(path.join(repoDir, '.tmp-style-gate-'));
   const fixtureFile = path.join(fixtureDir, 'fixture.ts');
@@ -292,9 +326,9 @@ function testSessionStartContextIsDedupedBySession() {
     outputs[0].hookSpecificOutput.additionalContext,
     /context-restore/,
   );
-  assert.equal(outputs[1], null);
-  assert.equal(outputs[2], null);
-  assert.equal(outputs[3], null);
+  assertNoopOutput(outputs[1]);
+  assertNoopOutput(outputs[2]);
+  assertNoopOutput(outputs[3]);
 
   const sessionStartEvents = readUsageEvents().filter(
     (event) =>
@@ -354,8 +388,8 @@ function testCompactHooksAreNotRegistered() {
   const hooksConfig = JSON.parse(fs.readFileSync(hooksConfigPath, 'utf8'));
   assert.equal(hooksConfig.hooks.PreCompact, undefined);
   assert.equal(hooksConfig.hooks.PostCompact, undefined);
-  assert.equal(runHook({ hook_event_name: 'PreCompact' }), null);
-  assert.equal(runHook({ hook_event_name: 'PostCompact' }), null);
+  assertNoopOutput(runHook({ hook_event_name: 'PreCompact' }));
+  assertNoopOutput(runHook({ hook_event_name: 'PostCompact' }));
 }
 
 function testMutatingMcpWarnsOnly() {
@@ -445,18 +479,19 @@ function testSubagentCompletionNeedsEvidence() {
     last_assistant_message:
       'Fixed. Verified with node scripts/test-codex-hook-router.mjs and README.md:101.',
   });
-  assert.equal(supportedOutput, null);
+  assertNoopOutput(supportedOutput);
 }
 
 testHighRiskBashDenied();
 testGitCleanDryRunAllowed();
-testNormalBashAllowedSilently();
+testNormalBashAllowedWithNoopJson();
 testDevServerWarnsWithoutDeny();
 testPermissionRequestOnlyDeniesHighRisk();
 testPatchSecretDenied();
 testPatchAdvisorySecretWarnsOnly();
 testGitPatchDenied();
 testPostToolUseFailureContext();
+testRegisteredNoopHooksEmitJson();
 testPostToolUseStyleGateAdvisory();
 testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
 testLifecycleContexts();

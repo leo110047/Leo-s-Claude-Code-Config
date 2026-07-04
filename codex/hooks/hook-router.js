@@ -204,7 +204,7 @@ function markOnce(input, advisoryName) {
 }
 
 function writeResult(result) {
-  if (result) writeJson(result);
+  writeJson(result ?? {});
 }
 
 function secretWarningForPatch(command) {
