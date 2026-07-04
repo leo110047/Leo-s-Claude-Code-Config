@@ -39,9 +39,24 @@ describe('workflow runtime', () => {
       });
       expect(result.workflow).toBe(workflow.name);
       expect(readJsonl(workflow.name).length).toBeGreaterThan(0);
+      if (workflow.name !== 'goldband-review') {
+        const output = result.output as Record<string, unknown>;
+        expect(output.mode).toBe('compatibility');
+        expect(typeof output.sourceTemplate).toBe('string');
+        expect(typeof output.legacyPromptDigest).toBe('string');
+      }
     }
     expect(integratedWorkflows().map((entry) => entry.name).sort())
       .toEqual([...CORE_WORKFLOWS].sort());
+  });
+
+  test('compatibility workflows fail closed in real mode', async () => {
+    await expect(runWorkflow(getWorkflow('goldband-investigate'), {
+      mode: 'real',
+      host: 'codex',
+      goldbandHome: tmpHome,
+      cwd: ROOT,
+    })).rejects.toThrow('compatibility runtime only supports mock mode');
   });
 
   test('registered-only workflows are not runnable', async () => {

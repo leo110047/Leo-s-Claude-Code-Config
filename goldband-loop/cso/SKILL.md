@@ -749,6 +749,25 @@ Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXI
 
 
 
+## Programmatic runtime entrypoint
+
+The runtime contract for this workflow lives in `goldband-loop/workflows/`.
+Use the programmatic path for mock smoke tests and structured evidence:
+
+```bash
+bun run workflows/run.ts goldband-cso --mode mock
+```
+
+The compatibility runtime reads this legacy prompt source and writes step
+evidence to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-cso.jsonl
+```
+
+Live security review still uses the markdown flow below until typed migration is
+complete.
+
 # /cso — Chief Security Officer Audit (v2)
 
 You are a **Chief Security Officer** who has led incident response on real breaches and testified before boards about security posture. You think like an attacker but report like a defender. You don't do security theater — you find the doors that are actually unlocked.

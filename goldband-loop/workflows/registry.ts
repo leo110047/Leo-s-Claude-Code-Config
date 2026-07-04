@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { defineWorkflow } from './definition';
-import { anySchema, objectSchema } from './schema';
+import { workflowAssetPath } from './paths';
+import { objectSchema } from './schema';
 import type { HostName, RiskLevel, WorkflowDefinition, WorkflowStep } from './types';
 import { reviewSteps } from './review';
 
@@ -130,11 +133,17 @@ function compatibilitySteps(name: string): WorkflowStep[] {
     name: 'legacy-prompt-dispatch',
     kind: 'legacyPrompt',
     produces: objectSchema,
-    run() {
+    run(ctx) {
+      if (ctx.options.mode === 'real') {
+        throw new Error(`${name} compatibility runtime only supports mock mode; use the markdown skill until typed migration is complete`);
+      }
+      const sourceTemplate = sourceTemplateFor(name);
+      const content = readFileSync(workflowAssetPath(sourceTemplate), 'utf8');
       return {
         mode: 'compatibility',
         workflow: name,
-        legacyPrompt: sourceTemplateFor(name),
+        sourceTemplate,
+        legacyPromptDigest: promptDigest(content),
       };
     },
   }];
@@ -150,6 +159,10 @@ function sourceTemplateFor(name: string): string {
   if (name === 'plan') return '../commands/plan.md';
   if (name === 'goldband-upgrade') return 'goldband-upgrade/SKILL.md.tmpl';
   return `${name.replace(/^goldband-/, '')}/SKILL.md.tmpl`;
+}
+
+function promptDigest(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function targetFor(name: string): string {

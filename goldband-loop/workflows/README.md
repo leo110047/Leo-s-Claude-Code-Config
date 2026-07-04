@@ -54,6 +54,10 @@ Default mode is mock unless `--mode real` is passed. Real mode fails unless
 `--host claude` or `--host codex` is also provided; invalid modes or hosts fail
 at CLI parse time instead of falling back to mock. Registered-only workflows are
 visible in the registry but cannot run yet.
+Compatibility workflows currently support mock mode only: they read their
+legacy prompt source, emit a digest-backed evidence event, and fail closed in
+real mode until their typed migration is complete. Real LLM execution is only
+enabled for typed runtime steps such as `goldband-review`.
 
 For `goldband-review`, diff selection is:
 

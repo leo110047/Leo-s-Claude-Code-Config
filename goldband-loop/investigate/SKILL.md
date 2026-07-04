@@ -783,6 +783,25 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
+## Programmatic runtime entrypoint
+
+The runtime contract for this workflow lives in `goldband-loop/workflows/`.
+Use the programmatic path for mock smoke tests and structured evidence:
+
+```bash
+bun run workflows/run.ts goldband-investigate --mode mock
+```
+
+The compatibility runtime reads this legacy prompt source and writes step
+evidence to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-investigate.jsonl
+```
+
+Live investigation still uses the markdown flow below until typed migration is
+complete.
+
 # Systematic Debugging
 
 ## Iron Law

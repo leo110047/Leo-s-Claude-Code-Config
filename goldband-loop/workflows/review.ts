@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { adapterFor, workflowLabelFromTemplate } from './host-adapter';
 import { evidencePath, stateRoot } from './evidence';
+import { workflowAssetPath } from './paths';
 import { findingsSchema, normalizeFindings, textSchema, type ReviewFinding } from './schema';
 import type { WorkflowContext, WorkflowStep } from './types';
 
@@ -234,7 +235,7 @@ function reviewHost(ctx: WorkflowContext): 'mock' | 'claude' | 'codex' {
 }
 
 function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
-  const template = readFileSync(workflowTemplatePath(ctx.workflow.sourceTemplate), 'utf8');
+  const template = readFileSync(workflowAssetPath(ctx.workflow.sourceTemplate), 'utf8');
   const label = workflowLabelFromTemplate(template);
   return [
     `${label}`,
@@ -244,11 +245,6 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
     diff,
     'DIFF_END',
   ].join('\n');
-}
-
-function workflowTemplatePath(sourceTemplate: string): string {
-  if (isAbsolute(sourceTemplate)) return sourceTemplate;
-  return resolve(import.meta.dir, '..', sourceTemplate);
 }
 
 const findingsJsonSchema = {

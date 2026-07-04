@@ -43,6 +43,18 @@ describe('workflow registry', () => {
     expect(registeredOnlyWorkflows().length).toBeGreaterThan(40);
   });
 
+  test('integrated workflows expose a runtime thin entrypoint in source guidance', () => {
+    for (const name of CORE_WORKFLOWS) {
+      const entry = WORKFLOW_REGISTRY.find((item) => item.name === name);
+      expect(entry).toBeDefined();
+      if (!entry) continue;
+      const source = readFileSync(resolve(ROOT, entry.sourceTemplate), 'utf8');
+      expect(source).toContain('Programmatic runtime entrypoint');
+      expect(source).toContain(`workflows/run.ts ${name}`);
+      expect(source).toContain(`/workflow-runs/${name}.jsonl`);
+    }
+  });
+
   test('coverage report table matches registry contract fields', () => {
     const report = readFileSync(resolve(ROOT, 'workflows/COVERAGE.md'), 'utf8');
     const tableRows = new Map<string, string[]>();

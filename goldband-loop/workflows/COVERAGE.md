@@ -42,54 +42,59 @@ Real LLM e2e readback for `goldband-review`:
 
 ## Pending Registered-Only
 
-| Workflow | Status | Entrypoint | Risk | Next step |
-| --- | --- | --- | --- | --- |
-| goldband-autoplan | registered-only | legacy-thin | low | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-benchmark | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-benchmark-models | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-browse | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-canary | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
-| goldband-careful | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-codex | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-context-restore | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-context-save | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-design-consultation | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-design-html | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-design-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-design-shotgun | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-devex-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-document-generate | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-document-release | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-freeze | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-guard | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-health | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-ios-clean | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-ios-design-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-ios-fix | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-ios-qa | registered-only | legacy-thin | high | Promote browser checks and screenshot artifacts to typed steps. |
-| goldband-ios-sync | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
-| goldband-land-and-deploy | registered-only | legacy-thin | high | Add safety-gate typed steps before side effects. |
-| goldband-landing-report | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-learn | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-make-pdf | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-office-hours | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-open-goldband-browser | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-pair-agent | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-plan-ceo-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-plan-design-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-plan-devex-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-plan-eng-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-plan-tune | registered-only | legacy-thin | low | Type non-interactive review pieces while preserving HITL prompts. |
-| goldband-qa-only | registered-only | legacy-thin | medium | Promote browser checks and screenshot artifacts to typed steps. |
-| goldband-retro | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-scrape | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. |
-| goldband-setup-browser-cookies | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
-| goldband-setup-deploy | registered-only | legacy-thin | high | Add safety-gate typed steps before side effects. |
-| goldband-setup-gbrain | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
-| goldband-skillify | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-sync-gbrain | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
-| goldband-unfreeze | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. |
-| goldband-upgrade | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. |
+Pending workflows are sorted by typed/integration priority, not alphabetically:
+browser/QA and plan-review typed candidates first, high-risk safety-gate
+workflows next, then medium-risk interactive/browser workflows, then the
+remaining registry-only workflows.
+
+| Workflow | Status | Entrypoint | Risk | Next step | Priority |
+| --- | --- | --- | --- | --- | --- |
+| goldband-qa-only | registered-only | legacy-thin | medium | Promote browser checks and screenshot artifacts to typed steps. | P1 typed evidence candidate |
+| goldband-ios-qa | registered-only | legacy-thin | high | Promote browser checks and screenshot artifacts to typed steps. | P1 typed evidence candidate |
+| goldband-plan-ceo-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. | P1 plan typed candidate |
+| goldband-plan-design-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. | P1 plan typed candidate |
+| goldband-plan-devex-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. | P1 plan typed candidate |
+| goldband-plan-eng-review | registered-only | legacy-thin | medium | Type non-interactive review pieces while preserving HITL prompts. | P1 plan typed candidate |
+| goldband-plan-tune | registered-only | legacy-thin | low | Type non-interactive review pieces while preserving HITL prompts. | P1 plan typed candidate |
+| goldband-land-and-deploy | registered-only | legacy-thin | high | Add safety-gate typed steps before side effects. | P2 high-risk safety gate |
+| goldband-setup-deploy | registered-only | legacy-thin | high | Add safety-gate typed steps before side effects. | P2 high-risk safety gate |
+| goldband-canary | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-ios-sync | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-setup-browser-cookies | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-setup-gbrain | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-sync-gbrain | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-upgrade | registered-only | legacy-thin | high | Prioritize after core runtime coverage settles. | P2 high-risk safety gate |
+| goldband-browse | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-design-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-devex-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-ios-design-review | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-make-pdf | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-open-goldband-browser | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-pair-agent | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-scrape | registered-only | legacy-thin | medium | Prioritize after core runtime coverage settles. | P3 medium-risk interactive |
+| goldband-autoplan | registered-only | legacy-thin | low | Type non-interactive review pieces while preserving HITL prompts. | P4 registry-only |
+| goldband-benchmark | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-benchmark-models | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-careful | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-codex | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-context-restore | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-context-save | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-design-consultation | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-design-html | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-design-shotgun | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-document-generate | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-document-release | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-freeze | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-guard | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-health | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-ios-clean | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-ios-fix | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-landing-report | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-learn | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-office-hours | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-retro | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-skillify | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
+| goldband-unfreeze | registered-only | legacy-thin | low | Prioritize after core runtime coverage settles. | P4 registry-only |
 
 ## Typed Migration Order
 

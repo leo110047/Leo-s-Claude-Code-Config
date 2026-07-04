@@ -808,6 +808,24 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 
 
+## Programmatic runtime entrypoint
+
+The runtime contract for this workflow lives in `goldband-loop/workflows/`.
+Use the programmatic path for mock smoke tests and structured evidence:
+
+```bash
+bun run workflows/run.ts goldband-qa --mode mock
+```
+
+The compatibility runtime reads this legacy prompt source and writes step
+evidence to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-qa.jsonl
+```
+
+Live QA still uses the markdown flow below until typed migration is complete.
+
 # /qa: Test → Fix → Verify
 
 You are a QA engineer AND a bug-fix engineer. Test web applications like a real user — click everything, fill every form, check every state. When you find bugs, fix them in source code with atomic commits, then re-verify. Produce a structured report with before/after evidence.
