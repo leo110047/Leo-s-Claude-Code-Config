@@ -40,6 +40,11 @@ export interface ShouldSpawnDecision {
 const DISPLAY_RANGE_START = 99;
 const DISPLAY_RANGE_END = 120;
 
+export function hasXvfbProbeTools(env: NodeJS.ProcessEnv = process.env): boolean {
+  const PATH = env.PATH ?? env.Path ?? '';
+  return Boolean(Bun.which('Xvfb', { PATH }) && Bun.which('xdpyinfo', { PATH }));
+}
+
 /**
  * Decide whether the daemon should auto-spawn an Xvfb. Pure: takes env +
  * platform and returns a decision. Easy to unit test.
@@ -59,6 +64,9 @@ export function shouldSpawnXvfb(env: NodeJS.ProcessEnv, platform: NodeJS.Platfor
 export function isDisplayFree(displayNum: number): boolean {
   // xdpyinfo exits 0 if a display is reachable. Exit non-zero means no
   // server, which is what we want.
+  if (!Bun.which('xdpyinfo', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+    throw new Error('xdpyinfo not installed; cannot safely probe X display availability.');
+  }
   const result = Bun.spawnSync(['xdpyinfo', '-display', `:${displayNum}`], {
     stdout: 'ignore', stderr: 'ignore', timeout: 2000,
   });
@@ -87,9 +95,14 @@ export function pickFreeDisplay(
  */
 export function readPidStartTime(pid: number): string {
   if (!isProcessAlive(pid)) return '';
-  const result = Bun.spawnSync(['ps', '-p', String(pid), '-o', 'lstart='], {
-    stdout: 'pipe', stderr: 'pipe', timeout: 2000,
-  });
+  let result: ReturnType<typeof Bun.spawnSync>;
+  try {
+    result = Bun.spawnSync(['ps', '-p', String(pid), '-o', 'lstart='], {
+      stdout: 'pipe', stderr: 'pipe', timeout: 2000,
+    });
+  } catch {
+    return '';
+  }
   if (result.exitCode !== 0) return '';
   return result.stdout.toString().trim();
 }
@@ -129,6 +142,13 @@ export function isOurXvfb(pid: number, recordedStartTime: string): boolean {
  * install hint).
  */
 export async function spawnXvfb(displayNum: number): Promise<XvfbHandle> {
+  if (!Bun.which('Xvfb', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+    throw new Error('Xvfb not installed.');
+  }
+  if (!Bun.which('xdpyinfo', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+    throw new Error('xdpyinfo not installed; cannot validate Xvfb startup.');
+  }
+
   const display = `:${displayNum}`;
 
   // Spawn detached: Xvfb's lifetime is tied to whether we've explicitly

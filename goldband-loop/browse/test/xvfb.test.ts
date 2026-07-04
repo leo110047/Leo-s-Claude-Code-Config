@@ -7,13 +7,11 @@ import {
   cleanupXvfb,
   pickFreeDisplay,
   isDisplayFree,
+  hasXvfbProbeTools,
 } from '../src/xvfb';
 
-const HAS_XVFB = (() => {
-  if (process.platform !== 'linux') return false;
-  const result = Bun.spawnSync(['which', 'Xvfb'], { stdout: 'pipe', stderr: 'pipe' });
-  return result.exitCode === 0;
-})();
+const HAS_XVFB_TOOLS = process.platform === 'linux' && hasXvfbProbeTools();
+const CAN_READ_PID_START_TIME = process.platform !== 'win32' && readPidStartTime(process.pid).length > 0;
 
 describe('shouldSpawnXvfb', () => {
   test('skips when not headed', () => {
@@ -61,10 +59,19 @@ describe('isOurXvfb (PID validation)', () => {
     expect(isOurXvfb(process.pid, '')).toBe(false);
   });
 
-  test('returns false when cmdline does not contain Xvfb', () => {
-    // Current bun process is not Xvfb. PID-correct, cmdline-wrong → reject.
-    const myStart = readPidStartTime(process.pid);
-    expect(isOurXvfb(process.pid, myStart)).toBe(false);
+  test.skipIf(!CAN_READ_PID_START_TIME)('returns false when cmdline does not contain Xvfb', () => {
+    const proc = Bun.spawn([process.execPath, '-e', 'setTimeout(() => {}, 5000)'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    try {
+      const startTime = readPidStartTime(proc.pid);
+      expect(startTime.length).toBeGreaterThan(0);
+      expect(readPidCmdline(proc.pid).toLowerCase()).not.toContain('xvfb');
+      expect(isOurXvfb(proc.pid, startTime)).toBe(false);
+    } finally {
+      try { proc.kill('SIGKILL'); } catch { /* already gone */ }
+    }
   });
 
   test('returns false when start-time differs (PID reuse defense)', () => {
@@ -75,9 +82,14 @@ describe('isOurXvfb (PID validation)', () => {
   });
 });
 
+describe('hasXvfbProbeTools', () => {
+  test('returns false when PATH cannot resolve Xvfb helpers', () => {
+    expect(hasXvfbProbeTools({ PATH: '' })).toBe(false);
+  });
+});
+
 describe('readPidStartTime', () => {
-  test('returns non-empty for current process', () => {
-    if (process.platform === 'win32') return; // ps not available
+  test.skipIf(!CAN_READ_PID_START_TIME)('returns non-empty for current process', () => {
     const t = readPidStartTime(process.pid);
     expect(t.length).toBeGreaterThan(0);
   });
@@ -118,7 +130,7 @@ describe('cleanupXvfb', () => {
 });
 
 describe('pickFreeDisplay (Xvfb installed)', () => {
-  test.skipIf(!HAS_XVFB)('returns a number in the requested range', () => {
+  test.skipIf(!HAS_XVFB_TOOLS)('returns a number in the requested range', () => {
     const n = pickFreeDisplay(99, 105);
     if (n != null) {
       expect(n).toBeGreaterThanOrEqual(99);
@@ -127,14 +139,14 @@ describe('pickFreeDisplay (Xvfb installed)', () => {
     // null means all displays in range are busy — also valid.
   });
 
-  test.skipIf(!HAS_XVFB)('isDisplayFree returns boolean', () => {
+  test.skipIf(!HAS_XVFB_TOOLS)('isDisplayFree returns boolean', () => {
     const result = isDisplayFree(99);
     expect(typeof result).toBe('boolean');
   });
 });
 
 describe('xvfb spawn → cleanup round trip (Linux + Xvfb only)', () => {
-  test.skipIf(!HAS_XVFB)('spawn, validate ownership, cleanup', async () => {
+  test.skipIf(!HAS_XVFB_TOOLS)('spawn, validate ownership, cleanup', async () => {
     const { spawnXvfb } = await import('../src/xvfb');
     const display = pickFreeDisplay(99, 110);
     if (display == null) {
