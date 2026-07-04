@@ -20,14 +20,16 @@ process.on('exit', () => {
   fs.rmSync(telemetryDir, { recursive: true, force: true });
 });
 
-function runHook(input) {
+function runHook(input, extraEnv = {}) {
   const result = spawnSync(process.execPath, [routerPath], {
     cwd: repoDir,
     input: JSON.stringify(input),
     encoding: 'utf8',
     env: {
       ...process.env,
+      GOLDBAND_DATA_DIR: telemetryDir,
       GOLDBAND_USAGE_FILE: usageFile,
+      ...extraEnv,
     },
   });
 
@@ -36,6 +38,25 @@ function runHook(input) {
 
   const stdout = result.stdout.trim();
   return stdout ? JSON.parse(stdout) : null;
+}
+
+function sessionStartMarkerPath(sessionId) {
+  return path.join(
+    telemetryDir,
+    'hook-router',
+    'dedupe',
+    'session-start-context-restore-hint',
+    `${sessionId}.json`,
+  );
+}
+
+function readUsageEvents() {
+  if (!fs.existsSync(usageFile)) return [];
+  return fs
+    .readFileSync(usageFile, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 function testHighRiskBashDenied() {
@@ -256,6 +277,79 @@ function testLifecycleContexts() {
   assert.match(output.hookSpecificOutput.additionalContext, /context-restore/);
 }
 
+function testSessionStartContextIsDedupedBySession() {
+  const sessionId = 'session-start-dedupe-test';
+  const outputs = Array.from({ length: 4 }, () =>
+    runHook({
+      hook_event_name: 'SessionStart',
+      session_id: sessionId,
+      start_source: 'resume',
+    }),
+  );
+
+  assert.equal(outputs[0].hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(
+    outputs[0].hookSpecificOutput.additionalContext,
+    /context-restore/,
+  );
+  assert.equal(outputs[1], null);
+  assert.equal(outputs[2], null);
+  assert.equal(outputs[3], null);
+
+  const sessionStartEvents = readUsageEvents().filter(
+    (event) =>
+      event.category === 'hook-advisory' &&
+      event.name === 'SessionStart' &&
+      event.sessionId === sessionId,
+  );
+  assert.equal(sessionStartEvents.length, 1);
+  assert.equal(sessionStartEvents[0].detail.startSource, 'resume');
+}
+
+function testSessionStartContextIsNotDedupedAcrossSessions() {
+  const first = runHook({
+    hook_event_name: 'SessionStart',
+    session_id: 'session-start-dedupe-a',
+  });
+  const second = runHook({
+    hook_event_name: 'SessionStart',
+    session_id: 'session-start-dedupe-b',
+  });
+
+  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
+}
+
+function testSessionStartContextWithoutSessionIdIsNotGloballyDeduped() {
+  const first = runHook({ hook_event_name: 'SessionStart' });
+  const second = runHook({ hook_event_name: 'SessionStart' });
+
+  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
+}
+
+function testSessionStartExpiredDedupeMarkerIsCleanedUp() {
+  const sessionId = 'session-start-expired-marker';
+  const markerPath = sessionStartMarkerPath(sessionId);
+  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+  fs.writeFileSync(markerPath, '{}', 'utf8');
+  const oldDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  fs.utimesSync(markerPath, oldDate, oldDate);
+
+  const output = runHook(
+    {
+      hook_event_name: 'SessionStart',
+      session_id: sessionId,
+    },
+    { GOLDBAND_DEDUPE_RETENTION_DAYS: '1' },
+  );
+
+  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
+  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  assert.equal(marker.sessionId, sessionId);
+  assert.equal(marker.advisoryName, 'session-start-context-restore-hint');
+}
+
 function testCompactHooksAreNotRegistered() {
   const hooksConfig = JSON.parse(fs.readFileSync(hooksConfigPath, 'utf8'));
   assert.equal(hooksConfig.hooks.PreCompact, undefined);
@@ -366,6 +460,10 @@ testPostToolUseFailureContext();
 testPostToolUseStyleGateAdvisory();
 testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
 testLifecycleContexts();
+testSessionStartContextIsDedupedBySession();
+testSessionStartContextIsNotDedupedAcrossSessions();
+testSessionStartContextWithoutSessionIdIsNotGloballyDeduped();
+testSessionStartExpiredDedupeMarkerIsCleanedUp();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();

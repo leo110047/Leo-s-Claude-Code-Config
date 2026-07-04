@@ -338,6 +338,18 @@ function isAdvisoryResult(result) {
   return Boolean(result?.systemMessage || output.additionalContext);
 }
 
+function startSource(input) {
+  return (
+    input.start_source ||
+    input.startSource ||
+    input.session_start_source ||
+    input.sessionStartSource ||
+    input.hook_event_source ||
+    input.hookEventSource ||
+    null
+  );
+}
+
 function hookOutcomeUsageEvents(input, result) {
   if (!result) return [];
 
@@ -348,6 +360,7 @@ function hookOutcomeUsageEvents(input, result) {
       host: 'codex',
       hookEventName: input.hook_event_name || 'unknown',
       toolName: input.tool_name || null,
+      startSource: startSource(input),
     },
   };
 

@@ -44,6 +44,7 @@ function runNode(script, input, extraEnv = {}, expectedStatus = 0) {
     env: {
       ...process.env,
       GOLDBAND_USAGE_FILE: usageFile,
+      GOLDBAND_DATA_DIR: path.join(tmpDir, 'runtime-data'),
       HOOK_ROUTER_METRICS_FILE: metricsFile,
       CLAUDE_SESSION_ID: 'claude-session',
       CODEX_SESSION_ID: 'codex-session',
@@ -62,6 +63,17 @@ function readJsonl(filePath) {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+}
+
+function dedupeMarkerPath(sessionId) {
+  return path.join(
+    tmpDir,
+    'runtime-data',
+    'hook-router',
+    'dedupe',
+    'session-start-context-restore-hint',
+    `${sessionId}.json`,
+  );
 }
 
 function runReportJson() {
@@ -289,6 +301,55 @@ function testCodexStructuredDenyTelemetryName() {
   assert.equal(events[0].name, 'recursive-force-delete');
 }
 
+function testClaudeSessionStartContextIsDedupedBySession() {
+  const sessionId = 'claude-session-start-dedupe';
+  const first = runNode(claudeRouter, {
+    hook_event_name: 'SessionStart',
+    session_id: sessionId,
+  });
+  const second = runNode(claudeRouter, {
+    hook_event_name: 'SessionStart',
+    session_id: sessionId,
+  });
+
+  const firstOutput = JSON.parse(first.stdout);
+  const secondOutput = JSON.parse(second.stdout);
+  assert.equal(firstOutput.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.equal(secondOutput.hookSpecificOutput, undefined);
+
+  const sessionStartEvents = readJsonl(usageFile).filter(
+    (event) =>
+      event.category === 'hook-advisory' &&
+      event.name === 'SessionStart' &&
+      event.sessionId === sessionId &&
+      event.detail?.host === 'claude',
+  );
+  assert.equal(sessionStartEvents.length, 1);
+}
+
+function testClaudeExpiredDedupeMarkerIsCleanedUp() {
+  const sessionId = 'claude-session-start-expired-marker';
+  const markerPath = dedupeMarkerPath(sessionId);
+  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+  fs.writeFileSync(markerPath, '{}', 'utf8');
+  const oldDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  fs.utimesSync(markerPath, oldDate, oldDate);
+
+  const result = runNode(
+    claudeRouter,
+    {
+      hook_event_name: 'SessionStart',
+      session_id: sessionId,
+    },
+    { GOLDBAND_DEDUPE_RETENTION_DAYS: '1' },
+  );
+
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
+  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  assert.equal(marker.sessionId, sessionId);
+}
+
 function runTelemetryFixtures() {
   runNode(claudeRouter, {
     hook_event_name: 'PreToolUse',
@@ -423,6 +484,8 @@ testCodexDataRootFallbacks();
 testCodexTempFallback();
 testCodexUsageRetention();
 testCodexStructuredDenyTelemetryName();
+testClaudeSessionStartContextIsDedupedBySession();
+testClaudeExpiredDedupeMarkerIsCleanedUp();
 testTelemetryCapture();
 testReportSummary();
 
