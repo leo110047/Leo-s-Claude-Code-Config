@@ -224,9 +224,9 @@ Phase 4 對應審查優先級 3;Phase 5 對應審查優先級 4 與 buzzword 清
 
 ### Phase 4 — eval 與 failure taxonomy 接 CI
 
-- [ ] 繼承的 eval harness 改名並接上 CI(含預算與金鑰安排)。
-- [ ] 擴充 `hooks/scripts/tools/replay-hook-router.js`:建 golden decision dataset(該擋/不該擋案例),hook policy 每次改動跑回歸。
-- [ ] 建 failure taxonomy:hook 誤擋、漏擋、skill 誤觸發、installer 壞損,結構化累積;每次事故補一筆 regression case。
+- [x] 繼承的 eval harness 改名並接上 CI(含預算與金鑰安排)。
+- [x] 擴充 `hooks/scripts/tools/replay-hook-router.js`:建 golden decision dataset(該擋/不該擋案例),hook policy 每次改動跑回歸。
+- [x] 建 failure taxonomy:hook 誤擋、漏擋、skill 誤觸發、installer 壞損,結構化累積;每次事故補一筆 regression case。
 
 完成條件:改 hook policy 或 workflow skill 時,CI 能擋住已知退化;能陳述 deny 規則的誤殺/漏擋狀況。
 

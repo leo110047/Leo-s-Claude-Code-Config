@@ -1,0 +1,151 @@
+name: Goldband Loop Paid Evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      eval_suite:
+        description: Root npm script to run against goldband-loop
+        required: true
+        default: test:gate
+        type: choice
+        options:
+          - test:gate
+          - test:e2e
+          - test:evals
+          - test:periodic
+      confirm_budget:
+        description: Maintainer confirms this run may spend API budget
+        required: true
+        default: false
+        type: boolean
+      max_cost_usd:
+        description: Post-run budget cap in USD
+        required: true
+        default: "25"
+        type: string
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: goldband-loop-paid-evals-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.preflight.outputs.enabled }}
+      reason: ${{ steps.preflight.outputs.reason }}
+      eval_suite: ${{ steps.preflight.outputs.eval_suite }}
+      max_cost_usd: ${{ steps.preflight.outputs.max_cost_usd }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: preflight
+        name: Check secrets and budget gate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          REQUESTED_SUITE: ${{ github.event_name == 'schedule' && 'test:periodic' || inputs.eval_suite }}
+          REQUESTED_MAX_COST_USD: ${{ github.event_name == 'schedule' && vars.GOLDBAND_EVALS_MAX_COST_USD || inputs.max_cost_usd }}
+          DISPATCH_BUDGET_CONFIRMED: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_budget || 'false' }}
+          SCHEDULE_BUDGET_CONFIRMED: ${{ vars.GOLDBAND_EVALS_BUDGET_APPROVED }}
+        run: |
+          suite="${REQUESTED_SUITE:-test:gate}"
+          max_cost_usd="${REQUESTED_MAX_COST_USD:-25}"
+          echo "eval_suite=$suite" >> "$GITHUB_OUTPUT"
+          echo "max_cost_usd=$max_cost_usd" >> "$GITHUB_OUTPUT"
+
+          node -e '
+            const value = process.argv[1];
+            if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+              console.error(`max_cost_usd must be a non-negative decimal, got: ${value}`);
+              process.exit(1);
+            }
+          ' "$max_cost_usd"
+
+          missing=()
+          [ -z "$ANTHROPIC_API_KEY" ] && missing+=("ANTHROPIC_API_KEY")
+          [ -z "$OPENAI_API_KEY" ] && missing+=("OPENAI_API_KEY")
+          [ -z "$GEMINI_API_KEY" ] && missing+=("GEMINI_API_KEY")
+
+          budget_confirmed="false"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "$DISPATCH_BUDGET_CONFIRMED" = "true" ]; then
+            budget_confirmed="true"
+          fi
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "$SCHEDULE_BUDGET_CONFIRMED" = "true" ]; then
+            budget_confirmed="true"
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=missing secrets: ${missing[*]}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$budget_confirmed" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=budget not confirmed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "reason=secrets present and budget confirmed" >> "$GITHUB_OUTPUT"
+
+  paid-evals:
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install Goldband Loop dependencies
+        run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Install Goldband Loop Playwright browser
+        run: cd goldband-loop && bunx playwright install --with-deps chromium
+
+      - name: Run paid eval suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EVALS_CONCURRENCY: "15"
+        run: npm run ${{ needs.preflight.outputs.eval_suite }}
+
+      - name: Enforce eval budget cap
+        if: always()
+        env:
+          MAX_COST_USD: ${{ needs.preflight.outputs.max_cost_usd }}
+        run: node scripts/check-eval-budget-cap.mjs
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldband-loop-paid-evals
+          path: |
+            ~/.goldband-dev/evals/*.json
+            ~/.goldband/projects/*/evals/*.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  skipped:
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.enabled != 'true'
+    steps:
+      - name: Report skipped paid evals
+        run: |
+          echo "Goldband Loop paid evals skipped."
+          echo "Reason: ${{ needs.preflight.outputs.reason }}"
+          echo "Requested suite: ${{ needs.preflight.outputs.eval_suite }}"

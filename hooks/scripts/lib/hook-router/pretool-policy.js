@@ -3,6 +3,18 @@ const { isModeActive } = require('./mode-state');
 const { matchCarefulModeRisk } = require('./careful-mode-rules');
 const { matchFreezeModeBashViolation } = require('./freeze-mode-rules');
 
+const PRETOOL_DENY_POLICIES = [
+  {
+    name: 'dev-server-blocker',
+    description: 'blocks foreground development servers outside tmux',
+  },
+  {
+    name: 'doc-file-blocker',
+    description:
+      'blocks ad hoc documentation file creation outside approved paths',
+  },
+];
+
 function shouldBlockDevServer(command) {
   if (!command || process.platform === 'win32') {
     return false;
@@ -246,5 +258,6 @@ function evaluatePreToolUse(input) {
 }
 
 module.exports = {
+  PRETOOL_DENY_POLICIES,
   evaluatePreToolUse,
 };

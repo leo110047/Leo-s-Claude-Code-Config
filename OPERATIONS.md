@@ -25,6 +25,9 @@ bash scripts/check-codex-portability.sh
 ./scripts/check-skills.sh
 python3 scripts/verify-hook-script-references.py
 node scripts/check-code-style.mjs
+npm run test:hook-router
+npm run test:hook-router:coverage
+npm run test:eval-budget-cap
 ```
 
 If `codex/rules/default.rules` becomes dirty with local approvals, run:
@@ -129,6 +132,32 @@ explicitly reported a `Skill` tool invocation with a `goldband-*` skill name.
 Phase 2 keep/delete decisions should use confirmed workflow counts as the
 primary signal. Inferred workflow signals and hook advisories are secondary
 triage data and can be noisy.
+
+## Regression Gates and Failure Taxonomy
+
+Hook policy regressions are tracked through the required/free replay gate:
+
+```bash
+npm run test:hook-router
+npm run test:hook-router:coverage
+npm run test:eval-budget-cap
+```
+
+CI runs these commands on every push and pull request. The replay dataset is
+`hooks/fixtures/router/replay-fixtures.json`; the coverage checker reads that
+dataset plus the live hook policy modules so missing secret-pattern,
+pretool-policy, careful-mode, or freeze-mode cases fail mechanically.
+
+Paid Goldband Loop evals are opt-in only through
+`.github/workflows/goldband-loop-paid-evals.yml`. They require maintainer budget
+confirmation and `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY`
+GitHub Actions secrets. If either budget or secrets are missing, the workflow
+must report skipped and must not count as PR coverage.
+
+See:
+
+- [docs/HOOK_REGRESSION_GATES.md](docs/HOOK_REGRESSION_GATES.md)
+- [docs/FAILURE_TAXONOMY.md](docs/FAILURE_TAXONOMY.md)
 
 Current hook discovery boundary:
 

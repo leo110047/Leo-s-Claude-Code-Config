@@ -54,6 +54,15 @@ jobs:
       - name: Test coding style gate
         run: npm run test:style-gate
 
+      - name: Replay hook router golden dataset
+        run: npm run test:hook-router
+
+      - name: Check hook router coverage matrix
+        run: npm run test:hook-router:coverage
+
+      - name: Test eval budget cap checker
+        run: npm run test:eval-budget-cap
+
       - name: Verify hook script references
         run: |
           echo "=== Verifying hook script references ==="

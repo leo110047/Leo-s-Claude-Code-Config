@@ -1,6 +1,13 @@
 [
   {
     "id": "pretool-allow-normal-edit",
+    "coverage": {
+      "category": "router-smoke",
+      "policy": "normal-edit",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Edit",
@@ -15,26 +22,14 @@
     }
   },
   {
-    "id": "pretool-block-secret",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Edit",
-      "tool_input": {
-        "file_path": "src/secret.ts",
-        "new_string": "const token = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890';"
-      }
+    "id": "pretool-block-doc-file-creation",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "doc-file-blocker",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
     },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "BLOCKED",
-        "Potential secrets"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-doc-write",
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Write",
@@ -52,24 +47,36 @@
     }
   },
   {
-    "id": "pretool-allow-git-push-reminder",
+    "id": "pretool-allow-readme-write",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "doc-file-blocker",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
+      "tool_name": "Write",
       "tool_input": {
-        "command": "git push origin main"
+        "file_path": "README.md",
+        "content": "documented in the project README"
       }
     },
     "expect": {
       "exitCode": 0,
-      "decision": "allow",
-      "stderrIncludes": [
-        "review branch/commits/remote"
-      ]
+      "decision": "allow"
     }
   },
   {
     "id": "pretool-block-dev-server",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "dev-server-blocker",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
@@ -86,7 +93,899 @@
     }
   },
   {
-    "id": "pretool-block-force-push-when-careful-mode-active",
+    "id": "pretool-allow-non-dev-npm-script",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "dev-server-blocker",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "npm run build"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "pretool-allow-git-push-reminder",
+    "coverage": {
+      "category": "pretool-advisory",
+      "policy": "git-push-reminder",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git push origin main"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stderrIncludes": [
+        "review branch/commits/remote"
+      ]
+    }
+  },
+  {
+    "id": "secret-aws-access-key-id-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "AWS Access Key ID",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/aws-access-key-id.ts",
+        "new_string": "const sample = \"A\u004bIAABCDEFGHIJKLMNOP\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "AWS Access Key ID"
+      ]
+    }
+  },
+  {
+    "id": "secret-aws-access-key-id-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "AWS Access Key ID",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/aws-access-key-id-negative.ts",
+        "new_string": "const sample = \"placeholder AKIA ABCD\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-aws-secret-access-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "AWS Secret Access Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/aws-secret-access-key.ts",
+        "new_string": "const sample = \"AWS_SECRET_ACCESS_\u004bEY=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "AWS Secret Access Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-aws-secret-access-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "AWS Secret Access Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/aws-secret-access-key-negative.ts",
+        "new_string": "const sample = \"AWS_SECRET_ACCESS_KEY=example\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-github-token-classic-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub Token (classic)",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-token-classic.ts",
+        "new_string": "const sample = \"ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "GitHub Token (classic)"
+      ]
+    }
+  },
+  {
+    "id": "secret-github-token-classic-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub Token (classic)",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-token-classic-negative.ts",
+        "new_string": "const sample = \"ghp_example_token\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-github-token-fine-grained-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub Token (fine-grained)",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-token-fine-grained.ts",
+        "new_string": "const sample = \"github_pat_AAAAAAAAAAAAAAAAAAAAAA\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "GitHub Token (fine-grained)"
+      ]
+    }
+  },
+  {
+    "id": "secret-github-token-fine-grained-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub Token (fine-grained)",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-token-fine-grained-negative.ts",
+        "new_string": "const sample = \"github_pat_example\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-github-oauth-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub OAuth",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-oauth.ts",
+        "new_string": "const sample = \"gho_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "GitHub OAuth"
+      ]
+    }
+  },
+  {
+    "id": "secret-github-oauth-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "GitHub OAuth",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/github-oauth-negative.ts",
+        "new_string": "const sample = \"gho_example_token\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-stripe-secret-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Stripe Secret Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/stripe-secret-key.ts",
+        "new_string": "const sample = \"s\u006b_live_cccccccccccccccccccccccc\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Stripe Secret Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-stripe-secret-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Stripe Secret Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/stripe-secret-key-negative.ts",
+        "new_string": "const sample = \"sk_test_placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-stripe-restricted-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Stripe Restricted Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/stripe-restricted-key.ts",
+        "new_string": "const sample = \"r\u006b_live_dddddddddddddddddddddddd\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Stripe Restricted Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-stripe-restricted-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Stripe Restricted Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/stripe-restricted-key-negative.ts",
+        "new_string": "const sample = \"rk_test_placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-private-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Private Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/private-key.ts",
+        "new_string": "const sample = \"-----BEGIN OPENSSH PRIVATE KEY-----\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Private Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-private-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Private Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/private-key-negative.ts",
+        "new_string": "const sample = \"-----BEGIN PUBLIC KEY-----\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-database-url-with-password-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Database URL with password",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/database-url-with-password.ts",
+        "new_string": "const sample = \"postgres://user:password@example.com/db\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Database URL with password"
+      ]
+    }
+  },
+  {
+    "id": "secret-database-url-with-password-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Database URL with password",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/database-url-with-password-negative.ts",
+        "new_string": "const sample = \"postgres://user@example.com/db\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-jwt-token-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "JWT Token",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/jwt-token.ts",
+        "new_string": "const sample = \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature123\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "JWT Token"
+      ]
+    }
+  },
+  {
+    "id": "secret-jwt-token-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "JWT Token",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/jwt-token-negative.ts",
+        "new_string": "const sample = \"jwt token stored in env\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-slack-token-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Slack Token",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/slack-token.ts",
+        "new_string": "const sample = \"xoxb-1234567890-abcdef\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Slack Token"
+      ]
+    }
+  },
+  {
+    "id": "secret-slack-token-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Slack Token",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/slack-token-negative.ts",
+        "new_string": "const sample = \"slack token placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-google-api-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Google API Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/google-api-key.ts",
+        "new_string": "const sample = \"AIzaEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Google API Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-google-api-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Google API Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/google-api-key-negative.ts",
+        "new_string": "const sample = \"AIza placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-anthropic-api-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Anthropic API Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/anthropic-api-key.ts",
+        "new_string": "const sample = \"sk-ant-FFFFFFFFFFFFFFFFFFFF\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "Anthropic API Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-anthropic-api-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Anthropic API Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/anthropic-api-key-negative.ts",
+        "new_string": "const sample = \"sk-ant-placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-openai-api-key-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "OpenAI API Key",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/openai-api-key.ts",
+        "new_string": "const sample = \"sk-GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG\";"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Potential secrets",
+        "OpenAI API Key"
+      ]
+    }
+  },
+  {
+    "id": "secret-openai-api-key-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "OpenAI API Key",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/openai-api-key-negative.ts",
+        "new_string": "const sample = \"sk-openai-placeholder\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-generic-api-key-assignment-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Generic API Key assignment",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/generic-api-key-assignment.ts",
+        "new_string": "const api_key = \"HHHHHHHHHHHHHHHHHHHHHH\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stderrIncludes": [
+        "WARNING",
+        "Generic API Key assignment"
+      ]
+    }
+  },
+  {
+    "id": "secret-generic-api-key-assignment-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Generic API Key assignment",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/generic-api-key-assignment-negative.ts",
+        "new_string": "const sample = \"api_key=\\\"placeholder\\\"\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "secret-generic-password-assignment-positive",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Generic password assignment",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/generic-password-assignment.ts",
+        "new_string": "const password = \"correcthorsebattery\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stderrIncludes": [
+        "WARNING",
+        "Generic password assignment"
+      ]
+    }
+  },
+  {
+    "id": "secret-generic-password-assignment-negative",
+    "coverage": {
+      "category": "secret-patterns",
+      "policy": "Generic password assignment",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Edit",
+      "tool_input": {
+        "file_path": "src/generic-password-assignment-negative.ts",
+        "new_string": "const sample = \"password=\\\"placeholder\\\"\";"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-rm-rf-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "rm-rf",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "rm -rf /tmp/danger"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "rm -rf"
+      ]
+    }
+  },
+  {
+    "id": "careful-rm-rf-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "rm-rf",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "rm -r /tmp/non-force"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-git-force-push-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "git-force-push",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
@@ -117,7 +1016,14 @@
     }
   },
   {
-    "id": "pretool-allow-safe-push-when-careful-mode-active",
+    "id": "careful-git-force-push-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "git-force-push",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
@@ -147,7 +1053,518 @@
     }
   },
   {
-    "id": "pretool-block-edit-when-freeze-mode-active",
+    "id": "careful-git-reset-hard-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "git-reset-hard",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "git reset --hard HEAD~1"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "git reset --hard"
+      ]
+    }
+  },
+  {
+    "id": "careful-git-reset-hard-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "git-reset-hard",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "git reset --soft HEAD~1"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-terraform-destroy-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "terraform-destroy",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "terraform destroy -auto-approve"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "terraform destroy"
+      ]
+    }
+  },
+  {
+    "id": "careful-terraform-destroy-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "terraform-destroy",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "terraform plan"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-kubectl-delete-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "kubectl-delete",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "kubectl delete namespace prod"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "kubectl delete"
+      ]
+    }
+  },
+  {
+    "id": "careful-kubectl-delete-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "kubectl-delete",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "kubectl get pods"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-helm-uninstall-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "helm-uninstall",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "helm uninstall production"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "helm uninstall"
+      ]
+    }
+  },
+  {
+    "id": "careful-helm-uninstall-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "helm-uninstall",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "helm list"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "careful-destructive-sql-positive",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "destructive-sql",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "psql -c \"DROP TABLE users\""
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "careful-mode is active",
+        "destructive SQL"
+      ]
+    }
+  },
+  {
+    "id": "careful-destructive-sql-negative",
+    "coverage": {
+      "category": "careful-mode",
+      "policy": "destructive-sql",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "careful-session",
+      "tool_input": {
+        "command": "psql -c \"SELECT * FROM users\""
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "careful-session",
+        "modes": {
+          "careful-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "freeze-read-only-bash-only-positive",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "read-only-bash-only",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "phase-4-golden-dataset"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "freeze-session",
+      "tool_input": {
+        "command": "python scripts/migrate.py"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "freeze-session",
+        "modes": {
+          "freeze-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "freeze-mode is active",
+        "read-only Bash"
+      ]
+    }
+  },
+  {
+    "id": "freeze-read-only-bash-only-negative",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "read-only-bash-only",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "existing-replay-fixture"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "freeze-session",
+      "tool_input": {
+        "command": "git status --short --branch"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "freeze-session",
+        "modes": {
+          "freeze-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "freeze-no-shell-chaining-positive",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "no-shell-chaining",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "freeze-session",
+      "tool_input": {
+        "command": "echo $(rm -rf /tmp/x)"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "freeze-session",
+        "modes": {
+          "freeze-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "freeze-mode is active",
+        "command substitution"
+      ]
+    }
+  },
+  {
+    "id": "freeze-no-shell-chaining-negative",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "no-shell-chaining",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "existing-replay-fixture"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "session_id": "freeze-session",
+      "tool_input": {
+        "command": "printenv HOME"
+      }
+    },
+    "setup": {
+      "modeState": {
+        "sessionId": "freeze-session",
+        "modes": {
+          "freeze-mode": {
+            "active": true,
+            "enabledAt": "2026-03-18T00:00:00.000Z",
+            "updatedAt": "2026-03-18T00:00:00.000Z"
+          }
+        }
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "freeze-no-file-edits-positive",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "no-file-edits",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Edit",
@@ -179,13 +1596,20 @@
     }
   },
   {
-    "id": "pretool-allow-git-status-when-freeze-mode-active",
+    "id": "freeze-no-file-edits-negative",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "no-file-edits",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "phase-4-golden-dataset"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
       "session_id": "freeze-session",
       "tool_input": {
-        "command": "git status --short --branch"
+        "command": "rg TODO src"
       }
     },
     "setup": {
@@ -206,131 +1630,14 @@
     }
   },
   {
-    "id": "pretool-block-git-push-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "git push origin main"
-      }
+    "id": "freeze-block-diff-output-positive",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "read-only-bash-only",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
     },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "read-only Bash"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-sed-inplace-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "sed -i 's/foo/bar/g' README.md"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "read-only Bash"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-find-delete-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "find . -delete"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "read-only Bash"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-git-branch-delete-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "git branch -D old-branch"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "read-only Bash"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-diff-output-when-freeze-mode-active",
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
@@ -361,7 +1668,14 @@
     }
   },
   {
-    "id": "pretool-allow-git-diff-when-freeze-mode-active",
+    "id": "freeze-allow-git-diff-negative",
+    "coverage": {
+      "category": "freeze-mode",
+      "policy": "read-only-bash-only",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
@@ -388,127 +1702,14 @@
     }
   },
   {
-    "id": "pretool-block-env-wrapper-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "env rm -rf /tmp/x"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "read-only Bash"
-      ]
-    }
-  },
-  {
-    "id": "pretool-block-command-substitution-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "echo $(rm -rf /tmp/x)"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "command substitution"
-      ]
-    }
-  },
-  {
-    "id": "pretool-allow-printenv-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "printenv HOME"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 0,
-      "decision": "allow"
-    }
-  },
-  {
-    "id": "pretool-block-newline-chaining-when-freeze-mode-active",
-    "input": {
-      "hook_event_name": "PreToolUse",
-      "tool_name": "Bash",
-      "session_id": "freeze-session",
-      "tool_input": {
-        "command": "git status\nrm -rf /tmp/x"
-      }
-    },
-    "setup": {
-      "modeState": {
-        "sessionId": "freeze-session",
-        "modes": {
-          "freeze-mode": {
-            "active": true,
-            "enabledAt": "2026-03-18T00:00:00.000Z",
-            "updatedAt": "2026-03-18T00:00:00.000Z"
-          }
-        }
-      }
-    },
-    "expect": {
-      "exitCode": 2,
-      "decision": "block",
-      "stderrIncludes": [
-        "freeze-mode is active",
-        "command substitution"
-      ]
-    }
-  },
-  {
     "id": "posttool-edit-ts-async-tasks",
+    "coverage": {
+      "category": "posttool-policy",
+      "policy": "edit-ts-async-tasks",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PostToolUse",
       "tool_name": "Edit",
@@ -524,6 +1725,13 @@
   },
   {
     "id": "posttool-edit-js-format-only",
+    "coverage": {
+      "category": "posttool-policy",
+      "policy": "edit-js-format-only",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "PostToolUse",
       "tool_name": "Edit",
@@ -539,6 +1747,13 @@
   },
   {
     "id": "stop-non-blocking",
+    "coverage": {
+      "category": "stop-policy",
+      "policy": "stop-non-blocking",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "existing-replay-fixture"
+    },
     "input": {
       "hook_event_name": "Stop"
     },

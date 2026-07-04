@@ -11,6 +11,9 @@ const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
 const LOOP_DIR = path.join(ROOT_DIR, 'goldband-loop');
 const INVENTORY_PATH = path.join(LOOP_DIR, 'inventory.json');
+const GENERATED_RUNTIME_BINARY_SOURCES = new Map([
+  ['goldband-global-discover', 'bin/goldband-global-discover.ts'],
+]);
 
 function main() {
   const inventory = readJson(INVENTORY_PATH);
@@ -45,7 +48,6 @@ function runInstall(home, target) {
         ...process.env,
         HOME: home,
         GOLDBAND_LOOP_DIR: LOOP_DIR,
-        GOLDBAND_SKIP_BUILD: '1',
         GOLDBAND_SKIP_GENERATE: '1',
         GOLDBAND_SKIP_PLAYWRIGHT: '1',
         GOLDBAND_SKIP_COREUTILS: '1',
@@ -72,8 +74,27 @@ function assertSourceInventory(inventory) {
     .sort();
   assertDeepSetEqual('source skills', sourceSkills, inventory.skills);
 
-  const sourceBins = executableFiles(path.join(LOOP_DIR, 'bin'));
-  assertDeepSetEqual('runtime binaries', sourceBins, inventory.binaries);
+  assertGeneratedRuntimeSources(inventory);
+  const sourceBins = executableFiles(path.join(LOOP_DIR, 'bin')).filter(
+    (entry) => !GENERATED_RUNTIME_BINARY_SOURCES.has(entry),
+  );
+  const expectedSourceBins = inventory.binaries.filter(
+    (entry) => !GENERATED_RUNTIME_BINARY_SOURCES.has(entry),
+  );
+  assertDeepSetEqual('source runtime binaries', sourceBins, expectedSourceBins);
+}
+
+function assertGeneratedRuntimeSources(inventory) {
+  for (const [binary, sourcePath] of GENERATED_RUNTIME_BINARY_SOURCES) {
+    assert.ok(
+      inventory.binaries.includes(binary),
+      `generated runtime binary missing from inventory: ${binary}`,
+    );
+    assert.ok(
+      fs.existsSync(path.join(LOOP_DIR, sourcePath)),
+      `generated runtime binary source missing: ${sourcePath}`,
+    );
+  }
 }
 
 function assertSourceSymlinksResolve(rootDir) {
