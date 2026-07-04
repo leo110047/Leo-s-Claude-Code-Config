@@ -13,6 +13,13 @@ function mkTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-team-test-'));
 }
 
+function gitCommit(cwd: string, args: string): void {
+  execSync(
+    `git -c user.name="Goldband Test" -c user.email="goldband-test@example.invalid" commit ${args}`,
+    { cwd },
+  );
+}
+
 function run(
   cmd: string,
   opts: { cwd?: string; env?: Record<string, string>; timeout?: number } = {},
@@ -136,8 +143,8 @@ describe('goldband-session-update', () => {
     fs.mkdirSync(stateDir, { recursive: true });
 
     // Init a git repo to pass the .git guard
-    execSync('git init', { cwd: goldbandDir });
-    execSync('git commit --allow-empty -m "init"', { cwd: goldbandDir });
+    execSync('git init -q', { cwd: goldbandDir });
+    gitCommit(goldbandDir, '--allow-empty -m "init"');
     fs.writeFileSync(path.join(goldbandDir, 'VERSION'), '0.1.0');
 
     // Create a minimal goldband-config that returns auto_upgrade=true
@@ -194,8 +201,8 @@ describe('goldband-team-init', () => {
 
   beforeEach(() => {
     tmpDir = mkTmpDir();
-    execSync('git init', { cwd: tmpDir });
-    execSync('git commit --allow-empty -m "init"', { cwd: tmpDir });
+    execSync('git init -q', { cwd: tmpDir });
+    gitCommit(tmpDir, '--allow-empty -m "init"');
   });
 
   afterEach(() => {
@@ -269,7 +276,7 @@ describe('goldband-team-init', () => {
     fs.writeFileSync(path.join(vendoredDir, 'README.md'), 'vendored');
     // Track it in git
     execSync('git add .claude/skills/goldband/', { cwd: tmpDir });
-    execSync('git commit -m "add vendored goldband"', { cwd: tmpDir });
+    gitCommit(tmpDir, '-m "add vendored goldband"');
 
     const result = run(`${TEAM_INIT} optional`, { cwd: tmpDir });
     expect(result.exitCode).toBe(0);
@@ -310,7 +317,7 @@ describe('goldband-team-init', () => {
     fs.mkdirSync(vendoredDir, { recursive: true });
     fs.writeFileSync(path.join(vendoredDir, 'VERSION'), '0.14.0.0');
     execSync('git add .claude/skills/goldband/', { cwd: tmpDir });
-    execSync('git commit -m "add vendored"', { cwd: tmpDir });
+    gitCommit(tmpDir, '-m "add vendored"');
 
     run(`${TEAM_INIT} optional`, { cwd: tmpDir });
 
