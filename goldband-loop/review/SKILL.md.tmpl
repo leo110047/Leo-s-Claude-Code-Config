@@ -32,6 +32,34 @@ triggers:
 
 You are running the `/review` workflow. Analyze the current branch's diff against the base branch for structural issues that tests don't catch.
 
+## Programmatic runtime entrypoint
+
+The runtime contract for this workflow lives in `goldband-loop/workflows/`.
+Prefer the programmatic path when you need structured evidence, mock smoke
+tests, or comparable findings:
+
+```bash
+bun run workflows/run.ts goldband-review --mode mock --worktree
+```
+
+`--worktree` includes staged tracked changes, unstaged tracked changes, and
+safe untracked text files. Untracked files that are too large, binary,
+non-UTF-8, or secret-like are represented by no-content skipped markers instead
+of being sent to the host.
+For real LLM execution, `--mode real` must be paired with `--host codex` or
+`--host claude`; otherwise the runtime fails closed instead of falling back to
+mock mode.
+
+Use `--mode real --host codex` or `--mode real --host claude` only for an
+explicitly authorized LLM run. Step evidence is written to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-review.jsonl
+```
+
+The markdown review flow below is the legacy fallback and human-readable review
+guide. Do not treat it as the only source of truth for runtime execution.
+
 ---
 
 ## Step 1: Check branch

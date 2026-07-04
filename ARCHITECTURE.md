@@ -47,6 +47,7 @@ result against a machine-readable inventory.
 ### goldband-loop owns
 
 - workflow runtime source and generated host skill surfaces
+- programmatic workflow contracts under `goldband-loop/workflows/`
 - workflow-native docs, build metadata, tests, browser/PDF/design/iOS tooling
 - runtime binaries under `goldband-loop/bin/goldband-*`
 - the Goldband Loop inventory at `goldband-loop/inventory.json`
@@ -77,6 +78,37 @@ That installer is responsible for:
 The inventory gate proves the contract. It runs a clean-home install, lists the
 actual Claude/Codex skill entries and runtime binaries, and fails on missing
 entries, extra entries, legacy commands, or old runtime prefixes.
+
+## Programmatic Workflow Runtime
+
+`goldband-loop/workflows/` is the runtime contract layer for workflow execution.
+Markdown skills and `.tmpl` files remain the user-facing entrypoints and human
+guidance, but they are no longer the only source of truth for migrated workflows.
+The registry records the executable contract: target, evaluation signal,
+iteration cap, stop conditions, risk level, integration status, and evidence
+policy.
+
+This layer deliberately does not replace the existing inventory or usage
+telemetry:
+
+- `goldband-loop/inventory.json` remains the installed skill list.
+- `hooks/scripts/lib/hook-router/workflow-telemetry.js` remains the workflow
+  usage event builder.
+- `goldband-loop/hosts/*.ts` remains the host generation/support source.
+- `goldband-loop/workflows/registry.ts` owns runtime execution status and step
+  contracts only.
+
+Integrated runtime runs write step evidence to
+`${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/<workflow>.jsonl`. Core
+workflows can run in mock mode for CI without LLM spend; real host execution is
+gated behind explicit `--mode real`.
+For review workflows, untracked worktree files cross an additional trust
+boundary before real host execution: only bounded text files without secret-like
+content are materialized into the prompt, while skipped files are recorded as
+no-content markers.
+The workflow runner is currently single-pass: iteration caps and stop
+conditions are recorded as contract metadata, but convergence loops are not yet
+autonomously executed by the runtime.
 
 ## Validation Gates
 

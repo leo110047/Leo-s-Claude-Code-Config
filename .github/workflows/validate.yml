@@ -89,6 +89,9 @@ jobs:
       - name: Check Goldband Loop inventory
         run: node scripts/check-goldband-loop-inventory.mjs
 
+      - name: Test Goldband Loop workflow runtime
+        run: cd goldband-loop && bun run test:workflows
+
       - name: Test Goldband Loop free suite
         run: cd goldband-loop && bun run test:free
 
