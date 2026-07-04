@@ -1,0 +1,25 @@
+{
+  "name": "goldband sandbox",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "../..",
+    "args": {
+      "CLAUDE_CODE_VERSION": "2.1.201",
+      "CODEX_CLI_VERSION": "0.142.5",
+      "BUN_VERSION": "1.3.11"
+    }
+  },
+  "remoteUser": "goldband",
+  "workspaceFolder": "/workspace/project",
+  "containerEnv": {
+    "GOLDBAND_CONTAINER": "1",
+    "GOLDBAND_SKIP_BUILD": "1",
+    "GOLDBAND_SKIP_COREUTILS": "1",
+    "GOLDBAND_SKIP_GENERATE": "1",
+    "GOLDBAND_SKIP_PLAYWRIGHT": "1"
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace/project,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": "test -d /opt/goldband && claude --version && codex --version"
+}

@@ -10,6 +10,7 @@ Codex. It has two first-party layers:
 
 - shared policy and host adapters, owned by the root repo
 - Goldband Loop runtime, owned by `goldband-loop/`
+- optional local sandbox execution, owned by `sandbox/`
 
 The user-facing workflow surface is `goldband-*`. The installer no longer wraps
 or hides an upstream runtime; it installs Goldband Loop directly and verifies the
@@ -40,6 +41,7 @@ result against a machine-readable inventory.
   - `skills/projects/`
 - validation gates:
   - `scripts/check-goldband-loop-inventory.mjs`
+  - `scripts/test-sandbox.sh`
   - `.github/workflows/validate.yml`
 
 ### goldband-loop owns
@@ -92,6 +94,19 @@ toolchains and file-shape rules.
   dependencies, installs the Playwright browser asset, runs
   `node scripts/check-goldband-loop-inventory.mjs`, and then runs
   `cd goldband-loop && bun run test:free`.
+- The sandbox story is additive defense in depth. `sandbox/sandbox.sh` starts a
+  Docker/Podman container with goldband baked into a non-writable
+  `/opt/goldband`, a clean container HOME, and one target project mounted
+  read-write. It does not change hook router or permission defaults.
+  `scripts/test-sandbox.sh` proves the image builds, goldband installs through
+  the normal clean-home path during image build, hook replay still blocks
+  representative unsafe commands, CLI smoke checks run, installed Goldband Loop
+  helper commands write runtime state under container HOME, `/opt/goldband` is
+  not writable at runtime, the launcher happy path works, and an unmounted host
+  path is not writable.
+- CI runs the sandbox build as a real validation gate. Buildx cache reduces
+  repeat cost on GitHub Actions, but a cold push or pull request still pays for
+  a full image build and global CLI install.
 
 ## Maintenance Rules
 
@@ -101,3 +116,7 @@ toolchains and file-shape rules.
   and run `node scripts/check-goldband-loop-inventory.mjs`.
 - Keep Claude and Codex install paths aligned before claiming dual-tool parity.
 - Keep attribution for the absorbed upstream runtime in the Goldband Loop docs.
+- Keep sandbox claims limited to the boundaries verified in
+  [sandbox/THREAT-MODEL.md](sandbox/THREAT-MODEL.md). Do not present the
+  container as host-complete security or network isolation unless a matching
+  enforcement test exists.

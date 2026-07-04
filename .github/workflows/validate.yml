@@ -95,6 +95,14 @@ jobs:
       - name: Test workflow installer integration
         run: bash scripts/test-workflow-integration.sh
 
+      - name: Set up Docker Buildx for sandbox cache
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test sandbox container
+        env:
+          GOLDBAND_SANDBOX_USE_BUILDX: "1"
+        run: bash scripts/test-sandbox.sh
+
       - name: Summary
         run: |
           echo "=== Validation Summary ==="
