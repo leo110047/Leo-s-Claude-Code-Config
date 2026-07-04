@@ -147,14 +147,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 
@@ -501,7 +500,7 @@ equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
 
 ## Voice
 
-Goldband Loop voice: Garry-shaped product and engineering judgment, compressed for runtime.
+Goldband Loop voice: product and engineering judgment, compressed for runtime.
 
 - Lead with the point. Say what it does, why it matters, and what changes for the builder.
 - Be concrete. Name files, functions, line numbers, commands, outputs, evals, and real numbers.
@@ -632,7 +631,7 @@ Jargon list, gloss on first use if the term appears:
 - buffer overflow
 
 
-## Completeness Principle — Boil the Lake
+## Completeness Principle
 
 AI makes completeness cheap. Recommend complete lakes (tests, edge cases, error paths); flag oceans (rewrites, multi-quarter migrations).
 
@@ -806,6 +805,34 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 # Pre-Landing PR Review
 
 You are running the `/review` workflow. Analyze the current branch's diff against the base branch for structural issues that tests don't catch.
+
+## Programmatic runtime entrypoint
+
+The runtime contract for this workflow lives in `goldband-loop/workflows/`.
+Prefer the programmatic path when you need structured evidence, mock smoke
+tests, or comparable findings:
+
+```bash
+bun run workflows/run.ts goldband-review --mode mock --worktree
+```
+
+`--worktree` includes staged tracked changes, unstaged tracked changes, and
+safe untracked text files. Untracked files that are too large, binary,
+non-UTF-8, or secret-like are represented by no-content skipped markers instead
+of being sent to the host.
+For real LLM execution, `--mode real` must be paired with `--host codex` or
+`--host claude`; otherwise the runtime fails closed instead of falling back to
+mock mode.
+
+Use `--mode real --host codex` or `--mode real --host claude` only for an
+explicitly authorized LLM run. Step evidence is written to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-review.jsonl
+```
+
+The markdown review flow below is the legacy fallback and human-readable review
+guide. Do not treat it as the only source of truth for runtime execution.
 
 ---
 

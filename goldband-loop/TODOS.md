@@ -192,7 +192,7 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 
 **What:** Phase 2a of the browser-skills design (`docs/designs/BROWSER_SKILLS_V1.md`). Two new goldband skills: `/scrape <intent>` (read-only) is the single entry point for pulling page data — first call prototypes via `$B` primitives, subsequent calls on a matching intent route to a codified browser-skill in ~200ms. `/skillify` codifies the most recent successful prototype into a permanent browser-skill on disk: synthesizes `script.ts` + `script.test.ts` + fixture from the agent's own context (final-attempt $B calls only), runs the test in a temp dir, asks before committing, atomic rename to `~/.goldband/browser-skills/<name>/`. The mutating-flow sibling `/automate` is split out as its own P0 (below) — same skillify pattern, different trust profile.
 
-**Why:** Phase 1 shipped the runtime — humans can hand-write deterministic browser scripts that goldband runs. Phase 2a unlocks the productivity gain: an agent that gets a flow right once via 20+ `$B` commands says `/skillify` and the script becomes a 200ms call forever after. Same skillify pattern Garry's articles describe, applied to the read-only browser activity (scraping) most amenable to deterministic compression. Mutating actions ship next as `/automate` because the failure mode (unintended writes) needs stronger gates.
+**Why:** Phase 1 shipped the runtime — humans can hand-write deterministic browser scripts that goldband runs. Phase 2a unlocks the productivity gain: an agent that gets a flow right once via 20+ `$B` commands says `/skillify` and the script becomes a 200ms call forever after. Same skillify pattern the maintainer's articles describe, applied to the read-only browser activity (scraping) most amenable to deterministic compression. Mutating actions ship next as `/automate` because the failure mode (unintended writes) needs stronger gates.
 
 **Pros:** The 100x productivity gain lives here. Closes the loop: agents prototype, codify, then reach for the codified skill in future sessions instead of re-exploring. Replaces the original "self-authoring `$B` commands" P1 — same user-visible goal, no in-daemon isolation problem (skill scripts run as standalone Bun processes, never imported into the daemon). Synthesis question (Codex finding #6) is resolved by re-prompting from the agent's own conversation context (option b in the design doc), bounded to final-attempt `$B` calls per `/plan-eng-review` D2.
 
@@ -201,7 +201,7 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 **Context:** The Phase 1 architecture (3-tier lookup, scoped tokens, sibling SDK, frontmatter contract) is locked and exercised by the bundled `hackernews-frontpage` reference skill. Phase 2a plugs `/scrape` and `/skillify` into that runtime via two skill templates plus one new helper (`browse/src/browser-skill-write.ts` for atomic temp-dir-then-rename per `/plan-eng-review` D3) — no new storage primitives.
 
 **Effort:** M (human: ~1 week / CC: ~1 day)
-**Priority:** P1 (this branch — `garrytan/browserharness` shipping as v1.19.0.0)
+**Priority:** P1 (this branch — `project-owner/browserharness` shipping as v1.19.0.0)
 **Depends on:** Phase 1 shipped (this branch).
 
 ---
@@ -248,7 +248,7 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 
 **Cons:** Migration touches every consumer of `learnings.jsonl` — `/learn` scripts (`goldband-learnings-log`, `goldband-learnings-search`), domain-skills.ts read/write, gbrain-sync (which currently treats it as a flat file). Old `learnings.jsonl` files in the wild need a one-shot migration script.
 
-**Context:** The JSONL hardening in v1.8.0.0 was the right call for that release scope (preserve unification, not boil-the-ocean). But the failure modes are bounded, not eliminated. SQLite is the boil-the-ocean fix.
+**Context:** The JSONL hardening in v1.8.0.0 was the right call for that release scope (preserve unification, not high-scope). But the failure modes are bounded, not eliminated. SQLite is the high-scope fix.
 
 **Effort:** M (human: ~1 week / CC: ~1 day)
 **Priority:** P2
@@ -312,7 +312,7 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 
 ### P3: GBrain skillpack publishing for domain skills
 
-**What:** Domain skills are agent-authored notes per hostname. Right now they're per-machine or per-agent-repo. The natural compounding extension: publish curated skill packs to GBrain (`goldband-brain-sync`) so others can subscribe. "Louise's LinkedIn skills" or "Garry's GitHub skills" become packs anyone can pull.
+**What:** Domain skills are agent-authored notes per hostname. Right now they're per-machine or per-agent-repo. The natural compounding extension: publish curated skill packs to GBrain (`goldband-brain-sync`) so others can subscribe. "Louise's LinkedIn skills" or "the maintainer's GitHub skills" become packs anyone can pull.
 
 **Why:** v1.8.0.0 gets us per-machine compounding. Cross-user compounding is the network effect — every user contributes, every user benefits.
 
@@ -528,7 +528,7 @@ scope of that PR; deliberately deferred to keep PTY-import small.
 
 **Cons:** Mutating intents have higher blast radius (the wrong selector clicks "Delete Account" instead of "Delete Comment"). Phase 4 OS-level FS sandbox is a stronger answer; until then, the user trust burden is real. Confirmation-gate UX needs care — too many prompts and users hit "yes" reflexively. Mitigation: only gate first-run; after `/skillify` codifies, the skill runs unattended.
 
-**Context:** Original Phase 2 plan in `docs/designs/BROWSER_SKILLS_V1.md` bundled `/scrape` + `/automate`. Split during the v1.19.0.0 plan review (`/plan-eng-review` on `garrytan/browserharness`) — the user's source doc framed both as primary, but in practice scraping is where users start because the failure mode is benign. Ship `/scrape` + `/skillify` first (this branch), validate the skillify pattern works, then `/automate` lands on top of the same machinery.
+**Context:** Original Phase 2 plan in `docs/designs/BROWSER_SKILLS_V1.md` bundled `/scrape` + `/automate`. Split during the v1.19.0.0 plan review (`/plan-eng-review` on `project-owner/browserharness`) — the user's source doc framed both as primary, but in practice scraping is where users start because the failure mode is benign. Ship `/scrape` + `/skillify` first (this branch), validate the skillify pattern works, then `/automate` lands on top of the same machinery.
 
 **Effort:** M (human: ~3-5 days / CC: ~1 day)
 **Priority:** P0 (next branch after v1.19.0.0)
@@ -610,7 +610,7 @@ subcommand + slop-check test.
 ### E4 — Blind-spot coach
 
 **What:** Preamble injection that surfaces the OPPOSITE of the user's profile
-once per session per tier >= 2 skill. Boil-the-ocean user gets challenged on
+once per session per tier >= 2 skill. High-scope user gets challenged on
 scope ("what's the 80% version?"); small-scope user gets challenged on ambition.
 `scripts/resolvers/blind-spot-coach.ts`. Marker file for session dedup. Opt-out
 via `goldband-config set blind_spot_coach false`.
@@ -618,7 +618,7 @@ via `goldband-config set blind_spot_coach false`.
 **Why:** Makes goldband a coach (challenges you) instead of a mirror (reflects
 you). The killer differentiation vs. a settings menu.
 
-**Pros:** The feature that makes goldband feel like Garry. Surfaces assumptions
+**Pros:** The feature that makes goldband feel distinct. Surfaces assumptions
 the user hasn't challenged.
 
 **Cons:** Logically conflicts with E1 (which adapts TO profile) and E6 (which
@@ -734,12 +734,12 @@ calibration gate is trustworthy.
 
 ## Sidebar Security
 
-### ML Prompt Injection Classifier — v1 SHIPPED (branch garrytan/prompt-injection-guard)
+### ML Prompt Injection Classifier — v1 SHIPPED (branch project-owner/prompt-injection-guard)
 
-**Status:** IN PROGRESS on branch `garrytan/prompt-injection-guard`. Classifier swap:
+**Status:** IN PROGRESS on branch `project-owner/prompt-injection-guard`. Classifier swap:
 **TestSavantAI** replaces DeBERTa (better on developer content — HN/Reddit/Wikipedia/tech blogs all
 score SAFE 0.98+, attacks score INJECTION 0.99+). Pre-impl gate 3 (benign corpus dry-run)
-forced this pivot — see `~/.goldband/projects/garrytan-goldband/ceo-plans/2026-04-19-prompt-injection-guard.md`.
+forced this pivot — see `~/.goldband/projects/project-owner-goldband/ceo-plans/2026-04-19-prompt-injection-guard.md`.
 
 **What shipped in v1:**
 - `browse/src/security.ts` — canary injection + check, verdict combiner (ensemble rule),
@@ -942,7 +942,7 @@ Remaining work (XL, multi-week):
 
 **What:** Add a `generateSearchIntro()` function (like `generateLakeIntro()`) that introduces the Search Before Building principle on first use, with a link to the blog essay.
 
-**Why:** Boil the Lake has an intro flow that links to the essay and marks `.completeness-intro-seen`. Search Before Building should have the same pattern for discoverability.
+**Why:** Completeness Principle has an intro flow that links to the essay and marks `.completeness-intro-seen`. Search Before Building should have the same pattern for discoverability.
 
 **Context:** Blocked on a blog post to link to. When the essay exists, add the intro flow with a `.search-intro-seen` marker file. Pattern: `generateLakeIntro()` at gen-skill-docs.ts:176.
 
@@ -1169,7 +1169,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 
 **Why:** Surfaced by the Claude adversarial subagent during the v1.0.1.0 ship. Today the tests would stay green while the template regresses, because the error-message strings already differ between test and template. It's a silent-drift bug waiting to happen.
 
-**Context:** The fixed test file is at `test/ship-version-sync.test.ts` (branched off garrytan/ship-version-sync). Existing precedent for extracting-from-skill-md is at `test/helpers/skill-parser.ts`. Pattern: read the template, slice from `## Step 12` to the next `---`, grep fenced bash, feed to `/bin/bash` with substituted fixtures.
+**Context:** The fixed test file is at `test/ship-version-sync.test.ts` (branched off project-owner/ship-version-sync). Existing precedent for extracting-from-skill-md is at `test/helpers/skill-parser.ts`. Pattern: read the template, slice from `## Step 12` to the next `---`, grep fenced bash, feed to `/bin/bash` with substituted fixtures.
 
 **Effort:** S (human: ~2h / CC: ~30min)
 **Priority:** P2
@@ -1203,7 +1203,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 
 **What:** Add a periodic E2E eval that creates a branch with 5+ commits spanning 3+ themes (features, cleanup, infra), runs /ship's Step 5 CHANGELOG generation, and verifies the CHANGELOG mentions all themes.
 
-**Why:** The bug fixed in v0.11.22 (garrytan/ship-full-commit-coverage) showed that /ship's CHANGELOG generation biased toward recent commits on long branches. The prompt fix adds a cross-check, but no test exercises the multi-commit failure mode. The existing `ship-local-workflow` E2E only uses a single-commit branch.
+**Why:** The bug fixed in v0.11.22 (project-owner/ship-full-commit-coverage) showed that /ship's CHANGELOG generation biased toward recent commits on long branches. The prompt fix adds a cross-check, but no test exercises the multi-commit failure mode. The existing `ship-local-workflow` E2E only uses a single-commit branch.
 
 **Context:** Would be a `periodic` tier test (~$4/run, non-deterministic since it tests LLM instruction-following). Setup: create bare remote, clone, add 5+ commits across different themes on a feature branch, run Step 5 via `claude -p`, verify CHANGELOG output covers all themes. Pattern: `ship-local-workflow` in `test/skill-e2e-workflow.test.ts`.
 
@@ -1461,7 +1461,7 @@ Shipped: Default model changed to Sonnet for structure tests (~30), Opus retaine
 
 **Effort:** S
 **Priority:** P2
-**Depends on:** `garrytan/team-supabase-store` branch landing on main
+**Depends on:** `project-owner/team-supabase-store` branch landing on main
 
 ### /yc-prep skill
 
@@ -1562,7 +1562,7 @@ Shipped in v0.8.3. Step 8.5 added to `/ship` — after creating the PR, `/ship` 
 
 **Effort:** M (human) / S (CC)
 **Priority:** P3
-**Depends on:** Boil the Lake shipped (v0.6.1)
+**Depends on:** Completeness Principle shipped (v0.6.1)
 
 ## Safety & Observability
 
@@ -1606,7 +1606,7 @@ Shipped in v0.6.5. TemplateContext in gen-skill-docs.ts bakes skill name into pr
 
 **Why:** goldband skills produce valuable artifacts stored at `~/.goldband/projects/$SLUG/`. When Claude's auto-compaction fires, it preserves a generic summary but doesn't know these artifacts exist. The plans and reviews that shaped the current work silently vanish from context, even though they're still on disk. This is the thing nobody else in the Claude Code ecosystem is solving, because nobody else has goldband's artifact architecture.
 
-**Context:** Inspired by Anthropic's `claude-progress.txt` pattern for long-running agents. Also informed by claude-mem's "progressive disclosure" approach. See `docs/designs/SESSION_INTELLIGENCE.md` for the broader vision. CEO plan: `~/.goldband/projects/garrytan-goldband/ceo-plans/2026-03-31-session-intelligence-layer.md`.
+**Context:** Inspired by Anthropic's `claude-progress.txt` pattern for long-running agents. Also informed by claude-mem's "progressive disclosure" approach. See `docs/designs/SESSION_INTELLIGENCE.md` for the broader vision. CEO plan: `~/.goldband/projects/project-owner-goldband/ceo-plans/2026-03-31-session-intelligence-layer.md`.
 
 **Effort:** S (human: ~30 min / CC: ~5 min)
 **Priority:** P1

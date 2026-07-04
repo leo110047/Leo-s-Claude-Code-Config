@@ -34,5 +34,7 @@ codex/local/rules/*
 
 # Node
 node_modules/
+mcp/server/dist/
+mcp/server/dist-test/
 .agents/
 .goldband/

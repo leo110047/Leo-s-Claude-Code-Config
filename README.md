@@ -22,7 +22,7 @@ commands、rules、portable skills 和 workflow runtime 接到你的本機環境
 ## goldband 與 Goldband Loop 的邊界
 
 - goldband 管 shared policy、installer、Claude/Codex adapters、global guidance、hooks、commands、rules 和 portable skills。
-- `goldband-loop/` 是 first-party workflow runtime,不是 vendored upstream。
+- `goldband-loop/` 是 first-party workflow runtime。
 - 安裝時 goldband 會直接安裝 Goldband Loop,暴露 `goldband-*` 入口。
 
 維護細節看 [ARCHITECTURE.md](ARCHITECTURE.md)。
@@ -96,6 +96,41 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 
 Claude `hooks/hooks.json` 使用 `defaultMode: acceptEdits`，定位是信任本機開發環境的便利 profile，不是 sandbox。它會用 hooks、permissions 和 deny list 降低誤操作風險，但不能把惡意或任意 shell 視為已隔離。`node`、`python`、`xargs`、`find` 和 `sed` 這類可包裝或批次執行其他動作的 broad allow pattern 不應放回 source auto-allow；需要時應由使用者針對具體命令確認，或在本機 overlay 裡明確承擔信任邊界。
 
+## Running goldband in a sandbox
+
+goldband 也提供一個 container-first 的本機 sandbox 入口。它不是 VM，也不是「主機完全安全」保證；它只是把 agent process、hooks、MCP servers、CLI 和 goldband HOME 放進 Docker/Podman container，並且 run 階段只掛入明確指定的目標專案。
+
+5 分鐘 demo：
+
+```bash
+TMP_PROJECT=$(mktemp -d)
+./sandbox/sandbox.sh run "$TMP_PROJECT"
+```
+
+進入容器後：
+
+```bash
+npm --prefix /opt/goldband run test:hook-router
+set +e
+printf '%s\n' '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"notes/random-notes.md","content":"temporary"}}' \
+  | node /opt/goldband/hooks/scripts/hooks/hook-router.js
+status=$?
+set -e
+test "$status" -eq 2
+node /opt/goldband/hooks/scripts/tools/report-usage-summary.js --days 1
+touch /__goldband-host-probe || echo "host path blocked"
+```
+
+你應該看到 hook router golden dataset 仍會攔截代表性高風險命令；單筆安全 fixture payload 會被 `doc-file-blocker` 擋下並寫入容器 HOME 內的 telemetry；未掛載的 host 絕對路徑寫入會失敗。`sandbox/sandbox.sh run <dir>` 的 contract 是：
+
+- goldband build 階段 copy 到 image 內 `/opt/goldband`，run 階段不可寫
+- `<dir>` read-write 掛到 `/workspace/project`
+- container HOME 是 `/home/goldband`
+- host goldband repo、host HOME、SSH key、cloud credentials 和 Docker socket 預設不掛入
+- credential 只能用 `--env-file` 或 `--env KEY=VALUE` 顯式傳入
+
+第一版沒有 network allowlist。它使用 Docker/Podman runtime 的預設 egress，所以這是 documented network posture，不是網路隔離。邊界與不保護項目看 [sandbox/THREAT-MODEL.md](sandbox/THREAT-MODEL.md)。
+
 ## Codex 補充
 
 Codex tracked config/rules 只放 portable baseline。本機路徑、trusted projects、plugin state 和一次性 approvals 放在 ignored overlay：
@@ -116,6 +151,8 @@ Codex tracked config/rules 只放 portable baseline。本機路徑、trusted pro
 Windows managed requirements。
 
 MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。
+第一方零 token `goldband-mcp` server 位於 `mcp/server/`，installer 不會預設啟用；
+需要先 build，再把 `mcp/` template 裡的 `goldband` 條目改成你的 checkout 路徑。
 
 ## Git style gate
 
@@ -212,4 +249,3 @@ git pull --ff-only
 ## 授權
 
 MIT License.
-Goldband Loop 的原上游 attribution 保留在 [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md)。

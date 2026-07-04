@@ -59,7 +59,7 @@ describe('goldband-paths', () => {
   test('CLAUDE_PLUGIN_DATA respected when CLAUDE_PLUGIN_ROOT identifies goldband', () => {
     const got = run({
       CLAUDE_PLUGIN_DATA: '/tmp/goldband-plugin-data',
-      CLAUDE_PLUGIN_ROOT: '/tmp/goldband-garrytan',
+      CLAUDE_PLUGIN_ROOT: '/tmp/goldband-example',
       HOME: '/tmp/home',
     });
     expect(got.GOLDBAND_STATE_ROOT).toBe('/tmp/goldband-plugin-data');

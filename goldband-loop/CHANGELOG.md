@@ -240,7 +240,7 @@ Source: `git log v1.42.2.0..HEAD --oneline` (26 commits) plus the test sweep acr
 | `gh pr merge` exits non-zero in `/land-and-deploy` | Skill stops, deploy never runs — but the PR may already be MERGED server-side (concurrent merge, or local cleanup phase failed after the merge succeeded) | New §4a-postfail check queries `gh pr view --json state,mergeCommit` after any non-zero exit. MERGED → record merge SHA, offer non-destructive worktree cleanup with uncommitted-work guard, continue to §4a CI watch. OPEN → probe `autoMergeRequest`. CLOSED → STOP. Hard rule: never retry `gh pr merge`. Original diff by @davidfoy via PR #1620, re-authored into the `.tmpl` so the next `gen:skill-docs` doesn't overwrite the fix. |
 | `goldband-config` slash command in Claude Code | `/goldband` returned "Unknown command" because the root SKILL.md had `name: goldband` but no slash alias registered | Setup registers a `_goldband-command` Claude wrapper pointing at the root SKILL.md, preserving `name: goldband` for discovery. Survives `goldband-relink` after `skill_prefix` flips. Closes #1543. Contributed by @jbetala7 via PR #1577. |
 | `bun run scan-secrets` on Windows | `command -v gitleaks` not available in `cmd.exe` PATH — probe treats gitleaks as missing even when it's installed | Probes via `execFileSync('gitleaks', ['--version'])` instead of `command -v`. Closes #1545. Contributed by @jbetala7 via PR #1546. |
-| `goldband-artifacts-url` accepting `github.com` or `garrytan` as a repository | Validator passed host-only or owner-only inputs as repos; downstream code emitted broken URLs | Rejects with a clear error when the path component isn't `<owner>/<repo>`. Closes #1597. Contributed by @jbetala7 via PR #1598. |
+| `goldband-artifacts-url` accepting `github.com` or `project-owner` as a repository | Validator passed host-only or owner-only inputs as repos; downstream code emitted broken URLs | Rejects with a clear error when the path component isn't `<owner>/<repo>`. Closes #1597. Contributed by @jbetala7 via PR #1598. |
 | `/qa` on Ubuntu with AppArmor blocking unprivileged Chromium sandboxing | `/qa` hangs at launch — kernel denies the unprivileged user namespaces Chromium needs, even for normal users | `GOLDBAND_CHROMIUM_NO_SANDBOX=1` opt-in env override forces the sandbox off without changing the default for everyone else. Headed-launch sandbox-on-Linux-dev behavior from v1.42.2.0 preserved. Original diff by @techcenter68 via PR #1562, rebased onto the `shouldEnableChromiumSandbox()` helper that landed in v1.42.2.0. |
 | `goldband browse` server inside Claude Code's per-command Bash sandbox, Conductor, or CI step runners | `Bun.spawn().unref()` removes the child from Bun's event loop but doesn't call `setsid()`. The session leader's exit SIGHUPs every PID in the session — the browse server (and its Chromium grandchildren) die before the next command runs | macOS/Linux spawn routes through Node's `child_process.spawn` with `detached:true`, which calls `setsid()`. Server becomes its own session leader (PPID=1) and survives the spawning shell's exit. Windows path unchanged (was already correct via Node-via-Bun launcher). Contributed by @bharat2913 via PR #1612. |
 | `GOLDBAND_CHROMIUM_PATH` pointing at a custom Chromium build, headless launch | Custom-build path didn't apply to headless `launch()`, only headed `launchPersistentContext()`. Headless callers fell back to the bundled Chromium | `isCustomChromium()` guard mirrored to the headless launch path. Custom Chromium honored everywhere. Contributed by @shohu via PR #1614. |
@@ -467,7 +467,7 @@ If you embed goldband's `buildFetchHandler` and run your own PTY server, pass `o
 
 **For contributors**
 - Followup TODOs filed in `TODOS.md`: identity-based terminal-agent kill (replace `pkill -f` with PID-tracked `process.kill`), the pre-existing `shutdown()` reads module-level `config` (composition gap with parallel `chromiumProfile` gap), and the 4th-gate-collapse-to-ownership-object trigger
-- Plan + reviews under `~/.goldband/projects/garrytan-goldband/`: autoplan CEO + Eng dual voices (Codex + Claude subagent), interactive `/plan-eng-review` (D3: drop dead try/catch), `/ship` adversarial pass (strict-bool + JSDoc hardening + test save/restore)
+- Plan + reviews under `~/.goldband/projects/project-owner-goldband/`: autoplan CEO + Eng dual voices (Codex + Claude subagent), interactive `/plan-eng-review` (D3: drop dead try/catch), `/ship` adversarial pass (strict-bool + JSDoc hardening + test save/restore)
 
 ## [1.42.0.0] - 2026-05-19
 
@@ -982,7 +982,7 @@ Source: `bun test test/gbrain-local-status.test.ts test/gbrain-detect-shape.test
 
 | Surface | Before | After |
 |---|---|---|
-| Path 4 + `/sync-gbrain --full` output (Garry's broken-db state) | `ERR code source registration failed: gbrain not configured (run /setup-gbrain)` + `ERR memory gbrain import exited 1: Cannot connect to database` | `SKIP code skipped — local engine broken-db — config points at unreachable DB; see /setup-gbrain Step 1.5` + brain-sync runs normally |
+| Path 4 + `/sync-gbrain --full` output (the maintainer's broken-db state) | `ERR code source registration failed: gbrain not configured (run /setup-gbrain)` + `ERR memory gbrain import exited 1: Cannot connect to database` | `SKIP code skipped — local engine broken-db — config points at unreachable DB; see /setup-gbrain Step 1.5` + brain-sync runs normally |
 | `bin/goldband-gbrain-detect` runtime | bash + jq, single-purpose probe | TypeScript shebang script sharing the `localEngineStatus()` classifier with the orchestrator. 10 JSON fields, 9 existing keys byte-compat; one new `gbrain_local_status` enum. Memoized resolvers cut ~400ms of duplicate fork-exec per skill preamble. |
 | Status probe cost | `gbrain doctor --json` without `--fast` could hang up to 5s on dead DB | `gbrain doctor --json --fast` (3s ceiling) + DB-reachability via `gbrain sources list --json` stderr classification (~80ms steady), 60s TTL cache keyed on `{HOME, PATH, gbrain bin, gbrain version, config mtime}` |
 | Path 4 user discovers code search | Hidden — only `/sync-gbrain` errors hint at it | `/goldband-upgrade` migration v1.37.0.0 prints a one-time notice when `gbrain_mcp_mode == remote-http` AND `gbrain_local_status == missing-config`. `goldband-config set local_code_index_offered true` to silence. |
@@ -1025,7 +1025,7 @@ Source: `bun test test/gbrain-local-status.test.ts test/gbrain-detect-shape.test
 
 You can now run `/document-generate` to write missing documentation from scratch. The skill reads your code first (the codebase archaeology step is non-skippable), maps the public surface, then writes docs in the four Diataxis quadrants: tutorial (newcomer walkthrough), how-to (task-oriented), reference (factual API description), explanation (design rationale). It runs standalone or chains automatically from `/document-release` when the coverage map finds gaps. `/document-release` got a Step 1.5 coverage map that scores every new entity across the four quadrants. Items with zero coverage show up as critical gaps in the PR body. Items with reference-only coverage show up as common gaps. Architecture diagrams get scanned for entity-name drift against the diff. The CHANGELOG voice check now uses a 0-3 sell-test rubric: 1 point each for "what changed?", "why care?", and "how to use it?". Entries below 2 get rewritten.
 
-A new section in CLAUDE.md documents the fork-PR workflow for `garrytan-agents` PRs: push the branch to `garrytan/goldband` and re-target so eval CI can access secrets. The pattern keeps secret distribution scoped to one branch instead of broadening it to all forks.
+A new section in CLAUDE.md documents the fork-PR workflow for `external-agents` PRs: push the branch to `project-owner/goldband` and re-target so eval CI can access secrets. The pattern keeps secret distribution scoped to one branch instead of broadening it to all forks.
 
 ### The numbers that matter
 
@@ -1058,7 +1058,7 @@ To use: run `/document-release` after `/ship` (or let `/ship` auto-invoke it), s
 - **`/document-release` `### Documentation Debt` section in PR body**: surfaces critical gaps, common gaps, and stale diagrams with a one-line description + Diataxis quadrant per item. Suggests adding a `docs-debt` label.
 - **`/document-release` CHANGELOG sell-test rubric**: 0-3 scoring per entry (1 point each for reference / explanation / how-to coverage). Entries below 2 get rewritten.
 - **Skill routing entry**: `/document-generate` added to `SKILL.md` routing rules and `README.md` skills table (Technical Writer category).
-- **CLAUDE.md fork-PR workflow section**: documents how to handle "check out <PR link>" when the PR is from a non-collaborator fork. Push the branch to `garrytan/goldband`, close the fork PR, open a new PR from the base-repo branch. Keeps secret distribution scoped.
+- **CLAUDE.md fork-PR workflow section**: documents how to handle "check out <PR link>" when the PR is from a non-collaborator fork. Push the branch to `project-owner/goldband`, close the fork PR, open a new PR from the base-repo branch. Keeps secret distribution scoped.
 
 #### Changed
 - `/document-release` description and triggers updated to reference the coverage map and `/document-generate` chaining.
@@ -1120,7 +1120,7 @@ If you have been seeing `/codex review` fail on argv parsing since Codex CLI hit
 ## **`goldband-update-check` resolves remote VERSION via a SHA-pinned URL.**
 ## **A semver-order guard makes sure the script never proposes a downgrade.**
 
-The version check now runs `git ls-remote https://github.com/garrytan/goldband.git refs/heads/main` to get the live HEAD SHA, then fetches `raw.githubusercontent.com/garrytan/goldband/<SHA>/VERSION`. SHA-pinned raw URLs are immediately consistent, so a freshly-published VERSION shows up right away instead of trailing behind the branch-raw CDN by several minutes. A second guard treats `REMOTE < LOCAL` as up-to-date, so transient stale-CDN responses and dev installs running ahead of main can never produce a backwards `UPGRADE_AVAILABLE` line. The `git ls-remote` call is fenced with `GIT_TERMINAL_PROMPT=0` plus a 5-second low-speed timeout so flaky networks and captive portals cannot hang a skill preamble.
+The version check now runs `git ls-remote https://github.com/project-owner/goldband.git refs/heads/main` to get the live HEAD SHA, then fetches `raw.githubusercontent.com/project-owner/goldband/<SHA>/VERSION`. SHA-pinned raw URLs are immediately consistent, so a freshly-published VERSION shows up right away instead of trailing behind the branch-raw CDN by several minutes. A second guard treats `REMOTE < LOCAL` as up-to-date, so transient stale-CDN responses and dev installs running ahead of main can never produce a backwards `UPGRADE_AVAILABLE` line. The `git ls-remote` call is fenced with `GIT_TERMINAL_PROMPT=0` plus a 5-second low-speed timeout so flaky networks and captive portals cannot hang a skill preamble.
 
 ### The numbers that matter
 
@@ -1128,7 +1128,7 @@ Source: `bun test browse/test/goldband-update-check.test.ts` — 35 existing tes
 
 | Surface | Before | After |
 |---|---|---|
-| Remote VERSION fetch | branch-raw URL (`/garrytan/goldband/main/VERSION`), can serve stale content for minutes after a push | `git ls-remote` SHA, then SHA-pinned raw URL (immediately consistent), branch-raw kept as fallback |
+| Remote VERSION fetch | branch-raw URL (`/project-owner/goldband/main/VERSION`), can serve stale content for minutes after a push | `git ls-remote` SHA, then SHA-pinned raw URL (immediately consistent), branch-raw kept as fallback |
 | Behavior when REMOTE < LOCAL | `UPGRADE_AVAILABLE <local> <older>` (backwards downgrade prompt) | `UP_TO_DATE <local>` (silent, semver-order guard via `sort -V`) |
 | `GOLDBAND_REMOTE_URL` override semantics | Always honored | Skipped when explicit; preserves `file://` test fixtures and private mirrors |
 | `git ls-remote` hang exposure | Not used | `GIT_TERMINAL_PROMPT=0` + `GIT_HTTP_LOW_SPEED_LIMIT=1000` + `GIT_HTTP_LOW_SPEED_TIME=5` enforce a 5-second floor on hung connections |
@@ -1145,7 +1145,7 @@ Run `/goldband-upgrade` immediately after a new release and the script finds the
 
 #### Fixed
 
-- **`bin/goldband-update-check`** — replaced the unconditional `curl` of `raw.githubusercontent.com/.../main/VERSION` with a SHA-pinned fetch path that resolves the live HEAD via `git ls-remote` first, then curls `raw.githubusercontent.com/garrytan/goldband/<SHA>/VERSION`. Branch-raw fetch kept as fallback when `git ls-remote` is unavailable or `GOLDBAND_REMOTE_URL` is explicitly set.
+- **`bin/goldband-update-check`** — replaced the unconditional `curl` of `raw.githubusercontent.com/.../main/VERSION` with a SHA-pinned fetch path that resolves the live HEAD via `git ls-remote` first, then curls `raw.githubusercontent.com/project-owner/goldband/<SHA>/VERSION`. Branch-raw fetch kept as fallback when `git ls-remote` is unavailable or `GOLDBAND_REMOTE_URL` is explicitly set.
 - **`bin/goldband-update-check`** — added a semver-order guard. After fetching REMOTE, the script runs `sort -V` to confirm REMOTE > LOCAL before emitting `UPGRADE_AVAILABLE`. When LOCAL is at or ahead of REMOTE, it writes `UP_TO_DATE` and exits silently.
 - **`bin/goldband-update-check`** — fenced `git ls-remote` with `GIT_TERMINAL_PROMPT=0`, `GIT_HTTP_LOW_SPEED_LIMIT=1000`, and `GIT_HTTP_LOW_SPEED_TIME=5` so a flaky network cannot hang every skill preamble.
 
@@ -1208,7 +1208,7 @@ Phoenix and any future Bun-based consumer can now `import { start, resolveConfig
 
 ### For contributors
 - The full `buildFetchHandler` runtime extraction (hybrid hoist of 13 module-level mutables into a factory closure, plus `beforeRoute` auth-then-hook wiring, plus `stopListeners` implementation) is **deferred to a follow-up PR**. The exported types document the eventual contract; today's release ships the minimum-viable surface so Phoenix can land v0.6.0.0 against `import { start }` + AUTH_TOKEN env.
-- See `/Users/garrytan/.claude/plans/system-instruction-you-are-working-swirling-fountain.md` for the full plan + 13 decisions + codex outside-voice tensions resolved.
+- See `/Users/example/.claude/plans/system-instruction-you-are-working-swirling-fountain.md` for the full plan + 13 decisions + codex outside-voice tensions resolved.
 
 ## [1.33.2.0] - 2026-05-11
 
@@ -1361,7 +1361,7 @@ If you've been hitting the 35-minute hang on `/sync-gbrain`, it's gone. The arch
 - `bin/goldband-memory-ingest.ts` `require("fs")` calls replaced with top-level ESM `import`s for runtime portability.
 
 #### For contributors
-- Plan file at `/Users/garrytan/.claude/plans/purrfect-tumbling-quiche.md` captures the full review chain: `/investigate` → `/plan-eng-review` (5 architecture decisions D1-D5) → `/codex review` outside-voice plan challenge (9 findings, 3 reshaped the architecture into D6-D8). Plan also records the post-Codex user perf review that flipped D3 to opt-in.
+- Plan file at `/Users/example/.claude/plans/purrfect-tumbling-quiche.md` captures the full review chain: `/investigate` → `/plan-eng-review` (5 architecture decisions D1-D5) → `/codex review` outside-voice plan challenge (9 findings, 3 reshaped the architecture into D6-D8). Plan also records the post-Codex user perf review that flipped D3 to opt-in.
 - `TODOS.md` filed P2: investigate `gbrain import` perf on large staging dirs (5,131 files takes >10 minutes when 501 takes 10 seconds — gbrain-side N+1 SQL or auto-link reconciliation suspected). P3: cache "no changes since last import" at the prepare-batch level for true no-op fast paths.
 - `Plan completion audit` ran via subagent on this branch: 17/21 DONE, 1 CHANGED (D3 made opt-in), 2 deferred (F8 benchmark harness as separate work, 24-path unit coverage went integration-only).
 
@@ -1704,7 +1704,7 @@ ongoing background sync; gbrain owns the daemon lifecycle.
 
 #### For contributors
 
-- Phase 0 verification spike at `~/.goldband/projects/garrytan-goldband/2026-05-08-gbrain-split-engine-spike.md` documents what gbrain v0.30 actually provides (no `--db` flag, `serve --http` requires postgres, `sources attach` is the v0.30 routing primitive). The approved plan's "per-worktree PGLite + per-worktree HTTP serve" architecture was invalidated by the spike; the simpler "one brain, many sources, attach for CWD pin" model collapsed ~80% of the plan's complexity.
+- Phase 0 verification spike at `~/.goldband/projects/project-owner-goldband/2026-05-08-gbrain-split-engine-spike.md` documents what gbrain v0.30 actually provides (no `--db` flag, `serve --http` requires postgres, `sources attach` is the v0.30 routing primitive). The approved plan's "per-worktree PGLite + per-worktree HTTP serve" architecture was invalidated by the spike; the simpler "one brain, many sources, attach for CWD pin" model collapsed ~80% of the plan's complexity.
 - `/codex` adversarial review during `/ship` caught all three correctness bugs above (silent attach, preamble inconsistency, orphan leak) before merge. Find-cost: ~10 min CC. Production-bug-cost: stale code search results that "almost worked" — the worst kind to debug.
 - gbrain CLI minimum version is now v0.30.0 (uses `sources attach`, which doesn't exist in v0.20.x). Run `cd ~/git/gbrain && git pull && bun install && bun link` to upgrade.
 
@@ -1821,7 +1821,7 @@ SKILL.md files and start with the right skill on the first try.
 - Xvfb + x11-utils added to `.github/docker/Dockerfile.ci` so
   `headed-xvfb`/`headed-orphan-cleanup` exercise the Linux container
   path on every CI run instead of only manual smoke tests.
-- Community PR #1355 from @garrytan-agents merged; attribution
+- Community PR #1355 from @external-agents merged; attribution
   preserved on the merging commit.
 
 ## [1.27.1.0] - 2026-05-06
@@ -2086,7 +2086,7 @@ Both numbers come from running the binaries against the real gbrain v0.25.1 inst
 |---|---|---|---|
 | Memory-ingest writer verb | `gbrain put_page --slug ... --title ...` (CLI rejects: `Unknown command`) | `gbrain put <slug>` with frontmatter (CLI accepts) | from 100% fail to 0% fail |
 | Transcript pages with title/type/tags | none — fields rode CLI flags that no gbrain version accepts | injected into existing frontmatter on every page | search/filter by `--type transcript` actually returns results now |
-| Source id derived for `github.com/garrytan/goldband` | `goldband-code-github.com-garrytan-goldband` (38 chars, contains `.`, fails gbrain `[a-z0-9-]{1,32}` validator) | `goldband-code-garrytan-goldband` (27 chars, valid) | 100% of github-hosted repos go from rejected to accepted |
+| Source id derived for `github.com/project-owner/goldband` | `goldband-code-github.com-project-owner-goldband` (38 chars, contains `.`, fails gbrain `[a-z0-9-]{1,32}` validator) | `goldband-code-project-owner-goldband` (27 chars, valid) | 100% of github-hosted repos go from rejected to accepted |
 | Availability probe failure mode | every page errors with `Unknown command: put_page` | one clean error: `gbrain CLI not in PATH or missing put subcommand` | log spam goes from N copies to 1 |
 | Available `gbrainPutPage()` timeout | 30 s (auto-link reconciliation hits 30 s on dense brains) | 60 s | brains with hundreds of existing pages stop hitting the ceiling on every put |
 | `gbrainPutPage()` error surface | `Command failed:` (Node truncates 1 MB stderr) | first 300 chars of `err.stderr` | debugging stops requiring strace; the failure is visible |
@@ -2336,7 +2336,7 @@ V1 is **Goldilocks** scope per CEO D18 (Codex F10 strategic challenge): the valu
 
 #### For contributors
 
-- The plan file at `/Users/garrytan/.claude/plans/ok-actually-lets-go-luminous-thacker.md` (~890 lines) is the canonical V1 design source, including office-hours findings, CEO review expansions (6 cherry-picks accepted, 1 reverted+replaced), Codex outside-voice 10 findings (F1-F10 each resolved or deferred), eng review additions (ED1 + ED2 + 6 auto-applied implementation specs), and V1.5 P0 TODOs section with full handoff context.
+- The plan file at `/Users/example/.claude/plans/ok-actually-lets-go-luminous-thacker.md` (~890 lines) is the canonical V1 design source, including office-hours findings, CEO review expansions (6 cherry-picks accepted, 1 reverted+replaced), Codex outside-voice 10 findings (F1-F10 each resolved or deferred), eng review additions (ED1 + ED2 + 6 auto-applied implementation specs), and V1.5 P0 TODOs section with full handoff context.
 - Manifest schema is versioned (`gbrain.schema: 1`); future format changes bump the schema and require explicit migration. gen-skill-docs validates the schema at build time (kind / required fields per kind / template var resolution / unique IDs).
 - Lane D (cross-repo `gbrain restore-from-sync` with atomic swap + 7-day .bak retention per D11) is documented as V1.5 P0 TODO — goldband repo cannot write to gbrain CLI repo.
 - The retrieval surface helper signature is V1.5-promotion-stable: when V1.5 ships server-side `mcp__gbrain__get_recent_salience` / `find_anomalies` MCP tools, the helper switches its internals from 4-call composition to a single MCP call without changing the manifest format or any skill template.
@@ -2546,7 +2546,7 @@ Branch totals come from `git diff --shortstat origin/main..HEAD` after every lan
 - `AGENTS.md`: rewrote the skill table from 21 entries to 40+, organized by category (plan reviews, implementation, release, operational, browser, safety). `/debug` → `/investigate`. Stale `<5s` `bun test` claim dropped — there's no realistic universal claim to make about test suite duration with periodic + gate + free tiers all in play.
 - `docs/skills.md`: added 11 missing skills to the inventory table (`/plan-devex-review`, `/devex-review`, `/plan-tune`, `/context-save`, `/context-restore`, `/health`, `/landing-report`, `/benchmark-models`, `/pair-agent`, `/setup-gbrain`, `/make-pdf`).
 - `package.json`: 2 new scripts. `test:free` runs the full free suite via the sharding script. `test:windows` runs the curated Windows-safe subset. Version bump `1.15.0.0` → `1.24.0.0`.
-- `VERSION`: `1.15.0.0` → `1.24.0.0`. Workspace-aware queue at /ship time: v1.16.0.0 claimed by `garrytan/gbrowser-unleashed` (PR #1253), v1.17.0.0 by `garrytan/setup-gbrain-run` (PR #1234), v1.19.0.0 by `garrytan/browserharness` (PR #1233), v1.21.1.0 by `garrytan/pty-plan-mode-e2e` (PR #1255). This branch claims the next available MINOR slot.
+- `VERSION`: `1.15.0.0` → `1.24.0.0`. Workspace-aware queue at /ship time: v1.16.0.0 claimed by `project-owner/gbrowser-unleashed` (PR #1253), v1.17.0.0 by `project-owner/setup-gbrain-run` (PR #1234), v1.19.0.0 by `project-owner/browserharness` (PR #1233), v1.21.1.0 by `project-owner/pty-plan-mode-e2e` (PR #1255). This branch claims the next available MINOR slot.
 
 #### Fixed
 
@@ -3086,7 +3086,7 @@ Invoke `/plan-eng-review` from plan mode. You get the scope-mode question (`SCOP
 
 ## **`/setup-gbrain` — any coding agent goes from zero to "gbrain is running, and I can call it" in under five minutes.**
 
-goldband v1.9.0.0 shipped `gbrain-sync`, which assumed a `gbrain` CLI was already installed. That was fine on Garry's machine (he'd manually cloned `~/git/gbrain`), broken for everyone else. This release closes the onboarding gap: one skill, three paths (local PGLite, existing Supabase URL, or Supabase auto-provision via the Management API), an MCP registration step for Claude Code, a per-remote trust triad (read-write / read-only / deny) so multi-client consultants don't mingle brains, and a reusable secret-sink test harness other skills can import when they start handling secrets.
+goldband v1.9.0.0 shipped `gbrain-sync`, which assumed a `gbrain` CLI was already installed. That was fine on the maintainer's machine (he'd manually cloned `~/git/gbrain`), broken for everyone else. This release closes the onboarding gap: one skill, three paths (local PGLite, existing Supabase URL, or Supabase auto-provision via the Management API), an MCP registration step for Claude Code, a per-remote trust triad (read-write / read-only / deny) so multi-client consultants don't mingle brains, and a reusable secret-sink test harness other skills can import when they start handling secrets.
 
 ### What shipped
 
@@ -3394,7 +3394,7 @@ v1.6.4.0 broke something nobody wrote down. Plan reviews on Opus 4.7 silently st
 
 ### What changes for you
 
-Run `/plan-ceo-review` or `/plan-eng-review` on a plan with 3 findings. You get 3 separate AskUserQuestion prompts, one per finding, with the full Pros / Cons shape. Pick the option in 5 seconds, or expand the pros / cons if you want to think about it. Every review finding becomes a decision you actually made, not a bullet point you skimmed. The reference shape matches the D2 memory-design question Garry hand-crafted for his own use, now baked into every tier-2 skill via the preamble resolver, so `/ship`, `/office-hours`, `/investigate`, and the rest inherit it for free.
+Run `/plan-ceo-review` or `/plan-eng-review` on a plan with 3 findings. You get 3 separate AskUserQuestion prompts, one per finding, with the full Pros / Cons shape. Pick the option in 5 seconds, or expand the pros / cons if you want to think about it. Every review finding becomes a decision you actually made, not a bullet point you skimmed. The reference shape matches the D2 memory-design question maintainer-crafted for his own use, now baked into every tier-2 skill via the preamble resolver, so `/ship`, `/office-hours`, `/investigate`, and the rest inherit it for free.
 
 ### The numbers that matter
 
@@ -3516,7 +3516,7 @@ Work on the laptop Monday. Switch to the desktop Tuesday. Skill preamble sees th
 #### Known follow-ups
 
 - `test/brain-sync.test.ts` — 12 of 27 tests pass on first bun-test run; remaining 15 hit bun-test's 5s default timeout (spawnSync-heavy git operations). Behaviors verified via integration smokes during implementation. Test infrastructure needs a 30s per-test timeout wrapper.
-- Three unmerged team-sync branches (`garrytan/team-supabase-store`, `garrytan/fix-team-setup`, `garrytan/team-install-mode`) should be formally closed if team-sync isn't landing — flagged in the CEO plan.
+- Three unmerged team-sync branches (`project-owner/team-supabase-store`, `project-owner/fix-team-setup`, `project-owner/team-install-mode`) should be formally closed if team-sync isn't landing — flagged in the CEO plan.
 - Pre-existing golden-file regression test failure in `test/host-config.test.ts` (Codex ship skill baseline) exists on `main` too — unrelated to this PR, tracked separately.
 
 ## [1.6.4.0] - 2026-04-22
@@ -3640,7 +3640,7 @@ Source: `test/skill-e2e-plan-format.test.ts`, four cases pinned to `claude-opus-
 #### Changed
 
 - The `AskUserQuestion Format` section in the T2 preamble splits the old run-on paragraph into two ALWAYS-framed rules: step 3 "Recommend (ALWAYS)" and step 4 "Score completeness (when meaningful)". This affects every T2 skill (~15 files regenerated).
-- The `Completeness Principle — Boil the Lake` preamble section now states the coverage-vs-kind distinction explicitly, matching step 4. Without this edit the two preamble locations would disagree — which is how the regression started.
+- The `Completeness Principle` preamble section now states the coverage-vs-kind distinction explicitly, matching step 4. Without this edit the two preamble locations would disagree — which is how the regression started.
 - Section 0C-bis (approach menu) and Section 0F (mode selection) in `plan-ceo-review/SKILL.md.tmpl` now carry short anchor lines that remind the model which question type applies. `plan-eng-review/SKILL.md.tmpl` gets an equivalent anchor inside the CRITICAL RULE section for per-issue AskUserQuestion decisions.
 
 #### For contributors
@@ -3657,7 +3657,7 @@ PR #1117 (initial Opus 4.7 migration) shipped the right idea with quality gaps. 
 
 ### The numbers that matter
 
-Source: the `test/skill-e2e-opus-47.test.ts` eval, two cases, 8 assertions, ~$2.50 per full run on `claude-opus-4-7`. Runs are saved under `~/.goldband/projects/garrytan-goldband/evals/`. Review evidence in `~/.goldband/projects/garrytan-goldband/ceo-plans/2026-04-21-pr1117-opus-4-7-ship-review.md`.
+Source: the `test/skill-e2e-opus-47.test.ts` eval, two cases, 8 assertions, ~$2.50 per full run on `claude-opus-4-7`. Runs are saved under `~/.goldband/projects/project-owner-goldband/evals/`. Review evidence in `~/.goldband/projects/project-owner-goldband/ceo-plans/2026-04-21-pr1117-opus-4-7-ship-review.md`.
 
 | Surface | Before (#1117 as-shipped) | After (v1.6.1.0) |
 |---|---|---|
@@ -3784,7 +3784,7 @@ Run `pair-agent --client test-agent` on your laptop. Share the ngrok URL with so
 
 - F1 (dual-listener refactor) is bisected as four commits on the branch: rate-limit loosening, new `tunnel-denial-log` module, the server.ts refactor, and the new source-level test suite. Each commit is independently green. Subsequent wave items rebase onto F1 cleanly.
 - Credits: @garagon (critical bug surface in PR #1026 plus SSRF, envelope, DOM-channel coverage, and --from-file PRs), @Hybirdss (PR #1002 concept, superseded by F1 but informed the policy model), @HMAKT99 (PRs #469 and #472 — both ended up already-landed-on-main; credit for surfacing the issues), @theqazi (2 commits from #1073, skills portion deferred pending internal voice review per CLAUDE.md).
-- Codex-reviewed plan stored at `~/.goldband/projects/garrytan-goldband/ceo-plans/2026-04-21-security-wave-v1.5.2.md`. Eng-review test plan at `~/.goldband/projects/garrytan-goldband/garrytan-garrytan-sec-wave-eng-review-test-plan-*.md`.
+- Codex-reviewed plan stored at `~/.goldband/projects/project-owner-goldband/ceo-plans/2026-04-21-security-wave-v1.5.2.md`. Eng-review test plan at `~/.goldband/projects/project-owner-goldband/project-owner-project-owner-sec-wave-eng-review-test-plan-*.md`.
 - Non-goal tracked as #1136: switch cookie-import-browser CDP transport from TCP `--remote-debugging-port` to `--remote-debugging-pipe` so the Windows v20 ABE elevation path is closed. Non-trivial (Playwright doesn't expose the pipe transport; needs a minimal CDP-over-pipe client); intentionally deferred from this wave.
 
 ## [1.5.1.0] - 2026-04-20
@@ -3936,7 +3936,7 @@ The new `/make-pdf` skill takes a `.md` file and produces a publication-quality 
 ### What you can do now
 
 - `$P generate letter.md` writes a clean letter PDF to `/tmp/letter.pdf` with sensible defaults.
-- `$P generate --cover --toc --author "Garry Tan" --title "On Horizons" essay.md essay.pdf` adds a left-aligned cover page (title, subtitle, date, hairline rule) and a TOC from your H1/H2/H3 headings.
+- `$P generate --cover --toc --author "project maintainer" --title "On Horizons" essay.md essay.pdf` adds a left-aligned cover page (title, subtitle, date, hairline rule) and a TOC from your H1/H2/H3 headings.
 - `$P generate --watermark DRAFT memo.md draft.pdf` overlays a diagonal DRAFT watermark on every page. Send as draft. Drop the flag when it's final.
 - `$P generate --no-chapter-breaks memo.md` disables the default "every H1 starts a new page" behavior for memos that happen to have multiple top-level headings.
 - `$P generate --allow-network essay.md` lets external images load. Off by default so someone else's markdown can't phone home through a tracking pixel when you generate their PDF.
@@ -4828,11 +4828,11 @@ You can now go from an approved design mockup to production-quality HTML with on
 
 ## [0.13.10.0] - 2026-03-29. Office Hours Gets a Reading List
 
-Repeat /office-hours users now get fresh, curated resources every session instead of the same YC closing. 34 hand-picked videos and essays from Garry Tan, Lightcone Podcast, YC Startup School, and Paul Graham, contextually matched to what came up during the session. The system remembers what it already showed you, so you never see the same recommendation twice.
+Repeat /office-hours users now get fresh, curated resources every session instead of the same YC closing. 34 hand-picked videos and essays from project maintainer, Lightcone Podcast, YC Startup School, and Paul Graham, contextually matched to what came up during the session. The system remembers what it already showed you, so you never see the same recommendation twice.
 
 ### Added
 
-- **Rotating founder resources in /office-hours closing.** 34 curated resources across 5 categories (Garry Tan videos, YC Backstory, Lightcone Podcast, YC Startup School, Paul Graham essays). Claude picks 2-3 per session based on session context, not randomly.
+- **Rotating founder resources in /office-hours closing.** 34 curated resources across 5 categories (project maintainer videos, YC Backstory, Lightcone Podcast, YC Startup School, Paul Graham essays). Claude picks 2-3 per session based on session context, not randomly.
 - **Resource dedup log.** Tracks which resources were shown in `~/.goldband/projects/$SLUG/resources-shown.jsonl` so repeat users always see fresh content.
 - **Resource selection analytics.** Logs which resources get picked to `skill-usage.jsonl` so you can see patterns over time.
 - **Browser-open offer.** After showing resources, offers to open them in your browser so you can check them out later.
@@ -4974,7 +4974,7 @@ Six fixes from community PRs and bug reports. The big one: your dependency tree 
 
 ### Added
 
-- **Community PR guardrails in CLAUDE.md.** ETHOS.md, promotional material, and Garry's voice are explicitly protected from modification without user approval.
+- **Community PR guardrails in CLAUDE.md.** ETHOS.md, promotional material, and the maintainer's voice are explicitly protected from modification without user approval.
 
 ## [0.13.2.0] - 2026-03-28. User Sovereignty
 
@@ -5736,7 +5736,7 @@ Thanks to @osc, @Explorer1092, @Qike-Li, @francoisaubert1, @itstimwhite, @yinanl
 
 ### Added
 
-- **ETHOS.md. goldband's builder philosophy in one document.** Four principles: The Golden Age (AI compression ratios), Boil the Lake (completeness is cheap), Search Before Building (three layers of knowledge), and Build for Yourself. This is the philosophical source of truth that every workflow skill references.
+- **ETHOS.md. goldband's builder philosophy in one document.** Four principles: The Golden Age (AI compression ratios), Completeness Principle (completeness is cheap), Search Before Building (three layers of knowledge), and Build for Yourself. This is the philosophical source of truth that every workflow skill references.
 - **Every workflow skill now searches before recommending.** Before suggesting infrastructure patterns, concurrency approaches, or framework-specific solutions, goldband checks if the runtime has a built-in and whether the pattern is current best practice. Three layers of knowledge. tried-and-true (Layer 1), new-and-popular (Layer 2), and first-principles (Layer 3). with the most valuable insights prized above all.
 - **Eureka moments.** When first-principles reasoning reveals that conventional wisdom is wrong, goldband names it, celebrates it, and logs it. Your weekly `/retro` now surfaces these insights so you can see where your projects zigged while others zagged.
 - **`/office-hours` adds Landscape Awareness phase.** After understanding your problem through questioning but before challenging premises, goldband searches for what the world thinks. then runs a three-layer synthesis to find where conventional wisdom might be wrong for your specific case.
@@ -5830,7 +5830,7 @@ Thanks to @osc, @Explorer1092, @Qike-Li, @francoisaubert1, @itstimwhite, @yinanl
 ### Fixed
 
 - **`/retro` now counts full calendar days.** Running a retro late at night no longer silently misses commits from earlier in the day. Git treats bare dates like `--since="2026-03-11"` as "11pm on March 11" if you run it at 11pm. now we pass `--since="2026-03-11T00:00:00"` so it always starts from midnight. Compare mode windows get the same fix.
-- **Review log no longer breaks on branch names with `/`.** Branch names like `garrytan/design-system` caused review log writes to fail because Claude Code runs multi-line bash blocks as separate shell invocations, losing variables between commands. New `goldband-review-log` and `goldband-review-read` atomic helpers encapsulate the entire operation in a single command.
+- **Review log no longer breaks on branch names with `/`.** Branch names like `project-owner/design-system` caused review log writes to fail because Claude Code runs multi-line bash blocks as separate shell invocations, losing variables between commands. New `goldband-review-log` and `goldband-review-read` atomic helpers encapsulate the entire operation in a single command.
 - **All skill templates are now platform-agnostic.** Removed Rails-specific patterns (`bin/test-lane`, `RAILS_ENV`, `.includes()`, `rescue StandardError`, etc.) from `/ship`, `/review`, `/plan-ceo-review`, and `/plan-eng-review`. The review checklist now shows examples for Rails, Node, Python, and Django side-by-side.
 - **`/ship` reads CLAUDE.md to discover test commands** instead of hardcoding `bin/test-lane` and `npm run test`. If no test commands are found, it asks the user and persists the answer to CLAUDE.md.
 
@@ -5994,13 +5994,11 @@ When something is broken and you don't know why, `/debug` is your systematic deb
 - `test:evals` and `test:e2e` now auto-select based on diff (was: all-or-nothing)
 - New `test:evals:all` and `test:e2e:all` scripts for explicit full runs
 
-## 0.6.1. 2026-03-17. Boil the Lake
+## 0.6.1. 2026-03-17. Completeness Principle
 
 Every goldband skill now follows the **Completeness Principle**: always recommend the
 full implementation when AI makes the marginal cost near-zero. No more "Choose B
 because it's 90% of the value" when option A is 70 lines more code.
-
-Read the philosophy: https://garryslist.org/posts/boil-the-ocean
 
 - **Completeness scoring**: every AskUserQuestion option now shows a completeness
   score (1-10), biasing toward the complete solution

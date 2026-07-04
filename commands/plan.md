@@ -4,6 +4,25 @@ description: Restate requirements, pressure-test the direction, and create a ste
 
 # Plan Command
 
+## Programmatic runtime entrypoint
+
+The runtime contract for this command lives in `goldband-loop/workflows/`.
+Use the programmatic path for mock smoke tests and structured evidence:
+
+```bash
+cd goldband-loop && bun run workflows/run.ts plan --mode mock
+```
+
+The compatibility runtime reads this legacy command source and writes step
+evidence to:
+
+```bash
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/plan.jsonl
+```
+
+Live planning still uses the markdown command flow below until typed migration
+is complete.
+
 Create a comprehensive implementation plan before writing any code.
 
 For architecture or implementation-plan review, use `/goldband-plan-eng-review`

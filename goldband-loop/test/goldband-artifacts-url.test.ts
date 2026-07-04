@@ -23,24 +23,24 @@ function run(args: string[]): { code: number; stdout: string; stderr: string } {
 
 describe('goldband-artifacts-url', () => {
   test('--to ssh from canonical https', () => {
-    const r = run(['--to', 'ssh', 'https://github.com/garrytan/goldband-artifacts-garrytan']);
+    const r = run(['--to', 'ssh', 'https://github.com/example-org/goldband-artifacts-example']);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe('git@github.com:garrytan/goldband-artifacts-garrytan.git');
+    expect(r.stdout).toBe('git@github.com:example-org/goldband-artifacts-example.git');
   });
 
   test('--to ssh from https-with-.git', () => {
-    const r = run(['--to', 'ssh', 'https://github.com/garrytan/goldband-artifacts-garrytan.git']);
-    expect(r.stdout).toBe('git@github.com:garrytan/goldband-artifacts-garrytan.git');
+    const r = run(['--to', 'ssh', 'https://github.com/example-org/goldband-artifacts-example.git']);
+    expect(r.stdout).toBe('git@github.com:example-org/goldband-artifacts-example.git');
   });
 
   test('--to https is idempotent on https input', () => {
-    const r = run(['--to', 'https', 'https://github.com/garrytan/goldband-artifacts-garrytan']);
-    expect(r.stdout).toBe('https://github.com/garrytan/goldband-artifacts-garrytan');
+    const r = run(['--to', 'https', 'https://github.com/example-org/goldband-artifacts-example']);
+    expect(r.stdout).toBe('https://github.com/example-org/goldband-artifacts-example');
   });
 
   test('--to https from git@host:owner/repo.git', () => {
-    const r = run(['--to', 'https', 'git@github.com:garrytan/goldband-artifacts-garrytan.git']);
-    expect(r.stdout).toBe('https://github.com/garrytan/goldband-artifacts-garrytan');
+    const r = run(['--to', 'https', 'git@github.com:example-org/goldband-artifacts-example.git']);
+    expect(r.stdout).toBe('https://github.com/example-org/goldband-artifacts-example');
   });
 
   test('--to https from ssh:// scheme (gitlab self-hosted style)', () => {
@@ -55,8 +55,8 @@ describe('goldband-artifacts-url', () => {
   });
 
   test('--owner-repo extracts the path segment', () => {
-    expect(run(['--owner-repo', 'https://github.com/garrytan/goldband-artifacts-garrytan']).stdout)
-      .toBe('garrytan/goldband-artifacts-garrytan');
+    expect(run(['--owner-repo', 'https://github.com/example-org/goldband-artifacts-example']).stdout)
+      .toBe('example-org/goldband-artifacts-example');
     expect(run(['--owner-repo', 'git@github.com:team/goldband-artifacts-team.git']).stdout)
       .toBe('team/goldband-artifacts-team');
   });
@@ -97,7 +97,7 @@ describe('goldband-artifacts-url', () => {
   });
 
   test('round-trip: https → ssh → https is identity', () => {
-    const original = 'https://github.com/garrytan/goldband-artifacts-garrytan';
+    const original = 'https://github.com/example-org/goldband-artifacts-example';
     const ssh = run(['--to', 'ssh', original]).stdout;
     const back = run(['--to', 'https', ssh]).stdout;
     expect(back).toBe(original);

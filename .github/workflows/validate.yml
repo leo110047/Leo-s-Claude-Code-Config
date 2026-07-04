@@ -55,11 +55,20 @@ jobs:
       - name: Replay hook router golden dataset
         run: npm run test:hook-router
 
+      - name: Test telemetry schema and OTLP exporter
+        run: npm run test:telemetry
+
       - name: Check hook router coverage matrix
         run: npm run test:hook-router:coverage
 
       - name: Test eval budget cap checker
         run: npm run test:eval-budget-cap
+
+      - name: Test goldband MCP server
+        run: |
+          npm ci --prefix mcp/server
+          npm run test:mcp-server
+          npm run smoke:mcp-server
 
       - name: Verify hook script references
         run: |
@@ -83,11 +92,22 @@ jobs:
       - name: Check Goldband Loop inventory
         run: node scripts/check-goldband-loop-inventory.mjs
 
+      - name: Test Goldband Loop workflow runtime
+        run: cd goldband-loop && bun run test:workflows
+
       - name: Test Goldband Loop free suite
         run: cd goldband-loop && bun run test:free
 
       - name: Test workflow installer integration
         run: bash scripts/test-workflow-integration.sh
+
+      - name: Set up Docker Buildx for sandbox cache
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test sandbox container
+        env:
+          GOLDBAND_SANDBOX_USE_BUILDX: "1"
+        run: bash scripts/test-sandbox.sh
 
       - name: Summary
         run: |

@@ -3,6 +3,10 @@ import { resolveConfig, ensureStateDir, readVersionHash, getGitRoot, getRemoteSl
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { canStartTestServer } from './test-server';
+
+const LOCALHOST_BIND_AVAILABLE = canStartTestServer();
+const describeWithLocalhost = LOCALHOST_BIND_AVAILABLE ? describe : describe.skip;
 
 describe('config', () => {
   describe('getGitRoot', () => {
@@ -136,24 +140,24 @@ describe('config', () => {
 
     test('parses SSH remote URLs', () => {
       // Test the regex directly since we can't mock Bun.spawnSync easily
-      const url = 'git@github.com:garrytan/goldband.git';
+      const url = 'git@github.com:example-owner/example-repo.git';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-goldband');
+      expect(`${match![1]}-${match![2]}`).toBe('example-owner-example-repo');
     });
 
     test('parses HTTPS remote URLs', () => {
-      const url = 'https://github.com/garrytan/goldband.git';
+      const url = 'https://github.com/example-owner/example-repo.git';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-goldband');
+      expect(`${match![1]}-${match![2]}`).toBe('example-owner-example-repo');
     });
 
     test('parses HTTPS remote URLs without .git suffix', () => {
-      const url = 'https://github.com/garrytan/goldband';
+      const url = 'https://github.com/example-owner/example-repo';
       const match = url.match(/[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
       expect(match).not.toBeNull();
-      expect(`${match![1]}-${match![2]}`).toBe('garrytan-goldband');
+      expect(`${match![1]}-${match![2]}`).toBe('example-owner-example-repo');
     });
   });
 
@@ -249,7 +253,7 @@ describe('version mismatch detection', () => {
   });
 });
 
-describe('isServerHealthy', () => {
+describeWithLocalhost('isServerHealthy', () => {
   const { isServerHealthy } = require('../src/cli');
   const http = require('http');
 

@@ -25,7 +25,7 @@ directional recommendations are expected to surface assumptions, failure modes, 
 
 - goldband owns shared policy, installer behavior, Claude/Codex adapters, global
   guidance, hooks, commands, rules, and portable skills.
-- `goldband-loop/` is the first-party workflow runtime, not a vendored upstream.
+- `goldband-loop/` is the first-party workflow runtime.
 - At install time, goldband installs Goldband Loop directly and exposes
   `goldband-*` entry points.
 
@@ -128,6 +128,9 @@ install flow does not stage `~/.codex/requirements.toml` and does not claim
 Windows managed-requirements enforcement.
 
 MCP templates and token-backed setup live in [mcp/README.md](mcp/README.md).
+The first-party zero-token `goldband-mcp` server lives in `mcp/server/`.
+The installer does not enable it by default; build it first, then point the
+`goldband` template entry at your checkout path.
 
 ## Common Entry Points
 
@@ -201,4 +204,3 @@ If you only need the runtime, start with
 ## License
 
 MIT License.
-Goldband Loop upstream attribution is preserved in [goldband-loop/UPSTREAM_ATTRIBUTION.md](goldband-loop/UPSTREAM_ATTRIBUTION.md).

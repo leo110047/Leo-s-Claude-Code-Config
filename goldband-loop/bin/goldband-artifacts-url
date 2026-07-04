@@ -13,10 +13,10 @@
 #   goldband-artifacts-url --owner-repo <any-url>    # extract owner/repo
 #
 # Inputs accepted:
-#   https://github.com/garrytan/goldband-artifacts-garrytan
-#   https://github.com/garrytan/goldband-artifacts-garrytan.git
-#   git@github.com:garrytan/goldband-artifacts-garrytan.git
-#   ssh://git@gitlab.com/garrytan/goldband-artifacts-garrytan.git
+#   https://github.com/example-owner/goldband-artifacts-example
+#   https://github.com/example-owner/goldband-artifacts-example.git
+#   git@github.com:example-owner/goldband-artifacts-example.git
+#   ssh://git@gitlab.com/example-owner/goldband-artifacts-example.git
 #   git@gitlab.example.org:team/goldband-artifacts-team.git
 #
 # Output: the requested form on stdout. Exits non-zero on parse failure with

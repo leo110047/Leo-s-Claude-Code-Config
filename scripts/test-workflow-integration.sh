@@ -62,6 +62,9 @@ create_fake_loop_metadata() {
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
 # test checklist
 EOF_CHECKLIST
+  cat > "$loop_dir/review/greptile-triage.md" <<'EOF_GREPTILE'
+# test greptile triage
+EOF_GREPTILE
 }
 
 write_fake_config_bin() {
@@ -173,6 +176,7 @@ install_codex() {
   ln -s "$ROOT/bin/goldband-config" "$HOME/.codex/skills/goldband/bin/goldband-config"
   ln -s "$ROOT/bin/goldband-repo-mode" "$HOME/.codex/skills/goldband/bin/goldband-repo-mode"
   ln -s "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"
+  ln -s "$ROOT/review/greptile-triage.md" "$HOME/.codex/skills/goldband/review/greptile-triage.md"
   printf '%s\n' "$VERSION" > "$HOME/.codex/skills/goldband/.installed-version"
   for skill_dir in "$ROOT/.agents/skills"/goldband-*; do
     [ -f "$skill_dir/SKILL.md" ] || continue
@@ -259,6 +263,8 @@ assert_exists "$TMP_HOME/.claude/skills/goldband-ship/SKILL.md"
 assert_exists "$TMP_HOME/.claude/skills/goldband-browse/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
+assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
+assert_exists "$TMP_HOME/.codex/skills/goldband/review/greptile-triage.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"

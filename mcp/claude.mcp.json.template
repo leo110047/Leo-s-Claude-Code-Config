@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "goldband": {
+      "command": "node",
+      "args": ["/path/to/goldband/mcp/server/dist/index.js"],
+      "disabled": true
+    },
     "github": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],

@@ -28,7 +28,7 @@
  * internals switch from 4-call composition to a single MCP call.
  *
  * Usage:
- *   goldband-brain-context-load --skill office-hours --repo garrytan-goldband
+ *   goldband-brain-context-load --skill office-hours --repo goldband-project
  *   goldband-brain-context-load --skill-file ./SKILL.md --repo X --user Y
  *   goldband-brain-context-load --window 14d --explain
  *   goldband-brain-context-load --quiet

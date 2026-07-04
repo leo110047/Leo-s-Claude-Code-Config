@@ -135,7 +135,7 @@ goldband/
 ├── setup            # One-time setup: build binary + symlink skills
 ├── SKILL.md         # Generated from SKILL.md.tmpl (don't edit directly)
 ├── SKILL.md.tmpl    # Template: edit this, run gen:skill-docs
-├── ETHOS.md         # Builder philosophy (Boil the Lake, Search Before Building)
+├── ETHOS.md         # Builder philosophy (Completeness Principle, Search Before Building)
 └── package.json     # Build scripts for browse
 ```
 
@@ -316,8 +316,8 @@ every `git pull`.
 compiled browse binary. `@huggingface/transformers` v4 requires `onnxruntime-node`
 which fails to `dlopen` from Bun compile's temp extract dir. Only `security.ts`
 (pure-string operations — canary, verdict combiner, attack log, status) is safe
-for `server.ts`. See `~/.goldband/projects/garrytan-goldband/ceo-plans/2026-04-19-prompt-injection-guard.md`
-§"Pre-Impl Gate 1 Outcome" for full architectural decision.
+for `server.ts`. The architectural decision is recorded in the local project
+decision log.
 
 **Thresholds** (in `security.ts`):
 - `BLOCK: 0.85` — single-layer score that would cause BLOCK if cross-confirmed
@@ -472,18 +472,15 @@ Accept findings where the "sloppy" pattern is the correct engineering choice.
 
 Goldband Loop is first-party source in this repository. Public docs and install
 instructions should present Goldband Loop as a goldband-maintained runtime, not
-as the upstream author's personal project.
+as a third-party project.
 
 When reviewing or merging PRs:
 
-1. **Preserve upstream attribution** in `UPSTREAM_ATTRIBUTION.md`, `LICENSE`, and
-   any legally meaningful notice files.
-2. **Do not put upstream clone URLs in user-facing install docs.** Use the current
+1. **Do not put external clone URLs in user-facing install docs.** Use the current
    goldband repository URL or root `install.sh` workflow.
-3. **Do not reintroduce upstream personal marketing as the README or install
-   path.** Personal history, hiring copy, and upstream promotional language
-   belong in attribution/history material only when they are needed for context.
-4. **Keep product voice first-party.** It is fine for individual skills to carry
+2. **Do not reintroduce personal marketing as the README or install path.**
+   Historical project notes should stay out of public entrypoints.
+3. **Keep product voice first-party.** It is fine for individual skills to carry
    inherited method names or historical concepts, but public entrypoints should
    make ownership and maintenance responsibility clear.
 
@@ -651,7 +648,7 @@ the branch's history. When real work lands, the entry will replace this at /ship
 ### Release-summary format (every `## [X.Y.Z]` entry)
 
 Every version entry in `CHANGELOG.md` MUST start with a release-summary section in
-the Goldband Loop/Garry voice, one viewport's worth of prose + tables that lands like a
+the Goldband Loop voice, one viewport's worth of prose + tables that lands like a
 verdict, not marketing. The itemized changelog (subsections, bullets, files) goes
 BELOW that summary, separated by a `### Itemized changes` header.
 

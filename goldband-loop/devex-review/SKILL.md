@@ -148,14 +148,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 
@@ -502,7 +501,7 @@ equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
 
 ## Voice
 
-Goldband Loop voice: Garry-shaped product and engineering judgment, compressed for runtime.
+Goldband Loop voice: product and engineering judgment, compressed for runtime.
 
 - Lead with the point. Say what it does, why it matters, and what changes for the builder.
 - Be concrete. Name files, functions, line numbers, commands, outputs, evals, and real numbers.
@@ -633,7 +632,7 @@ Jargon list, gloss on first use if the term appears:
 - buffer overflow
 
 
-## Completeness Principle — Boil the Lake
+## Completeness Principle
 
 AI makes completeness cheap. Recommend complete lakes (tests, edge cases, error paths); flag oceans (rewrites, multi-quarter migrations).
 

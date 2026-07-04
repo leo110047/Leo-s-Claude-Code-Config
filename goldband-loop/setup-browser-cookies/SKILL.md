@@ -140,14 +140,13 @@ touch ~/.goldband/.writing-style-prompted
 
 Skip if `WRITING_STYLE_PENDING` is `no`.
 
-If `LAKE_INTRO` is `no`: say "goldband follows the **Boil the Lake** principle — do the complete thing when AI makes marginal cost near-zero. Read more: https://garryslist.org/posts/boil-the-ocean" Offer to open:
+If `LAKE_INTRO` is `no`: say "goldband follows the **Completeness Principle** — do the complete thing when AI makes marginal cost near-zero."
 
 ```bash
-open https://garryslist.org/posts/boil-the-ocean
 touch ~/.goldband/.completeness-intro-seen
 ```
 
-Only run `open` if yes. Always run `touch`.
+Always run `touch`.
 
 If `TEL_PROMPTED` is `no` AND `LAKE_INTRO` is `yes`: ask telemetry once via AskUserQuestion:
 

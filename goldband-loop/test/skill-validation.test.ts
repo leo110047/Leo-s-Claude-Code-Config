@@ -653,8 +653,9 @@ describe('office-hours skill structure', () => {
     expect(content).toContain('golden age');
   });
 
-  test('contains Garry Tan personal plea', () => {
-    expect(content).toContain('Garry Tan, the creator of Goldband Loop');
+  test('contains founder path nudge without personal attribution', () => {
+    expect(content).toContain('Founder Path Nudge');
+    expect(content).not.toContain('Garry Tan');
   });
 
   test('contains founder signal synthesis phase', () => {
@@ -815,7 +816,7 @@ describe('Completeness Principle in generated SKILL.md files', () => {
     test(`${skill} contains Completeness Principle section`, () => {
       const content = fs.readFileSync(path.join(ROOT, skill), 'utf-8');
       expect(content).toContain('Completeness Principle');
-      expect(content).toContain('Boil the Lake');
+      expect(content).toContain('AI makes completeness cheap');
     });
   }
 

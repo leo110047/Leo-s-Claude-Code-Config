@@ -71,7 +71,7 @@ describeE2E('AUTO_DECIDE opt-in preserved under Conductor flags (periodic)', () 
         env: { ...process.env, GOLDBAND_HOME: tmpHome },
         encoding: 'utf-8',
       });
-      // goldband-slug emits `eval`-able shell exports like `SLUG=garrytan-goldband`.
+      // goldband-slug emits `eval`-able shell exports like `SLUG=example-owner-example-repo`.
       const slug = (slugRes.stdout.match(/SLUG=([^\s;]+)/)?.[1] ?? 'unknown').replace(/['"]/g, '');
 
       // 3. Write the preference: plan-ceo-review-mode → never-ask. The

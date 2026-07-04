@@ -156,12 +156,27 @@ Future keep/delete decisions should use confirmed workflow counts as the primary
 signal. Inferred workflow signals and hook advisories are secondary triage data
 and can be noisy.
 
+OTLP trace export is opt-in and offline-first. JSONL remains the source of
+truth; the exporter only reads the usage file and sends a derived traces payload
+when explicitly run:
+
+```bash
+node scripts/export-telemetry-otlp.mjs --dry-run
+node scripts/export-telemetry-otlp.mjs --endpoint http://localhost:4318
+```
+
+The exporter supports `--usage-file`, `--cursor-file`, `--dry-run`, and
+`--limit`. `--since` is dry-run only because formal exports advance a cursor. See
+[docs/observability.md](docs/observability.md) for the local Jaeger demo and
+[docs/telemetry-schema.md](docs/telemetry-schema.md) for the v1 schema.
+
 ## Regression Gates and Failure Taxonomy
 
 Hook policy regressions are tracked through the required/free replay gate:
 
 ```bash
 npm run test:hook-router
+npm run test:telemetry
 npm run test:hook-router:coverage
 npm run test:eval-budget-cap
 ```
@@ -193,6 +208,9 @@ Current hook discovery boundary:
   signals are inferred only when a `goldband-*` executable appears in shell
   command position, not when search, docs, or test output merely mention the
   workflow name.
+- New usage events are normalized to `goldband.telemetry.v1` with `run_id`,
+  `event_id`, and optional `parent_event_id`. Legacy `sessionId` remains present
+  for compatibility with existing local summaries.
 
 ## MCP Templates
 

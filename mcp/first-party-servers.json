@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "goldband",
+      "package": "mcp/server",
+      "transport": "stdio",
+      "credentialPolicy": "none",
+      "defaultEnabled": false,
+      "tools": [
+        "goldband_policy_check",
+        "goldband_telemetry_query",
+        "goldband_health_check"
+      ]
+    }
+  ]
+}

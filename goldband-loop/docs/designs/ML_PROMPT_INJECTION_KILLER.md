@@ -1,9 +1,9 @@
 # ML Prompt Injection Killer
 
 **Status:** P0 TODO (follow-up to sidebar security fix PR)
-**Branch:** garrytan/extension-prompt-injection-defense
+**Branch:** project-owner/extension-prompt-injection-defense
 **Date:** 2026-03-28
-**CEO Plan:** ~/.goldband/projects/garrytan-goldband/ceo-plans/2026-03-28-sidebar-prompt-injection-defense.md
+**CEO Plan:** ~/.goldband/projects/project-owner-goldband/ceo-plans/2026-03-28-sidebar-prompt-injection-defense.md
 
 ## The Problem
 

@@ -10,10 +10,11 @@ Codex. It has two first-party layers:
 
 - shared policy and host adapters, owned by the root repo
 - Goldband Loop runtime, owned by `goldband-loop/`
+- optional local sandbox execution, owned by `sandbox/`
 
-The user-facing workflow surface is `goldband-*`. The installer no longer wraps
-or hides an upstream runtime; it installs Goldband Loop directly and verifies the
-result against a machine-readable inventory.
+The user-facing workflow surface is `goldband-*`. The installer installs
+Goldband Loop directly and verifies the result against a machine-readable
+inventory.
 
 ## Responsibility Boundary
 
@@ -31,20 +32,25 @@ result against a machine-readable inventory.
   - `commands/`
   - `rules/`
   - `hooks/`
+- first-party MCP surface:
+  - `mcp/server/`
+  - `mcp/first-party-servers.json`
+  - `mcp/*.template`
 - portable shared skills:
   - `skills/global/`
   - `skills/projects/`
 - validation gates:
   - `scripts/check-goldband-loop-inventory.mjs`
+  - `scripts/test-sandbox.sh`
   - `.github/workflows/validate.yml`
 
 ### goldband-loop owns
 
 - workflow runtime source and generated host skill surfaces
+- programmatic workflow contracts under `goldband-loop/workflows/`
 - workflow-native docs, build metadata, tests, browser/PDF/design/iOS tooling
 - runtime binaries under `goldband-loop/bin/goldband-*`
 - the Goldband Loop inventory at `goldband-loop/inventory.json`
-- inherited upstream MIT license text and attribution
 
 Concrete ownership signals include:
 
@@ -65,12 +71,62 @@ That installer is responsible for:
 - exposing workflow skills as `goldband-*`
 - cleaning legacy runtime roots and generated entries from older installs
 - preserving `~/.goldband` as the runtime state directory
-- migrating legacy `~/.workflow` and `~/.gstack` config/state into
-  `~/.goldband` without overwriting newer Goldband Loop files
+- migrating legacy workflow config/state into `~/.goldband` without overwriting
+  newer Goldband Loop files
 
 The inventory gate proves the contract. It runs a clean-home install, lists the
 actual Claude/Codex skill entries and runtime binaries, and fails on missing
 entries, extra entries, legacy commands, or old runtime prefixes.
+
+## Programmatic Workflow Runtime
+
+`goldband-loop/workflows/` is the runtime contract layer for workflow execution.
+Markdown skills and `.tmpl` files remain the user-facing entrypoints and human
+guidance, but they are no longer the only source of truth for migrated workflows.
+The registry records the executable contract: target, evaluation signal,
+iteration cap, stop conditions, risk level, integration status, and evidence
+policy.
+
+This layer deliberately does not replace the existing inventory or usage
+telemetry:
+
+- `goldband-loop/inventory.json` remains the installed skill list.
+- `hooks/scripts/lib/hook-router/workflow-telemetry.js` remains the workflow
+  usage event builder.
+- `goldband-loop/hosts/*.ts` remains the host generation/support source.
+- `goldband-loop/workflows/registry.ts` owns runtime execution status and step
+  contracts only.
+
+Integrated runtime runs write step evidence to
+`${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/<workflow>.jsonl`. Core
+workflows can run in mock mode for CI without LLM spend; real host execution is
+gated behind explicit `--mode real`.
+For review workflows, untracked worktree files cross an additional trust
+boundary before real host execution: only bounded text files without secret-like
+content are materialized into the prompt, while skipped files are recorded as
+no-content markers.
+The workflow runner is currently single-pass: iteration caps and stop
+conditions are recorded as contract metadata, but convergence loops are not yet
+autonomously executed by the runtime.
+
+## Observability Pipeline
+
+Goldband telemetry is intentionally local-first:
+
+```text
+Claude/Codex hooks -> JSONL usage events -> optional OTLP exporter -> collector/UI
+```
+
+`hooks/scripts/lib/hook-router/usage-telemetry.js` and
+`codex/hooks/telemetry.js` append JSONL events without network I/O. The shared
+normalizer in `scripts/lib/telemetry-schema.cjs` adds `schema_version`,
+`run_id`, and `event_id` while preserving legacy `sessionId` for existing
+reports. `schemas/telemetry.v1.schema.json` documents the v1 JSON shape.
+
+`scripts/export-telemetry-otlp.mjs` is the only OTLP bridge. It reads JSONL,
+normalizes old rows in memory, maps one `run_id` to one trace, maps each event
+to a span, and sends OTLP/HTTP JSON only when explicitly invoked. It is not a
+hook, daemon, or installer default.
 
 ## Validation Gates
 
@@ -79,18 +135,39 @@ toolchains and file-shape rules.
 
 - Root policy, installer, hooks, commands, and portable skills are covered by
   `node scripts/check-code-style.mjs` and the root validation scripts.
+- Telemetry schema, legacy JSONL compatibility, and OTLP exporter behavior are
+  covered by `npm run test:telemetry`.
+- The first-party stdio MCP server is a separate TypeScript package under
+  `mcp/server/`; it uses the official `@modelcontextprotocol/sdk`, stays
+  read-only, and is opt-in in Claude/Codex MCP templates.
 - `goldband-loop/` is excluded from the root code-style scanner because it owns
   a runtime-specific Bun test suite and generated skill/docs surfaces.
 - CI still treats `goldband-loop/` as first-party code: it installs the runtime
   dependencies, installs the Playwright browser asset, runs
   `node scripts/check-goldband-loop-inventory.mjs`, and then runs
   `cd goldband-loop && bun run test:free`.
+- The sandbox story is additive defense in depth. `sandbox/sandbox.sh` starts a
+  Docker/Podman container with goldband baked into a non-writable
+  `/opt/goldband`, a clean container HOME, and one target project mounted
+  read-write. It does not change hook router or permission defaults.
+  `scripts/test-sandbox.sh` proves the image builds, goldband installs through
+  the normal clean-home path during image build, hook replay still blocks
+  representative unsafe commands, CLI smoke checks run, installed Goldband Loop
+  helper commands write runtime state under container HOME, `/opt/goldband` is
+  not writable at runtime, the launcher happy path works, and an unmounted host
+  path is not writable.
+- CI runs the sandbox build as a real validation gate. Buildx cache reduces
+  repeat cost on GitHub Actions, but a cold push or pull request still pays for
+  a full image build and global CLI install.
 
 ## Maintenance Rules
 
-- Treat `goldband-loop/` as first-party source, not a vendored upstream snapshot.
+- Treat `goldband-loop/` as first-party source.
 - Do not recreate wrapper manifests or hidden-name installer behavior.
 - When adding or removing a Goldband Loop entry, update `goldband-loop/inventory.json`
   and run `node scripts/check-goldband-loop-inventory.mjs`.
 - Keep Claude and Codex install paths aligned before claiming dual-tool parity.
-- Keep attribution for the absorbed upstream runtime in the Goldband Loop docs.
+- Keep sandbox claims limited to the boundaries verified in
+  [sandbox/THREAT-MODEL.md](sandbox/THREAT-MODEL.md). Do not present the
+  container as host-complete security or network isolation unless a matching
+  enforcement test exists.

@@ -179,7 +179,7 @@ fi
 # --local: install to .claude/skills/ in the current working directory (deprecated)
 if [ "$LOCAL_INSTALL" -eq 1 ]; then
   echo "Warning: --local is deprecated. Use global install + --team instead." >&2
-  echo "  See: https://github.com/garrytan/goldband#team-mode" >&2
+  echo "  See: https://github.com/leo110047/goldband#team-mode" >&2
   if [ "$HOST" = "codex" ]; then
     echo "Error: --local is only supported for Claude Code (not Codex)." >&2
     exit 1
@@ -354,7 +354,7 @@ if [ "$NEEDS_BUILD" -eq 1 ]; then
   # macOS kills with SIGKILL (exit 137). The two-step remove+re-sign is
   # required because a naive `codesign -s - -f` fails when the existing
   # signature block is corrupt. This is idempotent and costs <1s.
-  # See: https://github.com/garrytan/goldband/issues/997
+  # See: https://github.com/leo110047/goldband/issues/997
   if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
     for _bin in browse/dist/browse browse/dist/find-browse design/dist/design make-pdf/dist/pdf bin/goldband-global-discover; do
       _bin_path="$SOURCE_GOLDBAND_DIR/$_bin"
@@ -679,11 +679,11 @@ link_codex_skill_dirs() {
       # symlink that Step 5 already pointed at the repo root.
       [ "$skill_name" = "goldband" ] && continue
       target="$skills_dir/$skill_name"
-      # Create or update symlink
-      if [ -L "$target" ] || [ ! -e "$target" ]; then
-        _link_or_copy "$skill_dir" "$target"
-        linked+=("$skill_name")
-      fi
+      # Always refresh generated goldband-* Codex skills. Older installs could
+      # leave real directories with stale generated SKILL.md files.
+      rm -rf "$target"
+      _link_or_copy "$skill_dir" "$target"
+      linked+=("$skill_name")
     fi
   done
   if [ ${#linked[@]} -gt 0 ]; then
