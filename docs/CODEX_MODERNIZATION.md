@@ -4,10 +4,9 @@
 
 P5 is mostly implemented with conservative runtime adoption.
 
-Implemented now: configuration cleanup, Codex agents/hooks installation,
-packaging placeholders, MCP templates, opt-in Codex profile configs, managed
-requirements packaging, token-backed MCP setup/status flow, and operations
-documentation.
+Implemented now: configuration cleanup, Codex agents/hooks installation, MCP
+templates, opt-in Codex profile configs, POSIX managed requirements packaging,
+token-backed MCP setup/status flow, and operations documentation.
 
 Not completed yet: migrating to beta `default_permissions` / `[permissions.*]`
 permission profiles, enabling token-backed MCP servers by default, scheduled
@@ -37,11 +36,11 @@ automations, and active plugin marketplace distribution.
   consumption still needs validation with a real auto-review approval request.
 - Managed requirements packaging: `codex/requirements.toml` constrains
   approval policies, approval reviewers, sandbox modes, and web search modes.
-  Install it explicitly with `./install.sh codex-requirements` on POSIX. The
-  Windows installer only stages the same file under `~/.codex/requirements.toml`
-  until the Windows Codex managed-requirements load path is verified.
-- Plugin packaging placeholder: `.codex-plugin/plugin.json` plus
-  `codex/plugin-marketplace/`.
+  Install it explicitly with `./install.sh codex-requirements` on POSIX. Native
+  Windows enforcement uses `%ProgramData%\OpenAI\Codex\requirements.toml`;
+  goldband does not install that system file.
+- Plugin metadata: `.claude-plugin/plugin.json` is factual metadata only. Active
+  Codex plugin marketplace distribution is not implemented.
 - MCP templates: `mcp/claude.mcp.json.template` and
   `mcp/codex.config.toml.template`, plus token-backed inventory/status tooling
   in `mcp/token-backed-servers.json` and
@@ -71,9 +70,8 @@ automations, and active plugin marketplace distribution.
 - `codex execpolicy check codex/rules/default.rules`
 - `bash scripts/check-codex-portability.sh`
 - temp-`HOME` installer run for `codex-full`
-- temp/system-path installer run for `codex-requirements`
-- JSON syntax checks for `codex/hooks.json`, plugin manifests, and marketplace
-  prototype
+- temp/system-path POSIX installer run for `codex-requirements`
+- JSON syntax checks for `codex/hooks.json` and `.claude-plugin/plugin.json`
 - TOML syntax checks for `codex/config.toml`, `codex/profiles/*.config.toml`,
   `codex/permission-profiles/*.config.toml`, and `codex/requirements.toml`
 - MCP Inspector smoke test for each MCP server before enabling it

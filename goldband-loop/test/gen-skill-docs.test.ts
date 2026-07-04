@@ -2299,6 +2299,21 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('command -v opencode');
   });
 
+  test('setup requires Playwright browser runtime by default', () => {
+    expect(setupContent).toContain('playwright_required()');
+    expect(setupContent).toContain('[ "${GOLDBAND_REQUIRE_PLAYWRIGHT:-1}" != "0" ]');
+    expect(setupContent).toContain('GOLDBAND_SKIP_PLAYWRIGHT=1');
+    expect(setupContent).toContain('Browser workflows will be unavailable');
+  });
+
+  test('setup Playwright readiness honors GOLDBAND_CHROMIUM_PATH', () => {
+    const fnStart = setupContent.indexOf('ensure_playwright_browser()');
+    const fnEnd = setupContent.indexOf('prepare_bun_for_windows_compile()', fnStart);
+    const fnBody = setupContent.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('process.env.GOLDBAND_CHROMIUM_PATH');
+    expect(fnBody).toContain('executablePath ? { executablePath } : {}');
+  });
+
   // T1: Sidecar skip guard — prevents .agents/skills/goldband from being linked as a skill
   test('link_codex_skill_dirs skips the goldband sidecar directory', () => {
     const fnStart = setupContent.indexOf('link_codex_skill_dirs()');

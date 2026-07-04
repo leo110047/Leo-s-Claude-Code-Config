@@ -121,7 +121,6 @@ node scripts/check-code-style.mjs [--staged] [--files <a> <b> ...] [--format jso
 
 | 檔案 | 現行行數 | 拆分方向建議 |
 |---|---|---|
-| `scripts/goldband-windows.mjs` | 1657 | 依功能拆：平台偵測 / 安裝步驟 / 測試輔助 等子模組 |
 | `shell/install/common.sh` | 913 | 依職責拆：skill-profile 管理 / codex rules / 通用 link 工具 分檔 |
 | `skills/global/claude-config-verification/scripts/verify-claude-config.js` | 787 | 依檢查類別拆：各 verify 區塊獨立模組 |
 

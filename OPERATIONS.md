@@ -85,6 +85,29 @@ Temporary bypasses print a warning and write a local log under
 If a repo uses Husky or another local `core.hooksPath`, git uses the local value
 instead of the global goldband hook. That is expected.
 
+## Installer Distribution
+
+goldband's active installer path is the POSIX installer:
+
+```bash
+./install.sh all-tools
+./install.sh all-with-workflow
+./install.sh status
+./install.sh uninstall
+```
+
+On Windows, use Git Bash or WSL. Native PowerShell install, status, uninstall,
+and self-update wrappers are retired. If an older install left
+`~/.claude/bin/goldband-self-update.ps1`,
+`~/.claude/shell/goldband-launchers.ps1`, or
+`~/.claude/.goldband-windows-state.json`, remove those stale files manually.
+
+`./install.sh codex-requirements` manages the POSIX system path
+`/etc/codex/requirements.toml`. Native Windows managed requirements must be
+installed by an administrator or managed policy at
+`%ProgramData%\OpenAI\Codex\requirements.toml`; goldband does not stage
+`~/.codex/requirements.toml` as a Windows enforcement path.
+
 ## Goldband Telemetry
 
 Goldband telemetry is local-only. It writes JSONL files on this machine and does

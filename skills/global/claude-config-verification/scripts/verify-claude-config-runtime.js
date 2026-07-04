@@ -58,16 +58,13 @@ function readWorkflowVersion(runtimeDir) {
 
 function checkShellLaunchers(homeDir) {
   const shellChecks = buildShellChecks(homeDir);
-  const powershellChecks = buildPowerShellChecks(homeDir);
   const shellInstalled = shellChecks.every((item) => item.ok);
-  const powershellInstalled = powershellChecks.every((item) => item.ok);
   return {
-    installed: shellInstalled || powershellInstalled,
+    installed: shellInstalled,
     shellInstalled,
-    powershellInstalled,
-    checks: [...shellChecks, ...powershellChecks],
+    checks: shellChecks,
     shellChecks,
-    powershellChecks,
+    staleNativeWindowsFiles: staleNativeWindowsLauncherFiles(homeDir),
   };
 }
 
@@ -116,51 +113,12 @@ function hasZshSourceBlock(homeDir, envZdotdir) {
   );
 }
 
-function buildPowerShellChecks(homeDir) {
+function staleNativeWindowsLauncherFiles(homeDir) {
   return [
-    launcherCheck('~/.claude/bin/goldband-self-update.ps1', [
-      homeDir,
-      '.claude',
-      'bin',
-      'goldband-self-update.ps1',
-    ]),
-    launcherCheck('~/.claude/shell/goldband-launchers.ps1', [
-      homeDir,
-      '.claude',
-      'shell',
-      'goldband-launchers.ps1',
-    ]),
-    {
-      file: '~/Documents/{PowerShell,WindowsPowerShell}/Microsoft.PowerShell_profile.ps1 goldband launcher block (PowerShell only)',
-      ok: hasPowerShellSourceBlock(homeDir),
-    },
-  ];
-}
-
-function hasPowerShellSourceBlock(homeDir) {
-  return powerShellProfiles(homeDir).some((profilePath) =>
-    fileContainsAll(profilePath, [
-      '# >>> goldband powershell launchers >>>',
-      '. "$HOME/.claude/shell/goldband-launchers.ps1"',
-    ]),
-  );
-}
-
-function powerShellProfiles(homeDir) {
-  return [
-    path.join(
-      homeDir,
-      'Documents',
-      'PowerShell',
-      'Microsoft.PowerShell_profile.ps1',
-    ),
-    path.join(
-      homeDir,
-      'Documents',
-      'WindowsPowerShell',
-      'Microsoft.PowerShell_profile.ps1',
-    ),
-  ];
+    path.join(homeDir, '.claude', 'bin', 'goldband-self-update.ps1'),
+    path.join(homeDir, '.claude', 'shell', 'goldband-launchers.ps1'),
+    path.join(homeDir, '.claude', '.goldband-windows-state.json'),
+  ].filter((candidate) => fs.existsSync(candidate));
 }
 
 function fileContainsAll(filePath, fragments) {

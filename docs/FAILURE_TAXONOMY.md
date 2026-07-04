@@ -57,15 +57,16 @@ For hook policy changes, the default regression target is
   classified here.
 - Regression target: skill activation rules tests or Goldband Loop routing evals.
 
-### installer breakage: Windows link fallback idempotency
+### installer breakage: retired native Windows installer
 
 - Evidence: `ac0d9b4 fix(installer): verify Windows link fallback idempotency`.
 - Search scope: `git log --oneline --grep='fix' --grep='installer' --grep='Windows'`
   and `git show --stat ac0d9b4`.
-- Impact: Windows fallback linking needed explicit idempotency coverage so reruns
-  do not produce broken or duplicated installed assets.
-- Regression target: `scripts/test-workflow-integration.sh` and
-  `scripts/test-windows-platform-integration.mjs`.
+- Impact: native Windows fallback linking was retired in Phase 5. Windows users
+  should run the POSIX installer through Git Bash or WSL.
+- Regression target: `scripts/test-workflow-integration.sh`,
+  `scripts/test-goldband-loop-playwright-setup.sh`, and
+  `node scripts/check-goldband-loop-inventory.mjs`.
 
 ### installer breakage: repo-local runtime detection
 

@@ -251,12 +251,12 @@ ensure_playwright_browser() {
     # (oven-sh/bun#4253). Use Node.js to verify Chromium works instead.
     (
       cd "$SOURCE_GOLDBAND_DIR"
-      node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); await b.close(); })()" 2>/dev/null
+      node -e "const { chromium } = require('playwright'); (async () => { const executablePath = process.env.GOLDBAND_CHROMIUM_PATH || undefined; const b = await chromium.launch(executablePath ? { executablePath } : {}); await b.close(); })()" 2>/dev/null
     )
   else
     (
       cd "$SOURCE_GOLDBAND_DIR"
-      bun --eval 'import { chromium } from "playwright"; const browser = await chromium.launch(); await browser.close();'
+      bun --eval 'import { chromium } from "playwright"; const executablePath = process.env.GOLDBAND_CHROMIUM_PATH || undefined; const browser = await chromium.launch(executablePath ? { executablePath } : {}); await browser.close();'
     ) >/dev/null 2>&1
   fi
 }
@@ -307,6 +307,10 @@ except subprocess.TimeoutExpired:
     echo "goldband setup warning: no timeout helper found; skipping timed command to avoid an unbounded hang" >&2
     return 124
   fi
+}
+
+playwright_required() {
+  [ "${GOLDBAND_REQUIRE_PLAYWRIGHT:-1}" != "0" ]
 }
 
 cleanup_copied_bun() {
@@ -429,6 +433,7 @@ fi
 PLAYWRIGHT_READY=1
 if [ "${GOLDBAND_SKIP_PLAYWRIGHT:-0}" = "1" ]; then
   PLAYWRIGHT_READY=0
+  log "Skipping Playwright Chromium install (GOLDBAND_SKIP_PLAYWRIGHT=1). Browser workflows will be unavailable until Chromium is installed."
 elif ! ensure_playwright_browser; then
   echo "Installing Playwright Chromium..."
   PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS="${GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS:-300}"
@@ -436,10 +441,11 @@ elif ! ensure_playwright_browser; then
     cd "$SOURCE_GOLDBAND_DIR"
     run_with_timeout "$PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS" bunx playwright install chromium
   ) || {
-    if [ "${GOLDBAND_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
+    if playwright_required; then
       echo "goldband setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
       echo "  Re-run manually for details: cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium" >&2
       echo "  Or increase the timeout: GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
+      echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
       exit 1
     fi
     PLAYWRIGHT_READY=0
@@ -476,7 +482,7 @@ if [ "$PLAYWRIGHT_READY" -eq 1 ] && ! ensure_playwright_browser; then
   else
     echo "goldband setup failed: Playwright Chromium could not be launched" >&2
   fi
-  if [ "${GOLDBAND_REQUIRE_PLAYWRIGHT:-0}" = "1" ]; then
+  if playwright_required; then
     exit 1
   fi
   echo "warning: continuing without browser runtime; run 'cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium' to enable browser workflows" >&2

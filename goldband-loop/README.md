@@ -44,6 +44,14 @@ Fork it. Improve it. Make it yours. And if you want to hate on free open source 
 
 **Requirements:** [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Git](https://git-scm.com/), [Bun](https://bun.sh/) v1.0+, [Node.js](https://nodejs.org/) (Windows only)
 
+Setup installs and verifies Playwright Chromium because `/browse`, `/qa`,
+`/design-review`, and screenshot/PDF workflows need a working browser runtime.
+If the download cannot complete, setup fails instead of leaving a partial
+install. For managed/offline machines, preinstall Chromium with
+`cd ~/.claude/skills/goldband && bunx playwright install chromium`, point
+`GOLDBAND_CHROMIUM_PATH` at a compatible Chromium binary, or explicitly skip
+browser workflows with `GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup`.
+
 ### Step 1: Install on your machine
 
 Open Claude Code and paste this. Claude does the rest.

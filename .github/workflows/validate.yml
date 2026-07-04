@@ -17,7 +17,7 @@ jobs:
           echo "=== Validating JSON files ==="
           errors=0
 
-          for f in hooks/hooks.json skills/global/skill-rules.json; do
+          for f in hooks/hooks.json skills/global/skill-rules.json .claude-plugin/plugin.json; do
             if [ -f "$f" ]; then
               if python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
                 echo "  [OK] $f"
@@ -76,6 +76,9 @@ jobs:
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
 
+      - name: Test Goldband Loop Playwright setup behavior
+        run: bash scripts/test-goldband-loop-playwright-setup.sh
+
       - name: Install Goldband Loop Playwright browser
         run: cd goldband-loop && bunx playwright install --with-deps chromium
 
@@ -87,9 +90,6 @@ jobs:
 
       - name: Test workflow installer integration
         run: bash scripts/test-workflow-integration.sh
-
-      - name: Test Windows platform integration
-        run: node scripts/test-windows-platform-integration.mjs
 
       - name: Summary
         run: |

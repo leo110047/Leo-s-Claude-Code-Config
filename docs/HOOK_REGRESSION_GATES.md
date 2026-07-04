@@ -20,7 +20,7 @@ bash scripts/verify-decision-guidance.sh
 node scripts/check-goldband-loop-inventory.mjs
 cd goldband-loop && bun run test:free
 bash scripts/test-workflow-integration.sh
-node scripts/test-windows-platform-integration.mjs
+bash scripts/test-goldband-loop-playwright-setup.sh
 ```
 
 `test:hook-router` replays `hooks/fixtures/router/replay-fixtures.json`.

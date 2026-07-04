@@ -12,10 +12,12 @@
 installer 從三套實作收斂,並讓所有對外宣稱與現實一致:`plugin.json` 的
 承諾做真或刪掉,Windows managed requirements 的狀態明確化。
 
-## 現況(已驗證,行數為審查時快照)
+## 現況基線(先重算,不要沿用舊快照)
 
-- 三套 installer 實作:`install.sh`(326 行)+ `shell/install/*.sh`
-  (約 2,779 行)+ 9 個 `scripts/goldband-windows-*.mjs` + `install.ps1`。
+- 三套 installer 實作:POSIX 入口 `install.sh`、POSIX 模組
+  `shell/install/*.sh`、Windows `scripts/goldband-windows*.mjs` 與
+  `install.ps1`。開始前先重算檔案數與行數,並在決策分析中列出本次
+  證據;不要把架構審查時的行數快照當成現況。
 - `.claude-plugin/plugin.json` 宣稱 packs、semver、biweekly cadence、
   stable/rc channels,但沒有發佈流程支撐。
 - `codex/plugin-marketplace/` 是 placeholder。
@@ -30,8 +32,13 @@ installer 從三套實作收斂,並讓所有對外宣稱與現實一致:`plugin.
    - 方案 B:保留現行 installer,Windows 支援收斂到 Git Bash only,刪除
      平行的 `goldband-windows-*.mjs` 套件與(或含)`install.ps1`。
 
-   分析要含:各方案刪掉多少行/多少檔、對現有使用者的遷移步驟、對
-   Claude Code plugin 機制的現況查證(用當前官方文件,附來源)。
+   分析要含:
+   - 各方案刪掉多少行/多少檔,以本次重算結果為準;
+   - 對現有使用者的遷移步驟;
+   - 方案 B 的 blast radius:README/README.en、Windows integration test、
+     Windows fixture、`commands/verify-config.md`、PowerShell launcher 與
+     self-update 檢查、CI workflow 需要刪除或改寫哪些內容;
+   - Claude Code plugin 機制的現況查證(用當前官方文件,附來源)。
    呈報後**等維護者選定再實作**。
 2. 實作選定方案,含 `install.sh status`/`uninstall` 的對應調整與文件更新。
 3. **空承諾清理**(不論選哪個方案都做):
@@ -41,16 +48,25 @@ installer 從三套實作收斂,並讓所有對外宣稱與現實一致:`plugin.
    - Windows managed requirements:查證 Windows Codex 的
      managed-requirements 載入路徑;可行就轉正並補驗證,不可行就把安裝
      行為降級為明確的文件說明(不再 staged 一個沒人載入的檔案)。
-4. 更新 README 兩份、`OPERATIONS.md`、`docs/CODEX_MODERNIZATION.md` 中
-   受影響的描述。
+4. 更新 `README.md`、`README.en.md`、`OPERATIONS.md`、
+   `docs/CODEX_MODERNIZATION.md` 中受影響的描述;不要引用不存在的文件
+   路徑。
 
 ## 邊界
 
 - 不改已在 Phase 3 定案的入口與目錄結構。
 - 刪除 installer 路徑前,確認 `shell/goldband-self-update.sh` 與
   launchers 沒有殘留引用。
+- 方案 B 若刪除 Windows mjs installer 或 `install.ps1`,必須同步處理
+  `scripts/test-windows-platform-integration.mjs`、Windows fixtures、README
+  安裝指令、`commands/verify-config.md`、PowerShell launcher/self-update
+  狀態檢查與 CI 入口;不能只刪 installer 檔案。
 - 對外部機制(Claude plugin、Codex requirements)的現況陳述必須引官方
   文件或實測,不引用記憶。
+- 未完成 Claude Code plugin 官方文件查證前,不得選定方案 A 或宣稱
+  `.claude-plugin/plugin.json` 的 packs/release channels 已可運作。未完成
+  Windows Codex requirements 載入路徑官方查證或實測前,不得宣稱 managed
+  requirements 已轉正。
 
 ## 驗證(完成宣稱必須附本次執行的證據)
 

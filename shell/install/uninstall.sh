@@ -155,7 +155,7 @@ uninstall_codex_requirements() {
 }
 
 remove_codex_requirements_file() {
-    if [ "$(id -u)" -eq 0 ]; then
+    if [ "$(id -u)" -eq 0 ] || [ -w "$(dirname "$CODEX_REQUIREMENTS_FILE")" ]; then
         rm "$CODEX_REQUIREMENTS_FILE"
     else
         sudo rm "$CODEX_REQUIREMENTS_FILE"

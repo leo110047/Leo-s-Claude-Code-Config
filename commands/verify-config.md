@@ -37,14 +37,13 @@ Check these paths exist and point to valid targets:
   - `~/.claude/bin/goldband-self-update` → should exist
   - `~/.claude/shell/goldband-launchers.sh` → should exist
   - `~/.zshrc` → should contain the goldband shell launcher source block (`zsh` only)
-- Windows PowerShell integration:
-  - `~/.claude/bin/goldband-self-update.ps1` → should exist
-  - `~/.claude/shell/goldband-launchers.ps1` → should exist
-  - `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` or `~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`
-    → should contain the goldband PowerShell launcher source block
+Windows support is through Git Bash or WSL. Do not expect native PowerShell
+launcher files; if stale `goldband-self-update.ps1`,
+`goldband-launchers.ps1`, or `.goldband-windows-state.json` files exist, report
+INFO with cleanup guidance instead of treating them as required install assets.
 
-For each: report OK if target is valid, WARNING if exists but target is ambiguous, ERROR if missing.
-Treat either the POSIX launcher path or the PowerShell launcher path as sufficient, depending on platform.
+For each active POSIX path: report OK if target is valid, WARNING if exists but
+target is ambiguous, ERROR if missing.
 
 ### 2. Codex Install Checks
 

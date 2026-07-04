@@ -50,12 +50,15 @@ macOS / POSIX:
 ./install.sh status            # Check status
 ```
 
-Windows PowerShell:
+Windows:
 
-```powershell
-pwsh -File .\install.ps1 all-tools
-pwsh -File .\install.ps1 all-with-workflow
-pwsh -File .\install.ps1 status
+goldband no longer maintains a native PowerShell installer. On Windows, use Git
+Bash or WSL from a full git checkout and run the same POSIX commands:
+
+```bash
+./install.sh all-tools
+./install.sh all-with-workflow
+./install.sh status
 ```
 
 Install individual pieces:
@@ -76,6 +79,10 @@ Dependencies:
 
 - Hook merging requires `jq`.
 - Windows workflow installation needs `bash`; Git for Windows is recommended.
+- `all-with-workflow` installs and verifies Goldband Loop's Playwright Chromium
+  browser runtime; download or launch failure stops the install. Offline/CI
+  runs can explicitly set `GOLDBAND_SKIP_PLAYWRIGHT=1` to skip browser
+  workflows, or set `GOLDBAND_CHROMIUM_PATH` to a compatible Chromium binary.
 
 ## Installed Surface
 
@@ -114,9 +121,11 @@ If an older checkout wrote approvals into `codex/rules/default.rules`:
 ./install.sh repair-codex-rules
 ```
 
-`codex-requirements` installs managed requirements. POSIX defaults to
-`/etc/codex/requirements.toml`; Windows currently stages the same file to
-`~/.codex/requirements.toml` and does not claim runtime enforcement.
+`codex-requirements` installs Codex managed requirements. POSIX defaults to
+`/etc/codex/requirements.toml`. The native Windows system path is
+`%ProgramData%\OpenAI\Codex\requirements.toml`; goldband's Git Bash / WSL
+install flow does not stage `~/.codex/requirements.toml` and does not claim
+Windows managed-requirements enforcement.
 
 MCP templates and token-backed setup live in [mcp/README.md](mcp/README.md).
 Codex modernization status lives in

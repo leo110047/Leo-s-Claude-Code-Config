@@ -49,7 +49,7 @@ function printWorkflowSummary(summary) {
 }
 
 function shellSummary(summary) {
-  return `${summary.shellLaunchers.installed ? 'OK' : 'FAIL'} (POSIX=${yesNo(summary.shellLaunchers.shellInstalled)} PowerShell=${yesNo(summary.shellLaunchers.powershellInstalled)})`;
+  return `${summary.shellLaunchers.installed ? 'OK' : 'FAIL'} (POSIX=${yesNo(summary.shellLaunchers.shellInstalled)})`;
 }
 
 function yesNo(value) {
@@ -116,17 +116,20 @@ function printShellLaunchers(summary) {
       active: summary.shellLaunchers.shellInstalled,
       checks: summary.shellLaunchers.shellChecks ?? [],
     },
-    {
-      label: 'PowerShell',
-      active: summary.shellLaunchers.powershellInstalled,
-      checks: summary.shellLaunchers.powershellChecks ?? [],
-    },
   ];
   for (const group of launcherCheckGroups) {
     if (group.checks.length === 0) continue;
     console.log(`  ${group.label}:`);
     for (const item of group.checks) {
       console.log(`    [${launcherStatus(summary, group, item)}] ${item.file}`);
+    }
+  }
+  const staleNativeWindowsFiles =
+    summary.shellLaunchers.staleNativeWindowsFiles ?? [];
+  if (staleNativeWindowsFiles.length > 0) {
+    console.log('  Retired native Windows files:');
+    for (const filePath of staleNativeWindowsFiles) {
+      console.log(`    [INFO] ${filePath} — stale native Windows launcher`);
     }
   }
 }

@@ -46,12 +46,15 @@ macOS / POSIX：
 ./install.sh status            # 檢查狀態
 ```
 
-Windows PowerShell：
+Windows：
 
-```powershell
-pwsh -File .\install.ps1 all-tools
-pwsh -File .\install.ps1 all-with-workflow
-pwsh -File .\install.ps1 status
+goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 WSL，
+從完整 git checkout 執行同一組 POSIX 指令：
+
+```bash
+./install.sh all-tools
+./install.sh all-with-workflow
+./install.sh status
 ```
 
 補裝特定項目：
@@ -73,6 +76,10 @@ pwsh -File .\install.ps1 status
 
 - hooks 合併需要 `jq`。
 - Windows workflow 需要可用的 `bash`，建議 Git for Windows。
+- `all-with-workflow` 會安裝並驗證 Goldband Loop 的 Playwright Chromium
+  browser runtime；下載或啟動失敗會中止安裝。離線/CI 可明確設定
+  `GOLDBAND_SKIP_PLAYWRIGHT=1` 跳過 browser workflows，或用
+  `GOLDBAND_CHROMIUM_PATH` 指向相容 Chromium。
 
 ## 裝了什麼
 
@@ -102,7 +109,11 @@ Codex tracked config/rules 只放 portable baseline。本機路徑、trusted pro
 ./install.sh repair-codex-rules
 ```
 
-`codex-requirements` 會安裝 managed requirements。POSIX 預設寫到 `/etc/codex/requirements.toml`；Windows 目前只 staged 到 `~/.codex/requirements.toml`，不宣稱 runtime 已強制載入。
+`codex-requirements` 會安裝 Codex managed requirements。POSIX 預設寫到
+`/etc/codex/requirements.toml`。native Windows 的官方 system path 是
+`%ProgramData%\OpenAI\Codex\requirements.toml`；goldband 的 Git Bash / WSL
+安裝流程不會 staging `~/.codex/requirements.toml`，也不宣稱會強制載入
+Windows managed requirements。
 
 MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。Codex 現代化狀態看 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
 

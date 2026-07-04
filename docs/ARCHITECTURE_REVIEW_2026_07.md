@@ -232,9 +232,12 @@ Phase 4 對應審查優先級 3;Phase 5 對應審查優先級 4 與 buzzword 清
 
 ### Phase 5 — installer 瘦身、分發與空承諾清理
 
-- [ ] 三套 installer 收斂:Claude 端評估改走 plugin 分發(讓 `.claude-plugin/plugin.json` 成真),或把 Windows 支援收斂到 Git Bash only 以刪除平行的 `goldband-windows-*.mjs` 套件——擇一,不三套都養。
-- [ ] `plugin.json` 的 release channels 與 `codex/plugin-marketplace/`:做真或刪掉,不留空承諾。
-- [ ] Windows managed requirements「staged 但不強制」:確認 runtime 載入路徑後轉正,或明確降級為文件說明。
+- [x] 三套 installer 收斂:選定 Windows 支援收斂到 Git Bash / WSL,刪除 native
+  Windows installer。
+- [x] `plugin.json` 的 release channels 與 `codex/plugin-marketplace/`:刪掉空承諾,
+  `.claude-plugin/plugin.json` 只留事實性 metadata。
+- [x] Windows managed requirements「staged 但不強制」:明確降級為文件說明,
+  不再 staged 到非 runtime 載入路徑。
 
 完成條件:installer 實作數量減少;所有對外宣稱與現實一致。
 
