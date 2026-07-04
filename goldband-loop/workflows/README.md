@@ -138,6 +138,37 @@ Verified on 2026-07-04:
 | Codex | `codex-cli 0.142.5` | `codex exec --sandbox read-only --json --output-schema <schema> -o <file> <prompt>` | local `codex --version` and `codex exec --help`; official docs: https://developers.openai.com/codex/cli/reference and https://developers.openai.com/codex/noninteractive |
 | Claude | `2.1.201 (Claude Code)` | `claude -p --output-format json --disable-slash-commands --tools "" --max-budget-usd 0.50 --json-schema <schema> <prompt>` | local `claude --version` and `claude --help`; official docs: https://code.claude.com/docs/en/cli-reference |
 
+Local command excerpts:
+
+```text
+$ codex --version
+codex-cli 0.142.5
+
+$ codex exec --help
+Run Codex non-interactively
+Usage: codex exec [OPTIONS] [PROMPT]
+       codex exec [OPTIONS] <COMMAND> [ARGS]
+  -s, --sandbox <SANDBOX_MODE>
+          [possible values: read-only, workspace-write, danger-full-access]
+      --output-schema <FILE>
+          Path to a JSON Schema file describing the model's final response shape
+      --json
+          Print events to stdout as JSONL
+  -o, --output-last-message <FILE>
+          Specifies file where the last message from the agent should be written
+
+$ claude --version
+2.1.201 (Claude Code)
+
+$ claude --help
+Claude Code - starts an interactive session by default, use -p/--print for non-interactive output
+  --json-schema <schema>     JSON Schema for structured output validation...
+  --max-budget-usd <amount>  Maximum dollar amount to spend on API calls (only works with --print)
+  --output-format <format>   Output format (only works with --print): "text", "json", or "stream-json"
+  -p, --print                Print response and exit...
+  --tools <tools...>         Specify the list of available tools ... Use "" to disable all tools
+```
+
 Discovery note: `scripts/resolvers/codex-helpers.ts` currently contains Codex
 skill-generation helpers, not a process execution adapter. The workflow host
 adapter reuses its frontmatter parsing helper for prompt labels and keeps all
