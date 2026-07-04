@@ -115,7 +115,7 @@ Codex tracked config/rules 只放 portable baseline。本機路徑、trusted pro
 安裝流程不會 staging `~/.codex/requirements.toml`，也不宣稱會強制載入
 Windows managed requirements。
 
-MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。Codex 現代化狀態看 [docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md)。
+MCP template 與 token-backed 啟用流程看 [mcp/README.md](mcp/README.md)。
 
 ## Git style gate
 

@@ -224,7 +224,6 @@ function assertLegacyConfigMigration() {
 function assertLegacyNameMentionsAreAllowlisted() {
   const allowedFiles = new Set([
     'ARCHITECTURE.md',
-    'docs/prompts/phase-3-merge-restructure.md',
     'goldband-loop/LICENSE',
     'goldband-loop/UPSTREAM_ATTRIBUTION.md',
     'goldband-loop/bin/goldband-config',

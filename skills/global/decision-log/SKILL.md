@@ -2,7 +2,7 @@
 name: decision-log
 description: |
   Use when making a significant architectural, tooling, or process decision
-  that should be captured as an ADR in docs/DECISIONS.md.
+  that should be captured as an ADR or project decision record.
 allowed-tools:
   - Read
   - Grep
@@ -31,7 +31,8 @@ Log a decision when:
 - Do not omit rejected alternatives, or the record becomes useless when the same debate returns.
 - Do not omit assumptions, failure signals, or revisit triggers, or the ADR will not help when the same decision degrades later.
 - Do not rewrite old ADRs to match current opinion; supersede them and preserve history.
-- Do not create `docs/DECISIONS.md` as busywork when no meaningful decision was made.
+- Do not create a decision file as busywork when no meaningful decision was made.
+- Do not assume `docs/DECISIONS.md` exists or is the right location; follow the repository's current convention.
 
 ## ADR Format
 
@@ -82,13 +83,17 @@ Log a decision when:
 
 ## Process
 
-### 1. Check for docs/DECISIONS.md
+### 1. Find the Project Decision Location
 
 ```bash
-test -f docs/DECISIONS.md || mkdir -p docs && touch docs/DECISIONS.md
+rg -n "ADR-|Architecture Decision|Decision Record|DECISIONS.md" .
 ```
 
-If file doesn't exist, create with header:
+If the project already has an ADR or decision record, append there. If no
+decision record exists, create one only when the user explicitly asked for a
+durable ADR or the repository's instructions require it.
+
+Default header for a new ADR file:
 ```markdown
 # Architecture Decision Records
 
@@ -120,7 +125,7 @@ Required fields:
 
 ### 4. Append to File
 
-Add new ADR at the end of docs/DECISIONS.md.
+Add the new ADR at the end of the chosen decision record.
 
 ## Integration Points
 
@@ -131,7 +136,7 @@ During project creation, automatically log:
 - ADR-003: Database Choice (if applicable)
 
 ### With /why
-`/why` reads from docs/DECISIONS.md to provide context for past decisions.
+`/why` reads from the project decision record when one exists.
 
 ### With /next
 When implementing features that require architectural choices, prompt to log decision.
@@ -212,7 +217,7 @@ Use SQLite with sqlx for database operations.
 After logging, confirm:
 ```
 Logged: ADR-{number} "{title}"
-View: docs/DECISIONS.md
+View: {decision-record-path}
 Query: /why {topic}
 ```
 

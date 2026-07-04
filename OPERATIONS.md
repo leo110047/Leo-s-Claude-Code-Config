@@ -152,9 +152,9 @@ signals, plus hook deny and advisory counts. `confirmed` means a hook payload
 explicitly reported a `Skill` tool invocation with a `goldband-*` skill name.
 `inferred` is used for slash-command prompts and Bash wrapper commands such as
 `goldband-review`; do not treat inferred signals as real workflow completion.
-Phase 2 keep/delete decisions should use confirmed workflow counts as the
-primary signal. Inferred workflow signals and hook advisories are secondary
-triage data and can be noisy.
+Future keep/delete decisions should use confirmed workflow counts as the primary
+signal. Inferred workflow signals and hook advisories are secondary triage data
+and can be noisy.
 
 ## Regression Gates and Failure Taxonomy
 
@@ -176,11 +176,6 @@ Paid Goldband Loop evals are opt-in only through
 confirmation and `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY`
 GitHub Actions secrets. If either budget or secrets are missing, the workflow
 must report skipped and must not count as PR coverage.
-
-See:
-
-- [docs/HOOK_REGRESSION_GATES.md](docs/HOOK_REGRESSION_GATES.md)
-- [docs/FAILURE_TAXONOMY.md](docs/FAILURE_TAXONOMY.md)
 
 Current hook discovery boundary:
 

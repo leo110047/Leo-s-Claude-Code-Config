@@ -128,8 +128,6 @@ install flow does not stage `~/.codex/requirements.toml` and does not claim
 Windows managed-requirements enforcement.
 
 MCP templates and token-backed setup live in [mcp/README.md](mcp/README.md).
-Codex modernization status lives in
-[docs/CODEX_MODERNIZATION.md](docs/CODEX_MODERNIZATION.md).
 
 ## Common Entry Points
 
