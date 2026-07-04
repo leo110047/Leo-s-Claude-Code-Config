@@ -2956,12 +2956,21 @@ export async function start() {
   let xvfb: XvfbHandle | null = null;
   const xvfbDecision = shouldSpawnXvfb(process.env, process.platform);
   if (xvfbDecision.spawn) {
+    let displayNum: number | null = null;
     try {
-      const displayNum = pickFreeDisplay();
-      if (displayNum == null) {
-        console.error('[browse] no free X display in range :99-:120 — refusing to clobber existing X servers');
-        process.exit(1);
-      }
+      displayNum = pickFreeDisplay();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[browse] [xvfb] FAILED: ${msg}`);
+      console.error(`[browse] [xvfb] hint: ${xvfbInstallHint()}`);
+      process.exit(1);
+    }
+    if (displayNum == null) {
+      console.error('[browse] no free X display in range :99-:120 — refusing to clobber existing X servers');
+      process.exit(1);
+    }
+
+    try {
       xvfb = await spawnXvfb(displayNum);
       process.env.DISPLAY = xvfb.display;
       console.log(`[browse] [xvfb] spawned on ${xvfb.display} (pid ${xvfb.pid})`);

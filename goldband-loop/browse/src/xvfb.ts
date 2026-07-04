@@ -40,9 +40,16 @@ export interface ShouldSpawnDecision {
 const DISPLAY_RANGE_START = 99;
 const DISPLAY_RANGE_END = 120;
 
+function xvfbPathEnv(env: NodeJS.ProcessEnv = process.env): string {
+  return env.PATH ?? env.Path ?? '';
+}
+
+function hasXvfbBinary(name: 'Xvfb' | 'xdpyinfo', env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(Bun.which(name, { PATH: xvfbPathEnv(env) }));
+}
+
 export function hasXvfbProbeTools(env: NodeJS.ProcessEnv = process.env): boolean {
-  const PATH = env.PATH ?? env.Path ?? '';
-  return Boolean(Bun.which('Xvfb', { PATH }) && Bun.which('xdpyinfo', { PATH }));
+  return hasXvfbBinary('Xvfb', env) && hasXvfbBinary('xdpyinfo', env);
 }
 
 /**
@@ -64,7 +71,7 @@ export function shouldSpawnXvfb(env: NodeJS.ProcessEnv, platform: NodeJS.Platfor
 export function isDisplayFree(displayNum: number): boolean {
   // xdpyinfo exits 0 if a display is reachable. Exit non-zero means no
   // server, which is what we want.
-  if (!Bun.which('xdpyinfo', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+  if (!hasXvfbBinary('xdpyinfo')) {
     throw new Error('xdpyinfo not installed; cannot safely probe X display availability.');
   }
   const result = Bun.spawnSync(['xdpyinfo', '-display', `:${displayNum}`], {
@@ -142,10 +149,10 @@ export function isOurXvfb(pid: number, recordedStartTime: string): boolean {
  * install hint).
  */
 export async function spawnXvfb(displayNum: number): Promise<XvfbHandle> {
-  if (!Bun.which('Xvfb', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+  if (!hasXvfbBinary('Xvfb')) {
     throw new Error('Xvfb not installed.');
   }
-  if (!Bun.which('xdpyinfo', { PATH: process.env.PATH ?? process.env.Path ?? '' })) {
+  if (!hasXvfbBinary('xdpyinfo')) {
     throw new Error('xdpyinfo not installed; cannot validate Xvfb startup.');
   }
 
