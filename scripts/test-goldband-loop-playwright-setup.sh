@@ -3,6 +3,26 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SETUP_SCRIPT="$ROOT_DIR/goldband-loop/setup"
+BROWSE_BIN="$ROOT_DIR/goldband-loop/browse/dist/browse"
+
+ensure_setup_preconditions() {
+  local build_log
+
+  if [ -x "$BROWSE_BIN" ]; then
+    return 0
+  fi
+
+  echo "Building Goldband Loop browser binary for setup smoke precondition..."
+  build_log="$(mktemp "${TMPDIR:-/tmp}/goldband-pw-build.XXXXXX.log")"
+  if ! (
+    cd "$ROOT_DIR/goldband-loop"
+    bun run build
+  ) > "$build_log" 2>&1; then
+    echo "failed to build Goldband Loop browser binary" >&2
+    cat "$build_log" >&2
+    exit 1
+  fi
+}
 
 run_required_missing_browser_fails() {
   local tmp_home log_file rc
@@ -52,6 +72,7 @@ run_explicit_skip_succeeds() {
   grep -q "goldband ready (claude)." "$log_file"
 }
 
+ensure_setup_preconditions
 run_required_missing_browser_fails
 run_explicit_skip_succeeds
 

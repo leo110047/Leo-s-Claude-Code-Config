@@ -2,7 +2,7 @@ name: Validate Config
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
   pull_request:
     branches: [main]
 
@@ -11,6 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Enforce main merge source
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ] || [ "${{ github.event.pull_request.head.ref }}" != "dev" ]; then
+            echo "::error::Pull requests into main must come from the dev branch in this repository."
+            exit 1
+          fi
 
       - name: Validate JSON files
         run: |
