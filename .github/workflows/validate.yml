@@ -55,6 +55,9 @@ jobs:
       - name: Replay hook router golden dataset
         run: npm run test:hook-router
 
+      - name: Test telemetry schema and OTLP exporter
+        run: npm run test:telemetry
+
       - name: Check hook router coverage matrix
         run: npm run test:hook-router:coverage
 

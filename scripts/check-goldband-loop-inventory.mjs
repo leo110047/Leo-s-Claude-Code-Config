@@ -395,9 +395,25 @@ function assertInstalledInventory(home, inventory) {
     inventory.binaries,
   );
 
+  assertInstalledRuntimeSupportFiles(claudeRuntime, codexRuntime);
   assertNoForbiddenEntries('Claude skills', actualClaude, inventory);
   assertNoForbiddenEntries('Codex skills', actualCodex, inventory);
   assertNoLegacyCommands(home, inventory);
+}
+
+function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
+  const requiredFiles = [
+    path.join('review', 'checklist.md'),
+    path.join('review', 'greptile-triage.md'),
+  ];
+  for (const runtimeRoot of runtimeRoots) {
+    for (const relPath of requiredFiles) {
+      assert.ok(
+        fs.existsSync(path.join(runtimeRoot, relPath)),
+        `installed runtime support file missing: ${path.join(runtimeRoot, relPath)}`,
+      );
+    }
+  }
 }
 
 function skillDirectories(parent) {

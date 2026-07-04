@@ -679,11 +679,11 @@ link_codex_skill_dirs() {
       # symlink that Step 5 already pointed at the repo root.
       [ "$skill_name" = "goldband" ] && continue
       target="$skills_dir/$skill_name"
-      # Create or update symlink
-      if [ -L "$target" ] || [ ! -e "$target" ]; then
-        _link_or_copy "$skill_dir" "$target"
-        linked+=("$skill_name")
-      fi
+      # Always refresh generated goldband-* Codex skills. Older installs could
+      # leave real directories with stale generated SKILL.md files.
+      rm -rf "$target"
+      _link_or_copy "$skill_dir" "$target"
+      linked+=("$skill_name")
     fi
   done
   if [ ${#linked[@]} -gt 0 ]; then

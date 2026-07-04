@@ -9,6 +9,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
+const {
+  SCHEMA_VERSION,
+  validateUsageEvent,
+} = require('../scripts/lib/telemetry-schema.cjs');
 const repoDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
@@ -100,6 +104,15 @@ function hasEvent(events, expected) {
   );
 }
 
+function assertV1TelemetryEvent(event, expectedRunId) {
+  assert.equal(event.schema_version, SCHEMA_VERSION);
+  assert.equal(event.run_id, expectedRunId);
+  assert.equal(typeof event.event_id, 'string');
+  assert.ok(event.event_id.length > 0);
+  const validation = validateUsageEvent(event);
+  assert.equal(validation.valid, true, validation.errors.join('; '));
+}
+
 function withEnv(updates, callback) {
   const previous = {};
   for (const key of Object.keys(updates)) {
@@ -185,7 +198,9 @@ function testCodexDataRootFallbacks() {
     () => {
       assert.equal(codexTelemetry.dataRoot(), path.join(xdgRoot, 'goldband'));
       codexTelemetry.appendUsageEvent({ category: 'test', name: 'xdg' });
-      assert.equal(readJsonl(codexTelemetry.usageFile()).at(-1).name, 'xdg');
+      const event = readJsonl(codexTelemetry.usageFile()).at(-1);
+      assert.equal(event.name, 'xdg');
+      assertV1TelemetryEvent(event, 'unknown');
     },
   );
 }
@@ -231,7 +246,10 @@ function testCodexTempFallback() {
     observed.file,
     path.join(tempRoot, 'goldband', 'hook-router', 'usage-events.jsonl'),
   );
-  assert.equal(observed.events.at(-1).name, 'temp-fallback');
+  const event = observed.events.at(-1);
+  assert.equal(event.name, 'temp-fallback');
+  assert.equal(event.schema_version, SCHEMA_VERSION);
+  assert.equal(event.run_id, 'unknown');
 }
 
 function testCodexUsageRetention() {
@@ -299,6 +317,56 @@ function testCodexStructuredDenyTelemetryName() {
 
   assert.equal(events.length, 1);
   assert.equal(events[0].name, 'recursive-force-delete');
+  assert.equal(events[0].run_id, 'unknown');
+}
+
+function testSchemaValidationAndLegacyCompatibility() {
+  const usageSummary = require('../hooks/scripts/lib/hook-router/usage-summary.js');
+  const oldUsageFile = path.join(tmpDir, 'legacy-usage-events.jsonl');
+  fs.writeFileSync(
+    oldUsageFile,
+    `${JSON.stringify({
+      category: 'workflow-entry',
+      name: 'goldband-review',
+      action: 'invoked',
+      source: 'legacy-fixture',
+      sessionId: 'legacy-session',
+      confidence: 'confirmed',
+      host: 'claude',
+      detail: { host: 'claude' },
+      recordedAt: new Date().toISOString(),
+    })}\n`,
+    'utf8',
+  );
+  const summary = usageSummary.summarizeEvents(
+    { days: 30, limit: 20 },
+    { usageFile: oldUsageFile, metricsFile },
+    { usageEvents: usageSummary.loadJsonl(oldUsageFile), metrics: [] },
+  );
+  assert.equal(summary.usage.uniqueSessions, 1);
+  assert.equal(summary.workflowEntries.confirmed[0].name, 'goldband-review');
+}
+
+function testCodexRunIdFileFallback() {
+  const codexTelemetry = require('../codex/hooks/telemetry.js');
+  const runIdFile = path.join(tmpDir, 'codex-run-id', 'run-id.txt');
+
+  withEnv(
+    {
+      CODEX_SESSION_ID: undefined,
+      GOLDBAND_RUN_ID: undefined,
+      GOLDBAND_RUN_ID_FILE: runIdFile,
+    },
+    () => {
+      const events = codexTelemetry.workflowUsageEvents({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Skill',
+        tool_input: { name: 'goldband-review' },
+      });
+      assert.equal(events.length, 1);
+      assert.equal(events[0].run_id, fs.readFileSync(runIdFile, 'utf8').trim());
+    },
+  );
 }
 
 function testClaudeSessionStartContextIsDedupedBySession() {
@@ -408,6 +476,9 @@ function runTelemetryFixtures() {
 
 function assertTelemetryEvents() {
   const events = readJsonl(usageFile);
+  for (const event of events) {
+    assertV1TelemetryEvent(event, event.sessionId || 'unknown');
+  }
   assert.equal(
     hasEvent(events, {
       category: 'workflow-entry',
@@ -484,6 +555,8 @@ testCodexDataRootFallbacks();
 testCodexTempFallback();
 testCodexUsageRetention();
 testCodexStructuredDenyTelemetryName();
+testSchemaValidationAndLegacyCompatibility();
+testCodexRunIdFileFallback();
 testClaudeSessionStartContextIsDedupedBySession();
 testClaudeExpiredDedupeMarkerIsCleanedUp();
 testTelemetryCapture();

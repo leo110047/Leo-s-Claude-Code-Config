@@ -109,6 +109,25 @@ The workflow runner is currently single-pass: iteration caps and stop
 conditions are recorded as contract metadata, but convergence loops are not yet
 autonomously executed by the runtime.
 
+## Observability Pipeline
+
+Goldband telemetry is intentionally local-first:
+
+```text
+Claude/Codex hooks -> JSONL usage events -> optional OTLP exporter -> collector/UI
+```
+
+`hooks/scripts/lib/hook-router/usage-telemetry.js` and
+`codex/hooks/telemetry.js` append JSONL events without network I/O. The shared
+normalizer in `scripts/lib/telemetry-schema.cjs` adds `schema_version`,
+`run_id`, and `event_id` while preserving legacy `sessionId` for existing
+reports. `schemas/telemetry.v1.schema.json` documents the v1 JSON shape.
+
+`scripts/export-telemetry-otlp.mjs` is the only OTLP bridge. It reads JSONL,
+normalizes old rows in memory, maps one `run_id` to one trace, maps each event
+to a span, and sends OTLP/HTTP JSON only when explicitly invoked. It is not a
+hook, daemon, or installer default.
+
 ## Validation Gates
 
 Root goldband and Goldband Loop use separate gates because they have different
@@ -116,6 +135,8 @@ toolchains and file-shape rules.
 
 - Root policy, installer, hooks, commands, and portable skills are covered by
   `node scripts/check-code-style.mjs` and the root validation scripts.
+- Telemetry schema, legacy JSONL compatibility, and OTLP exporter behavior are
+  covered by `npm run test:telemetry`.
 - The first-party stdio MCP server is a separate TypeScript package under
   `mcp/server/`; it uses the official `@modelcontextprotocol/sdk`, stays
   read-only, and is opt-in in Claude/Codex MCP templates.

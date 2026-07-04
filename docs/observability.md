@@ -1,0 +1,98 @@
+# Observability
+
+Goldband observability has two layers:
+
+1. Local JSONL telemetry under the persistent Goldband data root.
+2. Optional OTLP trace export from JSONL with `scripts/export-telemetry-otlp.mjs`.
+
+Nothing is uploaded by default. Export is a manual or scheduled opt-in action.
+
+## Start a Local Trace UI
+
+Jaeger all-in-one is the shortest local demo path because it accepts OTLP/HTTP
+on `4318` and serves a UI on `16686`.
+
+```bash
+docker run --rm --name goldband-jaeger \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:1.57
+```
+
+Open:
+
+```text
+http://localhost:16686
+```
+
+## Trigger a Hook Event
+
+Use a temp usage file so the demo does not mix with your normal local
+telemetry:
+
+```bash
+TMP_DIR=$(mktemp -d)
+printf '%s\n' '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"notes/random-notes.md","content":"temporary"}}' \
+  | GOLDBAND_USAGE_FILE="$TMP_DIR/usage-events.jsonl" \
+    CLAUDE_SESSION_ID="demo-run" \
+    node hooks/scripts/hooks/hook-router.js >/tmp/goldband-demo-hook.out
+```
+
+That fixture should be denied by `doc-file-blocker` and written to the JSONL
+usage file.
+
+## Export to OTLP
+
+Dry-run first:
+
+```bash
+node scripts/export-telemetry-otlp.mjs \
+  --usage-file "$TMP_DIR/usage-events.jsonl" \
+  --dry-run
+```
+
+Send to Jaeger:
+
+```bash
+node scripts/export-telemetry-otlp.mjs \
+  --usage-file "$TMP_DIR/usage-events.jsonl" \
+  --endpoint http://127.0.0.1:4318
+```
+
+In Jaeger, select service `goldband` and click **Find Traces**. The demo trace
+should show a span named similar to:
+
+```text
+hook-decision:doc-file-blocker
+```
+
+The span attributes include `goldband.run_id=demo-run`,
+`goldband.category=hook-decision`, `gen_ai.operation.name=execute_tool`, and
+`gen_ai.provider.name=anthropic`.
+
+## Exporter Options
+
+```bash
+node scripts/export-telemetry-otlp.mjs --help
+```
+
+Supported flags:
+
+- `--endpoint <url>`: OTLP/HTTP endpoint. Defaults to `http://localhost:4318`.
+  The exporter appends `/v1/traces` when needed.
+- `--usage-file <path>`: JSONL usage file. Defaults to the normal Goldband
+  usage file.
+- `--cursor-file <path>`: cursor file. Defaults to
+  `<usage-file>.otlp-cursor.json`.
+- `--since <iso-date>`: filter events at or after the timestamp for `--dry-run`
+  inspection only. Formal exports reject `--since` so a cursor cannot skip older
+  unsent events.
+- `--dry-run`: print the OTLP JSON payload and do not send or advance cursor.
+- `--limit <n>`: export at most `n` events.
+
+## Privacy Boundary
+
+Goldband does not run an exporter daemon and does not send telemetry from hooks.
+The only network step is explicitly running `scripts/export-telemetry-otlp.mjs`
+without `--dry-run`.

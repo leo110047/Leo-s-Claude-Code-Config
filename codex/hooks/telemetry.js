@@ -1,6 +1,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const {
+  normalizeUsageEvent,
+  resolveRunId,
+} = require('../../scripts/lib/telemetry-schema.cjs');
 
 const DEFAULT_MAX_BYTES = 1024 * 1024;
 const DEFAULT_RETENTION_DAYS = 30;
@@ -120,10 +124,10 @@ function appendUsageEvent(entry) {
   }
 
   const filePath = usageFile();
-  const payload = {
+  const payload = normalizeUsageEvent({
     ...entry,
     recordedAt: new Date().toISOString(),
-  };
+  });
 
   try {
     ensureDir(path.dirname(filePath));
@@ -145,6 +149,16 @@ function sessionId(input) {
   return (
     input.session_id || input.sessionId || process.env.CODEX_SESSION_ID || null
   );
+}
+
+function baseTelemetryFields(input) {
+  return {
+    run_id: resolveRunId(input, {
+      GOLDBAND_RUN_ID: process.env.GOLDBAND_RUN_ID,
+      GOLDBAND_RUN_ID_FILE: process.env.GOLDBAND_RUN_ID_FILE,
+      CODEX_SESSION_ID: process.env.CODEX_SESSION_ID,
+    }),
+  };
 }
 
 function workflowSlashCommands(prompt) {
@@ -222,6 +236,7 @@ function candidateSkillNames(toolInput) {
 
 function workflowEntryEvent(input, options) {
   return {
+    ...baseTelemetryFields(input),
     category: 'workflow-entry',
     name: options.name,
     action: options.action,
@@ -354,6 +369,7 @@ function hookOutcomeUsageEvents(input, result) {
   if (!result) return [];
 
   const base = {
+    ...baseTelemetryFields(input),
     source: 'codex/hooks/hook-router.js',
     sessionId: sessionId(input),
     detail: {

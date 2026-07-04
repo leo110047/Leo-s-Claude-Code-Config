@@ -1,3 +1,7 @@
+const {
+  resolveRunId,
+} = require('../../../../scripts/lib/telemetry-schema.cjs');
+
 function safeString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -18,6 +22,12 @@ function resolveSessionId(input) {
     process.env.CODEX_SESSION_ID ||
     null
   );
+}
+
+function baseTelemetryFields(input) {
+  return {
+    run_id: resolveRunId(input),
+  };
 }
 
 function firstWorkflowCommand(text) {
@@ -95,6 +105,7 @@ function candidateSkillNames(toolInput) {
 
 function buildWorkflowEntryEvent(input, options) {
   return {
+    ...baseTelemetryFields(input),
     category: 'workflow-entry',
     name: options.name,
     action: options.action,
@@ -187,6 +198,7 @@ function buildHookOutcomeUsageEvents(input, outcome, host, source) {
 
   if (outcome?.decision === 'block') {
     events.push({
+      ...baseTelemetryFields(input),
       category: 'hook-decision',
       name: outcome.blockedBy || hookEventName,
       action: 'deny',
@@ -204,6 +216,7 @@ function buildHookOutcomeUsageEvents(input, outcome, host, source) {
     (logCount > 0 || hasAdditionalContext(outcome?.outputJson))
   ) {
     events.push({
+      ...baseTelemetryFields(input),
       category: 'hook-advisory',
       name: hookEventName,
       action: 'emit',

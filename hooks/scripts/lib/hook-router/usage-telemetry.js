@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureDir, getPersistentDataPath } = require('../utils');
+const {
+  normalizeUsageEvent,
+} = require('../../../../scripts/lib/telemetry-schema.cjs');
 
 const DEFAULT_MAX_BYTES = 1024 * 1024;
 const DEFAULT_RETENTION_DAYS = 30;
@@ -77,10 +80,10 @@ function appendUsageEvent(entry) {
   }
 
   const usageFile = getUsageFile();
-  const payload = {
+  const payload = normalizeUsageEvent({
     ...entry,
     recordedAt: new Date().toISOString(),
-  };
+  });
 
   try {
     ensureDir(path.dirname(usageFile));

@@ -27,6 +27,12 @@ function scopedByDays(rows, days) {
   });
 }
 
+function eventRunId(event) {
+  return (
+    event.run_id || event.runId || event.sessionId || event.session_id || null
+  );
+}
+
 function increment(map, key, fields) {
   const current = map.get(key) || { ...fields, count: 0 };
   current.count += 1;
@@ -131,9 +137,7 @@ function dataWindow(rows) {
 function summarizeEvents(options, paths, rows) {
   const events = scopedByDays(rows.usageEvents, options.days);
   const metrics = scopedByDays(rows.metrics, options.days);
-  const sessions = new Set(
-    events.map((event) => event.sessionId).filter(Boolean),
-  );
+  const sessions = new Set(events.map(eventRunId).filter(Boolean));
 
   return {
     generatedAt: new Date().toISOString(),

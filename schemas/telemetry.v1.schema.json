@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.local/schemas/telemetry.v1.schema.json",
+  "title": "Goldband Telemetry Event v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "run_id",
+    "event_id",
+    "category",
+    "name",
+    "action",
+    "source",
+    "host",
+    "detail",
+    "recordedAt"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "goldband.telemetry.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parent_event_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "sessionId": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "workflow-entry",
+        "hook-decision",
+        "hook-advisory",
+        "prompt-trigger",
+        "mode",
+        "mode-enforcement",
+        "test"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "invoked",
+        "requested",
+        "deny",
+        "emit",
+        "record",
+        "matched",
+        "suggested",
+        "enable",
+        "disable",
+        "block"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "type": ["string", "null"],
+      "enum": ["confirmed", "inferred", null]
+    },
+    "detail": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

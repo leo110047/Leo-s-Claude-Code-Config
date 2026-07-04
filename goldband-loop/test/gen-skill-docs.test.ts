@@ -2233,6 +2233,14 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('goldband*');
   });
 
+  test('link_codex_skill_dirs refreshes stale installed skill directories', () => {
+    const fnStart = setupContent.indexOf('link_codex_skill_dirs()');
+    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
+    const fnBody = setupContent.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('rm -rf "$target"');
+    expect(fnBody).toContain('_link_or_copy "$skill_dir" "$target"');
+  });
+
   test('link_claude_skill_dirs creates real directories with absolute SKILL.md symlinks', () => {
     // Claude links should be real directories with absolute SKILL.md symlinks
     // to ensure Claude Code discovers them as top-level skills (not nested under goldband/)
