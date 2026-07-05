@@ -164,12 +164,21 @@ describe('goldband-gbrain-install D5 detect-first', () => {
     expect(r.stdout).toContain('would run bun install + bun link');
   });
 
-  test('--dry-run falls through to fresh clone when no valid clone detected', () => {
+  test('--dry-run requires an explicit repo URL when no valid clone is detected', () => {
     // No ~/git/gbrain, no ~/gbrain.
     const r = run(INSTALL, ['--dry-run']);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('GBRAIN_REPO_URL is required');
+  });
+
+  test('--dry-run falls through to fresh clone when repo URL is explicit', () => {
+    // No ~/git/gbrain, no ~/gbrain.
+    const r = run(INSTALL, ['--dry-run'], {
+      env: { GBRAIN_REPO_URL: 'https://github.com/example/gbrain.git' },
+    });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('DRY RUN: would clone');
-    expect(r.stdout).toContain('https://github.com/garrytan/gbrain.git');
+    expect(r.stdout).toContain('https://github.com/example/gbrain.git');
   });
 
   test('rejects a pre-existing path that lacks a valid gbrain package.json', () => {
@@ -178,9 +187,9 @@ describe('goldband-gbrain-install D5 detect-first', () => {
     fs.mkdirSync(badGit, { recursive: true });
     fs.writeFileSync(path.join(badGit, 'package.json'), JSON.stringify({ name: 'not-gbrain' }));
     const r = run(INSTALL, ['--dry-run']);
-    expect(r.status).toBe(0);
-    // Falls through to fresh clone
-    expect(r.stdout).toContain('DRY RUN: would clone');
+    expect(r.status).toBe(2);
+    // Falls through to fresh clone, then requires an explicit repo URL.
+    expect(r.stderr).toContain('GBRAIN_REPO_URL is required');
   });
 });
 

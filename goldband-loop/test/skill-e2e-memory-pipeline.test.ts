@@ -63,7 +63,7 @@ function setupFixture(home: string): { goldbandHome: string; counts: Record<stri
   writeFileSync(join(codexDir, "rollout-1.jsonl"), codexSession, "utf-8");
 
   // goldband artifacts
-  writeFileSync(join(goldbandHome, "analytics", "eureka.jsonl"), '{"insight":"boil the lake"}\n', "utf-8");
+  writeFileSync(join(goldbandHome, "analytics", "eureka.jsonl"), '{"insight":"complete the work"}\n', "utf-8");
   writeFileSync(join(goldbandHome, "builder-profile.jsonl"), '{"date":"2026-05-01","mode":"startup"}\n', "utf-8");
   writeFileSync(join(goldbandHome, "projects", "test-repo", "learnings.jsonl"), '{"key":"a","insight":"b","confidence":8}\n', "utf-8");
   writeFileSync(join(goldbandHome, "projects", "test-repo", "timeline.jsonl"), '{"skill":"office-hours","event":"completed"}\n', "utf-8");

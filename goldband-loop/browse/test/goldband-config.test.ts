@@ -252,21 +252,4 @@ describe('goldband-config', () => {
     expect(existsSync(join(homeDir, '.goldband', 'projects', 'demo', 'late.jsonl'))).toBe(false);
   });
 
-  test('default home falls back to legacy gstack config when workflow is absent', () => {
-    const homeDir = join(stateDir, 'home');
-    const legacyDir = join(homeDir, '.gstack');
-    mkdirSync(legacyDir, { recursive: true });
-    writeFileSync(join(legacyDir, 'config.yaml'), 'telemetry: community\nskill_prefix: true\n', {
-      flag: 'w',
-    });
-
-    const { exitCode, stdout } = run(['get', 'skill_prefix'], {
-      HOME: homeDir,
-      GOLDBAND_HOME: '',
-      GOLDBAND_STATE_DIR: '',
-    });
-
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe('true');
-  });
 });

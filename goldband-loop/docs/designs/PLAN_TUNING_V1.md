@@ -47,7 +47,7 @@ The through-line: every review pass correctly narrowed the ambition until the re
 4. **Host-aware preamble echo.** `_EXPLAIN_LEVEL=$(${binDir}/goldband-config get explain_level 2>/dev/null || echo "default")`. Host-portable via existing V0 `ctx.paths.binDir` pattern.
 5. **goldband-config validation.** Document `explain_level: default|terse` in header. Whitelist values. Warn on unknown with specific message + default to `default`.
 6. **LOC reframe in README.** Remove "600,000+ lines of production code" hero framing. Insert `<!-- GOLDBAND-THROUGHPUT-PLACEHOLDER -->` anchor. Build-time script replaces anchor with computed multiple + caveat.
-7. **`scc`-backed throughput script** (`scripts/garry-output-comparison.ts`). For each of 2013 + 2026, enumerate maintainer-authored public commits, extract added lines from `git diff`, classify via `scc --stdin` (or regex fallback). Output `docs/throughput-2013-vs-2026.json` with per-language breakdown + caveats.
+7. **`scc`-backed throughput script** (`scripts/output-throughput-comparison.ts`). For each of 2013 + 2026, enumerate maintainer-authored public commits, extract added lines from `git diff`, classify via `scc --stdin` (or regex fallback). Output `docs/throughput-2013-vs-2026.json` with per-language breakdown + caveats.
 8. **`scc` as standalone install script** (`scripts/setup-scc.sh`). Not a `package.json` dependency (truly optional — 95% of users never run throughput). OS-detects and runs `brew install scc` / `apt install scc` / prints GitHub releases link.
 9. **README update pipeline** (`scripts/update-readme-throughput.ts`). Reads `docs/throughput-2013-vs-2026.json` if present, replaces the anchor with computed number. If missing, writes `GOLDBAND-THROUGHPUT-PENDING` marker that CI rejects — forces contributor to run the script before commit.
 10. **/retro adds logical SLOC + weighted commits above raw LOC.** Raw LOC stays for context but is visually demoted.
@@ -92,7 +92,7 @@ The through-line: every review pass correctly narrowed the ambition until the re
 
 scripts/
   jargon-list.json                  # NEW: ~50 repo-owned terms (gen-time inlined)
-  garry-output-comparison.ts        # NEW: scc + git per-year, author-scoped
+  output-throughput-comparison.ts        # NEW: scc + git per-year, author-scoped
   update-readme-throughput.ts       # NEW: README anchor replacement
   setup-scc.sh                      # NEW: OS-detecting scc installer
   resolvers/preamble.ts             # MODIFIED: Writing Style section + EXPLAIN_LEVEL echo
@@ -148,7 +148,7 @@ bun run build
    └── other steps (binary compilation, etc.)
 
 Separately, on-demand:
-bun run scripts/garry-output-comparison.ts
+bun run scripts/output-throughput-comparison.ts
    │
    ├── scc preflight (if missing → exit with setup-scc.sh hint)
    ├── For 2013 + 2026: enumerate maintainer-authored commits in public project-owner/* repos

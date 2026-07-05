@@ -653,9 +653,8 @@ describe('office-hours skill structure', () => {
     expect(content).toContain('golden age');
   });
 
-  test('contains founder path nudge without personal attribution', () => {
+  test('contains founder path nudge', () => {
     expect(content).toContain('Founder Path Nudge');
-    expect(content).not.toContain('Garry Tan');
   });
 
   test('contains founder signal synthesis phase', () => {

@@ -39,12 +39,14 @@ Install just the Claude Code runtime:
 
 ```bash
 ./install.sh workflow
+./install.sh workflow-slim
 ```
 
 Install just the Codex runtime:
 
 ```bash
 ./install.sh workflow-codex
+./install.sh workflow-codex-slim
 ```
 
 Use a local runtime checkout explicitly:
@@ -62,10 +64,19 @@ cd goldband-loop
 bun install
 ./setup --host claude --prefix
 ./setup --host codex --prefix
+./setup --host claude --profile slim --prefix
+./setup --host codex --profile slim --prefix
 ```
 
 `--prefix` exposes namespaced commands such as `goldband-review`. Without it,
 hosts that support short names may expose entries such as `review` and `qa`.
+
+`--profile full` is the default and keeps every `goldband-*` workflow visible as
+a top-level skill. `--profile slim` keeps only entrypoints such as `goldband` and
+`goldband-upgrade` visible, then installs host-specific workflow documents under
+`workflows/*.workflow.md` inside the runtime root. The slim profile reduces host
+skill discovery pressure, but direct top-level workflow names may not
+autocomplete.
 
 ## Requirements
 
@@ -165,6 +176,8 @@ Reinstall the runtime:
 ```bash
 ./install.sh workflow
 ./install.sh workflow-codex
+./install.sh workflow-slim
+./install.sh workflow-codex-slim
 ```
 
 Rebuild browser tooling:
