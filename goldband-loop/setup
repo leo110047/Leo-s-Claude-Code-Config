@@ -29,6 +29,9 @@ IS_WINDOWS=0
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*|Windows_NT) IS_WINDOWS=1 ;;
 esac
+if [ "${GOLDBAND_FORCE_COPY:-0}" = "1" ]; then
+  IS_WINDOWS=1
+fi
 
 # ─── Symlink-or-copy helper ───────────────────────────────────
 # On macOS/Linux: create a symlink (existing behavior).
@@ -77,6 +80,7 @@ log() { [ "$QUIET" -eq 0 ] && echo "$@" || true; }
 
 # ─── Parse flags ──────────────────────────────────────────────
 HOST="claude"
+WORKFLOW_PROFILE="${GOLDBAND_WORKFLOW_PROFILE:-full}"
 LOCAL_INSTALL=0
 SKILL_PREFIX=1
 SKILL_PREFIX_FLAG=0
@@ -86,6 +90,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --host) [ -z "$2" ] && echo "Missing value for --host (expected claude, codex, kiro, factory, opencode, openclaw, hermes, gbrain, or auto)" >&2 && exit 1; HOST="$2"; shift 2 ;;
     --host=*) HOST="${1#--host=}"; shift ;;
+    --profile) [ -z "$2" ] && echo "Missing value for --profile (expected slim or full)" >&2 && exit 1; WORKFLOW_PROFILE="$2"; shift 2 ;;
+    --profile=*) WORKFLOW_PROFILE="${1#--profile=}"; shift ;;
     --local) LOCAL_INSTALL=1; shift ;;
     --prefix)    SKILL_PREFIX=1; SKILL_PREFIX_FLAG=1; shift ;;
     --no-prefix) SKILL_PREFIX=0; SKILL_PREFIX_FLAG=1; shift ;;
@@ -133,6 +139,11 @@ case "$HOST" in
     echo ""
     exit 0 ;;
   *) echo "Unknown --host value: $HOST (expected claude, codex, kiro, factory, opencode, openclaw, hermes, gbrain, or auto)" >&2; exit 1 ;;
+esac
+
+case "$WORKFLOW_PROFILE" in
+  slim|full) ;;
+  *) echo "Unknown --profile value: $WORKFLOW_PROFILE (expected slim or full)" >&2; exit 1 ;;
 esac
 
 # ─── Resolve skill prefix preference ─────────────────────────
@@ -529,6 +540,8 @@ link_claude_skill_dirs() {
       # Validate target isn't a symlink before creating the link
       if [ -L "$target/SKILL.md" ]; then rm "$target/SKILL.md"; fi
       _link_or_copy "$goldband_dir/$dir_name/SKILL.md" "$target/SKILL.md"
+      write_goldband_managed_skill_marker "$target" "$goldband_dir/$dir_name"
+      record_workflow_managed_entry "claude" "$target"
       linked+=("$link_name")
     fi
   done
@@ -554,8 +567,46 @@ link_claude_root_skill_alias() {
   mkdir -p "$target"
   if [ -L "$target/SKILL.md" ]; then rm "$target/SKILL.md"; fi
   _link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"
+  write_goldband_managed_skill_marker "$target" "$goldband_dir"
   echo "  linked root skill alias: goldband"
   _print_windows_copy_note_once
+}
+
+link_claude_selected_skill_dirs() {
+  local goldband_dir="$1"
+  local skills_dir="$2"
+  shift 2
+  local linked=()
+  local requested skill_dir skill_name link_name target
+
+  for requested in "$@"; do
+    skill_dir="$goldband_dir/$requested"
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    skill_name=$(grep -m1 '^name:' "$skill_dir/SKILL.md" 2>/dev/null | sed 's/^name:[[:space:]]*//' | tr -d '[:space:]')
+    [ -z "$skill_name" ] && skill_name="$requested"
+    if [ "$SKILL_PREFIX" -eq 1 ]; then
+      case "$skill_name" in
+        goldband-*) link_name="$skill_name" ;;
+        *)        link_name="goldband-$skill_name" ;;
+      esac
+    else
+      link_name="$skill_name"
+    fi
+    target="$skills_dir/$link_name"
+    if [ -L "$target" ]; then
+      rm -f "$target"
+    fi
+    mkdir -p "$target"
+    if [ -L "$target/SKILL.md" ]; then rm "$target/SKILL.md"; fi
+    _link_or_copy "$skill_dir/SKILL.md" "$target/SKILL.md"
+    write_goldband_managed_skill_marker "$target" "$skill_dir"
+    linked+=("$link_name")
+  done
+
+  if [ ${#linked[@]} -gt 0 ]; then
+    echo "  linked entrypoint skills: ${linked[*]}"
+    _print_windows_copy_note_once
+  fi
 }
 
 # ─── Helper: remove old unprefixed Claude skill entries ───────────────────────
@@ -683,11 +734,243 @@ link_codex_skill_dirs() {
       # leave real directories with stale generated SKILL.md files.
       rm -rf "$target"
       _link_or_copy "$skill_dir" "$target"
+      write_goldband_managed_skill_marker "$target" "$skill_dir"
+      record_workflow_managed_entry "codex" "$target"
       linked+=("$skill_name")
     fi
   done
   if [ ${#linked[@]} -gt 0 ]; then
     echo "  linked skills: ${linked[*]}"
+  fi
+}
+
+link_codex_selected_skill_dirs() {
+  local goldband_dir="$1"
+  local skills_dir="$2"
+  shift 2
+  local agents_dir="$goldband_dir/.agents/skills"
+  local linked=()
+
+  for skill_name in "$@"; do
+    local skill_dir="$agents_dir/$skill_name"
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    local target="$skills_dir/$skill_name"
+    rm -rf "$target"
+    _link_or_copy "$skill_dir" "$target"
+    write_goldband_managed_skill_marker "$target" "$skill_dir"
+    linked+=("$skill_name")
+  done
+
+  if [ ${#linked[@]} -gt 0 ]; then
+    echo "  linked entrypoint skills: ${linked[*]}"
+  fi
+}
+
+path_under_dir() {
+  local candidate="$1"
+  local base="$2"
+  local candidate_real base_real
+  candidate_real="$(cd "$candidate" 2>/dev/null && pwd -P)" || return 1
+  base_real="$(cd "$base" 2>/dev/null && pwd -P)" || return 1
+  case "$candidate_real" in
+    "$base_real"|"$base_real"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+same_dir_path() {
+  local left="$1"
+  local right="$2"
+  local left_real right_real
+  left_real="$(cd "$left" 2>/dev/null && pwd -P)" || return 1
+  right_real="$(cd "$right" 2>/dev/null && pwd -P)" || return 1
+  [ "$left_real" = "$right_real" ]
+}
+
+workflow_managed_manifest_path() {
+  local host="$1"
+  printf '%s\n' "$HOME/.goldband/state/workflow-managed-$host"
+}
+
+reset_workflow_managed_manifest() {
+  local host="$1"
+  mkdir -p "$HOME/.goldband/state"
+  : > "$(workflow_managed_manifest_path "$host")"
+}
+
+record_workflow_managed_entry() {
+  local host="$1"
+  local target="$2"
+  mkdir -p "$HOME/.goldband/state"
+  printf '%s\n' "$target" >> "$(workflow_managed_manifest_path "$host")"
+}
+
+write_goldband_managed_skill_marker() {
+  local target="$1"
+  local source="$2"
+  [ -d "$target" ] || return 0
+  [ -L "$target" ] && return 0
+  printf 'source=%s\n' "$source" > "$target/.goldband-managed-skill"
+}
+
+goldband_managed_skill_marker_matches() {
+  local target="$1"
+  local source_root="$2"
+  local generated_root="$3"
+  local marker="$target/.goldband-managed-skill"
+  local source_path source_dir
+
+  [ -f "$marker" ] || return 1
+  source_path="$(sed -n 's/^source=//p' "$marker" | head -1)"
+  [ -n "$source_path" ] || return 1
+  if [ -d "$source_path" ]; then
+    source_dir="$source_path"
+  else
+    source_dir="$(dirname "$source_path")"
+  fi
+  path_under_dir "$source_dir" "$source_root" && return 0
+  [ -n "$generated_root" ] && path_under_dir "$source_dir" "$generated_root" && return 0
+  return 1
+}
+
+symlink_target_under_dir() {
+  local candidate="$1"
+  local base="$2"
+  local link_dest candidate_dir resolved_dir resolved_path base_real
+  link_dest="$(readlink "$candidate" 2>/dev/null || true)"
+  [ -n "$link_dest" ] || return 1
+  case "$link_dest" in
+    /*) resolved_path="$link_dest" ;;
+    *)
+      candidate_dir="$(dirname "$candidate")"
+      resolved_path="$candidate_dir/$link_dest"
+      ;;
+  esac
+  resolved_dir="$(dirname "$resolved_path")"
+  resolved_path="$(cd "$resolved_dir" 2>/dev/null && pwd -P)/$(basename "$resolved_path")" || return 1
+  base_real="$(cd "$base" 2>/dev/null && pwd -P)" || return 1
+  case "$resolved_path" in
+    "$base_real"|"$base_real"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+goldband_managed_skill_entry() {
+  local target="$1"
+  local source_root="$2"
+  local generated_root="$3"
+
+  if [ -L "$target" ]; then
+    path_under_dir "$target" "$source_root" && return 0
+    [ -n "$generated_root" ] && path_under_dir "$target" "$generated_root" && return 0
+  fi
+
+  if [ -d "$target" ] && [ -L "$target/SKILL.md" ]; then
+    symlink_target_under_dir "$target/SKILL.md" "$source_root" && return 0
+    [ -n "$generated_root" ] && symlink_target_under_dir "$target/SKILL.md" "$generated_root" && return 0
+  fi
+
+  if [ -d "$target" ]; then
+    goldband_managed_skill_marker_matches "$target" "$source_root" "$generated_root" && return 0
+  fi
+
+  return 1
+}
+
+cleanup_manifest_entries_for_slim() {
+  local host="$1"
+  local skills_dir="$2"
+  local manifest
+  local removed=()
+  local target
+
+  manifest="$(workflow_managed_manifest_path "$host")"
+  [ -f "$manifest" ] || return 0
+
+  while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    [ -e "$target" ] || [ -L "$target" ] || continue
+    path_under_dir "$target" "$skills_dir" || continue
+    rm -rf "$target"
+    removed+=("$(basename "$target")")
+  done < "$manifest"
+
+  : > "$manifest"
+  if [ ${#removed[@]} -gt 0 ]; then
+    echo "  cleaned manifest-managed full-profile entries for slim: ${removed[*]}"
+  fi
+}
+
+cleanup_full_workflow_entries_for_slim() {
+  local goldband_dir="$1"
+  local skills_dir="$2"
+  local generated_root="$3"
+  local host="${4:-}"
+  local removed=()
+  local skill_dir skill_name target
+
+  if [ -n "$host" ]; then
+    cleanup_manifest_entries_for_slim "$host" "$skills_dir"
+  fi
+
+  for skill_dir in "$goldband_dir"/*/; do
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    case "$skill_name" in connect-chrome|node_modules|goldband-upgrade) continue ;; esac
+
+    for target in "$skills_dir/$skill_name" "$skills_dir/goldband-$skill_name"; do
+      [ -e "$target" ] || [ -L "$target" ] || continue
+      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root"; then
+        rm -rf "$target"
+        removed+=("$(basename "$target")")
+      fi
+    done
+  done
+
+  if [ -n "$generated_root" ] && [ -d "$generated_root" ]; then
+    for skill_dir in "$generated_root"/goldband*/; do
+      [ -f "$skill_dir/SKILL.md" ] || continue
+      skill_name="$(basename "$skill_dir")"
+      case "$skill_name" in goldband|goldband-upgrade) continue ;; esac
+      target="$skills_dir/$skill_name"
+      [ -e "$target" ] || [ -L "$target" ] || continue
+      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root"; then
+        rm -rf "$target"
+        removed+=("$skill_name")
+      fi
+    done
+  fi
+
+  if [ ${#removed[@]} -gt 0 ]; then
+    echo "  cleaned full-profile entries for slim: ${removed[*]}"
+  fi
+}
+
+create_internal_workflow_docs() {
+  local generated_root="$1"
+  local runtime_root="$2"
+  local workflow_root="$runtime_root/workflows"
+  local linked=()
+  local skill_dir skill_name target
+
+  mkdir -p "$workflow_root"
+
+  for skill_dir in "$generated_root"/*/; do
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    case "$skill_name" in goldband|connect-chrome|node_modules) continue ;; esac
+    target="$workflow_root/$skill_name.workflow.md"
+    _link_or_copy "$skill_dir/SKILL.md" "$target"
+    case "$skill_name" in
+      goldband-*) _link_or_copy "$skill_dir/SKILL.md" "$workflow_root/${skill_name#goldband-}.workflow.md" ;;
+      *) _link_or_copy "$skill_dir/SKILL.md" "$workflow_root/goldband-$skill_name.workflow.md" ;;
+    esac
+    linked+=("$skill_name")
+  done
+
+  if [ ${#linked[@]} -gt 0 ]; then
+    echo "  internal workflows: ${#linked[@]}"
+    _print_windows_copy_note_once
   fi
 }
 
@@ -740,7 +1023,7 @@ create_codex_runtime_root() {
     rm -rf "$codex_goldband"
   fi
 
-  mkdir -p "$codex_goldband" "$codex_goldband/browse" "$codex_goldband/goldband-upgrade" "$codex_goldband/review"
+  mkdir -p "$codex_goldband" "$codex_goldband/browse" "$codex_goldband/goldband-upgrade" "$codex_goldband/review" "$codex_goldband/workflows"
 
   if [ -f "$agents_dir/goldband/SKILL.md" ]; then
     _link_or_copy "$agents_dir/goldband/SKILL.md" "$codex_goldband/SKILL.md"
@@ -767,6 +1050,56 @@ create_codex_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$codex_goldband/ETHOS.md"
   fi
+  create_internal_workflow_docs "$agents_dir" "$codex_goldband"
+}
+
+create_claude_runtime_root() {
+  local goldband_dir="$1"
+  local claude_goldband="$2"
+
+  if [ ! -L "$claude_goldband" ] && same_dir_path "$goldband_dir" "$claude_goldband"; then
+    mkdir -p "$claude_goldband/workflows"
+    create_internal_workflow_docs "$goldband_dir" "$claude_goldband"
+    return 0
+  fi
+
+  if [ -L "$claude_goldband" ]; then
+    rm -f "$claude_goldband"
+  elif [ -d "$claude_goldband" ] && [ "$claude_goldband" != "$goldband_dir" ]; then
+    if [ -f "$claude_goldband/.installed-version" ] || [ -x "$claude_goldband/bin/goldband-config" ]; then
+      rm -rf "$claude_goldband"
+    else
+      echo "goldband setup failed: refusing to replace non-goldband Claude runtime at $claude_goldband" >&2
+      exit 1
+    fi
+  fi
+
+  mkdir -p "$claude_goldband" "$claude_goldband/browse" "$claude_goldband/goldband-upgrade" "$claude_goldband/review" "$claude_goldband/workflows"
+
+  if [ -f "$goldband_dir/SKILL.md" ]; then
+    _link_or_copy "$goldband_dir/SKILL.md" "$claude_goldband/SKILL.md"
+  fi
+  if [ -d "$goldband_dir/bin" ]; then
+    _link_or_copy "$goldband_dir/bin" "$claude_goldband/bin"
+  fi
+  if [ -d "$goldband_dir/browse/dist" ]; then
+    _link_or_copy "$goldband_dir/browse/dist" "$claude_goldband/browse/dist"
+  fi
+  if [ -d "$goldband_dir/browse/bin" ]; then
+    _link_or_copy "$goldband_dir/browse/bin" "$claude_goldband/browse/bin"
+  fi
+  if [ -f "$goldband_dir/goldband-upgrade/SKILL.md" ]; then
+    _link_or_copy "$goldband_dir/goldband-upgrade/SKILL.md" "$claude_goldband/goldband-upgrade/SKILL.md"
+  fi
+  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+    if [ -f "$goldband_dir/review/$f" ]; then
+      _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
+    fi
+  done
+  if [ -f "$goldband_dir/ETHOS.md" ]; then
+    _link_or_copy "$goldband_dir/ETHOS.md" "$claude_goldband/ETHOS.md"
+  fi
+  create_internal_workflow_docs "$goldband_dir" "$claude_goldband"
 }
 
 create_factory_runtime_root() {
@@ -860,6 +1193,13 @@ create_opencode_runtime_root() {
   fi
 }
 
+write_workflow_profile_marker() {
+  local host="$1"
+  local profile="$2"
+  mkdir -p "$HOME/.goldband/state"
+  printf '%s\n' "$profile" > "$HOME/.goldband/state/workflow-profile-$host"
+}
+
 link_factory_skill_dirs() {
   local goldband_dir="$1"
   local skills_dir="$2"
@@ -934,31 +1274,39 @@ fi
 
 if [ "$INSTALL_CLAUDE" -eq 1 ]; then
   if [ "$SKILLS_BASENAME" = "skills" ]; then
-    # Clean up stale symlinks from the opposite prefix mode
-    if [ "$SKILL_PREFIX" -eq 1 ]; then
-      cleanup_old_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-    else
-      cleanup_prefixed_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-    fi
-    # Patch name: fields BEFORE creating symlinks so link_claude_skill_dirs
-    # reads the correct (patched) name: values for symlink naming
     "$SOURCE_GOLDBAND_DIR/bin/goldband-patch-names" "$SOURCE_GOLDBAND_DIR" "$SKILL_PREFIX"
-    link_claude_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-    link_claude_root_skill_alias "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-    # Self-healing: re-run goldband-relink to ensure name: fields and directory
-    # names are consistent with the config. This catches cases where an interrupted
-    # setup, stale git state, or gen:skill-docs left name: fields out of sync.
-    GOLDBAND_RELINK="$SOURCE_GOLDBAND_DIR/bin/goldband-relink"
-    if [ -x "$GOLDBAND_RELINK" ]; then
-      GOLDBAND_SKILLS_DIR="$INSTALL_SKILLS_DIR" GOLDBAND_INSTALL_DIR="$SOURCE_GOLDBAND_DIR" "$GOLDBAND_RELINK" >/dev/null 2>&1 || true
+    if [ "$WORKFLOW_PROFILE" = "slim" ]; then
+      INSTALL_GOLDBAND_DIR="$INSTALL_SKILLS_DIR/goldband"
+      create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
+      cleanup_full_workflow_entries_for_slim "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
+      link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"
+      link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+    else
+      reset_workflow_managed_manifest "claude"
+      # Clean up stale symlinks from the opposite prefix mode
+      if [ "$SKILL_PREFIX" -eq 1 ]; then
+        cleanup_old_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      else
+        cleanup_prefixed_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      fi
+      link_claude_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      link_claude_root_skill_alias "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      # Self-healing: re-run goldband-relink to ensure name: fields and directory
+      # names are consistent with the config. This catches cases where an interrupted
+      # setup, stale git state, or gen:skill-docs left name: fields out of sync.
+      GOLDBAND_RELINK="$SOURCE_GOLDBAND_DIR/bin/goldband-relink"
+      if [ -x "$GOLDBAND_RELINK" ]; then
+        GOLDBAND_SKILLS_DIR="$INSTALL_SKILLS_DIR" GOLDBAND_INSTALL_DIR="$SOURCE_GOLDBAND_DIR" "$GOLDBAND_RELINK" >/dev/null 2>&1 || true
+      fi
     fi
     if [ "$LOCAL_INSTALL" -eq 1 ]; then
       log "goldband ready (project-local)."
       log "  skills: $INSTALL_SKILLS_DIR"
     else
-      log "goldband ready (claude)."
+      log "goldband ready (claude, $WORKFLOW_PROFILE profile)."
     fi
     log "  browse: $BROWSE_BIN"
+    write_workflow_profile_marker "claude" "$WORKFLOW_PROFILE"
   else
     # Not inside a skills/ directory — would symlink the source into
     # ~/.claude/skills/goldband/ and register from there.
@@ -976,7 +1324,9 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
     if [ -d "$CLAUDE_GOLDBAND_LINK" ] && [ ! -L "$CLAUDE_GOLDBAND_LINK" ]; then
       _EXISTING_REAL=$(cd "$CLAUDE_GOLDBAND_LINK" 2>/dev/null && pwd -P || echo "")
       if [ -n "$_EXISTING_REAL" ] && [ "$_EXISTING_REAL" != "$SOURCE_GOLDBAND_DIR" ]; then
-        _SKIP_CLAUDE_REGISTER=1
+        if [ ! -f "$CLAUDE_GOLDBAND_LINK/.installed-version" ] && [ ! -x "$CLAUDE_GOLDBAND_LINK/bin/goldband-config" ]; then
+          _SKIP_CLAUDE_REGISTER=1
+        fi
       fi
     fi
 
@@ -996,25 +1346,40 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
       log "  browse: $BROWSE_BIN"
     else
       mkdir -p "$CLAUDE_SKILLS_DIR"
-      _link_or_copy "$SOURCE_GOLDBAND_DIR" "$CLAUDE_GOLDBAND_LINK"
-      log "  symlinked $CLAUDE_GOLDBAND_LINK -> $SOURCE_GOLDBAND_DIR"
       INSTALL_SKILLS_DIR="$CLAUDE_SKILLS_DIR"
-      INSTALL_GOLDBAND_DIR="$CLAUDE_GOLDBAND_LINK"
-      # Clean up stale symlinks from the opposite prefix mode
-      if [ "$SKILL_PREFIX" -eq 1 ]; then
-        cleanup_old_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-      else
-        cleanup_prefixed_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-      fi
       "$SOURCE_GOLDBAND_DIR/bin/goldband-patch-names" "$SOURCE_GOLDBAND_DIR" "$SKILL_PREFIX"
-      link_claude_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-      link_claude_root_skill_alias "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
-      GOLDBAND_RELINK="$SOURCE_GOLDBAND_DIR/bin/goldband-relink"
-      if [ -x "$GOLDBAND_RELINK" ]; then
-        GOLDBAND_SKILLS_DIR="$INSTALL_SKILLS_DIR" GOLDBAND_INSTALL_DIR="$SOURCE_GOLDBAND_DIR" "$GOLDBAND_RELINK" >/dev/null 2>&1 || true
+      if [ "$WORKFLOW_PROFILE" = "slim" ]; then
+        INSTALL_GOLDBAND_DIR="$CLAUDE_GOLDBAND_LINK"
+        create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
+        cleanup_full_workflow_entries_for_slim "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
+        link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"
+        link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      else
+        reset_workflow_managed_manifest "claude"
+        if [ -d "$CLAUDE_GOLDBAND_LINK" ] && [ ! -L "$CLAUDE_GOLDBAND_LINK" ]; then
+          if [ -f "$CLAUDE_GOLDBAND_LINK/.installed-version" ] || [ -x "$CLAUDE_GOLDBAND_LINK/bin/goldband-config" ]; then
+            rm -rf "$CLAUDE_GOLDBAND_LINK"
+          fi
+        fi
+        _link_or_copy "$SOURCE_GOLDBAND_DIR" "$CLAUDE_GOLDBAND_LINK"
+        log "  symlinked $CLAUDE_GOLDBAND_LINK -> $SOURCE_GOLDBAND_DIR"
+        INSTALL_GOLDBAND_DIR="$CLAUDE_GOLDBAND_LINK"
+        # Clean up stale symlinks from the opposite prefix mode
+        if [ "$SKILL_PREFIX" -eq 1 ]; then
+          cleanup_old_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+        else
+          cleanup_prefixed_claude_symlinks "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+        fi
+        link_claude_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+        link_claude_root_skill_alias "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+        GOLDBAND_RELINK="$SOURCE_GOLDBAND_DIR/bin/goldband-relink"
+        if [ -x "$GOLDBAND_RELINK" ]; then
+          GOLDBAND_SKILLS_DIR="$INSTALL_SKILLS_DIR" GOLDBAND_INSTALL_DIR="$SOURCE_GOLDBAND_DIR" "$GOLDBAND_RELINK" >/dev/null 2>&1 || true
+        fi
       fi
-      log "goldband ready (claude)."
+      log "goldband ready (claude, $WORKFLOW_PROFILE profile)."
       log "  browse: $BROWSE_BIN"
+      write_workflow_profile_marker "claude" "$WORKFLOW_PROFILE"
     fi
   fi
 fi
@@ -1031,13 +1396,22 @@ if [ "$INSTALL_CODEX" -eq 1 ]; then
   # create_codex_runtime_root would create self-referential symlinks (bin → bin, etc.).
   if [ "$CODEX_REPO_LOCAL" -eq 0 ]; then
     create_codex_runtime_root "$SOURCE_GOLDBAND_DIR" "$CODEX_GOLDBAND"
+  else
+    create_internal_workflow_docs "$SOURCE_GOLDBAND_DIR/.agents/skills" "$CODEX_GOLDBAND"
   fi
-  # Install generated Codex-format skills (not Claude source dirs)
-  link_codex_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS"
+  if [ "$WORKFLOW_PROFILE" = "slim" ]; then
+    cleanup_full_workflow_entries_for_slim "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS" "$SOURCE_GOLDBAND_DIR/.agents/skills" "codex"
+    link_codex_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS" "goldband-upgrade"
+  else
+    reset_workflow_managed_manifest "codex"
+    # Install generated Codex-format skills (not Claude source dirs)
+    link_codex_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS"
+  fi
 
-  log "goldband ready (codex)."
+  log "goldband ready (codex, $WORKFLOW_PROFILE profile)."
   log "  browse: $BROWSE_BIN"
   log "  codex skills: $CODEX_SKILLS"
+  write_workflow_profile_marker "codex" "$WORKFLOW_PROFILE"
 fi
 
 # 6. Install for Kiro CLI (copy from .agents/skills, rewrite paths)

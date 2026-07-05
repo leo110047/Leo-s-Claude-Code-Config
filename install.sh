@@ -81,9 +81,15 @@ show_help_codex_options() {
     echo "  codex-rules  只安裝 ~/.codex/rules"
     echo "  repair-codex-rules 將本機 approvals 從 tracked rules 移到 ignored local overlay"
     echo "  codex-skills 安裝 Codex portable skills 到 ~/.agents/skills"
-    echo "  workflow      安裝 Goldband Loop 到 Claude Code"
-    echo "  workflow-codex 安裝 Goldband Loop 到 Codex"
-    echo "  workflow-auto 安裝 Goldband Loop 到自動偵測到的 host"
+    echo "  workflow      安裝 Goldband Loop 到 Claude Code（預設 full profile）"
+    echo "  workflow-slim 安裝 Goldband Loop 到 Claude Code（slim profile）"
+    echo "  workflow-full 安裝 Goldband Loop 到 Claude Code（full profile）"
+    echo "  workflow-codex 安裝 Goldband Loop 到 Codex（預設 full profile）"
+    echo "  workflow-codex-slim 安裝 Goldband Loop 到 Codex（slim profile）"
+    echo "  workflow-codex-full 安裝 Goldband Loop 到 Codex（full profile）"
+    echo "  workflow-auto 安裝 Goldband Loop 到自動偵測到的 host（預設 full profile）"
+    echo "  workflow-auto-slim 安裝 Goldband Loop 到自動偵測到的 host（slim profile）"
+    echo "  workflow-auto-full 安裝 Goldband Loop 到自動偵測到的 host（full profile）"
     echo "  all-tools   安裝 Claude all-full + Codex full"
     echo "  all-with-workflow 安裝 Claude + Codex 全組件，並安裝 Goldband Loop"
     echo "  uninstall   移除所有安裝項目（含 profile links）"
@@ -102,8 +108,10 @@ show_help_examples() {
     echo "  ./install.sh skills-core  # 只裝核心 skills（建議日常）"
     echo "  ./install.sh skills-full  # 全量 skills"
     echo "  ./install.sh codex-full   # Codex 全量設定"
-    echo "  ./install.sh workflow       # 安裝 Goldband Loop 到 Claude Code"
-    echo "  ./install.sh workflow-codex # 安裝 Goldband Loop 到 Codex"
+    echo "  ./install.sh workflow       # 安裝 Goldband Loop 到 Claude Code（full profile）"
+    echo "  ./install.sh workflow-slim  # 安裝 Goldband Loop 到 Claude Code（slim profile）"
+    echo "  ./install.sh workflow-codex # 安裝 Goldband Loop 到 Codex（full profile）"
+    echo "  ./install.sh workflow-codex-slim # 安裝 Goldband Loop 到 Codex（slim profile）"
     echo "  GOLDBAND_LOOP_DIR=../goldband-loop ./install.sh all-with-workflow"
     echo "  ./install.sh all-tools    # Claude + Codex 全部安裝"
     echo "  ./install.sh unity        # 在 Unity 專案中安裝"
@@ -281,13 +289,31 @@ for arg in "$@"; do
             install_codex_skills
             ;;
         workflow)
-            install_workflow_host "claude"
+            install_workflow_host "claude" "full"
+            ;;
+        workflow-slim)
+            install_workflow_host "claude" "slim"
+            ;;
+        workflow-full)
+            install_workflow_host "claude" "full"
             ;;
         workflow-codex)
-            install_workflow_host "codex"
+            install_workflow_host "codex" "full"
+            ;;
+        workflow-codex-slim)
+            install_workflow_host "codex" "slim"
+            ;;
+        workflow-codex-full)
+            install_workflow_host "codex" "full"
             ;;
         workflow-auto)
-            install_workflow_host "auto"
+            install_workflow_host "auto" "full"
+            ;;
+        workflow-auto-slim)
+            install_workflow_host "auto" "slim"
+            ;;
+        workflow-auto-full)
+            install_workflow_host "auto" "full"
             ;;
         all-tools)
             echo -e "${GREEN}安裝 Claude + Codex 全組件...${NC}"

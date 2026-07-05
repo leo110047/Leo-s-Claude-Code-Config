@@ -22,6 +22,7 @@ main() {
   repo_dir="$(cd "$script_dir/.." && pwd)"
 
   local host="${1:-auto}"
+  local profile="${2:-full}"
 
   REPO_DIR="$repo_dir"
   CLAUDE_DIR="$HOME/.claude"
@@ -57,7 +58,7 @@ main() {
   # shellcheck source=/dev/null
   . "$REPO_DIR/shell/install/workflow.sh"
 
-  install_workflow_host "$host"
+  install_workflow_host "$host" "$profile"
 }
 
 main "$@"

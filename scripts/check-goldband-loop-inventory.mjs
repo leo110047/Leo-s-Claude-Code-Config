@@ -27,6 +27,9 @@ function main() {
     runInstall(tmpHome, 'workflow');
     runInstall(tmpHome, 'workflow-codex');
     assertInstalledInventory(tmpHome, inventory);
+    runInstall(tmpHome, 'workflow-slim');
+    runInstall(tmpHome, 'workflow-codex-slim');
+    assertInstalledSlimInventory(tmpHome);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -265,6 +268,54 @@ function assertInstalledInventory(home, inventory) {
   assertNoForbiddenEntries('Claude skills', actualClaude, inventory);
   assertNoForbiddenEntries('Codex skills', actualCodex, inventory);
   assertNoLegacyCommands(home, inventory);
+}
+
+function assertInstalledSlimInventory(home) {
+  const claudeSkillsDir = path.join(home, '.claude', 'skills');
+  const codexSkillsDir = path.join(home, '.codex', 'skills');
+  const claudeRuntime = path.join(claudeSkillsDir, 'goldband');
+  const codexRuntime = path.join(codexSkillsDir, 'goldband');
+
+  assertDeepSetEqual(
+    'Claude slim visible skills',
+    skillDirectories(claudeSkillsDir),
+    ['_goldband-command', 'goldband', 'goldband-upgrade'],
+  );
+  assertDeepSetEqual(
+    'Codex slim visible skills',
+    skillDirectories(codexSkillsDir),
+    ['goldband', 'goldband-upgrade'],
+  );
+  assert.ok(
+    fs.existsSync(
+      path.join(claudeRuntime, 'workflows', 'goldband-review.workflow.md'),
+    ),
+    'Claude slim workflow document missing',
+  );
+  assert.ok(
+    fs.existsSync(
+      path.join(codexRuntime, 'workflows', 'goldband-review.workflow.md'),
+    ),
+    'Codex slim workflow document missing',
+  );
+  assert.equal(
+    fs
+      .readFileSync(
+        path.join(home, '.goldband', 'state', 'workflow-profile-claude'),
+        'utf8',
+      )
+      .trim(),
+    'slim',
+  );
+  assert.equal(
+    fs
+      .readFileSync(
+        path.join(home, '.goldband', 'state', 'workflow-profile-codex'),
+        'utf8',
+      )
+      .trim(),
+    'slim',
+  );
 }
 
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {

@@ -2300,6 +2300,71 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('claude|codex|kiro|factory|opencode|auto');
   });
 
+  test('setup supports slim/full workflow profiles', () => {
+    expect(setupContent).toContain('WORKFLOW_PROFILE="${GOLDBAND_WORKFLOW_PROFILE:-full}"');
+    expect(setupContent).toContain('--profile');
+    expect(setupContent).toContain('slim|full');
+    expect(setupContent).toContain('link_codex_selected_skill_dirs');
+    expect(setupContent).toContain('link_claude_selected_skill_dirs');
+  });
+
+  test('slim profile installs internal workflow docs without nested SKILL.md discovery', () => {
+    expect(setupContent).toContain('create_internal_workflow_docs');
+    expect(setupContent).toContain('$workflow_root/$skill_name.workflow.md');
+    expect(setupContent).toContain('goldband-$skill_name.workflow.md');
+    expect(setupContent).not.toContain('$workflow_root/$skill_name/SKILL.md');
+  });
+
+  test('slim cleanup uses source provenance rather than goldband name prefix only', () => {
+    const cleanupStart = setupContent.indexOf('cleanup_full_workflow_entries_for_slim()');
+    const cleanupEnd = setupContent.indexOf('create_internal_workflow_docs()', cleanupStart);
+    const cleanupBody = setupContent.slice(cleanupStart, cleanupEnd);
+    expect(cleanupBody).toContain('goldband_managed_skill_entry');
+    expect(cleanupBody).toContain('cleanup_manifest_entries_for_slim');
+    expect(setupContent).toContain('path_under_dir()');
+    expect(setupContent).toContain('symlink_target_under_dir()');
+    expect(setupContent).toContain('write_goldband_managed_skill_marker');
+    expect(setupContent).toContain('record_workflow_managed_entry');
+    expect(cleanupBody).not.toContain('rm -rf "$skills_dir"/goldband-*');
+  });
+
+  test('Claude slim runtime root guards self-referential source installs', () => {
+    const fnStart = setupContent.indexOf('create_claude_runtime_root()');
+    const fnEnd = setupContent.indexOf('create_factory_runtime_root()', fnStart);
+    const fnBody = setupContent.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('[ ! -L "$claude_goldband" ]');
+    expect(fnBody).toContain('same_dir_path "$goldband_dir" "$claude_goldband"');
+    expect(fnBody).toContain('create_internal_workflow_docs "$goldband_dir" "$claude_goldband"');
+    expect(fnBody).toContain('return 0');
+  });
+
+  test('copy fallback can be exercised and cleaned via managed manifest', () => {
+    expect(setupContent).toContain('GOLDBAND_FORCE_COPY');
+    expect(setupContent).toContain('workflow_managed_manifest_path()');
+    expect(setupContent).toContain('cleanup_manifest_entries_for_slim');
+    expect(setupContent).toContain('reset_workflow_managed_manifest "claude"');
+    expect(setupContent).toContain('reset_workflow_managed_manifest "codex"');
+  });
+
+  test('root skill documents slim internal workflow routing', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
+    expect(content).toContain('Workflow Routing In Slim Installs');
+    expect(content).toContain('*.workflow.md');
+    expect(content).toContain('follow it as executable workflow instructions');
+    expect(content).toContain('active Goldband runtime root');
+    expect(content).not.toContain('~/.claude/skills/goldband/workflows/<name>.workflow.md');
+  });
+
+  test('generated Codex root skill routes slim workflows through GOLDBAND_ROOT', () => {
+    const content = fs.readFileSync(path.join(ROOT, '.agents', 'skills', 'goldband', 'SKILL.md'), 'utf-8');
+    const sectionStart = content.indexOf('## Workflow Routing In Slim Installs');
+    const sectionEnd = content.indexOf('**Routing rules', sectionStart);
+    const section = content.slice(sectionStart, sectionEnd);
+    expect(section).toContain('$GOLDBAND_ROOT');
+    expect(section).toContain('workflows/<name>.workflow.md');
+    expect(section).not.toContain('~/.claude/skills/goldband/workflows');
+  });
+
   test('auto mode detects claude, codex, kiro, and opencode binaries', () => {
     expect(setupContent).toContain('command -v claude');
     expect(setupContent).toContain('command -v codex');

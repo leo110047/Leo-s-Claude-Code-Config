@@ -69,8 +69,10 @@ Install individual pieces:
 ./install.sh codex-agents       # Codex AGENTS.md + custom agents
 ./install.sh codex-hooks        # Codex hooks
 ./install.sh codex-requirements # Codex managed requirements
-./install.sh workflow           # Claude-side workflow
-./install.sh workflow-codex     # Codex-side workflow
+./install.sh workflow           # Claude-side workflow (full profile, default)
+./install.sh workflow-slim      # Claude-side workflow (slim profile)
+./install.sh workflow-codex     # Codex-side workflow (full profile, default)
+./install.sh workflow-codex-slim # Codex-side workflow (slim profile)
 ./install.sh launchers          # shell launcher integration
 ./install.sh uninstall          # remove install
 ```
@@ -92,9 +94,16 @@ Dependencies:
 - Codex assets: config, profiles, rules, hooks, custom agents, portable skills
 - Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
 
+Goldband Loop has two workflow discovery profiles:
+
+- `full`: the default. Installs every `goldband-*` workflow as a top-level skill for backward compatibility.
+- `slim`: opt-in. Exposes only a few entrypoints such as `goldband` and `goldband-upgrade`; full workflow instructions remain installed under `workflows/*.workflow.md` in the runtime root and are loaded by the entrypoint skill.
+
+`slim` keeps the Claude/Codex skill list cleaner, but workflows such as `/goldband-qa` may not appear as top-level skills. Use `workflow-slim` / `workflow-codex-slim` when you want the smaller discovery surface; use the default `workflow` / `workflow-codex` when you need old entrypoint compatibility.
+
 Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
-`goldband-*` workflows, commands, skills, hooks, and rules.
+Goldband Loop workflows, commands, skills, hooks, and rules.
 
 ## Cross-Review Gate
 
@@ -167,8 +176,8 @@ The installer does not enable it by default; build it first, then point the
 
 ## Common Entry Points
 
-These workflow entry points require `workflow`, `workflow-codex`, or
-`all-with-workflow` first:
+These workflow entry points require `workflow`, `workflow-codex`,
+`workflow-slim`, `workflow-codex-slim`, or `all-with-workflow` first:
 
 - `/plan`
 - `/verify`

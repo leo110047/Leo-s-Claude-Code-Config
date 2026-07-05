@@ -109,8 +109,17 @@ write_workflow_installed_versions() {
 
 install_workflow_host() {
     local host="$1"
+    local profile="${2:-full}"
     local repo_dir
     local setup_status=0
+
+    case "$profile" in
+        slim|full) ;;
+        *)
+            echo -e "${RED}未知 Goldband Loop workflow profile: $profile${NC}" >&2
+            exit 1
+            ;;
+    esac
 
     if ! repo_dir="$(resolve_workflow_repo_dir)"; then
         echo -e "${RED}找不到 Goldband Loop runtime。${NC}"
@@ -122,12 +131,12 @@ install_workflow_host() {
     local version="unknown"
     version="$(read_workflow_version "$repo_dir" 2>/dev/null || echo "unknown")"
     mkdir -p "$HOME/.goldband/projects"
-    echo -e "${GREEN}安裝 Goldband Loop runtime (${host})...${NC}"
+    echo -e "${GREEN}安裝 Goldband Loop runtime (${host}, ${profile} profile)...${NC}"
     echo -e "  repo: ${CYAN}$repo_dir${NC}"
     echo -e "  version: ${CYAN}$version${NC}"
     echo ""
 
-    run_workflow_setup "$repo_dir" "$host" || setup_status="$?"
+    run_workflow_setup "$repo_dir" "$host" "$profile" || setup_status="$?"
     if [ "$setup_status" -ne 0 ]; then
         exit "$setup_status"
     fi
@@ -138,6 +147,7 @@ install_workflow_host() {
 run_workflow_setup() {
     local repo_dir="$1"
     local host="$2"
+    local profile="$3"
     local setup_status
     local errexit_was_set=0
 
@@ -150,7 +160,7 @@ run_workflow_setup() {
             echo "  [錯誤] 無法進入 Goldband Loop runtime: $repo_dir"
             exit 1
         }
-        GOLDBAND_HOME="$HOME/.goldband" ./setup --host "$host" --prefix --quiet 2>&1
+        GOLDBAND_HOME="$HOME/.goldband" ./setup --host "$host" --profile "$profile" --prefix --quiet 2>&1
     )
     setup_status=${PIPESTATUS[0]}
     if [ "$errexit_was_set" -eq 1 ]; then
