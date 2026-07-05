@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.local/schemas/cross-review-contract.schema.json",
+  "title": "Goldband Cross Review Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "host",
+    "implementer",
+    "reviewer",
+    "baseCommit",
+    "reviewScope",
+    "maxRounds",
+    "roundsUsed",
+    "status",
+    "armedAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "host": { "enum": ["claude", "codex"] },
+    "implementer": { "enum": ["claude", "codex"] },
+    "reviewer": { "enum": ["claude", "codex"] },
+    "planFile": { "type": ["string", "null"] },
+    "baseCommit": { "type": "string", "minLength": 7 },
+    "reviewScope": { "const": "tracked-and-untracked-vs-base" },
+    "maxRounds": { "type": "integer", "minimum": 1 },
+    "roundsUsed": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["active", "passed", "overridden", "expired"] },
+    "armedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "escalationSummaryPath": { "type": "string" },
+    "overrideReason": { "type": "string" },
+    "overriddenAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "not": {
+        "properties": {
+          "implementer": { "const": "claude" },
+          "reviewer": { "const": "claude" }
+        },
+        "required": ["implementer", "reviewer"]
+      }
+    },
+    {
+      "not": {
+        "properties": {
+          "implementer": { "const": "codex" },
+          "reviewer": { "const": "codex" }
+        },
+        "required": ["implementer", "reviewer"]
+      }
+    }
+  ]
+}

@@ -96,6 +96,39 @@ Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
 `goldband-*` workflows, commands, skills, hooks, and rules.
 
+## Cross-Review Gate
+
+For work that must be approved by the other host family before the implementer
+can finish, arm the cross-review gate:
+
+```bash
+goldband-loop/bin/goldband-cross-review start --plan docs/plans/feature.md --reviewer codex
+goldband-loop/bin/goldband-cross-review run
+```
+
+`run` defaults to the real reviewer CLI. `--review-mode mock` is only for CI and local contract tests, and mock artifacts are not accepted by the Stop gate as production approval evidence.
+
+The Stop hook only checks deterministic evidence: the session contract, plan
+marker, reviewer artifact, and current diff/untracked bundle `reviewed-sha`.
+It never starts Claude or Codex from inside the hook. Claude Stop blocks through
+the existing router `exit(2)` path. Codex cross-review Stop blocks through hook
+process `exit(2)`: the 2026-07-05 local probe showed JSON `systemMessage` is
+only advisory, while a non-zero hook exit makes Codex show `Stop Blocked` and
+prevents that turn from finishing.
+
+This is an evidence gate for preventing accidental completion and encouraging
+cross-model review, not a security boundary. The implementer and reviewer run on
+the same machine with the same user-level permissions, so this cannot resist a
+same-permission operator intentionally forging state or artifacts. Claude also
+short-circuits when `stop_hook_active` is set to avoid Stop-hook recursion,
+while Codex relies on exit code `2` to re-enter the turn; the two hosts are not
+interaction-identical.
+
+If max rounds or `ESCALATE` requires human arbitration, the runtime writes an
+escalation summary in the cross-review state directory and includes its path in
+the Stop message. Arm, round verdict, response, escalation, override, and done
+events are recorded in usage telemetry.
+
 ## Permission Boundary
 
 Claude `hooks/hooks.json` uses `defaultMode: acceptEdits`. This is a convenience

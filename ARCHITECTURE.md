@@ -109,6 +109,33 @@ The workflow runner is currently single-pass: iteration caps and stop
 conditions are recorded as contract metadata, but convergence loops are not yet
 autonomously executed by the runtime.
 
+## Cross-Review Gate
+
+The cross-review gate is a session-scoped evidence gate for work that must be
+reviewed by the other host family before the implementer can finish.
+`goldband-cross-review start` writes a contract under
+`${GOLDBAND_HOME:-$HOME/.goldband}/cross-review/`, and the Stop hook checks only
+that contract, the plan marker, the reviewer artifact, and a deterministic
+review-scope hash. The hook never starts Claude, Codex, or another LLM.
+
+The review scope is `tracked-and-untracked-vs-base`: `git diff --binary` from
+the armed base commit plus sorted untracked file bytes. The hash is drift
+detection, not a security boundary against same-permission tampering. A valid
+approval requires a reviewer artifact in the cross-review state directory and a
+matching marker in the plan file.
+
+When review cannot converge, the runtime writes an escalation summary under the
+cross-review state directory and keeps the contract active until a human
+override, expiry, or a valid approval marker. Runtime usage events record arm,
+round verdict, implementer response, escalation, override, and done events using
+the shared telemetry schema.
+
+Claude Stop can block through the existing router `exit(2)` path. Codex uses
+the same gate logic and blocks cross-review Stop failures by exiting the hook
+process with code `2`. The 2026-07-05 local probe showed that JSON
+`systemMessage` is advisory for final responses, while a non-zero Stop hook
+exit makes Codex show `Stop Blocked` and prevents that turn from finishing.
+
 ## Observability Pipeline
 
 Goldband telemetry is intentionally local-first:

@@ -2,6 +2,7 @@
 
 const { readStdinJson } = require('../lib/utils');
 const { appendUsageEvent } = require('../lib/hook-router/usage-telemetry');
+const { armFromPrompt } = require('../lib/hook-router/cross-review-gate');
 const {
   buildWorkflowUsageEvents,
 } = require('../lib/hook-router/workflow-telemetry');
@@ -52,6 +53,7 @@ async function main() {
   const input = await readStdinJson();
   const prompt = String(input.prompt || '');
   const sessionId = input.session_id || process.env.CLAUDE_SESSION_ID || null;
+  const crossReviewContract = armCrossReviewIfRequested(input);
   const matches = matchPrompt(prompt);
 
   for (const event of buildWorkflowUsageEvents(
@@ -85,6 +87,9 @@ async function main() {
   }
 
   const additionalContext = [
+    crossReviewContract
+      ? `Cross-review gate armed for this session. Reviewer: ${crossReviewContract.reviewer}. Plan: ${crossReviewContract.planFile || 'not bound yet'}.`
+      : null,
     shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
     shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
   ]
@@ -99,6 +104,18 @@ async function main() {
       },
     }),
   );
+}
+
+function armCrossReviewIfRequested(input) {
+  try {
+    return armFromPrompt(input, { implementer: 'claude' });
+  } catch (error) {
+    return {
+      reviewer: 'unknown',
+      planFile: null,
+      error: error && error.message ? error.message : String(error),
+    };
+  }
 }
 
 main().catch(() => {

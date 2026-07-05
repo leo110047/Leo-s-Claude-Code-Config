@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.local/schemas/cross-review-implementer-response.schema.json",
+  "title": "Goldband Cross Review Implementer Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findingId", "response", "summary", "evidence", "recordedAt"],
+  "properties": {
+    "findingId": { "type": "string", "minLength": 1 },
+    "response": { "enum": ["fixed", "rebutted", "ask-human"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recordedAt": { "type": "string", "format": "date-time" }
+  }
+}

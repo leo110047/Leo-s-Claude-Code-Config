@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.local/schemas/cross-review-artifact.schema.json",
+  "title": "Goldband Cross Review Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactId",
+    "sessionId",
+    "reviewer",
+    "implementer",
+    "baseCommit",
+    "reviewedSha",
+    "round",
+    "verdict",
+    "reviewMode",
+    "findings",
+    "reviewerCommand",
+    "reviewerExitCode",
+    "rawOutputPath",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifactId": { "type": "string", "minLength": 1 },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "reviewer": { "enum": ["claude", "codex"] },
+    "implementer": { "enum": ["claude", "codex"] },
+    "baseCommit": { "type": "string", "minLength": 7 },
+    "reviewedSha": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "round": { "type": "integer", "minimum": 1 },
+    "verdict": { "enum": ["APPROVED", "CHANGES_REQUESTED", "ESCALATE"] },
+    "reviewMode": { "enum": ["real", "mock"] },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "cross-review-finding.schema.json" }
+    },
+    "reviewerCommand": { "type": "string" },
+    "reviewerExitCode": { "type": "integer" },
+    "rawOutputPath": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

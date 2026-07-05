@@ -124,7 +124,7 @@ install_all_with_workflow() {
 }
 
 install_commands() {
-    link_component "$REPO_DIR/commands" "$CLAUDE_DIR/commands" "Commands (5 個)"
+    link_component "$REPO_DIR/commands" "$CLAUDE_DIR/commands" "Commands"
 }
 
 install_rules() {

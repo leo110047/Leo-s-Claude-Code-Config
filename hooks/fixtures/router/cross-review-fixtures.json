@@ -1,0 +1,28 @@
+[
+  {
+    "id": "cross-review-unarmed-stop-allows",
+    "input": {
+      "hook_event_name": "Stop",
+      "session_id": "fixture-unarmed"
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "cross-review-active-plan-missing-blocks",
+    "env": {
+      "GOLDBAND_CROSS_REVIEW_DIR": "hooks/fixtures/router/cross-review-state"
+    },
+    "input": {
+      "hook_event_name": "Stop",
+      "session_id": "fixture-plan-missing"
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": ["尚未綁定 plan"]
+    }
+  }
+]
