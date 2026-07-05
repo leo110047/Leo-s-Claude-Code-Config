@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.local/schemas/cross-review-finding.schema.json",
+  "title": "Goldband Cross Review Finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "severity", "status", "round"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+    "ruleId": { "type": ["string", "null"] },
+    "file": { "type": ["string", "null"] },
+    "line": { "type": ["integer", "null"], "minimum": 1 },
+    "failureScenario": { "type": ["string", "null"] },
+    "downgradeReason": { "type": "string" },
+    "status": {
+      "enum": ["open", "resolved", "rebutted-accepted", "rebutted-rejected"]
+    },
+    "round": { "type": "integer", "minimum": 1 }
+  }
+}

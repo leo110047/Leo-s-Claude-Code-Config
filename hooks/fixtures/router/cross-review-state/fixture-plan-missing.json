@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "fixture-plan-missing",
+  "host": "claude",
+  "implementer": "claude",
+  "reviewer": "codex",
+  "planFile": null,
+  "baseCommit": "0000000000000000000000000000000000000000",
+  "reviewScope": "tracked-and-untracked-vs-base",
+  "maxRounds": 3,
+  "roundsUsed": 0,
+  "status": "active",
+  "armedAt": "2026-07-05T00:00:00.000Z",
+  "expiresAt": "2099-01-01T00:00:00.000Z"
+}

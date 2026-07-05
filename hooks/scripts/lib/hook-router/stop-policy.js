@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { getGitModifiedFiles, isGitRepo } = require('../utils');
+const { evaluateCrossReviewGate } = require('./cross-review-gate');
 
 const NOTIFICATION_TITLE = 'Claude Code';
 const NOTIFICATION_MESSAGES = {
@@ -193,6 +194,12 @@ function getStyleGateWarningsInGitDiff() {
 }
 
 function evaluateStop(input) {
+  const crossReviewResult = evaluateCrossReviewGate(input);
+  if (crossReviewResult.decision === 'block') {
+    notifyIfNeeded(input);
+    return crossReviewResult;
+  }
+
   const warnings = getStyleGateWarningsInGitDiff();
   notifyIfNeeded(input);
 

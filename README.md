@@ -92,6 +92,23 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 
 全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 `goldband-*` workflow、commands、skills、hooks 和 rules。
 
+## 交互審查閘門
+
+需要另一個 host 家族審查才能收工的工作，可以用 cross-review gate：
+
+```bash
+goldband-loop/bin/goldband-cross-review start --plan docs/plans/feature.md --reviewer codex
+goldband-loop/bin/goldband-cross-review run
+```
+
+`run` 預設會呼叫真實 reviewer CLI。`--review-mode mock` 只給 CI/本機契約測試使用，mock artifact 不能作為 Stop gate 的正式通過證據。
+
+Stop hook 只做純檢查：session contract、plan marker、reviewer artifact、以及目前 diff/untracked bundle 的 `reviewed-sha`。它不會在 hook 裡啟動 Claude 或 Codex。Claude 端 Stop gate 會用 router `exit(2)` 擋下未通過的 session；Codex 端 cross-review Stop gate 也走 hook process `exit(2)`，因為 2026-07-05 本機實測確認 JSON `systemMessage` 只是 advisory，只有非零退出會讓 Codex 顯示 `Stop Blocked` 並阻止該輪結束。
+
+這是防手滑、促成跨模型互審的 evidence gate，不是安全邊界。實作者與 reviewer 在同一台機器、同一權限下運作，無法抵抗有意偽造 state/artifact 的同權限操作者。Claude 端為避免 Stop hook 自我觸發風暴，`stop_hook_active` 時會短路 allow；Codex 端則靠 exit code `2` 讓 turn 重進，因此兩邊的互動強制力不完全相同。
+
+若回合上限或 `ESCALATE` 觸發人類仲裁，runtime 會在 cross-review state 目錄寫 escalation summary，Stop 訊息會附路徑；arm、round verdict、response、escalation、override 和 done 也會寫進 usage telemetry。
+
 ## 權限邊界
 
 Claude `hooks/hooks.json` 使用 `defaultMode: acceptEdits`，定位是信任本機開發環境的便利 profile，不是 sandbox。它會用 hooks、permissions 和 deny list 降低誤操作風險，但不能把惡意或任意 shell 視為已隔離。`node`、`python`、`xargs`、`find` 和 `sed` 這類可包裝或批次執行其他動作的 broad allow pattern 不應放回 source auto-allow；需要時應由使用者針對具體命令確認，或在本機 overlay 裡明確承擔信任邊界。

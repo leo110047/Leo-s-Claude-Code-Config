@@ -10,6 +10,10 @@ const {
   findHighRiskPatch,
 } = require('./high-risk-policy');
 const { dataRoot, recordHookTelemetry } = require('./telemetry');
+const {
+  armFromPrompt,
+  evaluateCrossReviewGate,
+} = require('../../hooks/scripts/lib/hook-router/cross-review-gate');
 
 const ADVISORY_SECRET_PATTERNS = [
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
@@ -17,6 +21,7 @@ const ADVISORY_SECRET_PATTERNS = [
   /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token)\s*[=:]\s*['"][A-Za-z0-9_-]{20,}['"]/i,
 ];
 const DEFAULT_DEDUPE_RETENTION_DAYS = 30;
+const CODEX_STOP_BLOCK_EXIT_CODE = 2;
 
 const WORKFLOW_HINTS = [
   {
@@ -87,6 +92,24 @@ function buildSystemMessageOutput(message) {
   return { systemMessage: message };
 }
 
+function buildStopBlockOutput(
+  message,
+  telemetryName = 'cross-review-required',
+) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'Stop',
+      telemetryName,
+      decision: {
+        behavior: 'deny',
+        message,
+      },
+    },
+    codexExitCode: CODEX_STOP_BLOCK_EXIT_CODE,
+    stderr: message,
+  };
+}
+
 function buildPreToolUseDeny(reason, telemetryName = null) {
   return {
     hookSpecificOutput: {
@@ -117,6 +140,10 @@ function resultAdditionalContext(hookEventName, additionalContext) {
 
 function resultSystemMessage(message) {
   return buildSystemMessageOutput(message);
+}
+
+function resultStopBlock(message, telemetryName) {
+  return buildStopBlockOutput(message, telemetryName);
 }
 
 function resultPreToolUseDeny(decision) {
@@ -314,6 +341,11 @@ function evaluateSubagentStopResult(input) {
 }
 
 function evaluateStopResult(input) {
+  const gateResult = evaluateCrossReviewGate(input);
+  if (gateResult.decision === 'block') {
+    return resultStopBlock(gateResult.logs.join('\n'), gateResult.blockedBy);
+  }
+
   const message = input.last_assistant_message || '';
   if (hasCompletionClaim(message) && !hasEvidence(message)) {
     return resultSystemMessage(
@@ -341,16 +373,45 @@ function evaluateLifecycleResult(input) {
 
 function evaluateUserPromptSubmitResult(input) {
   const prompt = input.prompt || '';
+  const crossReviewContract = armCrossReviewIfRequested(input);
   if (/\/goldband-|\/plan\b/.test(prompt)) {
-    return null;
+    return crossReviewContract
+      ? resultAdditionalContext(
+          'UserPromptSubmit',
+          formatCrossReviewArmMessage(crossReviewContract),
+        )
+      : null;
   }
 
   const messages = WORKFLOW_HINTS.filter((hint) =>
     hint.pattern.test(prompt),
   ).map((hint) => hint.message);
 
+  if (crossReviewContract) {
+    messages.unshift(formatCrossReviewArmMessage(crossReviewContract));
+  }
+
   if (messages.length === 0) return null;
   return resultAdditionalContext('UserPromptSubmit', messages.join(' '));
+}
+
+function armCrossReviewIfRequested(input) {
+  try {
+    return armFromPrompt(input, { implementer: 'codex' });
+  } catch (error) {
+    return {
+      reviewer: 'unknown',
+      planFile: null,
+      error: error && error.message ? error.message : String(error),
+    };
+  }
+}
+
+function formatCrossReviewArmMessage(contract) {
+  if (contract.error) {
+    return `Cross-review gate was requested but could not be armed: ${contract.error}`;
+  }
+  return `Cross-review gate armed for this session. Reviewer: ${contract.reviewer}. Plan: ${contract.planFile || 'not bound yet'}.`;
 }
 
 function evaluatePreToolUseResult(input) {
@@ -441,6 +502,10 @@ async function main() {
   const input = parseInput(await readStdinRaw());
   const result = evaluateInput(input);
   recordHookTelemetry(input, result);
+  if (result?.codexExitCode) {
+    if (result.stderr) console.error(result.stderr);
+    process.exit(result.codexExitCode);
+  }
   writeResult(result);
 }
 
