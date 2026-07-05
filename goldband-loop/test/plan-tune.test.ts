@@ -313,7 +313,7 @@ describe('archetypes', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test('matchArchetype returns Cathedral Builder for boil-the-ocean profile', () => {
+  test('matchArchetype returns Cathedral Builder for expansive profile', () => {
     const dims = {
       scope_appetite: 0.88,
       risk_tolerance: 0.55,

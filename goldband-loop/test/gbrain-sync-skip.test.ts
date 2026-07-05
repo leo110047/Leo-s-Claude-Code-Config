@@ -3,8 +3,8 @@
  *
  * When localEngineStatus() returns anything except 'ok', the orchestrator's
  * code + memory stages return ran=false summaries; the brain-sync stage runs
- * unchanged. This is the behavior that matters most for Garry's broken-db
- * machine — instead of crashing two stages with ERR output, the orchestrator
+ * unchanged. This is the behavior that matters most for a broken local-db
+ * machine: instead of crashing two stages with ERR output, the orchestrator
  * surfaces a clear skip reason and still pushes artifacts.
  *
  * We test via the script (spawn) rather than importing runCodeImport/runMemoryIngest

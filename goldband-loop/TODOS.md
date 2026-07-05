@@ -587,7 +587,7 @@ reads it yet.
 ### E3 — `/plan-tune narrative` + `/plan-tune vibe`
 
 **What:** Event-anchored narrative ("You accepted 7 scope expansions, overrode
-test_failure_triage 4 times, called every PR 'boil the lake'") + one-word vibe
+test_failure_triage 4 times, called every PR 'ship the complete version'") + one-word vibe
 archetype (Cathedral Builder, Ship-It Pragmatist, Deep Craft, etc).
 scripts/archetypes.ts is ALREADY SHIPPED in v1 (8 archetypes + Polymath
 fallback). v2 work is the narrative generator + /plan-tune skill wiring.

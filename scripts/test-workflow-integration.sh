@@ -6,8 +6,6 @@ TMP_HOME="$(mktemp -d /tmp/goldband-loop-home.XXXXXX)"
 TMP_ROOT="$(mktemp -d /tmp/goldband-loop-root.XXXXXX)"
 trap 'rm -rf "$TMP_HOME" "$TMP_ROOT"' EXIT
 
-LEGACY_RUNTIME_NAME="g""stack"
-
 copy_repo_subset() {
   cp "$ROOT_DIR/install.sh" "$TMP_ROOT/install.sh"
   cp "$ROOT_DIR/AGENTS.md" "$TMP_ROOT/AGENTS.md"
@@ -224,29 +222,24 @@ assert_contains() {
   fi
 }
 
-seed_legacy_runtime_entries() {
+seed_old_workflow_entries() {
   mkdir -p \
-    "$TMP_HOME/.claude/skills/$LEGACY_RUNTIME_NAME" \
     "$TMP_HOME/.claude/skills/workflow" \
-    "$TMP_HOME/.codex/skills/$LEGACY_RUNTIME_NAME" \
     "$TMP_HOME/.codex/skills/workflow-old" \
-    "$TMP_HOME/.agents/skills/$LEGACY_RUNTIME_NAME-review" \
     "$TMP_ROOT/.agents/skills/workflow/review"
 }
 
 echo "[1/4] prepare fixture"
 copy_repo_subset
 create_fake_goldband_loop
-seed_legacy_runtime_entries
+seed_old_workflow_entries
 
 echo "[2/4] installer smoke"
 if HOME="$TMP_HOME" FAIL_GOLDBAND_LOOP_SETUP=1 "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-fail.log 2>&1; then
   echo "expected failing setup to fail" >&2
   exit 1
 fi
-assert_exists "$TMP_HOME/.claude/skills/$LEGACY_RUNTIME_NAME"
 assert_exists "$TMP_HOME/.claude/skills/workflow"
-assert_exists "$TMP_HOME/.codex/skills/$LEGACY_RUNTIME_NAME"
 assert_exists "$TMP_HOME/.codex/skills/workflow-old"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-claude.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-loop-codex.log
@@ -271,12 +264,9 @@ assert_exists "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
 grep -q '^name: goldband-investigate$' "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
 grep -q '^name: goldband-review$' "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
 
-assert_absent "$TMP_HOME/.claude/skills/$LEGACY_RUNTIME_NAME"
 assert_absent "$TMP_HOME/.claude/skills/workflow"
-assert_absent "$TMP_HOME/.codex/skills/$LEGACY_RUNTIME_NAME"
 assert_absent "$TMP_HOME/.codex/skills/workflow"
 assert_absent "$TMP_HOME/.codex/skills/workflow-old"
-assert_absent "$TMP_HOME/.agents/skills/$LEGACY_RUNTIME_NAME-review"
 assert_absent "$TMP_ROOT/.agents/skills/workflow"
 assert_absent "$TMP_HOME/.claude/commands/code-review.md"
 assert_absent "$TMP_HOME/.claude/commands/checkpoint.md"

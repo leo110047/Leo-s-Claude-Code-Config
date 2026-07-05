@@ -74,27 +74,14 @@ cleanup_workflow_user_entries() {
     local claude_skills_dir="$HOME/.claude/skills"
     local codex_skills_dir="$HOME/.codex/skills"
     local codex_agents_dir="$HOME/.agents/skills"
-    local legacy_runtime_name="g""stack"
     local entry
 
     for entry in \
-        "$claude_skills_dir/$legacy_runtime_name" \
-        "$claude_skills_dir/$legacy_runtime_name.bak" \
-        "$claude_skills_dir"/"$legacy_runtime_name".bak* \
-        "$claude_skills_dir/_${legacy_runtime_name}-command" \
-        "$claude_skills_dir/$legacy_runtime_name-upgrade" \
-        "$claude_skills_dir/goldband-$legacy_runtime_name-upgrade" \
         "$claude_skills_dir/workflow" \
         "$claude_skills_dir/workflow.bak" \
         "$claude_skills_dir"/workflow.bak* \
-        "$codex_skills_dir/$legacy_runtime_name" \
-        "$codex_skills_dir/$legacy_runtime_name-upgrade" \
-        "$codex_skills_dir/goldband-$legacy_runtime_name-upgrade" \
         "$codex_skills_dir/workflow" \
         "$codex_skills_dir"/workflow-* \
-        "$codex_agents_dir/$legacy_runtime_name" \
-        "$codex_agents_dir"/"$legacy_runtime_name"-* \
-        "$REPO_DIR/.agents/skills/$legacy_runtime_name" \
         "$REPO_DIR/.agents/skills/workflow"
     do
         [ -e "$entry" ] || [ -L "$entry" ] || continue
