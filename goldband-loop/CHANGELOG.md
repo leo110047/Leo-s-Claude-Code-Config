@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.46.0.0] - 2026-07-06
+
+## **Goldband Loop now has one workflow discovery profile.**
+
+The old fully expanded workflow profile is removed from the supported install
+surface. `workflow`, `workflow-codex`, and `workflow-auto` now install the
+standard profile: only entrypoint skills are exposed, and workflow instructions
+live under the runtime root's `workflows/*.workflow.md` files.
+
+### Removed from the supported CLI surface
+
+- `workflow-slim`
+- `workflow-full`
+- `workflow-codex-slim`
+- `workflow-codex-full`
+- `workflow-auto-slim`
+- `workflow-auto-full`
+
+These legacy aliases still route to the standard profile for compatibility and
+print a deprecation warning. `GOLDBAND_WORKFLOW_PROFILE=full` and
+`GOLDBAND_WORKFLOW_PROFILE=slim` are also mapped to `standard` with a warning
+instead of failing setup. Future scripts should call `workflow`,
+`workflow-codex`, or `workflow-auto` directly.
+
+### Migration safety
+
+The installer removes legacy top-level workflow skills such as
+`goldband-review`, `goldband-qa`, and `goldband-ship` when upgrading to the
+standard profile. Regression coverage now plants legacy full-profile entries,
+runs standard setup, and verifies the top-level workflow entries are cleaned
+for both Claude and Codex installs.
+
 ## [1.45.0.0] - 2026-05-25
 
 ## **Design boards now live 24 hours, not 10 minutes. One daemon hosts every board, one tab survives the whole day.**

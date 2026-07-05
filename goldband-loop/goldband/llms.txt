@@ -10,7 +10,7 @@ Conventions:
 
 ## Skills
 
-- [/goldband](goldband/SKILL.md): Fast headless browser for QA testing and site dogfooding.
+- [/goldband](goldband/SKILL.md): Goldband workflow router for review, QA, investigation, shipping, deploy verification, security audit, design review, benchmarking, docs, planning, browser testing, and context restore.
 - [/goldband-autoplan](goldband-autoplan/SKILL.md): Auto-review pipeline — reads the full CEO, design, eng, and DX review skills from disk and runs them sequentially with auto-decisions using 6 decision principles.
 - [/goldband-benchmark](goldband-benchmark/SKILL.md): Performance regression detection using the browse daemon.
 - [/goldband-benchmark-models](goldband-benchmark-models/SKILL.md): Cross-model benchmark for goldband skills.

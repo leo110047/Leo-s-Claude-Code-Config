@@ -125,7 +125,7 @@ write_fake_setup_header() {
 #!/usr/bin/env bash
 set -euo pipefail
 HOST="claude"
-PROFILE="full"
+PROFILE="standard"
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
@@ -152,7 +152,7 @@ append_fake_setup_claude() {
 install_claude() {
   mkdir -p "$HOME/.claude/skills"
   rm -rf "$HOME/.claude/skills/goldband"
-  if [ "$PROFILE" = "slim" ]; then
+  if [ "$PROFILE" = "standard" ]; then
     mkdir -p "$HOME/.claude/skills/goldband/bin" "$HOME/.claude/skills/goldband/review" "$HOME/.claude/skills/goldband/workflows"
     ln -s "$ROOT/SKILL.md" "$HOME/.claude/skills/goldband/SKILL.md"
     ln -s "$ROOT/bin/goldband-config" "$HOME/.claude/skills/goldband/bin/goldband-config"
@@ -176,7 +176,7 @@ install_claude() {
   rm -rf "$HOME/.claude/skills/_goldband-command"
   mkdir -p "$HOME/.claude/skills/_goldband-command"
   ln -s "$HOME/.claude/skills/goldband/SKILL.md" "$HOME/.claude/skills/_goldband-command/SKILL.md"
-  if [ "$PROFILE" = "slim" ]; then
+  if [ "$PROFILE" = "standard" ]; then
     rm -rf "$HOME/.claude/skills/goldband-upgrade"
     ln -s "$ROOT/goldband-upgrade" "$HOME/.claude/skills/goldband-upgrade"
   else
@@ -213,7 +213,7 @@ install_codex() {
     skill_name="$(basename "$skill_dir")"
     ln -s "$skill_dir/SKILL.md" "$HOME/.codex/skills/goldband/workflows/$skill_name.workflow.md"
     ln -s "$skill_dir/SKILL.md" "$HOME/.codex/skills/goldband/workflows/${skill_name#goldband-}.workflow.md"
-    if [ "$PROFILE" = "full" ] || [ "$skill_name" = "goldband-upgrade" ]; then
+    if [ "$skill_name" = "goldband-upgrade" ]; then
       rm -rf "$HOME/.codex/skills/$skill_name"
       ln -s "$skill_dir" "$HOME/.codex/skills/$skill_name"
     else
@@ -269,6 +269,22 @@ seed_old_workflow_entries() {
     "$TMP_ROOT/.agents/skills/workflow/review"
 }
 
+plant_legacy_workflow_entries() {
+  local home_dir="$1"
+  local source_dir="$2"
+
+  mkdir -p \
+    "$home_dir/.claude/skills/goldband-review" \
+    "$home_dir/.claude/skills/goldband-qa" \
+    "$home_dir/.codex/skills/goldband-review" \
+    "$home_dir/.codex/skills/goldband-qa"
+
+  ln -s "$source_dir/review/SKILL.md" "$home_dir/.claude/skills/goldband-review/SKILL.md"
+  ln -s "$source_dir/qa/SKILL.md" "$home_dir/.claude/skills/goldband-qa/SKILL.md"
+  ln -s "$source_dir/review/SKILL.md" "$home_dir/.codex/skills/goldband-review/SKILL.md"
+  ln -s "$source_dir/qa/SKILL.md" "$home_dir/.codex/skills/goldband-qa/SKILL.md"
+}
+
 write_fake_bun_bin() {
   local bin_dir="$1"
   mkdir -p "$bin_dir"
@@ -306,6 +322,10 @@ EOF_BROWSE
   write_skill "$loop_dir/qa" "goldband-qa"
   write_skill "$loop_dir/ship" "goldband-ship"
   write_skill "$loop_dir/goldband-upgrade" "goldband-upgrade"
+  write_skill "$loop_dir/.agents/skills/goldband" "goldband"
+  write_skill "$loop_dir/.agents/skills/goldband-review" "goldband-review"
+  write_skill "$loop_dir/.agents/skills/goldband-qa" "goldband-qa"
+  write_skill "$loop_dir/.agents/skills/goldband-upgrade" "goldband-upgrade"
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
 # test checklist
 EOF_CHECKLIST
@@ -350,29 +370,21 @@ assert_exists "$TMP_HOME/.codex/skills/workflow-old"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-claude.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-loop-codex.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" all-with-workflow >/tmp/goldband-loop-all.log
+HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-full >/tmp/goldband-loop-claude-legacy-full.log 2>&1
+HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex-slim >/tmp/goldband-loop-codex-legacy-slim.log 2>&1
+HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-auto-full >/tmp/goldband-loop-auto-legacy-full.log 2>&1
+grep -q "已棄用" /tmp/goldband-loop-claude-legacy-full.log
+grep -q "已棄用" /tmp/goldband-loop-codex-legacy-slim.log
+grep -q "已棄用" /tmp/goldband-loop-auto-legacy-full.log
 
 echo "[3/4] verify Goldband Loop entries"
 assert_exists "$TMP_HOME/.goldband/projects"
 assert_exists "$TMP_HOME/.claude/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.claude/skills/_goldband-command/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/goldband-review/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/goldband-qa/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/goldband-ship/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/goldband-browse/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/greptile-triage.md"
-assert_exists "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
-assert_exists "$TMP_HOME/.codex/skills/goldband-qa/SKILL.md"
-assert_exists "$TMP_HOME/.codex/skills/goldband-ship/SKILL.md"
-grep -q '^name: goldband-investigate$' "$TMP_HOME/.claude/skills/goldband-investigate/SKILL.md"
-grep -q '^name: goldband-review$' "$TMP_HOME/.codex/skills/goldband-review/SKILL.md"
-
-HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-slim >/tmp/goldband-loop-claude-slim.log
-HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex-slim >/tmp/goldband-loop-codex-slim.log
-
 assert_absent "$TMP_HOME/.claude/skills/goldband-investigate"
 assert_absent "$TMP_HOME/.claude/skills/goldband-review"
 assert_absent "$TMP_HOME/.claude/skills/goldband-qa"
@@ -393,16 +405,16 @@ assert_absent "$TMP_HOME/.claude/commands/code-review.md"
 assert_absent "$TMP_HOME/.claude/commands/checkpoint.md"
 assert_absent "$TMP_HOME/.claude/commands/map-codebase.md"
 
-echo "[3b/4] verify real setup slim guard and copy cleanup"
+echo "[3b/4] verify real setup standard guard and copy cleanup"
 write_fake_bun_bin "$TMP_ROOT/test-bin"
 
 SELF_HOME="$TMP_ROOT/self-home"
 SELF_SOURCE="$SELF_HOME/.claude/skills/goldband"
 create_minimal_real_setup_fixture "$SELF_SOURCE"
 printf '%s\n' 'self-source sentinel' >> "$SELF_SOURCE/SKILL.md"
-run_minimal_real_setup "$SELF_HOME" "$SELF_SOURCE/setup" --profile slim --quiet >/tmp/goldband-loop-self-slim.log
+run_minimal_real_setup "$SELF_HOME" "$SELF_SOURCE/setup" --profile standard --quiet >/tmp/goldband-loop-self-standard.log
 if [ -L "$SELF_SOURCE/SKILL.md" ]; then
-  echo "self-source slim rewrote SKILL.md as a symlink" >&2
+  echo "self-source standard rewrote SKILL.md as a symlink" >&2
   exit 1
 fi
 grep -q 'self-source sentinel' "$SELF_SOURCE/SKILL.md"
@@ -411,34 +423,50 @@ assert_exists "$SELF_SOURCE/workflows/goldband-review.workflow.md"
 COPY_HOME="$TMP_ROOT/copy-home"
 COPY_SOURCE="$TMP_ROOT/copy-source/goldband-loop"
 create_minimal_real_setup_fixture "$COPY_SOURCE"
-GOLDBAND_FORCE_COPY=1 run_minimal_real_setup "$COPY_HOME" "$COPY_SOURCE/setup" --profile full --quiet >/tmp/goldband-loop-copy-full.log
-assert_exists "$COPY_HOME/.claude/skills/goldband-review/SKILL.md"
-if [ -L "$COPY_HOME/.claude/skills/goldband-review/SKILL.md" ]; then
-  echo "forced copy setup unexpectedly produced a symlink" >&2
-  exit 1
-fi
-assert_exists "$COPY_HOME/.goldband/state/workflow-managed-claude"
-GOLDBAND_FORCE_COPY=1 run_minimal_real_setup "$COPY_HOME" "$COPY_SOURCE/setup" --profile slim --quiet >/tmp/goldband-loop-copy-slim.log
+plant_legacy_workflow_entries "$COPY_HOME" "$COPY_SOURCE"
+GOLDBAND_FORCE_COPY=1 run_minimal_real_setup "$COPY_HOME" "$COPY_SOURCE/setup" --host claude --profile standard --quiet >/tmp/goldband-loop-copy-standard.log
 assert_absent "$COPY_HOME/.claude/skills/goldband-review"
 assert_absent "$COPY_HOME/.claude/skills/goldband-qa"
 assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
 assert_exists "$COPY_HOME/.claude/skills/goldband-upgrade/SKILL.md"
 assert_exists "$COPY_HOME/.claude/skills/goldband/workflows/goldband-review.workflow.md"
 
+CODEX_LEGACY_HOME="$TMP_ROOT/codex-legacy-home"
+CODEX_LEGACY_SOURCE="$TMP_ROOT/codex-legacy-source/goldband-loop"
+create_minimal_real_setup_fixture "$CODEX_LEGACY_SOURCE"
+plant_legacy_workflow_entries "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE"
+run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host codex --profile standard --quiet >/tmp/goldband-loop-codex-legacy-cleanup.log
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
+assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband-upgrade/SKILL.md"
+assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/goldband-review.workflow.md"
+
+LEGACY_ENV_HOME="$TMP_ROOT/legacy-env-home"
+LEGACY_ENV_SOURCE="$TMP_ROOT/legacy-env-source/goldband-loop"
+create_minimal_real_setup_fixture "$LEGACY_ENV_SOURCE"
+GOLDBAND_WORKFLOW_PROFILE=full run_minimal_real_setup "$LEGACY_ENV_HOME" "$LEGACY_ENV_SOURCE/setup" --host codex --quiet >/tmp/goldband-loop-legacy-env-full.log
+assert_contains "$(cat "$LEGACY_ENV_HOME/.goldband/state/workflow-profile-codex")" "standard"
+
+LEGACY_FLAG_HOME="$TMP_ROOT/legacy-flag-home"
+LEGACY_FLAG_SOURCE="$TMP_ROOT/legacy-flag-source/goldband-loop"
+create_minimal_real_setup_fixture "$LEGACY_FLAG_SOURCE"
+run_minimal_real_setup "$LEGACY_FLAG_HOME" "$LEGACY_FLAG_SOURCE/setup" --host claude --profile slim --quiet >/tmp/goldband-loop-legacy-flag-slim.log
+assert_contains "$(cat "$LEGACY_FLAG_HOME/.goldband/state/workflow-profile-claude")" "standard"
+
 COUNT_HOME="$TMP_ROOT/count-home"
 COUNT_SOURCE="$TMP_ROOT/count-source/goldband-loop"
 create_minimal_real_setup_fixture "$COUNT_SOURCE"
 write_skill "$COUNT_HOME/.claude/skills/external-tool" "external-tool"
-run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile full --no-prefix --quiet >/tmp/goldband-loop-count-full.log
+run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile standard --no-prefix --quiet >/tmp/goldband-loop-count-standard.log
 COUNT_STATUS="$(HOME="$COUNT_HOME" "$TMP_ROOT/install.sh" status)"
-assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: full (6 exposed skills, 3 top-level workflows)"
+assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard (3 exposed skills, 0 top-level workflows)"
 
 echo "[4/4] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex runtime (0.0.0-test)"
-assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude workflow profile: slim"
-assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex workflow profile: slim"
+assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude workflow profile: standard"
+assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop state dir (~/.goldband/projects)"
 
 echo "[OK] Goldband Loop installer integration smoke test passed"

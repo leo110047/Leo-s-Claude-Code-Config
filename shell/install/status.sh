@@ -317,6 +317,10 @@ workflow_generated_root_for_runtime() {
     link_dir="$(dirname "$resolved_path")"
     resolved_path="$(cd "$link_dir" 2>/dev/null && pwd -P)/$(basename "$resolved_path")" || return 1
     skill_dir="$(dirname "$resolved_path")"
+    if [ -f "$skill_dir/setup" ] && [ -d "$skill_dir/goldband-upgrade" ]; then
+        printf '%s\n' "$skill_dir"
+        return 0
+    fi
     [ "$(basename "$skill_dir")" = "goldband" ] || return 1
     dirname "$skill_dir"
 }

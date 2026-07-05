@@ -315,7 +315,7 @@ describe('gen-skill-docs', () => {
     // Plan skills carry the same preamble surface as other tier-≥2 skills
     // (Artifacts Sync, Context Recovery, Routing Injection are load-bearing
     // functionality, not optional). Budget is set to current size + small
-    // headroom; ratchet down if a future slim trims real bytes.
+    // headroom; ratchet down if future prompt compaction trims real bytes.
     // Ratcheted from 33000 → 35000 when the gbrain context-load block was
     // added (per /sync-gbrain plan §4). Ratcheted 35000 → 36500 in v1.27.0.0
     // when generate-brain-sync-block.ts gained the gbrain_mcp_mode probe +
@@ -339,7 +339,7 @@ describe('gen-skill-docs', () => {
     expect(Buffer.byteLength(writingStyle, 'utf-8')).toBeLessThan(2_000);
   });
 
-  test('slim voice section preserves the goldband voice contract', () => {
+  test('voice section preserves the goldband voice contract', () => {
     const content = fs.readFileSync(path.join(ROOT, 'plan-eng-review', 'SKILL.md'), 'utf-8');
     const voice = extractMarkdownSection(content, '## Voice');
 
@@ -2174,31 +2174,28 @@ describe('--host all', () => {
 describe('setup script validation', () => {
   const setupContent = fs.readFileSync(path.join(ROOT, 'setup'), 'utf-8');
 
-  test('setup has separate link functions for Claude and Codex', () => {
-    expect(setupContent).toContain('link_claude_skill_dirs');
-    expect(setupContent).toContain('link_codex_skill_dirs');
-    // Old unified function must not exist
-    expect(setupContent).not.toMatch(/^link_skill_dirs\(\)/m);
-  });
-
-  test('Claude install uses link_claude_skill_dirs', () => {
-    // The Claude install section (section 4) should use the Claude function
+  test('Claude install exposes only standard entrypoint skills', () => {
     const claudeSection = setupContent.slice(
       setupContent.indexOf('# 4. Install for Claude'),
       setupContent.indexOf('# 5. Install for Codex')
     );
-    expect(claudeSection).toContain('link_claude_skill_dirs');
+    expect(claudeSection).toContain('create_claude_runtime_root');
+    expect(claudeSection).toContain('link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"');
+    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
+    expect(setupContent).not.toContain('link_claude_skill_dirs');
     expect(claudeSection).not.toContain('link_codex_skill_dirs');
   });
 
-  test('Codex install uses link_codex_skill_dirs', () => {
-    // The Codex install section (section 5) should use the Codex function
+  test('Codex install exposes only standard entrypoint skills', () => {
     const codexSection = setupContent.slice(
       setupContent.indexOf('# 5. Install for Codex'),
       setupContent.indexOf('# 6. Create')
     );
     expect(codexSection).toContain('create_codex_runtime_root');
-    expect(codexSection).toContain('link_codex_skill_dirs');
+    expect(codexSection).toContain('link_codex_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS" "goldband-upgrade"');
+    expect(codexSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
+    expect(setupContent).not.toContain('link_codex_skill_dirs');
     expect(codexSection).not.toContain('link_claude_skill_dirs');
     expect(codexSection).not.toContain('_link_or_copy "$GOLDBAND_DIR" "$CODEX_GOLDBAND"');
   });
@@ -2216,7 +2213,7 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('SOURCE_GOLDBAND_DIR=');
     expect(setupContent).toContain('INSTALL_SKILLS_DIR=');
     expect(setupContent).toContain('CODEX_GOLDBAND="$INSTALL_GOLDBAND_DIR"');
-    expect(setupContent).toContain('link_codex_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS"');
+    expect(setupContent).toContain('link_codex_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS"');
   });
 
   test('Codex installs always create sidecar runtime assets for the real skill target', () => {
@@ -2224,56 +2221,36 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('create_agents_sidecar "$SOURCE_GOLDBAND_DIR"');
   });
 
-  test('link_codex_skill_dirs reads from .agents/skills/', () => {
+  test('link_codex_selected_skill_dirs reads selected skills from .agents/skills/', () => {
     // The Codex link function must reference .agents/skills for generated Codex skills
-    const fnStart = setupContent.indexOf('link_codex_skill_dirs()');
+    const fnStart = setupContent.indexOf('link_codex_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('.agents/skills');
-    expect(fnBody).toContain('goldband*');
+    expect(fnBody).toContain('for skill_name in "$@"');
   });
 
-  test('link_codex_skill_dirs refreshes stale installed skill directories', () => {
-    const fnStart = setupContent.indexOf('link_codex_skill_dirs()');
+  test('link_codex_selected_skill_dirs refreshes stale installed skill directories', () => {
+    const fnStart = setupContent.indexOf('link_codex_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('rm -rf "$target"');
     expect(fnBody).toContain('_link_or_copy "$skill_dir" "$target"');
   });
 
-  test('link_claude_skill_dirs creates real directories with absolute SKILL.md symlinks', () => {
+  test('link_claude_selected_skill_dirs creates real directories with absolute SKILL.md symlinks', () => {
     // Claude links should be real directories with absolute SKILL.md symlinks
     // to ensure Claude Code discovers them as top-level skills (not nested under goldband/)
-    const fnStart = setupContent.indexOf('link_claude_skill_dirs()');
+    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('mkdir -p "$target"');
     // v1.36.0.0: routes through _link_or_copy helper for Windows fallback (cp on MSYS2/Git Bash).
-    expect(fnBody).toContain('_link_or_copy "$goldband_dir/$dir_name/SKILL.md" "$target/SKILL.md"');
+    expect(fnBody).toContain('_link_or_copy "$skill_dir/SKILL.md" "$target/SKILL.md"');
   });
 
-  // REGRESSION: cleanup functions must handle both old symlinks AND new real-directory pattern
-  test('cleanup functions handle real directories with symlinked SKILL.md', () => {
-    // cleanup_old_claude_symlinks must detect and remove real dirs with SKILL.md symlinks
-    const cleanupOldStart = setupContent.indexOf('cleanup_old_claude_symlinks()');
-    const cleanupOldEnd = setupContent.indexOf('}', setupContent.indexOf('cleaned up old', cleanupOldStart));
-    const cleanupOldBody = setupContent.slice(cleanupOldStart, cleanupOldEnd);
-    expect(cleanupOldBody).toContain('-d "$old_target"');
-    expect(cleanupOldBody).toContain('-L "$old_target/SKILL.md"');
-    expect(cleanupOldBody).toContain('rm -rf "$old_target"');
-
-    // cleanup_prefixed_claude_symlinks must also handle the new pattern
-    const cleanupPrefixedStart = setupContent.indexOf('cleanup_prefixed_claude_symlinks()');
-    const cleanupPrefixedEnd = setupContent.indexOf('}', setupContent.indexOf('cleaned up prefixed', cleanupPrefixedStart));
-    const cleanupPrefixedBody = setupContent.slice(cleanupPrefixedStart, cleanupPrefixedEnd);
-    expect(cleanupPrefixedBody).toContain('-d "$prefixed_target"');
-    expect(cleanupPrefixedBody).toContain('-L "$prefixed_target/SKILL.md"');
-    expect(cleanupPrefixedBody).toContain('rm -rf "$prefixed_target"');
-  });
-
-  // REGRESSION: link function must upgrade old directory symlinks
-  test('link_claude_skill_dirs removes old directory symlinks before creating real dirs', () => {
-    const fnStart = setupContent.indexOf('link_claude_skill_dirs()');
+  test('link_claude_selected_skill_dirs removes old directory symlinks before creating real dirs', () => {
+    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     // Must check for and remove old symlinks before mkdir
@@ -2283,7 +2260,7 @@ describe('setup script validation', () => {
 
   test('setup links root goldband skill through a thin Claude wrapper alias', () => {
     const fnStart = setupContent.indexOf('link_claude_root_skill_alias()');
-    const fnEnd = setupContent.indexOf('# ─── Helper: remove old unprefixed Claude skill entries', fnStart);
+    const fnEnd = setupContent.indexOf('link_claude_selected_skill_dirs()', fnStart);
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_goldband-command');
     expect(fnBody).toContain('_link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"');
@@ -2292,7 +2269,7 @@ describe('setup script validation', () => {
       setupContent.indexOf('# 4. Install for Claude'),
       setupContent.indexOf('# 5. Install for Codex')
     );
-    expect(claudeSection).toContain('link_claude_root_skill_alias "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
   });
 
   test('setup supports --host auto|claude|codex|kiro|opencode', () => {
@@ -2300,35 +2277,37 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('claude|codex|kiro|factory|opencode|auto');
   });
 
-  test('setup supports slim/full workflow profiles', () => {
-    expect(setupContent).toContain('WORKFLOW_PROFILE="${GOLDBAND_WORKFLOW_PROFILE:-full}"');
+  test('setup maps legacy workflow profile values to standard', () => {
+    expect(setupContent).toContain('WORKFLOW_PROFILE="${GOLDBAND_WORKFLOW_PROFILE:-standard}"');
     expect(setupContent).toContain('--profile');
-    expect(setupContent).toContain('slim|full');
+    expect(setupContent).toContain('expected standard');
+    expect(setupContent).toContain('full|slim)');
+    expect(setupContent).toContain('is deprecated; using standard');
+    expect(setupContent).not.toContain('expected slim or full');
     expect(setupContent).toContain('link_codex_selected_skill_dirs');
     expect(setupContent).toContain('link_claude_selected_skill_dirs');
   });
 
-  test('slim profile installs internal workflow docs without nested SKILL.md discovery', () => {
+  test('standard profile installs internal workflow docs without nested SKILL.md discovery', () => {
     expect(setupContent).toContain('create_internal_workflow_docs');
     expect(setupContent).toContain('$workflow_root/$skill_name.workflow.md');
     expect(setupContent).toContain('goldband-$skill_name.workflow.md');
     expect(setupContent).not.toContain('$workflow_root/$skill_name/SKILL.md');
   });
 
-  test('slim cleanup uses source provenance rather than goldband name prefix only', () => {
-    const cleanupStart = setupContent.indexOf('cleanup_full_workflow_entries_for_slim()');
+  test('standard cleanup uses source provenance rather than goldband name prefix only', () => {
+    const cleanupStart = setupContent.indexOf('cleanup_legacy_full_workflow_entries_for_standard()');
     const cleanupEnd = setupContent.indexOf('create_internal_workflow_docs()', cleanupStart);
     const cleanupBody = setupContent.slice(cleanupStart, cleanupEnd);
     expect(cleanupBody).toContain('goldband_managed_skill_entry');
-    expect(cleanupBody).toContain('cleanup_manifest_entries_for_slim');
+    expect(cleanupBody).toContain('cleanup_manifest_entries_for_standard');
     expect(setupContent).toContain('path_under_dir()');
     expect(setupContent).toContain('symlink_target_under_dir()');
     expect(setupContent).toContain('write_goldband_managed_skill_marker');
-    expect(setupContent).toContain('record_workflow_managed_entry');
     expect(cleanupBody).not.toContain('rm -rf "$skills_dir"/goldband-*');
   });
 
-  test('Claude slim runtime root guards self-referential source installs', () => {
+  test('Claude standard runtime root guards self-referential source installs', () => {
     const fnStart = setupContent.indexOf('create_claude_runtime_root()');
     const fnEnd = setupContent.indexOf('create_factory_runtime_root()', fnStart);
     const fnBody = setupContent.slice(fnStart, fnEnd);
@@ -2341,23 +2320,21 @@ describe('setup script validation', () => {
   test('copy fallback can be exercised and cleaned via managed manifest', () => {
     expect(setupContent).toContain('GOLDBAND_FORCE_COPY');
     expect(setupContent).toContain('workflow_managed_manifest_path()');
-    expect(setupContent).toContain('cleanup_manifest_entries_for_slim');
-    expect(setupContent).toContain('reset_workflow_managed_manifest "claude"');
-    expect(setupContent).toContain('reset_workflow_managed_manifest "codex"');
+    expect(setupContent).toContain('cleanup_manifest_entries_for_standard');
   });
 
-  test('root skill documents slim internal workflow routing', () => {
+  test('root skill documents standard internal workflow routing', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Workflow Routing In Slim Installs');
+    expect(content).toContain('Workflow Routing In Standard Installs');
     expect(content).toContain('*.workflow.md');
     expect(content).toContain('follow it as executable workflow instructions');
     expect(content).toContain('active Goldband runtime root');
     expect(content).not.toContain('~/.claude/skills/goldband/workflows/<name>.workflow.md');
   });
 
-  test('generated Codex root skill routes slim workflows through GOLDBAND_ROOT', () => {
+  test('generated Codex root skill routes standard workflows through GOLDBAND_ROOT', () => {
     const content = fs.readFileSync(path.join(ROOT, '.agents', 'skills', 'goldband', 'SKILL.md'), 'utf-8');
-    const sectionStart = content.indexOf('## Workflow Routing In Slim Installs');
+    const sectionStart = content.indexOf('## Workflow Routing In Standard Installs');
     const sectionEnd = content.indexOf('**Routing rules', sectionStart);
     const section = content.slice(sectionStart, sectionEnd);
     expect(section).toContain('$GOLDBAND_ROOT');
@@ -2385,14 +2362,6 @@ describe('setup script validation', () => {
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('process.env.GOLDBAND_CHROMIUM_PATH');
     expect(fnBody).toContain('executablePath ? { executablePath } : {}');
-  });
-
-  // T1: Sidecar skip guard — prevents .agents/skills/goldband from being linked as a skill
-  test('link_codex_skill_dirs skips the goldband sidecar directory', () => {
-    const fnStart = setupContent.indexOf('link_codex_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('done', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('[ "$skill_name" = "goldband" ] && continue');
   });
 
   // T2: Dynamic $GOLDBAND_ROOT paths in generated Codex preambles
@@ -2461,16 +2430,16 @@ describe('setup script validation', () => {
 
   // --- Symlink prefix tests (PR #503) ---
 
-  test('link_claude_skill_dirs applies goldband- prefix by default', () => {
-    const fnStart = setupContent.indexOf('link_claude_skill_dirs()');
+  test('link_claude_selected_skill_dirs applies goldband- prefix by default', () => {
+    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('SKILL_PREFIX');
     expect(fnBody).toContain('link_name="goldband-$skill_name"');
   });
 
-  test('link_claude_skill_dirs preserves already-prefixed dirs', () => {
-    const fnStart = setupContent.indexOf('link_claude_skill_dirs()');
+  test('link_claude_selected_skill_dirs preserves already-prefixed dirs', () => {
+    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     // goldband-* dirs should keep their name (e.g., goldband-upgrade stays goldband-upgrade)
@@ -2480,27 +2449,6 @@ describe('setup script validation', () => {
   test('setup supports --no-prefix flag', () => {
     expect(setupContent).toContain('--no-prefix');
     expect(setupContent).toContain('SKILL_PREFIX=0');
-  });
-
-  test('cleanup_old_claude_symlinks removes only goldband-pointing symlinks', () => {
-    expect(setupContent).toContain('cleanup_old_claude_symlinks');
-    const fnStart = setupContent.indexOf('cleanup_old_claude_symlinks()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('removed[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    // Should check readlink before removing
-    expect(fnBody).toContain('readlink');
-    expect(fnBody).toContain('goldband/*');
-    // Should skip already-prefixed dirs
-    expect(fnBody).toContain('goldband-*) continue');
-  });
-
-  test('cleanup runs before link when prefix is enabled', () => {
-    // In the Claude install section, cleanup should happen before linking
-    const claudeInstallSection = setupContent.slice(
-      setupContent.indexOf('INSTALL_CLAUDE'),
-      setupContent.lastIndexOf('link_claude_skill_dirs')
-    );
-    expect(claudeInstallSection).toContain('cleanup_old_claude_symlinks');
   });
 
   // --- Persistent config + interactive prompt tests ---
@@ -2528,23 +2476,6 @@ describe('setup script validation', () => {
   test('non-TTY defaults to flat names', () => {
     // Should check if stdin is a TTY before prompting
     expect(setupContent).toContain('-t 0');
-  });
-
-  test('cleanup_prefixed_claude_symlinks exists and uses readlink', () => {
-    expect(setupContent).toContain('cleanup_prefixed_claude_symlinks');
-    const fnStart = setupContent.indexOf('cleanup_prefixed_claude_symlinks()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('removed[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('readlink');
-    expect(fnBody).toContain('goldband-$skill_name');
-  });
-
-  test('reverse cleanup runs before link when prefix is disabled', () => {
-    const claudeInstallSection = setupContent.slice(
-      setupContent.indexOf('INSTALL_CLAUDE'),
-      setupContent.lastIndexOf('link_claude_skill_dirs')
-    );
-    expect(claudeInstallSection).toContain('cleanup_prefixed_claude_symlinks');
   });
 
   test('welcome message references SKILL_PREFIX', () => {

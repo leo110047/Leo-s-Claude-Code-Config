@@ -66,10 +66,8 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 ./install.sh codex-hooks        # Codex hooks
 ./install.sh codex-requirements # Codex managed requirements
 ./install.sh style-gate         # 全域 git style gate
-./install.sh workflow           # Claude 端 workflow（full profile，預設）
-./install.sh workflow-slim      # Claude 端 workflow（slim profile）
-./install.sh workflow-codex     # Codex 端 workflow（full profile，預設）
-./install.sh workflow-codex-slim # Codex 端 workflow（slim profile）
+./install.sh workflow           # Claude 端 workflow（standard profile）
+./install.sh workflow-codex     # Codex 端 workflow（standard profile）
 ./install.sh launchers          # shell 啟動整合
 ./install.sh uninstall          # 移除安裝
 ```
@@ -92,12 +90,12 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 - Git style gate（選配）：`git-hooks/` -> global `core.hooksPath`
 - Goldband Loop runtime：Claude 在 `~/.claude/skills/goldband`，Codex 在 `~/.codex/skills/goldband`
 
-Goldband Loop workflow 有兩種 discovery profile：
+Goldband Loop workflow 使用單一 standard discovery profile：
 
-- `full`：預設，保留所有 `goldband-*` top-level workflow skills，舊用法相容。
-- `slim`：opt-in，只暴露 `goldband`、`goldband-upgrade` 等少量入口；完整 workflow 仍安裝在 runtime root 的 `workflows/*.workflow.md`，由入口 skill 讀取執行。
+- 只暴露 `goldband`、`goldband-upgrade` 等少量入口。
+- 完整 workflow 仍安裝在 runtime root 的 `workflows/*.workflow.md`，由入口 skill 讀取執行。
 
-`slim` 讓 Claude/Codex 的 skills 清單更乾淨，但 `/goldband-qa` 這類 workflow 不一定會以 top-level skill 自動出現。日常若要降低 discovery surface，可用 `workflow-slim` / `workflow-codex-slim`；需要舊入口相容時用預設 `workflow` / `workflow-codex`。
+這讓 Claude/Codex 的 skills 清單更乾淨，避免 Goldband Loop 的大量 workflow description 擠壓 skills context。舊式 top-level `/goldband-qa`、`/goldband-review` 全展開模式已移除。
 
 全域守則只放日常回覆、查證口徑和工作邊界。review、debug、security、planning、QA 這類重流程走 Goldband Loop workflow、commands、skills、hooks 和 rules。
 
@@ -211,7 +209,7 @@ node scripts/check-code-style.mjs --staged
 
 ## 常用入口
 
-以下 workflow 入口需要先安裝 `workflow`、`workflow-codex`、`workflow-slim`、`workflow-codex-slim` 或 `all-with-workflow`：
+以下 workflow 入口需要先安裝 `workflow`、`workflow-codex` 或 `all-with-workflow`：
 
 - `/plan`
 - `/verify`

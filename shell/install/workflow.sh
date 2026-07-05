@@ -109,12 +109,16 @@ write_workflow_installed_versions() {
 
 install_workflow_host() {
     local host="$1"
-    local profile="${2:-full}"
+    local profile="${2:-standard}"
     local repo_dir
     local setup_status=0
 
     case "$profile" in
-        slim|full) ;;
+        full|slim)
+            echo -e "${YELLOW}Goldband Loop workflow profile '$profile' 已棄用；改用 standard。${NC}" >&2
+            profile="standard"
+            ;;
+        standard) ;;
         *)
             echo -e "${RED}未知 Goldband Loop workflow profile: $profile${NC}" >&2
             exit 1
