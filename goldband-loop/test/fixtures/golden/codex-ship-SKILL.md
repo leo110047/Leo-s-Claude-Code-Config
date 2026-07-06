@@ -1325,29 +1325,25 @@ If multiple suites need to run, run them sequentially (each needs a test lane). 
 
 > You are running a ship-workflow test coverage audit. Run `git diff <base>...HEAD` as needed. Do not commit or push — report only.
 >
-> 100% coverage is the goal — every untested path is a path where bugs hide and vibe coding becomes yolo coding. Evaluate what was ACTUALLY coded (from the diff), not what was planned.
+> 100% coverage is the goal — every untested path is a path where bugs hide and vibe coding becomes yolo coding. Evaluate what was ACTUALLY coded from `git diff origin/<base>...HEAD`, not what was planned.
 
 ### Test Framework Detection
 
-Before analyzing coverage, detect the project's test framework:
-
-1. **Read CLAUDE.md** — look for a `## Testing` section with test command and framework name. If found, use that as the authoritative source.
-2. **If CLAUDE.md has no testing section, auto-detect:**
+1. Read CLAUDE.md and prefer its `## Testing` / `## Test Coverage` instructions.
+2. If missing, auto-detect:
 
 ```bash
-setopt +o nomatch 2>/dev/null || true  # zsh compat
-# Detect project runtime
+setopt +o nomatch 2>/dev/null || true
 [ -f Gemfile ] && echo "RUNTIME:ruby"
 [ -f package.json ] && echo "RUNTIME:node"
 [ -f requirements.txt ] || [ -f pyproject.toml ] && echo "RUNTIME:python"
 [ -f go.mod ] && echo "RUNTIME:go"
 [ -f Cargo.toml ] && echo "RUNTIME:rust"
-# Check for existing test infrastructure
 ls jest.config.* vitest.config.* playwright.config.* cypress.config.* .rspec pytest.ini phpunit.xml 2>/dev/null
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 ```
 
-3. **If no framework detected:** falls through to the Test Framework Bootstrap step (Step 4) which handles full setup.
+No framework detected falls through to Step 4 bootstrap.
 
 **0. Before/after test count:**
 
@@ -1358,94 +1354,31 @@ find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec
 
 Store this number for the PR body.
 
-**1. Trace every codepath changed** using `git diff origin/<base>...HEAD`:
+**1. Trace every codepath changed** using `git diff origin/<base>...HEAD`.
 
-Read every changed file. For each one, trace how data flows through the code — don't just list functions, actually follow the execution:
-
-1. **Read the diff.** For each changed file, read the full file (not just the diff hunk) to understand context.
-2. **Trace data flow.** Starting from each entry point (route handler, exported function, event listener, component render), follow the data through every branch:
-   - Where does input come from? (request params, props, database, API call)
-   - What transforms it? (validation, mapping, computation)
-   - Where does it go? (database write, API response, rendered output, side effect)
-   - What can go wrong at each step? (null/undefined, invalid input, network failure, empty collection)
-3. **Diagram the execution.** For each changed file, draw an ASCII diagram showing:
-   - Every function/method that was added or modified
-   - Every conditional branch (if/else, switch, ternary, guard clause, early return)
-   - Every error path (try/catch, rescue, error boundary, fallback)
-   - Every call to another function (trace into it — does IT have untested branches?)
-   - Every edge: what happens with null input? Empty array? Invalid type?
-
-This is the critical step — you're building a map of every line of code that can execute differently based on input. Every branch in this diagram needs a test.
-
-**2. Map user flows, interactions, and error states:**
-
-Code coverage isn't enough — you need to cover how real users interact with the changed code. For each changed feature, think through:
-
-- **User flows:** What sequence of actions does a user take that touches this code? Map the full journey (e.g., "user clicks 'Pay' → form validates → API call → success/failure screen"). Each step in the journey needs a test.
-- **Interaction edge cases:** What happens when the user does something unexpected?
-  - Double-click/rapid resubmit
-  - Navigate away mid-operation (back button, close tab, click another link)
-  - Submit with stale data (page sat open for 30 minutes, session expired)
-  - Slow connection (API takes 10 seconds — what does the user see?)
-  - Concurrent actions (two tabs, same form)
-- **Error states the user can see:** For every error the code handles, what does the user actually experience?
-  - Is there a clear error message or a silent failure?
-  - Can the user recover (retry, go back, fix input) or are they stuck?
-  - What happens with no network? With a 500 from the API? With invalid data from the server?
-- **Empty/zero/boundary states:** What does the UI show with zero results? With 10,000 results? With a single character input? With maximum-length input?
-
-Add these to your diagram alongside the code branches. A user flow with no test is just as much a gap as an untested if/else.
-
-**3. Check each branch against existing tests:**
-
-Go through your diagram branch by branch — both code paths AND user flows. For each one, search for a test that exercises it:
-- Function `processPayment()` → look for `billing.test.ts`, `billing.spec.ts`, `test/billing_test.rb`
-- An if/else → look for tests covering BOTH the true AND false path
-- An error handler → look for a test that triggers that specific error condition
-- A call to `helperFn()` that has its own branches → those branches need tests too
-- A user flow → look for an integration or E2E test that walks through the journey
-- An interaction edge case → look for a test that simulates the unexpected action
+- Read each changed file, not only the diff hunk.
+- **Trace data flow** from entry point through validation, transforms, side effects, and error paths.
+- **Diagram the execution** with every changed function, branch, early return, error handler, and cross-function call.
+- Include user flows and visible error states, not only code branches.
+- **Map user flows** alongside code paths. Cover **Interaction edge cases** such as Double-click, Navigate away, stale form/session, slow network, and concurrent tabs.
+- Cover **Error states the user can see** and **Empty/zero/boundary states**.
 
 Quality scoring rubric:
-- ★★★  Tests behavior with edge cases AND error paths
-- ★★   Tests correct behavior, happy path only
-- ★    Smoke test / existence check / trivial assertion (e.g., "it renders", "it doesn't throw")
+- ★★★ Tests behavior with edge cases AND error paths
+- ★★ Tests correct behavior, happy path only
+- ★ Smoke test / existence check / trivial assertion
 
 ### E2E Test Decision Matrix
 
-When checking each branch, also determine whether a unit test or E2E/integration test is the right tool:
-
-**RECOMMEND E2E (mark as [→E2E] in the diagram):**
-- Common user flow spanning 3+ components/services (e.g., signup → verify email → first login)
-- Integration point where mocking hides real failures (e.g., API → queue → worker → DB)
-- Auth/payment/data-destruction flows — too important to trust unit tests alone
-
-**RECOMMEND EVAL (mark as [→EVAL] in the diagram):**
-- Critical LLM call that needs a quality eval (e.g., prompt change → test output still meets quality bar)
-- Changes to prompt templates, system instructions, or tool definitions
-
-**STICK WITH UNIT TESTS:**
-- Pure function with clear inputs/outputs
-- Internal helper with no side effects
-- Edge case of a single function (null input, empty array)
-- Obscure/rare flow that isn't customer-facing
+- Mark [→E2E] for common flows spanning 3+ components/services, auth/payment/destructive flows, or integration points where mocks hide real failures.
+- Mark [→EVAL] for LLM prompt/template/tool-definition changes that need quality evals.
+- Prefer unit tests for pure helpers, internal branches, and single-function edge cases.
 
 ### REGRESSION RULE (mandatory)
 
-**IRON RULE:** When the coverage audit identifies a REGRESSION — code that previously worked but the diff broke — a regression test is written immediately. No AskUserQuestion. No skipping. Regressions are the highest-priority test because they prove something broke.
+**IRON RULE:** When the audit identifies a REGRESSION, write the regression test immediately. No AskUserQuestion. No skipping. Format: `test: regression test for {what broke}`.
 
-A regression is when:
-- The diff modifies existing behavior (not new code)
-- The existing test suite (if any) doesn't cover the changed path
-- The change introduces a new failure mode for existing callers
-
-When uncertain whether a change is a regression, err on the side of writing the test.
-
-Format: commit as `test: regression test for {what broke}`
-
-**4. Output ASCII coverage diagram:**
-
-Include BOTH code paths and user flows in the same diagram. Mark E2E-worthy and eval-worthy paths:
+### ASCII coverage diagram
 
 ```
 CODE PATHS                                            USER FLOWS
@@ -1455,8 +1388,8 @@ CODE PATHS                                            USER FLOWS
   │   ├── [GAP]         Network timeout                 └── [GAP]        Navigate away mid-payment
   │   └── [GAP]         Invalid currency
   └── refundPayment()                                 [+] Error states
-      ├── [★★  TESTED] Full refund — :89                ├── [★★  TESTED] Card declined message
-      └── [★   TESTED] Partial (non-throw only) — :101  └── [GAP]        Network timeout UX
+      ├── [★★  TESTED] Full refund — billing.test.ts:89
+      └── [★   TESTED] Partial (non-throw only) — :101
 
 LLM integration: [GAP] [→EVAL] Prompt template change — needs eval test
 
@@ -1464,28 +1397,17 @@ COVERAGE: 5/13 paths tested (38%)  |  Code paths: 3/5 (60%)  |  User flows: 2/8 
 QUALITY: ★★★:2 ★★:2 ★:1  |  GAPS: 8 (2 E2E, 1 eval)
 ```
 
-Legend: ★★★ behavior + edge + error  |  ★★ happy path  |  ★ smoke check
-[→E2E] = needs integration test  |  [→EVAL] = needs LLM eval
-
-**Fast path:** All paths covered → "Step 7: All new code paths have test coverage ✓" Continue.
+Fast path: all paths covered → "Step 7: All new code paths have test coverage ✓".
 
 **5. Generate tests for uncovered paths:**
 
-If test framework detected (or bootstrapped in Step 4):
-- Prioritize error handlers and edge cases first (happy paths are more likely already tested)
-- Read 2-3 existing test files to match conventions exactly
-- Generate unit tests. Mock all external dependencies (DB, API, Redis).
-- For paths marked [→E2E]: generate integration/E2E tests using the project's E2E framework (Playwright, Cypress, Capybara, etc.)
-- For paths marked [→EVAL]: generate eval tests using the project's eval framework, or flag for manual eval if none exists
-- Write tests that exercise the specific uncovered path with real assertions
-- Run each test. Passes → commit as `test: coverage for {feature}`
-- Fails → fix once. Still fails → revert, note gap in diagram.
+- Prioritize error handlers, edge cases, regressions, then happy paths.
+- Match existing test conventions exactly.
+- Generate unit tests; generate integration/E2E tests for [→E2E]; generate or flag evals for [→EVAL].
+- Run each test. Passes → commit as `test: coverage for {feature}`; fails → fix once; still fails → revert and note gap.
+- Caps: 30 code paths max, 20 tests generated max, 2-min per-test exploration cap.
 
-Caps: 30 code paths max, 20 tests generated max (code + user flow combined), 2-min per-test exploration cap.
-
-If no test framework AND user declined bootstrap → diagram only, no generation. Note: "Test generation skipped — no test framework configured."
-
-**Diff is test-only changes:** Skip Step 7 entirely: "No new application code paths to audit."
+If no test framework and user declined bootstrap: diagram only. If diff is test-only: skip Step 7 entirely.
 
 **6. After-count and coverage summary:**
 
@@ -1494,45 +1416,32 @@ If no test framework AND user declined bootstrap → diagram only, no generation
 find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec.*' | grep -v node_modules | wc -l
 ```
 
-For PR body: `Tests: {before} → {after} (+{delta} new)`
-Coverage line: `Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.`
+PR body lines:
+- `Tests: {before} → {after} (+{delta} new)`
+- `Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.`
 
 **7. Coverage gate:**
 
-Before proceeding, check CLAUDE.md for a `## Test Coverage` section with `Minimum:` and `Target:` fields. If found, use those percentages. Otherwise use defaults: Minimum = 60%, Target = 80%.
-
-Using the coverage percentage from the diagram in substep 4 (the `COVERAGE: X/Y (Z%)` line):
+Read CLAUDE.md for a `## Test Coverage` section with `Minimum:` and `Target:`. Defaults: Minimum = 60%, Target = 80%.
 
 - **>= target:** Pass. "Coverage gate: PASS ({X}%)." Continue.
-- **>= minimum, < target:** Use AskUserQuestion:
-  - "AI-assessed coverage is {X}%. {N} code paths are untested. Target is {target}%."
-  - RECOMMENDATION: Choose A because untested code paths are where production bugs hide.
-  - Options:
-    A) Generate more tests for remaining gaps (recommended)
-    B) Ship anyway — I accept the coverage risk
-    C) These paths don't need tests — mark as intentionally uncovered
-  - If A: Loop back to substep 5 (generate tests) targeting the remaining gaps. After second pass, if still below target, present AskUserQuestion again with updated numbers. Maximum 2 generation passes total.
-  - If B: Continue. Include in PR body: "Coverage gate: {X}% — user accepted risk."
-  - If C: Continue. Include in PR body: "Coverage gate: {X}% — {N} paths intentionally uncovered."
+- **>= minimum, < target:** AskUserQuestion with options:
+  A) Generate more tests for remaining gaps (recommended)
+  B) Ship anyway — I accept the coverage risk
+  C) These paths don't need tests — mark as intentionally uncovered
+- **< minimum:** AskUserQuestion with options:
+  A) Generate tests for remaining gaps (recommended)
+  B) Override — ship with low coverage (I understand the risk)
 
-- **< minimum:** Use AskUserQuestion:
-  - "AI-assessed coverage is critically low ({X}%). {N} of {M} code paths have no tests. Minimum threshold is {minimum}%."
-  - RECOMMENDATION: Choose A because less than {minimum}% means more code is untested than tested.
-  - Options:
-    A) Generate tests for remaining gaps (recommended)
-    B) Override — ship with low coverage (I understand the risk)
-  - If A: Loop back to substep 5. Maximum 2 passes. If still below minimum after 2 passes, present the override choice again.
-  - If B: Continue. Include in PR body: "Coverage gate: OVERRIDDEN at {X}%."
+Maximum 2 generation passes total. If B/C continues, record the accepted risk or intentionally uncovered paths in the PR body.
 
-**Coverage percentage undetermined:** If the coverage diagram doesn't produce a clear numeric percentage (ambiguous output, parse error), **skip the gate** with: "Coverage gate: could not determine percentage — skipping." Do not default to 0% or block.
-
-**Test-only diffs:** Skip the gate (same as the existing fast-path).
+**Coverage percentage undetermined:** If the diagram does not produce a clear numeric percentage, skip the gate with: "Coverage gate: could not determine percentage — skipping." Do not default to 0% or block.
 
 **100% coverage:** "Coverage gate: PASS (100%)." Continue.
 
 ### Test Plan Artifact
 
-After producing the coverage diagram, write a test plan artifact so `/qa` and `/qa-only` can consume it:
+Write a QA-consumable artifact:
 
 ```bash
 eval "$($GOLDBAND_ROOT/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
@@ -1540,26 +1449,9 @@ USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 ```
 
-Write to `~/.goldband/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md`:
+Path: `~/.goldband/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md`
 
-```markdown
-# Test Plan
-Generated by /ship on {date}
-Branch: {branch}
-Repo: {owner/repo}
-
-## Affected Pages/Routes
-- {URL path} — {what to test and why}
-
-## Key Interactions to Verify
-- {interaction description} on {page}
-
-## Edge Cases
-- {edge case} on {page}
-
-## Critical Paths
-- {end-to-end flow that must work}
-```
+Include: affected pages/routes, key interactions, edge cases, and critical paths.
 >
 > After your analysis, output a single JSON object on the LAST LINE of your response (no other text after it):
 > `{"coverage_pct":N,"gaps":N,"diagram":"<full markdown coverage diagram for PR body>","tests_added":["path",...]}`
@@ -2124,6 +2016,17 @@ staleness detection: if those files are later deleted, the learning can be flagg
 
 **Only log genuine discoveries.** Don't log obvious things. Don't log things the user
 already knows. A good test: would this insight save time in a future session? If yes, log it.
+
+For high-value, verified material that may graduate into a skill or rule, capture
+a curated knowledge entry instead of leaving it only in append-only learnings:
+
+```bash
+$GOLDBAND_BIN/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+```
+
+Use `problem-solution` for a pitfall with a known fix, `decision` for an
+architectural or workflow choice, and `practice` for a verified reusable
+method.
 
 
 
