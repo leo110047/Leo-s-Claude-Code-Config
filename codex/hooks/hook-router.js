@@ -411,7 +411,10 @@ function formatCrossReviewArmMessage(contract) {
   if (contract.error) {
     return `Cross-review gate was requested but could not be armed: ${contract.error}`;
   }
-  return `Cross-review gate armed for this session. Reviewer: ${contract.reviewer}. Plan: ${contract.planFile || 'not bound yet'}.`;
+  const modelText = contract.reviewerModel
+    ? ` Model: ${contract.reviewerModel}.`
+    : '';
+  return `Cross-review gate armed for this session. Reviewer: ${contract.reviewer}. Plan: ${contract.planFile || 'not bound yet'}.${modelText}`;
 }
 
 function evaluatePreToolUseResult(input) {

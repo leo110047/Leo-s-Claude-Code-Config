@@ -205,25 +205,80 @@ function testPromptArmDoesNotResetActiveContract() {
   const env = envFor(stateDir);
   const sessionId = 'rearm-active';
   const first = core.armFromPrompt(
-    { session_id: sessionId, prompt: '開啟交互審查' },
+    { session_id: sessionId, prompt: '/goldband-cross-review PLAN.md' },
     { cwd: dir, env, implementer: 'claude' },
   );
   core.writeContract({ ...first, roundsUsed: 2 }, env);
   const second = core.armFromPrompt(
-    { session_id: sessionId, prompt: '開啟交互審查 --plan PLAN.md' },
+    { session_id: sessionId, prompt: '/goldband-cross-review PLAN.md' },
     { cwd: dir, env, implementer: 'claude' },
   );
   const third = core.armFromPrompt(
-    { session_id: sessionId, prompt: '開啟交互審查 --plan OTHER.md' },
+    { session_id: sessionId, prompt: '/goldband-cross-review OTHER.md' },
+    { cwd: dir, env, implementer: 'claude' },
+  );
+  const fourth = core.armFromPrompt(
+    { session_id: sessionId, prompt: '/goldband-cross-review' },
     { cwd: dir, env, implementer: 'claude' },
   );
   assert.equal(second.roundsUsed, 2);
   assert.equal(third.roundsUsed, 2);
+  assert.equal(fourth.roundsUsed, 2);
   assert.equal(third.planFile, 'PLAN.md');
+  assert.equal(fourth.planFile, 'PLAN.md');
   assert.equal(third.baseCommit, first.baseCommit);
+  assert.equal(fourth.baseCommit, first.baseCommit);
 }
 
-function testQuotedTriggerTextDoesNotArm() {
+function testSlashCommandArmParsesPlanReviewerAndModel() {
+  const dir = makeRepo();
+  const stateDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-cross-review-state-'),
+  );
+  const env = envFor(stateDir);
+  const contract = core.armFromPrompt(
+    {
+      session_id: 'slash-command-session',
+      prompt:
+        '/goldband-cross-review docs/implementation-plan.md claude --model claude-opus-4',
+    },
+    { cwd: dir, env, implementer: 'codex' },
+  );
+  assert.equal(contract.reviewer, 'claude');
+  assert.equal(contract.planFile, 'docs/implementation-plan.md');
+  assert.equal(contract.reviewerModel, 'claude-opus-4');
+
+  const parsed = core.parseCrossReviewRequest(
+    '/goldband-cross-review "docs/plan with spaces.md" --reviewer codex --model gpt-5.5',
+  );
+  assert.equal(parsed.planFile, 'docs/plan with spaces.md');
+  assert.equal(parsed.reviewer, 'codex');
+  assert.equal(parsed.reviewerModel, 'gpt-5.5');
+}
+
+function testSlashCommandRequiresPlanAndAvoidsInlineMentions() {
+  assert.equal(
+    core.promptRequestsCrossReview('可以用 /goldband-cross-review 嗎'),
+    false,
+  );
+  assert.throws(
+    () =>
+      core.armFromPrompt(
+        { session_id: 'missing-plan', prompt: '/goldband-cross-review' },
+        {
+          cwd: makeRepo(),
+          env: envFor(
+            fs.mkdtempSync(
+              path.join(os.tmpdir(), 'goldband-cross-review-state-'),
+            ),
+          ),
+        },
+      ),
+    /missing implementation plan path/,
+  );
+}
+
+function testOnlySlashCommandTriggersCrossReview() {
   assert.equal(
     core.promptRequestsCrossReview('說明 `[[cross-review]]` 這個觸發詞'),
     false,
@@ -234,12 +289,22 @@ function testQuotedTriggerTextDoesNotArm() {
   );
   assert.equal(
     core.promptRequestsCrossReview(
+      '說明 `/goldband-cross-review PLAN.md` 的用法',
+    ),
+    false,
+  );
+  assert.equal(
+    core.promptRequestsCrossReview(
       '請做這件事 [[cross-review]] --plan PLAN.md',
     ),
-    true,
+    false,
   );
   assert.equal(
     core.promptRequestsCrossReview('請開啟交互審查 --plan PLAN.md'),
+    false,
+  );
+  assert.equal(
+    core.promptRequestsCrossReview('/goldband-cross-review PLAN.md'),
     true,
   );
 }
@@ -251,6 +316,8 @@ testNonZeroReviewerExitEscalates();
 testUntrackedPlanMarkerRoundTripAllows();
 testRoundTwoHighRegressionCanBlock();
 testPromptArmDoesNotResetActiveContract();
-testQuotedTriggerTextDoesNotArm();
+testSlashCommandArmParsesPlanReviewerAndModel();
+testSlashCommandRequiresPlanAndAvoidsInlineMentions();
+testOnlySlashCommandTriggersCrossReview();
 
 console.log('[OK] cross-review regression tests passed');

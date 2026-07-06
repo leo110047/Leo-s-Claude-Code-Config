@@ -41,8 +41,8 @@ function printJson(payload) {
 
 function usage() {
   console.log(`Usage:
-  goldband-cross-review start --plan <path> --reviewer <codex|claude> [--implementer <claude|codex>] [--session-id <id>]
-  goldband-cross-review run [--session-id <id>] [--review-mode mock|real] [--mock-verdict APPROVED|CHANGES_REQUESTED|ESCALATE]
+  goldband-cross-review start --plan <path> [--reviewer <codex|claude>] [--model <model>] [--implementer <claude|codex>] [--session-id <id>]
+  goldband-cross-review run [--session-id <id>] [--review-mode mock|real] [--mock-verdict APPROVED|CHANGES_REQUESTED|ESCALATE] [--model <model>]
   goldband-cross-review respond --session-id <id> --finding-id <id> --response fixed|rebutted|ask-human --summary <text> [--evidence <path>]
   goldband-cross-review done --session-id <id>
   goldband-cross-review override --session-id <id> --reason <text>
@@ -53,7 +53,8 @@ function commandStart(args) {
   const contract = createContract({
     sessionId: args['session-id'],
     implementer: args.implementer,
-    reviewer: requireValue(args, 'reviewer'),
+    reviewer: args.reviewer,
+    reviewerModel: args.model,
     planFile: requireValue(args, 'plan'),
     maxRounds: args['max-rounds'],
     ttlHours: args['ttl-hours'],
@@ -66,6 +67,7 @@ function commandRun(args) {
   const result = runReviewRound({
     sessionId: args['session-id'],
     reviewMode: args['review-mode'] || 'real',
+    model: args.model,
     mockVerdict: args['mock-verdict'] || 'APPROVED',
     cwd: process.cwd(),
   });
