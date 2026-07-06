@@ -4,6 +4,7 @@ Goldband observability has two layers:
 
 1. Local JSONL telemetry under the persistent Goldband data root.
 2. Optional OTLP trace export from JSONL with `scripts/export-telemetry-otlp.mjs`.
+3. Offline mining from JSONL with `scripts/mine-telemetry.mjs`.
 
 Nothing is uploaded by default. Export is a manual or scheduled opt-in action.
 
@@ -96,3 +97,27 @@ Supported flags:
 Goldband does not run an exporter daemon and does not send telemetry from hooks.
 The only network step is explicitly running `scripts/export-telemetry-otlp.mjs`
 without `--dry-run`.
+
+## Mine Local Telemetry
+
+The telemetry miner is a read-only consumer for failure taxonomy, replay fixture
+candidates, and telemetry-derived eval candidates:
+
+```bash
+node scripts/mine-telemetry.mjs summary --days 7
+node scripts/mine-telemetry.mjs classify --days 7
+node scripts/mine-telemetry.mjs extract-fixtures --days 7 --out-dir /tmp/goldband-telemetry-review
+node scripts/mine-telemetry.mjs extract-evals --days 7 --out-dir /tmp/goldband-telemetry-review
+```
+
+`summary` prints markdown by default and supports `--json`. `classify` emits
+machine-readable taxonomy candidates. `extract-fixtures` and `extract-evals`
+write sanitized review candidates to the output directory; they do not modify
+the replay fixture file or run paid evals. Fixture extraction does execute hook
+replay verification, but does so with Goldband state and data roots redirected
+to a temp sandbox.
+
+Candidate outputs reuse `hooks/scripts/lib/hook-router/secret-patterns.js`,
+rewrite local absolute paths, anonymize run/event ids, and truncate content-like
+fields. See [failure taxonomy](failure-taxonomy.md) for category meanings and
+human-label requirements.

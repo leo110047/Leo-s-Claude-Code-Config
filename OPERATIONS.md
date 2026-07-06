@@ -156,6 +156,25 @@ Future keep/delete decisions should use confirmed workflow counts as the primary
 signal. Inferred workflow signals and hook advisories are secondary triage data
 and can be noisy.
 
+Weekly telemetry mining:
+
+```bash
+node scripts/mine-telemetry.mjs summary --days 7
+node scripts/mine-telemetry.mjs classify --days 7
+node scripts/mine-telemetry.mjs extract-fixtures --days 7 --out-dir /tmp/goldband-telemetry-review
+node scripts/mine-telemetry.mjs extract-evals --days 7 --out-dir /tmp/goldband-telemetry-review
+```
+
+The miner never rewrites source telemetry. It reads the usage JSONL base file
+plus rotated siblings, and it reads workflow evidence from
+`${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs` unless
+`--workflow-runs-dir` is supplied. `extract-fixtures` runs candidate replay
+checks with `GOLDBAND_HOME`, `GOLDBAND_DATA_DIR`, and `CLAUDE_PLUGIN_DATA`
+pointed at a temp sandbox so hook marker files do not land in the real state
+root. Replay fixture and eval outputs are review candidates only; do not append
+them to `hooks/fixtures/router/replay-fixtures.json` or a formal eval dataset
+until a human has reviewed the sanitized content.
+
 OTLP trace export is opt-in and offline-first. JSONL remains the source of
 truth; the exporter only reads the usage file and sends a derived traces payload
 when explicitly run:
