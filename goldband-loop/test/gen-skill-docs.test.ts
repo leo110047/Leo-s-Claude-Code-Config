@@ -238,6 +238,11 @@ describe('gen-skill-docs', () => {
     }
   });
 
+  test('ship SKILL.md stays under the token ceiling', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'ship/SKILL.md'), 'utf-8');
+    expect(Buffer.byteLength(content, 'utf-8')).toBeLessThanOrEqual(160000);
+  });
+
   test('templates contain placeholders', () => {
     const rootTmpl = fs.readFileSync(path.join(ROOT, 'SKILL.md.tmpl'), 'utf-8');
     expect(rootTmpl).toContain('{{COMMAND_REFERENCE}}');

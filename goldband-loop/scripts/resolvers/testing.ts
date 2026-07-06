@@ -543,7 +543,133 @@ export function generateTestCoverageAuditPlan(_ctx: TemplateContext): string {
 }
 
 export function generateTestCoverageAuditShip(_ctx: TemplateContext): string {
-  return generateTestCoverageAuditInner('ship');
+  return `100% coverage is the goal — every untested path is a path where bugs hide and vibe coding becomes yolo coding. Evaluate what was ACTUALLY coded from \`git diff origin/<base>...HEAD\`, not what was planned.
+
+### Test Framework Detection
+
+1. Read CLAUDE.md and prefer its \`## Testing\` / \`## Test Coverage\` instructions.
+2. If missing, auto-detect:
+
+\`\`\`bash
+setopt +o nomatch 2>/dev/null || true
+[ -f Gemfile ] && echo "RUNTIME:ruby"
+[ -f package.json ] && echo "RUNTIME:node"
+[ -f requirements.txt ] || [ -f pyproject.toml ] && echo "RUNTIME:python"
+[ -f go.mod ] && echo "RUNTIME:go"
+[ -f Cargo.toml ] && echo "RUNTIME:rust"
+ls jest.config.* vitest.config.* playwright.config.* cypress.config.* .rspec pytest.ini phpunit.xml 2>/dev/null
+ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
+\`\`\`
+
+No framework detected falls through to Step 4 bootstrap.
+
+**0. Before/after test count:**
+
+\`\`\`bash
+# Count test files before any generation
+find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec.*' | grep -v node_modules | wc -l
+\`\`\`
+
+Store this number for the PR body.
+
+**1. Trace every codepath changed** using \`git diff origin/<base>...HEAD\`.
+
+- Read each changed file, not only the diff hunk.
+- **Trace data flow** from entry point through validation, transforms, side effects, and error paths.
+- **Diagram the execution** with every changed function, branch, early return, error handler, and cross-function call.
+- Include user flows and visible error states, not only code branches.
+- **Map user flows** alongside code paths. Cover **Interaction edge cases** such as Double-click, Navigate away, stale form/session, slow network, and concurrent tabs.
+- Cover **Error states the user can see** and **Empty/zero/boundary states**.
+
+Quality scoring rubric:
+- ★★★ Tests behavior with edge cases AND error paths
+- ★★ Tests correct behavior, happy path only
+- ★ Smoke test / existence check / trivial assertion
+
+### E2E Test Decision Matrix
+
+- Mark [→E2E] for common flows spanning 3+ components/services, auth/payment/destructive flows, or integration points where mocks hide real failures.
+- Mark [→EVAL] for LLM prompt/template/tool-definition changes that need quality evals.
+- Prefer unit tests for pure helpers, internal branches, and single-function edge cases.
+
+### REGRESSION RULE (mandatory)
+
+**IRON RULE:** When the audit identifies a REGRESSION, write the regression test immediately. No AskUserQuestion. No skipping. Format: \`test: regression test for {what broke}\`.
+
+### ASCII coverage diagram
+
+\`\`\`
+CODE PATHS                                            USER FLOWS
+[+] src/services/billing.ts                           [+] Payment checkout
+  ├── processPayment()                                  ├── [★★★ TESTED] Complete purchase — checkout.e2e.ts:15
+  │   ├── [★★★ TESTED] happy + declined + timeout      ├── [GAP] [→E2E] Double-click submit
+  │   ├── [GAP]         Network timeout                 └── [GAP]        Navigate away mid-payment
+  │   └── [GAP]         Invalid currency
+  └── refundPayment()                                 [+] Error states
+      ├── [★★  TESTED] Full refund — billing.test.ts:89
+      └── [★   TESTED] Partial (non-throw only) — :101
+
+LLM integration: [GAP] [→EVAL] Prompt template change — needs eval test
+
+COVERAGE: 5/13 paths tested (38%)  |  Code paths: 3/5 (60%)  |  User flows: 2/8 (25%)
+QUALITY: ★★★:2 ★★:2 ★:1  |  GAPS: 8 (2 E2E, 1 eval)
+\`\`\`
+
+Fast path: all paths covered → "Step 7: All new code paths have test coverage ✓".
+
+**5. Generate tests for uncovered paths:**
+
+- Prioritize error handlers, edge cases, regressions, then happy paths.
+- Match existing test conventions exactly.
+- Generate unit tests; generate integration/E2E tests for [→E2E]; generate or flag evals for [→EVAL].
+- Run each test. Passes → commit as \`test: coverage for {feature}\`; fails → fix once; still fails → revert and note gap.
+- Caps: 30 code paths max, 20 tests generated max, 2-min per-test exploration cap.
+
+If no test framework and user declined bootstrap: diagram only. If diff is test-only: skip Step 7 entirely.
+
+**6. After-count and coverage summary:**
+
+\`\`\`bash
+# Count test files after generation
+find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec.*' | grep -v node_modules | wc -l
+\`\`\`
+
+PR body lines:
+- \`Tests: {before} → {after} (+{delta} new)\`
+- \`Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.\`
+
+**7. Coverage gate:**
+
+Read CLAUDE.md for a \`## Test Coverage\` section with \`Minimum:\` and \`Target:\`. Defaults: Minimum = 60%, Target = 80%.
+
+- **>= target:** Pass. "Coverage gate: PASS ({X}%)." Continue.
+- **>= minimum, < target:** AskUserQuestion with options:
+  A) Generate more tests for remaining gaps (recommended)
+  B) Ship anyway — I accept the coverage risk
+  C) These paths don't need tests — mark as intentionally uncovered
+- **< minimum:** AskUserQuestion with options:
+  A) Generate tests for remaining gaps (recommended)
+  B) Override — ship with low coverage (I understand the risk)
+
+Maximum 2 generation passes total. If B/C continues, record the accepted risk or intentionally uncovered paths in the PR body.
+
+**Coverage percentage undetermined:** If the diagram does not produce a clear numeric percentage, skip the gate with: "Coverage gate: could not determine percentage — skipping." Do not default to 0% or block.
+
+**100% coverage:** "Coverage gate: PASS (100%)." Continue.
+
+### Test Plan Artifact
+
+Write a QA-consumable artifact:
+
+\`\`\`bash
+eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+USER=$(whoami)
+DATETIME=$(date +%Y%m%d-%H%M%S)
+\`\`\`
+
+Path: \`~/.goldband/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md\`
+
+Include: affected pages/routes, key interactions, edge cases, and critical paths.`;
 }
 
 export function generateTestCoverageAuditReview(_ctx: TemplateContext): string {
