@@ -101,13 +101,14 @@ without `--dry-run`.
 ## Mine Local Telemetry
 
 The telemetry miner is a read-only consumer for failure taxonomy, replay fixture
-candidates, and telemetry-derived eval candidates:
+candidates, telemetry-derived eval candidates, and curated knowledge candidates:
 
 ```bash
 node scripts/mine-telemetry.mjs summary --days 7
 node scripts/mine-telemetry.mjs classify --days 7
 node scripts/mine-telemetry.mjs extract-fixtures --days 7 --out-dir /tmp/goldband-telemetry-review
 node scripts/mine-telemetry.mjs extract-evals --days 7 --out-dir /tmp/goldband-telemetry-review
+node scripts/mine-telemetry.mjs extract-knowledge --days 7
 ```
 
 `summary` prints markdown by default and supports `--json`. `classify` emits
@@ -115,7 +116,11 @@ machine-readable taxonomy candidates. `extract-fixtures` and `extract-evals`
 write sanitized review candidates to the output directory; they do not modify
 the replay fixture file or run paid evals. Fixture extraction does execute hook
 replay verification, but does so with Goldband state and data roots redirected
-to a temp sandbox.
+to a temp sandbox. `extract-knowledge` writes `status: candidate` markdown
+entries under `<out-dir>/knowledge-candidates/knowledge/` by default so humans
+can review them before promotion. Passing `--knowledge-home <path>` explicitly
+writes under `<path>/knowledge/` and updates that local `index.json`. It still
+treats telemetry and workflow evidence JSONL as read-only inputs.
 
 Candidate outputs reuse `hooks/scripts/lib/hook-router/secret-patterns.js`,
 rewrite local absolute paths, anonymize run/event ids, and truncate content-like

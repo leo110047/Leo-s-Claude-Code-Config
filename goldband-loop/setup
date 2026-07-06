@@ -783,7 +783,7 @@ create_internal_workflow_docs() {
 
 # ─── Helper: create .agents/skills/goldband/ sidecar symlinks ──────────
 # Codex/Gemini/Cursor read skills from .agents/skills/. We link runtime
-# assets (bin/, browse/dist/, review/, qa/, etc.) so skill templates can
+# assets (bin/, lib/, browse/dist/, review/, qa/, etc.) so skill templates can
 # resolve paths like $SKILL_ROOT/review/design-checklist.md.
 create_agents_sidecar() {
   local repo_root="$1"
@@ -791,7 +791,7 @@ create_agents_sidecar() {
   mkdir -p "$agents_goldband"
 
   # Sidecar directories that skills reference at runtime
-  for asset in bin browse review qa; do
+  for asset in bin lib browse review qa; do
     local src="$SOURCE_GOLDBAND_DIR/$asset"
     local dst="$agents_goldband/$asset"
     if [ -d "$src" ] || [ -f "$src" ]; then
@@ -837,6 +837,9 @@ create_codex_runtime_root() {
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$codex_goldband/bin"
+  fi
+  if [ -d "$goldband_dir/lib" ]; then
+    _link_or_copy "$goldband_dir/lib" "$codex_goldband/lib"
   fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$codex_goldband/browse/dist"
@@ -889,6 +892,9 @@ create_claude_runtime_root() {
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$claude_goldband/bin"
   fi
+  if [ -d "$goldband_dir/lib" ]; then
+    _link_or_copy "$goldband_dir/lib" "$claude_goldband/lib"
+  fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$claude_goldband/browse/dist"
   fi
@@ -928,6 +934,9 @@ create_factory_runtime_root() {
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$factory_goldband/bin"
   fi
+  if [ -d "$goldband_dir/lib" ]; then
+    _link_or_copy "$goldband_dir/lib" "$factory_goldband/lib"
+  fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$factory_goldband/browse/dist"
   fi
@@ -965,6 +974,9 @@ create_opencode_runtime_root() {
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$opencode_goldband/bin"
+  fi
+  if [ -d "$goldband_dir/lib" ]; then
+    _link_or_copy "$goldband_dir/lib" "$opencode_goldband/lib"
   fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$opencode_goldband/browse/dist"

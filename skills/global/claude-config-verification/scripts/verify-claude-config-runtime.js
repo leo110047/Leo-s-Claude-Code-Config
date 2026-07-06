@@ -156,12 +156,15 @@ function checkClaudeWorkflow(homeDir, result) {
   result.claudeInstalled = true;
   result.claudeVersion = readWorkflowVersion(claudeDir);
   result.claudeChecks = [
-    'setup',
+    'SKILL.md',
     path.join('bin', 'goldband-repo-mode'),
-    path.join('careful', 'SKILL.md'),
-    path.join('freeze', 'SKILL.md'),
-    path.join('review', 'SKILL.md'),
-    path.join('qa', 'SKILL.md'),
+    path.join('bin', 'goldband-knowledge'),
+    path.join('lib', 'knowledge.ts'),
+    path.join('review', 'checklist.md'),
+    path.join('workflows', 'careful.workflow.md'),
+    path.join('workflows', 'freeze.workflow.md'),
+    path.join('workflows', 'review.workflow.md'),
+    path.join('workflows', 'qa.workflow.md'),
   ].map((relativePath) => ({
     file: relativePath,
     ok: fs.existsSync(path.join(claudeDir, relativePath)),
@@ -179,6 +182,7 @@ function checkCodexWorkflow(homeDir, result) {
 function codexRuntimeChecks(homeDir, codexDir) {
   const required = [
     path.join('bin', 'goldband-config'),
+    path.join('lib', 'knowledge.ts'),
     path.join('review', 'checklist.md'),
   ].map((relativePath) => ({
     file: relativePath,

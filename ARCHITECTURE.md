@@ -152,6 +152,43 @@ improving, or the registry iteration cap is reached. Loop runs add `iteration`,
 `signalSnapshot`, and a `loop-summary` event to the same JSONL evidence path so
 readback can reconstruct why each round continued or stopped.
 
+## Local Knowledge Layer
+
+The curated knowledge layer lives under
+`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`. It is local runtime state, not a
+repo artifact. The repo owns only schema, CLI tooling, recall adapters, MCP
+query support, and synthetic fixtures.
+
+Knowledge entries are markdown files with frontmatter, one entry per file, plus
+`knowledge/index.json`. `index.json` is the low-cost recall surface: hooks,
+workflow resolvers, and MCP can read path plus one-line summary without parsing
+every full entry. Entry files stay authoritative; the index is rebuilt by
+`goldband-knowledge reindex` or any write command.
+
+This layer does not replace existing storage:
+
+- `learnings.jsonl` remains append-only project memory for small operational
+  discoveries and visible "Prior learning applied" readback.
+- GBrain remains optional semantic memory and is only queried where the host
+  supports that resolver.
+- context-save/context-restore remains working-session continuity.
+- auto-memory stores user identity and preferences; knowledge stores verified
+  problem/solution, decision, and practice records.
+
+Recall adapters are deliberately shallow. `goldband-review` and `goldband-qa`
+use a single `Prior Knowledge` resolver that queries learnings, the curated
+index, and optional GBrain instead of stacking three near-identical sections.
+Claude `UserPromptSubmit` gets an advisory-only prompt hook that lists matching
+knowledge paths with summaries and rate-limits repeats per session. Codex does
+not currently have an equivalent prompt-time advisory adapter in this repo;
+Codex reaches the same knowledge through generated workflow instructions and
+the first-party MCP `knowledge-query` tool.
+
+Promotion is explicit. `goldband-knowledge graduate --to <skill-or-rule-path>`
+marks a knowledge entry as graduated while preserving the historical record.
+High-frequency active entries should become skills or rules so the knowledge
+layer does not become a second source of truth.
+
 ## Cross-Review Gate
 
 The cross-review gate is a session-scoped evidence gate for work that must be

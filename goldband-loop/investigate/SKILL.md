@@ -1040,6 +1040,17 @@ staleness detection: if those files are later deleted, the learning can be flagg
 **Only log genuine discoveries.** Don't log obvious things. Don't log things the user
 already knows. A good test: would this insight save time in a future session? If yes, log it.
 
+For high-value, verified material that may graduate into a skill or rule, capture
+a curated knowledge entry instead of leaving it only in append-only learnings:
+
+```bash
+~/.claude/skills/goldband/bin/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+```
+
+Use `problem-solution` for a pitfall with a known fix, `decision` for an
+architectural or workflow choice, and `practice` for a verified reusable
+method.
+
 
 
 ---

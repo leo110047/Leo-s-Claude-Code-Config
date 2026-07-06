@@ -21,19 +21,6 @@ import type { TemplateContext } from './types';
 const QUERY_SAFE_RE = /^[A-Za-z0-9 _-]+$/;
 
 export function generateLearningsSearch(ctx: TemplateContext, args?: string[]): string {
-  // Parse query= arg. Empty value falls through to no-query (principle of least surprise:
-  // a stray {{LEARNINGS_SEARCH:query=}} placeholder gets today's behavior, not a build error).
-  const queryArg = (args || [])
-    .filter(a => a.startsWith('query='))
-    .map(a => a.slice(6))
-    .filter(Boolean)[0];
-  if (queryArg && !QUERY_SAFE_RE.test(queryArg)) {
-    throw new Error(
-      `{{LEARNINGS_SEARCH:query=...}} value must match ${QUERY_SAFE_RE} (alphanumeric, space, hyphen, underscore). Got: ${JSON.stringify(queryArg)}`
-    );
-  }
-  const queryFlag = queryArg ? ` --query "${queryArg}"` : '';
-
   if (ctx.host === 'codex') {
     // Codex: simpler version, no cross-project, uses $GOLDBAND_BIN
     return `## Prior Learnings
@@ -41,7 +28,7 @@ export function generateLearningsSearch(ctx: TemplateContext, args?: string[]): 
 Search for relevant learnings from previous sessions on this project:
 
 \`\`\`bash
-$GOLDBAND_BIN/goldband-learnings-search --limit 10${queryFlag} 2>/dev/null || true
+${generateLearningsSearchBash(ctx, args)}
 \`\`\`
 
 If learnings are found, incorporate them into your analysis. When a review finding
@@ -53,16 +40,37 @@ matches a past learning, note it: "Prior learning applied: [key] (confidence N, 
 Search for relevant learnings from previous sessions:
 
 \`\`\`bash
-_CROSS_PROJ=$(${ctx.paths.binDir}/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
+${generateLearningsSearchBash(ctx, args)}
+\`\`\`
+
+${generateCrossProjectLearningsSetup(ctx)}
+
+If learnings are found, incorporate them into your analysis. When a review finding
+matches a past learning, display:
+
+**"Prior learning applied: [key] (confidence N/10, from [date])"**
+
+This makes the compounding visible. The user should see that goldband is getting
+smarter on their codebase over time.`;
+}
+
+export function generateLearningsSearchBash(ctx: TemplateContext, args?: string[]): string {
+  const queryFlag = queryFlagFromArgs(args);
+  if (ctx.host === 'codex') {
+    return `$GOLDBAND_BIN/goldband-learnings-search --limit 10${queryFlag} 2>/dev/null || true`;
+  }
+  return `_CROSS_PROJ=$(${ctx.paths.binDir}/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
 if [ "$_CROSS_PROJ" = "true" ]; then
   ${ctx.paths.binDir}/goldband-learnings-search --limit 10${queryFlag} --cross-project 2>/dev/null || true
 else
   ${ctx.paths.binDir}/goldband-learnings-search --limit 10${queryFlag} 2>/dev/null || true
-fi
-\`\`\`
+fi`;
+}
 
-If \`CROSS_PROJECT\` is \`unset\` (first time): Use AskUserQuestion:
+export function generateCrossProjectLearningsSetup(ctx: TemplateContext): string {
+  if (ctx.host === 'codex') return '';
+  return `If \`CROSS_PROJECT\` is \`unset\` (first time): Use AskUserQuestion:
 
 > goldband can search learnings from your other projects on this machine to find
 > patterns that might apply here. This stays local (no data leaves your machine).
@@ -76,15 +84,21 @@ Options:
 If A: run \`${ctx.paths.binDir}/goldband-config set cross_project_learnings true\`
 If B: run \`${ctx.paths.binDir}/goldband-config set cross_project_learnings false\`
 
-Then re-run the search with the appropriate flag.
+Then re-run the search with the appropriate flag.`;
+}
 
-If learnings are found, incorporate them into your analysis. When a review finding
-matches a past learning, display:
-
-**"Prior learning applied: [key] (confidence N/10, from [date])"**
-
-This makes the compounding visible. The user should see that goldband is getting
-smarter on their codebase over time.`;
+function queryFlagFromArgs(args?: string[]): string {
+  // Empty query= falls through to no-query for backwards compatibility.
+  const queryArg = (args || [])
+    .filter((a) => a.startsWith('query='))
+    .map((a) => a.slice(6))
+    .filter(Boolean)[0];
+  if (queryArg && !QUERY_SAFE_RE.test(queryArg)) {
+    throw new Error(
+      `{{LEARNINGS_SEARCH:query=...}} value must match ${QUERY_SAFE_RE} (alphanumeric, space, hyphen, underscore). Got: ${JSON.stringify(queryArg)}`,
+    );
+  }
+  return queryArg ? ` --query "${queryArg}"` : '';
 }
 
 export function generateLearningsLog(ctx: TemplateContext): string {
@@ -113,5 +127,16 @@ An inference you're not sure about is 4-5. A user preference they explicitly sta
 staleness detection: if those files are later deleted, the learning can be flagged.
 
 **Only log genuine discoveries.** Don't log obvious things. Don't log things the user
-already knows. A good test: would this insight save time in a future session? If yes, log it.`;
+already knows. A good test: would this insight save time in a future session? If yes, log it.
+
+For high-value, verified material that may graduate into a skill or rule, capture
+a curated knowledge entry instead of leaving it only in append-only learnings:
+
+\`\`\`bash
+${binDir}/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+\`\`\`
+
+Use \`problem-solution\` for a pitfall with a known fix, \`decision\` for an
+architectural or workflow choice, and \`practice\` for a verified reusable
+method.`;
 }

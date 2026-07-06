@@ -12,6 +12,7 @@ import {
   defaultWorkflowRunsDir,
   extractEvalCandidates,
   extractFixtureCandidates,
+  extractKnowledgeCandidates,
   readUsageTelemetry,
   sanitizeEvent,
 } from './lib/telemetry-miner/index.mjs';
@@ -214,6 +215,46 @@ assert.equal(evals.paid_eval_status, 'not-run');
 assert.ok(evals.cases.length >= 1);
 assert.ok(fs.existsSync(evals.outputPath));
 
+const knowledgeHome = path.join(tmpDir, 'knowledge-home');
+writeExistingKnowledgeIndex(knowledgeHome);
+const knowledge = extractKnowledgeCandidates({
+  ...options,
+  knowledgeHome,
+  limit: 2,
+});
+assert.equal(knowledge.count, 2);
+assert.ok(fs.existsSync(knowledge.indexPath));
+const knowledgeIndex = JSON.parse(fs.readFileSync(knowledge.indexPath, 'utf8'));
+const existingKnowledgeRow = knowledgeIndex.entries.find(
+  (entry) => entry.id === 'existing-curated-entry',
+);
+assert.equal(
+  existingKnowledgeRow.summary,
+  'Do not drop curated knowledge when mining candidates.',
+);
+for (const entry of knowledge.entries) {
+  assert.equal(entry.status, 'candidate');
+  assert.equal(entry.source, 'telemetry-miner');
+  assert.ok(fs.existsSync(entry.path));
+  const rawEntry = fs.readFileSync(entry.path, 'utf8');
+  assert.match(rawEntry, /title: "Telemetry candidate:/);
+  assert.match(rawEntry, /## 情境/);
+}
+
+const reviewKnowledgeOutDir = path.join(reviewDir, 'knowledge-default');
+const reviewKnowledge = extractKnowledgeCandidates({
+  ...options,
+  outDir: reviewKnowledgeOutDir,
+  limit: 1,
+});
+assert.equal(
+  reviewKnowledge.knowledgeRoot,
+  path.join(reviewKnowledgeOutDir, 'knowledge-candidates', 'knowledge'),
+);
+assert.ok(
+  reviewKnowledge.entries[0].path.startsWith(reviewKnowledge.knowledgeRoot),
+);
+
 assert.equal(parseArgs(['node', 'script', '--help']).command, 'help');
 assert.match(run(parseArgs(['node', 'script', '--help'])), /^Usage:/);
 
@@ -264,6 +305,19 @@ const cliEvals = runCli([
 ]);
 assert.equal(JSON.parse(cliEvals).paid_eval_status, 'not-run');
 
+const cliKnowledge = runCli([
+  'extract-knowledge',
+  '--usage-file',
+  usageFile,
+  '--workflow-runs-dir',
+  workflowRunsDir,
+  '--knowledge-home',
+  path.join(tmpDir, 'cli-knowledge-home'),
+  '--limit',
+  '2',
+]);
+assert.equal(JSON.parse(cliKnowledge).count, 2);
+
 console.log('[OK] telemetry miner behavior verified');
 
 function usageEvent(overrides) {
@@ -282,6 +336,71 @@ function writeJsonl(file, rows) {
   fs.writeFileSync(
     file,
     rows.map((row) => JSON.stringify(row)).join('\n') + '\n',
+    'utf8',
+  );
+}
+
+function writeExistingKnowledgeIndex(knowledgeHome) {
+  const knowledgeDir = path.join(knowledgeHome, 'knowledge');
+  const entriesDir = path.join(knowledgeDir, 'entries');
+  fs.mkdirSync(entriesDir, { recursive: true });
+  const entryPath = path.join(entriesDir, 'existing-curated-entry.md');
+  fs.writeFileSync(
+    entryPath,
+    `---
+id: existing-curated-entry
+title: Existing curated entry
+type: practice
+domains: [qa]
+scope: global
+project_slug: ""
+canonical_remote: ""
+status: active
+confidence: 9
+created: 2026-07-01
+updated: 2026-07-01
+source: manual
+last_verified: null
+graduated_to: ""
+links: []
+summary: Do not drop curated knowledge when mining candidates.
+---
+
+## 做法
+Keep curated rows when adding telemetry candidates.
+
+## 適用情境
+Use this when telemetry mining writes candidates near existing knowledge.
+
+## 驗證證據
+The miner rebuilds the index from entry markdown files.
+`,
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(knowledgeDir, 'index.json'),
+    `${JSON.stringify(
+      {
+        schema_version: 1,
+        generated_at: '2026-07-06T00:00:00.000Z',
+        entries: [
+          {
+            id: 'existing-curated-entry',
+            title: 'Existing curated entry',
+            type: 'practice',
+            domains: ['qa'],
+            scope: 'global',
+            status: 'active',
+            confidence: 9,
+            updated: '2026-07-01',
+            summary: 'STALE index row should not be preserved.',
+            path: entryPath,
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
     'utf8',
   );
 }

@@ -83,6 +83,18 @@ checkout 執行同一組 POSIX 指令。
 ./install.sh uninstall         # 移除 installer-managed assets
 ```
 
+本機知識庫：
+
+```bash
+goldband-knowledge search --domain qa --query "fixture regression"
+goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains qa --summary "One-line recall summary" --body-file entry.md
+goldband-knowledge graduate --id "short-kebab-slug" --to "skills/global/example/SKILL.md"
+```
+
+`knowledge/` 不 commit 進 repo。它和 auto-memory 分工不同：auto-memory 記人和偏好；
+knowledge 記「這類問題怎麼解、哪些做法驗證過」。高頻條目應畢業成
+skill/rule，避免知識庫變成第二套真理來源。
+
 Plugin 移除：
 
 ```bash
@@ -108,6 +120,8 @@ git pull --ff-only
 - Codex installer assets：`AGENTS.md`、config、requirements、rules、hooks、
   profiles、permission profiles、custom agents、portable skills。
 - Goldband Loop runtime：Claude/Codex 的 `goldband-*` workflow entrypoints。
+- Local knowledge layer：`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`，
+  儲存已整理、可召回、未來可能畢業成 skill/rule 的 knowledge 條目。
 - Optional assets：global git style gate、MCP templates、container-first
   sandbox。
 

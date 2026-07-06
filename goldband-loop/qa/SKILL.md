@@ -805,7 +805,47 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 ---
 
+## Prior Knowledge
 
+Before starting, check one consolidated recall surface. This combines project
+learnings, curated local knowledge, and optional GBrain context when this host
+supports it. Read only the listed paths that look relevant.
+
+```bash
+echo "LEARNINGS:"
+_CROSS_PROJ=$(~/.claude/skills/goldband/bin/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
+echo "CROSS_PROJECT: $_CROSS_PROJ"
+if [ "$_CROSS_PROJ" = "true" ]; then
+  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "qa testing bug regression flake fixture" --cross-project 2>/dev/null || true
+else
+  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "qa testing bug regression flake fixture" 2>/dev/null || true
+fi
+echo ""
+echo "KNOWLEDGE:"
+~/.claude/skills/goldband/bin/goldband-knowledge search --domain "qa" --query "qa testing bug regression flake fixture" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"
+```
+
+If `CROSS_PROJECT` is `unset` (first time): Use AskUserQuestion:
+
+> goldband can search learnings from your other projects on this machine to find
+> patterns that might apply here. This stays local (no data leaves your machine).
+> Recommended for solo developers. Skip if you work on multiple client codebases
+> where cross-contamination would be a concern.
+
+Options:
+- A) Enable cross-project learnings (recommended)
+- B) Keep learnings project-scoped only
+
+If A: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings true`
+If B: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings false`
+
+Then re-run the search with the appropriate flag.
+
+If the curated knowledge search prints `KNOWLEDGE: no matching entries`, say
+"知識庫無相關條目" once and continue. If entries are listed, cite the path and
+one-line summary before deciding whether to read the full entry. When a finding
+or fix uses a prior learning, keep the existing visible note:
+`Prior learning applied: [key] (confidence N/10, from [date])`.
 
 ## Programmatic runtime entrypoint
 
@@ -1076,44 +1116,6 @@ mkdir -p .goldband/qa-reports/screenshots
 ```
 
 ---
-
-## Prior Learnings
-
-Search for relevant learnings from previous sessions:
-
-```bash
-_CROSS_PROJ=$(~/.claude/skills/goldband/bin/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
-echo "CROSS_PROJECT: $_CROSS_PROJ"
-if [ "$_CROSS_PROJ" = "true" ]; then
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "qa testing bug regression flake fixture" --cross-project 2>/dev/null || true
-else
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "qa testing bug regression flake fixture" 2>/dev/null || true
-fi
-```
-
-If `CROSS_PROJECT` is `unset` (first time): Use AskUserQuestion:
-
-> goldband can search learnings from your other projects on this machine to find
-> patterns that might apply here. This stays local (no data leaves your machine).
-> Recommended for solo developers. Skip if you work on multiple client codebases
-> where cross-contamination would be a concern.
-
-Options:
-- A) Enable cross-project learnings (recommended)
-- B) Keep learnings project-scoped only
-
-If A: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings true`
-If B: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings false`
-
-Then re-run the search with the appropriate flag.
-
-If learnings are found, incorporate them into your analysis. When a review finding
-matches a past learning, display:
-
-**"Prior learning applied: [key] (confidence N/10, from [date])"**
-
-This makes the compounding visible. The user should see that goldband is getting
-smarter on their codebase over time.
 
 ## Test Plan Context
 
@@ -1443,9 +1445,11 @@ Sort all discovered issues by severity, then decide which to fix based on the se
 
 Mark issues that cannot be fixed from source code (e.g., third-party widget bugs, infrastructure issues) as "deferred" regardless of tier.
 
-### Refresh learnings for the component/page where the bug lives
+### Refresh prior knowledge for the component/page where the bug lives
 
-The top-of-skill learnings pull was keyed to "qa testing" broadly. Before the fix loop, re-pull learnings keyed to the component or page where the bug you're about to fix lives so prior fixes for the same component-shape surface.
+The top-of-skill knowledge pull was keyed to "qa testing" broadly. Before the
+fix loop, re-pull prior knowledge keyed to the component or page where the bug
+you're about to fix lives so prior fixes for the same component-shape surface.
 
 Pick ONE keyword that names the buggy component or page. The keyword should be a noun: the failing component name, the page route base, or the feature noun. The keyword MUST be alphanumeric or hyphen only — no quotes, slashes, dots, colons, or whitespace. If your candidate has any of those, simplify to just the alphanumeric stem.
 
@@ -1453,9 +1457,12 @@ Worked examples (qa-specific): good keywords are `checkout-button`, `signup-form
 
 ```bash
 ~/.claude/skills/goldband/bin/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
+~/.claude/skills/goldband/bin/goldband-knowledge search --domain qa --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
 
-If any learnings come back, name which one applies to the fix you're about to make in one sentence. If none come back, continue without reference — the absence is itself useful information.
+If any learnings or curated knowledge entries come back, name which one applies
+to the fix you're about to make in one sentence. If none come back, continue
+without reference — the absence is itself useful information.
 
 ---
 
@@ -1654,6 +1661,17 @@ staleness detection: if those files are later deleted, the learning can be flagg
 
 **Only log genuine discoveries.** Don't log obvious things. Don't log things the user
 already knows. A good test: would this insight save time in a future session? If yes, log it.
+
+For high-value, verified material that may graduate into a skill or rule, capture
+a curated knowledge entry instead of leaving it only in append-only learnings:
+
+```bash
+~/.claude/skills/goldband/bin/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+```
+
+Use `problem-solution` for a pitfall with a known fix, `decision` for an
+architectural or workflow choice, and `practice` for a verified reusable
+method.
 
 
 

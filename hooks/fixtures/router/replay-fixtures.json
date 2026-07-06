@@ -1,5 +1,33 @@
 [
   {
+    "id": "userprompt-knowledge-advisory",
+    "script": "skill-activation-suggestions",
+    "coverage": {
+      "category": "prompt-advisory",
+      "policy": "knowledge-advisory",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "knowledge-base-implementation"
+    },
+    "env": {
+      "GOLDBAND_HOME": "__FIXTURE_DIR__/knowledge-home",
+      "CLAUDE_PLUGIN_DATA": "__RUN_TMP__/plugin-data"
+    },
+    "input": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "knowledge-advisory-fixture-__ITERATION__",
+      "prompt": "Run QA on the browser staging flow and check fixture regressions."
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stdoutIncludes": [
+        "知識庫有 1 條相關記錄",
+        "qa-fixture-replay.md"
+      ]
+    }
+  },
+  {
     "id": "pretool-allow-normal-edit",
     "coverage": {
       "category": "router-smoke",

@@ -70,6 +70,12 @@ function matchesExpected(stderr, expected) {
   return list.every((fragment) => stderr.includes(fragment));
 }
 
+function stdoutMatchesExpected(stdout, expected) {
+  if (!expected) return true;
+  const list = Array.isArray(expected) ? expected : [expected];
+  return list.every((fragment) => stdout.includes(fragment));
+}
+
 function loadMetrics(filePath) {
   if (!fs.existsSync(filePath)) return [];
   return fs
@@ -124,9 +130,11 @@ function formatRatio(numerator, denominator) {
 
 function buildTempPaths() {
   const runId = `${Date.now()}-${process.pid}`;
-  const makePath = (name, ext) =>
-    path.join(os.tmpdir(), `goldband-router-${name}-${runId}.${ext}`);
+  const runDir = path.join(os.tmpdir(), `goldband-router-${runId}`);
+  fs.mkdirSync(runDir, { recursive: true });
+  const makePath = (name, ext) => path.join(runDir, `${name}.${ext}`);
   return {
+    runDir,
     metricsFile: makePath('metrics', 'jsonl'),
     contextStateFile: makePath('context', 'json'),
     debounceFile: makePath('debounce', 'json'),
@@ -137,6 +145,7 @@ function buildTempPaths() {
 
 function tempFileList(paths) {
   return [
+    paths.runDir,
     paths.metricsFile,
     paths.contextStateFile,
     paths.debounceFile,
@@ -145,26 +154,66 @@ function tempFileList(paths) {
   ];
 }
 
-function invokeFixture(fixture, iteration, routerScript, paths) {
-  const stdinPayload = JSON.stringify(fixture.input || {});
-  const startNs = process.hrtime.bigint();
-  prepareModeStateFixture(fixture, paths.modeStateFile);
+function scriptForFixture(fixture, routerScript) {
+  if (fixture.script === 'skill-activation-suggestions') {
+    return path.join(
+      __dirname,
+      '..',
+      'hooks',
+      'skill-activation-suggestions.js',
+    );
+  }
+  return routerScript;
+}
 
-  const result = spawnSync(process.execPath, [routerScript], {
+function buildFixtureEnv(fixture, paths, fixtureDir) {
+  const env = {
+    ...process.env,
+    HOOK_ROUTER_METRICS_ENABLED: '1',
+    HOOK_ROUTER_METRICS_FILE: paths.metricsFile,
+    HOOK_ROUTER_CONTEXT_STATE_FILE: paths.contextStateFile,
+    HOOK_ROUTER_DEBOUNCE_FILE: paths.debounceFile,
+    HOOK_ROUTER_MODE_STATE_FILE: paths.modeStateFile,
+    GOLDBAND_USAGE_FILE: paths.usageFile,
+    ...(fixture.env || {}),
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') {
+      env[key] = value
+        .replaceAll('__FIXTURE_DIR__', fixtureDir)
+        .replaceAll('__RUN_TMP__', paths.runDir);
+    }
+  }
+  return env;
+}
+
+function invokeScript(scriptPath, stdinPayload, env) {
+  return spawnSync(process.execPath, [scriptPath], {
     input: stdinPayload,
     encoding: 'utf8',
     maxBuffer: 2 * 1024 * 1024,
-    env: {
-      ...process.env,
-      HOOK_ROUTER_METRICS_ENABLED: '1',
-      HOOK_ROUTER_METRICS_FILE: paths.metricsFile,
-      HOOK_ROUTER_CONTEXT_STATE_FILE: paths.contextStateFile,
-      HOOK_ROUTER_DEBOUNCE_FILE: paths.debounceFile,
-      HOOK_ROUTER_MODE_STATE_FILE: paths.modeStateFile,
-      GOLDBAND_USAGE_FILE: paths.usageFile,
-      ...(fixture.env || {}),
-    },
+    env,
   });
+}
+
+function invokeFixture({
+  fixture,
+  iteration,
+  routerScript,
+  paths,
+  fixtureDir,
+}) {
+  const stdinPayload = JSON.stringify(fixture.input || {}).replaceAll(
+    '__ITERATION__',
+    String(iteration),
+  );
+  const startNs = process.hrtime.bigint();
+  prepareModeStateFixture(fixture, paths.modeStateFile);
+  const result = invokeScript(
+    scriptForFixture(fixture, routerScript),
+    stdinPayload,
+    buildFixtureEnv(fixture, paths, fixtureDir),
+  );
 
   return buildInvocationResult(fixture, iteration, result, startNs);
 }
@@ -181,7 +230,8 @@ function buildInvocationResult(fixture, iteration, result, startNs) {
   const pass =
     exitCode === expectedExitCode &&
     decision === expectedDecision &&
-    matchesExpected(result.stderr || '', expected.stderrIncludes);
+    matchesExpected(result.stderr || '', expected.stderrIncludes) &&
+    stdoutMatchesExpected(result.stdout || '', expected.stdoutIncludes);
 
   return {
     id: fixture.id,
@@ -199,10 +249,11 @@ function buildInvocationResult(fixture, iteration, result, startNs) {
 
 function replayFixtures(fixtures, options, routerScript, paths) {
   const invocationResults = [];
+  const fixtureDir = path.dirname(options.fixtures);
   for (let iteration = 1; iteration <= options.iterations; iteration += 1) {
     for (const fixture of fixtures) {
       invocationResults.push(
-        invokeFixture(fixture, iteration, routerScript, paths),
+        invokeFixture({ fixture, iteration, routerScript, paths, fixtureDir }),
       );
     }
   }
@@ -311,7 +362,12 @@ function printFailure(fail) {
 function cleanupTempFiles(files) {
   for (const file of files) {
     try {
-      if (fs.existsSync(file)) fs.unlinkSync(file);
+      if (!fs.existsSync(file)) continue;
+      if (fs.statSync(file).isDirectory()) {
+        fs.rmSync(file, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(file);
+      }
     } catch {
       // Ignore temp cleanup failures.
     }

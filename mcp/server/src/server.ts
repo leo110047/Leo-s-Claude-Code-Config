@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { runHealthCheck } from './health-check.js';
+import { runKnowledgeQuery } from './knowledge-query.js';
 import { runPolicyCheck } from './policy-check.js';
 import { runTelemetryQuery } from './telemetry-query.js';
 
@@ -11,6 +12,7 @@ export function createGoldbandMcpServer() {
   });
   registerPolicyTool(server);
   registerTelemetryTool(server);
+  registerKnowledgeTool(server);
   registerHealthTool(server);
   return server;
 }
@@ -52,6 +54,27 @@ function registerTelemetryTool(server: McpServer) {
       },
     },
     async (input) => runTelemetryQuery(input),
+  );
+}
+
+function registerKnowledgeTool(server: McpServer) {
+  server.registerTool(
+    'knowledge-query',
+    {
+      title: 'Goldband knowledge query',
+      description:
+        'Reads the local curated goldband knowledge index and returns matching entry paths and summaries.',
+      inputSchema: {
+        domain: z.string().optional(),
+        type: z.enum(['problem-solution', 'decision', 'practice']).optional(),
+        keyword: z.string().optional(),
+        status: z
+          .enum(['active', 'candidate', 'graduated', 'retired', 'all'])
+          .default('active'),
+        limit: z.number().int().positive().max(50).default(10),
+      },
+    },
+    async (input) => runKnowledgeQuery(input),
   );
 }
 
