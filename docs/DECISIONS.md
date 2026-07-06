@@ -4,7 +4,8 @@
 
 Decision: distribute goldband's core Claude Code surface through a local
 `goldband@goldband` plugin, while keeping `install.sh` as the developer, Codex,
-and Goldband Loop workflow-runtime path.
+and Goldband Loop workflow-runtime path. Codex plugin distribution is possible
+for a Codex-specific subset, but it is not the current full-setup path.
 
 Why:
 
@@ -14,8 +15,16 @@ Why:
 - Goldband Loop is a heavier runtime with Playwright/browser/iOS dependencies;
   it remains installer-managed and is explicitly out of plugin scope.
 - Codex has a plugin ecosystem, but this Claude plugin packages Claude Code
-  assets. Codex config, rules, hooks, requirements, and workflow runtime stay on
-  `install.sh` until a Codex-specific distribution is designed.
+  assets. A Codex plugin could package a portable subset such as skills, MCP
+  config, or app/workflow integrations.
+- Goldband's Codex full setup also manages host-level assets:
+  `codex/config.toml`, `codex/requirements.toml`, `codex/rules/`,
+  `codex/hooks.json`, `codex/hooks/`, `codex/profiles/`,
+  `codex/permission-profiles/`, `codex/agents/`, and Goldband Loop runtime
+  assets. Those remain installer-managed until a Codex-specific distribution is
+  designed and verified.
+- Do not present Codex plugin support as Claude/Codex plugin parity or as a
+  replacement for `install.sh codex-full`.
 
 Implementation contract:
 

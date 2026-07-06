@@ -12,7 +12,14 @@ Date: 2026-07-06
 | Claude plugin validation | `claude plugin validate --help` documents validation and `--strict`. | Local validation is available before install. |
 | Claude plugin assets | Official Claude Code plugin reference documents plugin directories, manifests, commands, skills, hooks, MCP servers, and marketplaces: https://code.claude.com/docs/en/plugins-reference | Claude plugin can carry the core Claude surface used here: commands, portable skills, generated rules skill, and hooks. |
 | Claude marketplace install | Official marketplace docs document local marketplace files and `claude plugin marketplace add ./`: https://code.claude.com/docs/en/plugin-marketplaces | The repo exposes a local marketplace at `.claude-plugin/marketplace.json`. |
-| Codex plugin ecosystem | Fresh Codex manual fetch succeeded at `/var/folders/xn/y420c5c516d3p0wx0gvtsyk40000gn/T/openai-docs-cache/codex-manual.md`; the manual describes Codex plugins as bundles of Codex skills, apps, and MCP servers. | Codex has plugins, but this implementation does not claim Claude/Codex plugin parity. Codex install remains `install.sh`. |
+| Codex plugin ecosystem | Fresh Codex manual fetch succeeded at `/var/folders/xn/y420c5c516d3p0wx0gvtsyk40000gn/T/openai-docs-cache/codex-manual.md`; the manual describes Codex plugins as bundles of Codex skills, apps, and MCP servers, with local marketplace support. | Codex has plugins, but this implementation does not claim Claude/Codex plugin parity. Codex full setup remains `install.sh`. |
+
+Codex note: the decision to keep Codex on `install.sh` is not based on Codex
+lacking plugins. It is a distribution-scope decision. A future Codex-specific
+plugin can be designed for the portable subset that Codex plugins are intended
+to carry, such as skills, MCP configuration, app integrations, or shareable
+workflow helpers. It must not be documented as replacing `install.sh codex-full`
+until the remaining host-level Codex contract is supported and verified.
 
 ## Asset Scope
 
@@ -30,6 +37,23 @@ Excluded from the plugin:
 - Playwright, browser, iOS, and workflow runtime dependencies
 - Codex config/rules/hooks/requirements
 - public marketplace submission
+
+Codex full setup remains installer-managed and currently includes:
+
+- `codex/config.toml`
+- `codex/requirements.toml`
+- `codex/rules/`
+- `codex/hooks.json`
+- `codex/hooks/`
+- `codex/profiles/`
+- `codex/permission-profiles/`
+- `codex/agents/`
+- Goldband Loop runtime assets installed for Codex
+
+Those assets are intentionally outside this Claude plugin package. If a Codex
+plugin is added later, verify and document which subset it owns and keep
+`install.sh codex-full` as the canonical full setup until parity is proven by a
+clean-home install gate.
 
 Generated artifacts:
 
@@ -183,7 +207,10 @@ Not done in this implementation:
 
 - Publish to a public Claude Code marketplace.
 - Add signed release tags or hosted plugin zip artifacts.
-- Define a Codex-specific plugin distribution for goldband's Codex surface.
+- Define a Codex-specific plugin distribution for the portable subset of
+  goldband's Codex surface.
+- Prove that a Codex plugin can replace the host-level Codex setup currently
+  owned by `install.sh codex-full`.
 - Automate remote marketplace update/upgrade flow.
 
 Before public publishing:

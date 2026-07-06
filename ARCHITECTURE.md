@@ -14,9 +14,12 @@ Codex. It has two first-party layers:
 
 The Claude Code distribution surface is the `goldband@goldband` plugin for core
 commands, portable skills, rules-as-skill packaging, and hooks. The installer
-remains the developer/Codex/workflow-runtime path. The user-facing workflow
-surface is `goldband-*`. The installer installs Goldband Loop directly and
-verifies the result against a machine-readable inventory.
+remains the developer/Codex/workflow-runtime path. This is a scope boundary, not
+a claim that Codex lacks plugins: Codex plugins can distribute Codex workflows,
+but goldband's Codex full setup currently owns host-level configuration that is
+still installer-managed. The user-facing workflow surface is `goldband-*`. The
+installer installs Goldband Loop directly and verifies the result against a
+machine-readable inventory.
 
 ## Responsibility Boundary
 
@@ -84,6 +87,19 @@ The plugin deliberately excludes `goldband-loop/`, Playwright/browser/iOS
 tooling, and public marketplace publishing. Codex has its own plugin ecosystem,
 but goldband's Codex config/rules/hooks still use `install.sh` because this
 plugin packages Claude Code assets.
+
+Codex distribution is intentionally not symmetric yet. A future Codex-specific
+plugin could package the portable Codex-facing subset, such as skills, MCP
+configuration, or app/workflow integrations. It must not be described as a
+replacement for `install.sh codex-full` until it can install and verify the
+full Codex contract. That contract currently includes `codex/config.toml`,
+`codex/requirements.toml`, `codex/rules/`, `codex/hooks.json`, `codex/hooks/`,
+`codex/profiles/`, `codex/permission-profiles/`, `codex/agents/`, and the
+Goldband Loop runtime assets installed under the Codex skill root.
+
+Until that contract is redesigned and verified, `install.sh` is the canonical
+Codex full-setup path. Do not claim Claude/Codex plugin parity in README,
+installer status output, or verification reports.
 
 goldband installs Goldband Loop through [shell/install/workflow.sh](shell/install/workflow.sh).
 That installer is responsible for:
