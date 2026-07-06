@@ -95,7 +95,8 @@ function sanitizeString(value, key) {
     )
     .replace(/\/private\/var\/folders\/[^\s"',)]*/g, '/tmp/sanitized')
     .replace(/\/private\/tmp\/[^\s"',)]*/g, '/tmp/sanitized')
-    .replace(/\/var\/folders\/[^\s"',)]*/g, '/tmp/sanitized');
+    .replace(/\/var\/folders\/[^\s"',)]*/g, '/tmp/sanitized')
+    .replace(/\/tmp\/goldband-[^\s"',)]*/g, '/tmp/sanitized');
 
   if (/content|new_string|old_string|prompt|commandPreview/i.test(key || '')) {
     output = output.slice(0, 240);
