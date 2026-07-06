@@ -15,7 +15,7 @@ jobs:
           echo "=== Validating JSON files ==="
           errors=0
 
-          for f in hooks/hooks.json skills/global/skill-rules.json .claude-plugin/plugin.json .claude-plugin/marketplace.json plugin-assets/claude-code-plugin/.claude-plugin/plugin.json docs/reports/plugin-expected-assets.json; do
+          for f in hooks/hooks.json skills/global/skill-rules.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json .agents/plugins/marketplace.json plugin-assets/claude-code-plugin/.claude-plugin/plugin.json plugin-assets/codex-plugin/.codex-plugin/plugin.json plugin-assets/codex-plugin/.mcp.json app-adapters/claude-desktop/goldband-local-extension/manifest.json app-adapters/claude-remote/goldband-connector.template.json docs/reports/plugin-expected-assets.json docs/reports/app-support-expected-assets.json; do
             if [ -f "$f" ]; then
               if python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
                 echo "  [OK] $f"
@@ -53,6 +53,9 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
       - name: Check coding style gate
         run: node scripts/check-code-style.mjs
 
@@ -60,6 +63,11 @@ jobs:
         run: |
           node scripts/sync-plugin-assets.mjs --check
           node scripts/check-plugin-distribution.mjs --skip-cli
+
+      - name: Check app support artifacts and adapters
+        run: |
+          node scripts/sync-app-support-assets.mjs --check
+          npm run test:app-support
 
       - name: Test plugin distribution with Claude Code CLI
         run: npm run test:plugin-distribution

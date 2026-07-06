@@ -13,13 +13,15 @@ Codex. It has two first-party layers:
 - optional local sandbox execution, owned by `sandbox/`
 
 The Claude Code distribution surface is the `goldband@goldband` plugin for core
-commands, portable skills, rules-as-skill packaging, and hooks. The installer
-remains the developer/Codex/workflow-runtime path. This is a scope boundary, not
-a claim that Codex lacks plugins: Codex plugins can distribute Codex workflows,
-but goldband's Codex full setup currently owns host-level configuration that is
-still installer-managed. The user-facing workflow surface is `goldband-*`. The
-installer installs Goldband Loop directly and verifies the result against a
-machine-readable inventory.
+commands, portable skills, rules-as-skill packaging, and hooks. Codex has a
+separate portable plugin package under `plugin-assets/codex-plugin/`, exposed by
+the repo marketplace at `.agents/plugins/marketplace.json`. The installer
+remains the developer/full-Codex/workflow-runtime path because `codex-full`
+owns host-level configuration that the portable plugin does not replace. The
+Claude app surface uses separate app adapters: a Claude Desktop local MCP
+extension and a remote MCP connector template. The user-facing workflow surface
+is `goldband-*`. The installer installs Goldband Loop directly and verifies the
+result against a machine-readable inventory.
 
 ## Responsibility Boundary
 
@@ -43,6 +45,15 @@ machine-readable inventory.
   - `docs/reports/plugin-expected-assets.json`
   - `scripts/sync-plugin-assets.mjs`
   - `scripts/check-plugin-distribution.mjs`
+- Codex plugin and app adapter distribution:
+  - `.codex-plugin/plugin.json`
+  - `.agents/plugins/marketplace.json`
+  - `plugin-assets/codex-plugin/`
+  - `app-adapters/claude-desktop/`
+  - `app-adapters/claude-remote/`
+  - `docs/reports/app-support-expected-assets.json`
+  - `scripts/sync-app-support-assets.mjs`
+  - `scripts/check-app-support.mjs`
 - first-party MCP surface:
   - `mcp/server/`
   - `mcp/first-party-servers.json`
@@ -84,22 +95,35 @@ updates `docs/reports/plugin-expected-assets.json`. The drift gate is
 `node scripts/check-plugin-distribution.mjs`.
 
 The plugin deliberately excludes `goldband-loop/`, Playwright/browser/iOS
-tooling, and public marketplace publishing. Codex has its own plugin ecosystem,
-but goldband's Codex config/rules/hooks still use `install.sh` because this
-plugin packages Claude Code assets.
+tooling, Codex config/rules/hooks/requirements, and public marketplace
+publishing.
 
-Codex distribution is intentionally not symmetric yet. A future Codex-specific
-plugin could package the portable Codex-facing subset, such as skills, MCP
-configuration, or app/workflow integrations. It must not be described as a
-replacement for `install.sh codex-full` until it can install and verify the
-full Codex contract. That contract currently includes `codex/config.toml`,
+### Codex Plugin Contract
+
+The Codex plugin is generated from shared portable sources by
+`scripts/sync-app-support-assets.mjs`. It packages `skills/global/` and an
+opt-in MCP wrapper that can launch the first-party `goldband-mcp` server from a
+local checkout. The repo marketplace at `.agents/plugins/marketplace.json`
+exposes this package to Codex as a portable subset.
+
+The Codex plugin must not be described as a replacement for
+`install.sh codex-full`. The full Codex contract includes `codex/config.toml`,
 `codex/requirements.toml`, `codex/rules/`, `codex/hooks.json`, `codex/hooks/`,
 `codex/profiles/`, `codex/permission-profiles/`, `codex/agents/`, and the
 Goldband Loop runtime assets installed under the Codex skill root.
 
 Until that contract is redesigned and verified, `install.sh` is the canonical
-Codex full-setup path. Do not claim Claude/Codex plugin parity in README,
+Codex full-setup path. Do not claim Claude/Codex plugin symmetry in README,
 installer status output, or verification reports.
+
+### Claude App Adapter Contract
+
+Claude Desktop and Claude web/mobile support are separate from Claude Code. The
+Desktop path packages a local MCP extension under
+`app-adapters/claude-desktop/`; the remote path provides a connector
+registration template under `app-adapters/claude-remote/`. These adapters expose
+the portable MCP/tooling subset and do not install Claude Code hooks,
+permissions, statusline settings, or `~/.claude/settings.json` behavior.
 
 goldband installs Goldband Loop through [shell/install/workflow.sh](shell/install/workflow.sh).
 That installer is responsible for:
@@ -151,6 +175,43 @@ their target predicate matches, the same blocker repeats, the signal stops
 improving, or the registry iteration cap is reached. Loop runs add `iteration`,
 `signalSnapshot`, and a `loop-summary` event to the same JSONL evidence path so
 readback can reconstruct why each round continued or stopped.
+
+## Local Knowledge Layer
+
+The curated knowledge layer lives under
+`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`. It is local runtime state, not a
+repo artifact. The repo owns only schema, CLI tooling, recall adapters, MCP
+query support, and synthetic fixtures.
+
+Knowledge entries are markdown files with frontmatter, one entry per file, plus
+`knowledge/index.json`. `index.json` is the low-cost recall surface: hooks,
+workflow resolvers, and MCP can read path plus one-line summary without parsing
+every full entry. Entry files stay authoritative; the index is rebuilt by
+`goldband-knowledge reindex` or any write command.
+
+This layer does not replace existing storage:
+
+- `learnings.jsonl` remains append-only project memory for small operational
+  discoveries and visible "Prior learning applied" readback.
+- GBrain remains optional semantic memory and is only queried where the host
+  supports that resolver.
+- context-save/context-restore remains working-session continuity.
+- auto-memory stores user identity and preferences; knowledge stores verified
+  problem/solution, decision, and practice records.
+
+Recall adapters are deliberately shallow. `goldband-review` and `goldband-qa`
+use a single `Prior Knowledge` resolver that queries learnings, the curated
+index, and optional GBrain instead of stacking three near-identical sections.
+Claude `UserPromptSubmit` gets an advisory-only prompt hook that lists matching
+knowledge paths with summaries and rate-limits repeats per session. Codex does
+not currently have an equivalent prompt-time advisory adapter in this repo;
+Codex reaches the same knowledge through generated workflow instructions and
+the first-party MCP `knowledge-query` tool.
+
+Promotion is explicit. `goldband-knowledge graduate --to <skill-or-rule-path>`
+marks a knowledge entry as graduated while preserving the historical record.
+High-frequency active entries should become skills or rules so the knowledge
+layer does not become a second source of truth.
 
 ## Cross-Review Gate
 

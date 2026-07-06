@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "scripts/sync-app-support-assets.mjs",
+  "codex": {
+    "pluginRoot": "plugin-assets/codex-plugin",
+    "rootManifest": ".codex-plugin/plugin.json",
+    "manifest": "plugin-assets/codex-plugin/.codex-plugin/plugin.json",
+    "marketplace": ".agents/plugins/marketplace.json",
+    "skills": [
+      "careful-mode",
+      "ci-cd-integration",
+      "claude-config-verification",
+      "decision-log",
+      "evidence-based-coding",
+      "file-search",
+      "freeze-mode",
+      "frontend-design",
+      "implementation-contracts",
+      "performance-optimization",
+      "planning-workflow",
+      "prompt-hygiene",
+      "security-checklist",
+      "skill-developer",
+      "subagent-development",
+      "systematic-debugging",
+      "testing-strategy"
+    ],
+    "mcpConfig": "plugin-assets/codex-plugin/.mcp.json",
+    "mcpWrapper": "plugin-assets/codex-plugin/mcp/goldband-mcp-wrapper.mjs",
+    "fullSetupStillInstaller": true
+  },
+  "claudeApp": {
+    "desktopExtensionRoot": "app-adapters/claude-desktop/goldband-local-extension",
+    "desktopManifest": "app-adapters/claude-desktop/goldband-local-extension/manifest.json",
+    "desktopPackage": "app-adapters/claude-desktop/dist/goldband-local-extension.mcpb",
+    "remoteConnectorTemplate": "app-adapters/claude-remote/goldband-connector.template.json",
+    "packageVersion": "0.1.0"
+  },
+  "outOfScope": [
+    "Claude Code hooks/settings as Claude app support",
+    "Goldband Loop full runtime inside app/plugin packages",
+    "Codex plugin as a replacement for install.sh codex-full"
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "manifest_version": "0.3",
+  "name": "goldband-local-extension",
+  "display_name": "Goldband Local MCP",
+  "version": "0.1.0",
+  "description": "Claude Desktop extension for the local goldband first-party MCP server.",
+  "long_description": "Connects Claude Desktop to a local goldband checkout through the first-party read-only goldband MCP server. This is a Claude app adapter and does not install Claude Code hooks or settings.",
+  "author": {
+    "name": "Leo",
+    "url": "https://github.com/leo110047"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leo110047/goldband.git"
+  },
+  "homepage": "https://github.com/leo110047/goldband",
+  "documentation": "https://github.com/leo110047/goldband/blob/main/mcp/README.md",
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "GOLDBAND_REPO_DIR": "${user_config.goldband_repo_dir}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "goldband_policy_check",
+      "description": "Dry-run goldband policy checks without executing commands."
+    },
+    {
+      "name": "goldband_telemetry_query",
+      "description": "Read local goldband telemetry summaries."
+    },
+    {
+      "name": "knowledge-query",
+      "description": "Query the local goldband knowledge index."
+    },
+    {
+      "name": "goldband_health_check",
+      "description": "Run fixed read-only goldband health checks."
+    }
+  ],
+  "keywords": [
+    "goldband",
+    "mcp",
+    "claude-desktop",
+    "local"
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "user_config": {
+    "goldband_repo_dir": {
+      "type": "directory",
+      "title": "Goldband checkout",
+      "description": "Select the local goldband repository that contains mcp/server/dist/index.js.",
+      "required": true,
+      "default": "${HOME}/goldband"
+    }
+  }
+}

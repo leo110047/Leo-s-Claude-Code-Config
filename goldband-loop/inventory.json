@@ -89,6 +89,7 @@
     "goldband-ios-qa-daemon",
     "goldband-ios-qa-mint",
     "goldband-jsonl-merge",
+    "goldband-knowledge",
     "goldband-learnings-log",
     "goldband-learnings-search",
     "goldband-model-benchmark",

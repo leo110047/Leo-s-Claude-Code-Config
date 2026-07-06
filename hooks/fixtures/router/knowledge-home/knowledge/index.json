@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-06T00:00:00.000Z",
+  "entries": [
+    {
+      "id": "qa-fixture-replay",
+      "title": "QA fixture replay before staging",
+      "type": "practice",
+      "domains": ["qa", "browser"],
+      "scope": "global",
+      "project_slug": "",
+      "canonical_remote": "",
+      "status": "active",
+      "confidence": 8,
+      "updated": "2026-07-06",
+      "summary": "Use synthetic browser fixtures before staging QA.",
+      "path": "/tmp/sanitized/knowledge/entries/qa-fixture-replay.md"
+    },
+    {
+      "id": "qa-fixture-candidate",
+      "title": "Candidate fixture replay before staging",
+      "type": "practice",
+      "domains": ["qa", "browser"],
+      "scope": "global",
+      "project_slug": "",
+      "canonical_remote": "",
+      "status": "candidate",
+      "confidence": 4,
+      "updated": "2026-07-06",
+      "summary": "Candidate telemetry fixture should not be prompt-advised.",
+      "path": "/tmp/sanitized/knowledge/entries/qa-fixture-candidate.md"
+    },
+    {
+      "id": "qa-fixture-graduated",
+      "title": "Graduated fixture replay before staging",
+      "type": "practice",
+      "domains": ["qa", "browser"],
+      "scope": "global",
+      "project_slug": "",
+      "canonical_remote": "",
+      "status": "graduated",
+      "confidence": 9,
+      "updated": "2026-07-06",
+      "summary": "Graduated fixture guidance should live in its promoted source.",
+      "path": "/tmp/sanitized/knowledge/entries/qa-fixture-graduated.md"
+    }
+  ]
+}

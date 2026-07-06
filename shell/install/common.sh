@@ -79,7 +79,8 @@ repo_path_installed_from() {
     local dest="$2"
 
     repo_link_points_to "$dest" "$src" && return 0
-    [ -f "$src" ] && [ -f "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null
+    [ -f "$src" ] && [ -f "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null && return 0
+    [ -d "$src" ] && [ -d "$dest" ] && diff -qr "$src" "$dest" >/dev/null 2>&1
 }
 
 create_windows_directory_junction() {

@@ -23,6 +23,7 @@ function readState(sessionId) {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
       lastBaselineVersion: null,
+      lastKnowledgeAdvisoryKey: null,
       filePath,
     };
   }
@@ -36,11 +37,16 @@ function readState(sessionId) {
       typeof parsed.lastBaselineVersion === 'string'
         ? parsed.lastBaselineVersion
         : null;
+    const lastKnowledgeAdvisoryKey =
+      typeof parsed.lastKnowledgeAdvisoryKey === 'string'
+        ? parsed.lastKnowledgeAdvisoryKey
+        : null;
 
     return {
       sessionId: normalizeSessionId(parsed.sessionId || sessionId),
       lastSuggestedSkills,
       lastBaselineVersion,
+      lastKnowledgeAdvisoryKey,
       filePath,
     };
   } catch {
@@ -48,6 +54,7 @@ function readState(sessionId) {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
       lastBaselineVersion: null,
+      lastKnowledgeAdvisoryKey: null,
       filePath,
     };
   }
@@ -74,6 +81,12 @@ function persistState(state, updates) {
         )
           ? updates.lastBaselineVersion
           : state.lastBaselineVersion,
+        lastKnowledgeAdvisoryKey: Object.prototype.hasOwnProperty.call(
+          updates,
+          'lastKnowledgeAdvisoryKey',
+        )
+          ? updates.lastKnowledgeAdvisoryKey
+          : state.lastKnowledgeAdvisoryKey,
       },
       null,
       2,
@@ -110,8 +123,25 @@ function shouldEmitClaimVerificationBaseline(sessionId, baselineVersion) {
   return true;
 }
 
+function shouldEmitKnowledgeAdvisory(sessionId, advisoryKey) {
+  const state = readState(sessionId);
+  const normalizedKey = String(advisoryKey || '').trim();
+  if (!normalizedKey) return false;
+
+  if (state.lastKnowledgeAdvisoryKey === normalizedKey) {
+    return false;
+  }
+
+  persistState(state, {
+    lastKnowledgeAdvisoryKey: normalizedKey,
+  });
+
+  return true;
+}
+
 module.exports = {
   normalizeSessionId,
   shouldEmitClaimVerificationBaseline,
+  shouldEmitKnowledgeAdvisory,
   shouldEmitSuggestions,
 };

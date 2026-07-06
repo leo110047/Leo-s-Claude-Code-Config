@@ -31,13 +31,24 @@ function main() {
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }
+
+  const copyHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-loop-copy-home.'),
+  );
+  try {
+    runInstall(copyHome, 'workflow', { GOLDBAND_FORCE_COPY: '1' });
+    assertInstalledKnowledgeCliRuns(copyHome);
+    console.log('[OK] Goldband Loop copy fallback runtime CLI works');
+  } finally {
+    fs.rmSync(copyHome, { recursive: true, force: true });
+  }
 }
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-function runInstall(home, target) {
+function runInstall(home, target, extraEnv = {}) {
   const result = spawnSync(
     'bash',
     [path.join(ROOT_DIR, 'install.sh'), target],
@@ -50,6 +61,7 @@ function runInstall(home, target) {
         GOLDBAND_SKIP_GENERATE: '1',
         GOLDBAND_SKIP_PLAYWRIGHT: '1',
         GOLDBAND_SKIP_COREUTILS: '1',
+        ...extraEnv,
       },
       encoding: 'utf8',
     },
@@ -272,6 +284,7 @@ function assertInstalledStandardInventory(home, inventory) {
 
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
   const requiredFiles = [
+    path.join('lib', 'knowledge.ts'),
     path.join('review', 'checklist.md'),
     path.join('review', 'greptile-triage.md'),
   ];
@@ -283,6 +296,31 @@ function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
       );
     }
   }
+}
+
+function assertInstalledKnowledgeCliRuns(home) {
+  const result = spawnSync(
+    path.join(
+      home,
+      '.claude',
+      'skills',
+      'goldband',
+      'bin',
+      'goldband-knowledge',
+    ),
+    ['search', '--domain', 'qa', '--query', 'fixture'],
+    {
+      cwd: home,
+      env: {
+        ...process.env,
+        HOME: home,
+        GOLDBAND_HOME: path.join(home, '.goldband'),
+      },
+      encoding: 'utf8',
+    },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /KNOWLEDGE:/);
 }
 
 function skillDirectories(parent) {

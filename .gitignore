@@ -37,4 +37,9 @@ node_modules/
 mcp/server/dist/
 mcp/server/dist-test/
 .agents/
+!.agents/
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
 .goldband/

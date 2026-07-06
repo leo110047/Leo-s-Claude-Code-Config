@@ -22,6 +22,7 @@ import { externalSkillName, extractHookSafetyProse as _extractHookSafetyProse, e
 import { generatePlanCompletionAuditShip, generatePlanCompletionAuditReview, generatePlanVerificationExec } from './resolvers/review';
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
 import type { HostConfig } from './host-config';
+import { TOKEN_CEILING_BYTES } from './skill-budget';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -548,7 +549,6 @@ for (const currentHost of hostsToRun) {
       // exists to catch a runaway preamble or resolver that's grown by 10K+ tokens in
       // a release, not to force compression on carefully-tuned big skills (ship,
       // plan-ceo-review, office-hours all legitimately pack 25-35K tokens of behavior).
-      const TOKEN_CEILING_BYTES = 160_000;
       if (content.length > TOKEN_CEILING_BYTES) {
         console.warn(`⚠️  TOKEN CEILING: ${relOutput} is ${content.length} bytes (~${tokens} tokens), exceeds ${TOKEN_CEILING_BYTES} byte ceiling (~40K tokens)`);
       }

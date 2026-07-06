@@ -1,19 +1,40 @@
 {
-  "schema_version": "1.0",
   "name": "goldband",
-  "version": "1.5.0",
-  "description": "Packaging placeholder for shared engineering guardrails, portable skills, Codex rules, hooks, agents, and workflow handoffs. Active installation is still handled by goldband installers.",
-  "author": "Leo",
-  "license": "MIT",
+  "version": "0.1.0",
+  "description": "Repo-root compatibility manifest for the Goldband portable Codex plugin package. Marketplace installs use plugin-assets/codex-plugin.",
+  "author": {
+    "name": "Leo",
+    "url": "https://github.com/leo110047"
+  },
   "homepage": "https://github.com/leo110047/goldband",
   "repository": "https://github.com/leo110047/goldband",
+  "license": "MIT",
   "keywords": [
     "codex",
-    "claude-code",
-    "hooks",
     "skills",
-    "agents",
+    "mcp",
     "guardrails",
+    "review",
     "workflow"
-  ]
+  ],
+  "skills": "./plugin-assets/codex-plugin/skills/",
+  "mcpServers": "./plugin-assets/codex-plugin/.mcp.json",
+  "interface": {
+    "displayName": "Goldband",
+    "shortDescription": "Portable engineering skills and optional Goldband MCP readbacks for Codex.",
+    "longDescription": "Compatibility manifest at the repository root. It resolves to the generated portable Codex package under plugin-assets/codex-plugin and does not package Goldband Loop or replace install.sh codex-full.",
+    "developerName": "Leo",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills",
+      "MCP"
+    ],
+    "websiteURL": "https://github.com/leo110047/goldband",
+    "defaultPrompt": [
+      "Use Goldband skills to review this change.",
+      "Check this repo with evidence-based coding.",
+      "Plan a safe implementation with Goldband."
+    ],
+    "brandColor": "#1F8A70"
+  }
 }

@@ -11,7 +11,11 @@ const {
   matchPrompt,
 } = require('../lib/skill-activation/activation-rules');
 const {
+  buildKnowledgeAdvisory,
+} = require('../lib/skill-activation/knowledge-advisory');
+const {
   shouldEmitClaimVerificationBaseline,
+  shouldEmitKnowledgeAdvisory,
   shouldEmitSuggestions,
 } = require('../lib/skill-activation/session-state');
 const {
@@ -55,6 +59,7 @@ async function main() {
   const sessionId = input.session_id || process.env.CLAUDE_SESSION_ID || null;
   const crossReviewContract = armCrossReviewIfRequested(input);
   const matches = matchPrompt(prompt);
+  const knowledgeAdvisory = buildKnowledgeAdvisory(prompt);
 
   for (const event of buildWorkflowUsageEvents(
     input,
@@ -68,6 +73,38 @@ async function main() {
     appendUsageEvent(event);
   }
 
+  const promptContext = buildPromptContext({
+    crossReviewContract,
+    knowledgeAdvisory,
+    matches,
+    sessionId,
+  });
+
+  if (!promptContext.shouldEmit) {
+    process.stdout.write('{}');
+    return;
+  }
+
+  if (promptContext.shouldEmitSuggestions) {
+    appendUsageEvent(buildSuggestionUsageEvent(matches.slice(0, 3), sessionId));
+  }
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext: promptContext.additionalContext,
+      },
+    }),
+  );
+}
+
+function buildPromptContext({
+  crossReviewContract,
+  knowledgeAdvisory,
+  matches,
+  sessionId,
+}) {
   const suggestedSkills = matches.slice(0, 3).map((match) => match.skill);
   const shouldEmitBaseline = shouldEmitClaimVerificationBaseline(
     sessionId,
@@ -76,34 +113,28 @@ async function main() {
   const shouldEmitSuggestionsForPrompt =
     suggestedSkills.length > 0 &&
     shouldEmitSuggestions(sessionId, suggestedSkills);
-
-  if (!shouldEmitBaseline && !shouldEmitSuggestionsForPrompt) {
-    process.stdout.write('{}');
-    return;
-  }
-
-  if (shouldEmitSuggestionsForPrompt) {
-    appendUsageEvent(buildSuggestionUsageEvent(matches.slice(0, 3), sessionId));
-  }
-
-  const additionalContext = [
-    crossReviewContract
-      ? `Cross-review gate armed for this session. Reviewer: ${crossReviewContract.reviewer}. Plan: ${crossReviewContract.planFile || 'not bound yet'}.`
-      : null,
-    shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
-    shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext,
-      },
-    }),
+  const shouldEmitKnowledgeForPrompt = Boolean(
+    knowledgeAdvisory &&
+      shouldEmitKnowledgeAdvisory(sessionId, knowledgeAdvisory.key),
   );
+
+  return {
+    shouldEmit:
+      shouldEmitBaseline ||
+      shouldEmitSuggestionsForPrompt ||
+      shouldEmitKnowledgeForPrompt,
+    shouldEmitSuggestions: shouldEmitSuggestionsForPrompt,
+    additionalContext: [
+      crossReviewContract
+        ? `Cross-review gate armed for this session. Reviewer: ${crossReviewContract.reviewer}. Plan: ${crossReviewContract.planFile || 'not bound yet'}.`
+        : null,
+      shouldEmitKnowledgeForPrompt ? knowledgeAdvisory.text : null,
+      shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
+      shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+  };
 }
 
 function armCrossReviewIfRequested(input) {

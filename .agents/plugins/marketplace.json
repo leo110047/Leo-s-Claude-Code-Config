@@ -1,0 +1,20 @@
+{
+  "name": "goldband-local",
+  "interface": {
+    "displayName": "Goldband Local"
+  },
+  "plugins": [
+    {
+      "name": "goldband",
+      "source": {
+        "source": "local",
+        "path": "./plugin-assets/codex-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

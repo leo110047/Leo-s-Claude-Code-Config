@@ -4,6 +4,7 @@ import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { TOKEN_CEILING_BYTES } from '../scripts/skill-budget';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
@@ -238,6 +239,11 @@ describe('gen-skill-docs', () => {
     }
   });
 
+  test('ship SKILL.md stays under the token ceiling', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'ship/SKILL.md'), 'utf-8');
+    expect(Buffer.byteLength(content, 'utf-8')).toBeLessThanOrEqual(TOKEN_CEILING_BYTES);
+  });
+
   test('templates contain placeholders', () => {
     const rootTmpl = fs.readFileSync(path.join(ROOT, 'SKILL.md.tmpl'), 'utf-8');
     expect(rootTmpl).toContain('{{COMMAND_REFERENCE}}');
@@ -258,6 +264,24 @@ describe('gen-skill-docs', () => {
     expect(content).toContain('Operational Self-Improvement');
     expect(content).toContain('goldband-learnings-log');
     expect(content).toContain('goldband-learnings-search --limit 3');
+  });
+
+  test('qa and review use consolidated prior knowledge recall', () => {
+    for (const skill of ['qa', 'review']) {
+      const tmpl = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md.tmpl'), 'utf-8');
+      const generated = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
+      expect(tmpl).toContain('{{PRIOR_KNOWLEDGE:');
+      expect(tmpl).not.toContain('{{LEARNINGS_SEARCH');
+      expect(tmpl).not.toContain('{{GBRAIN_CONTEXT_LOAD');
+      expect(generated).toContain('## Prior Knowledge');
+      expect(generated).toContain('goldband-knowledge search');
+      expect(generated).toContain('cross_project_learnings');
+      expect(generated).toContain('--cross-project');
+      expect(generated).toContain('goldband-learnings-search --limit 10');
+      expect(generated).not.toContain('{{PRIOR_KNOWLEDGE');
+      expect(generated).not.toContain('{{LEARNINGS_SEARCH');
+      expect(generated).not.toContain('{{GBRAIN_CONTEXT_LOAD');
+    }
   });
 
   test('generated SKILL.md with LEARNINGS_LOG contains operational type', () => {
@@ -712,6 +736,14 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
   const planSkill = fs.readFileSync(path.join(ROOT, 'plan-eng-review', 'SKILL.md'), 'utf-8');
   const shipSkill = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
   const reviewSkill = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+  const testingResolver = fs.readFileSync(path.join(ROOT, 'scripts', 'resolvers', 'testing.ts'), 'utf-8');
+
+  test('ship coverage audit uses its compact resolver, not shared inner mode branches', () => {
+    expect(testingResolver).toContain("type CoverageAuditMode = 'plan' | 'review'");
+    expect(testingResolver).not.toContain("generateTestCoverageAuditInner('ship')");
+    expect(testingResolver).not.toContain("mode === 'ship'");
+    expect(testingResolver).not.toContain('mode === "ship"');
+  });
 
   test('plan and ship modes share codepath tracing methodology', () => {
     // Review mode delegates test coverage to the Testing specialist subagent (Review Army)
@@ -2396,11 +2428,12 @@ describe('setup script validation', () => {
   });
 
   test('create_agents_sidecar links runtime assets', () => {
-    // Sidecar must link bin, browse, review, qa
+    // Sidecar must link runtime assets used by generated skill commands.
     const fnStart = setupContent.indexOf('create_agents_sidecar()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('done', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('bin');
+    expect(fnBody).toContain('lib');
     expect(fnBody).toContain('browse');
     expect(fnBody).toContain('review');
     expect(fnBody).toContain('qa');
@@ -2411,6 +2444,7 @@ describe('setup script validation', () => {
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('done', setupContent.indexOf('review/', fnStart)));
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('goldband/SKILL.md');
+    expect(fnBody).toContain('goldband_dir/lib');
     expect(fnBody).toContain('browse/dist');
     expect(fnBody).toContain('browse/bin');
     expect(fnBody).toContain('goldband-upgrade/SKILL.md');
@@ -2758,7 +2792,7 @@ describe('codex commands must not use inline $(git rev-parse --show-toplevel) fo
 // ─── Learnings + Confidence Resolver Tests ─────────────────────
 
 describe('LEARNINGS_SEARCH resolver', () => {
-  const SEARCH_SKILLS = ['review', 'ship', 'plan-eng-review', 'investigate', 'office-hours', 'plan-ceo-review'];
+  const SEARCH_SKILLS = ['ship', 'plan-eng-review', 'investigate', 'office-hours', 'plan-ceo-review'];
 
   for (const skill of SEARCH_SKILLS) {
     test(`${skill} generated SKILL.md contains learnings search`, () => {
@@ -2768,16 +2802,27 @@ describe('LEARNINGS_SEARCH resolver', () => {
     });
   }
 
-  test('learnings search includes cross-project config check', () => {
+  test('review generated SKILL.md uses prior knowledge recall with learnings search', () => {
     const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    expect(content).toContain('cross_project_learnings');
-    expect(content).toContain('--cross-project');
+    expect(content).toContain('Prior Knowledge');
+    expect(content).toContain('goldband-learnings-search');
+    expect(content).toContain('goldband-knowledge search');
+  });
+
+  test('learnings search includes cross-project config check', () => {
+    for (const skill of ['ship', 'review', 'qa']) {
+      const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
+      expect(content).toContain('cross_project_learnings');
+      expect(content).toContain('--cross-project');
+    }
   });
 
   test('learnings search includes AskUserQuestion for first-time cross-project opt-in', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Enable cross-project learnings');
-    expect(content).toContain('project-scoped only');
+    for (const skill of ['ship', 'review', 'qa']) {
+      const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
+      expect(content).toContain('Enable cross-project learnings');
+      expect(content).toContain('project-scoped only');
+    }
   });
 
   test('learnings search mentions prior learning applied display format', () => {

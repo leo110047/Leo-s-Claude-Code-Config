@@ -12,6 +12,8 @@
     "smoke:mcp-server": "npm --prefix mcp/server run smoke",
     "test:eval-budget-cap": "node scripts/test-eval-budget-cap.mjs",
     "test:style-gate": "node scripts/test-code-style-gate.mjs",
+    "sync:app-support": "node scripts/sync-app-support-assets.mjs && node scripts/build-claude-app-adapters.mjs",
+    "test:app-support": "node scripts/check-app-support.mjs",
     "test:evals": "cd goldband-loop && bun run test:evals",
     "test:e2e": "cd goldband-loop && bun run test:e2e",
     "test:gate": "cd goldband-loop && bun run test:gate",

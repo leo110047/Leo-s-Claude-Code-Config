@@ -5,6 +5,7 @@ import {
   classifyTelemetry,
   extractEvalCandidates,
   extractFixtureCandidates,
+  extractKnowledgeCandidates,
   printSummaryMarkdown,
 } from './lib/telemetry-miner/index.mjs';
 
@@ -33,6 +34,7 @@ function baseOptions(command) {
     usageFile: null,
     workflowRunsDir: null,
     outDir: null,
+    knowledgeHome: null,
   };
 }
 
@@ -47,6 +49,8 @@ function consumeArg(options, tokens, index) {
     options.workflowRunsDir = value(tokens[index + 1], token);
   } else if (token === '--out-dir' || token === '--review-dir') {
     options.outDir = value(tokens[index + 1], token);
+  } else if (token === '--knowledge-home') {
+    options.knowledgeHome = value(tokens[index + 1], token);
   } else if (token === '--help' || token === '-h') {
     options.command = 'help';
     return index;
@@ -64,6 +68,7 @@ function consumesValue(token) {
     '--workflow-runs-dir',
     '--out-dir',
     '--review-dir',
+    '--knowledge-home',
   ].includes(token);
 }
 
@@ -81,7 +86,7 @@ function value(raw, flag) {
 }
 
 function usage() {
-  return `Usage: node scripts/mine-telemetry.mjs <summary|classify|extract-fixtures|extract-evals> [options]
+  return `Usage: node scripts/mine-telemetry.mjs <summary|classify|extract-fixtures|extract-evals|extract-knowledge> [options]
 
 Options:
   --json                         Print machine-readable JSON for summary.
@@ -90,6 +95,7 @@ Options:
   --usage-file <path>            Usage JSONL base file. Rotated siblings are included.
   --workflow-runs-dir <path>     Workflow evidence directory.
   --out-dir <path>               Candidate review output directory.
+  --knowledge-home <path>        Explicitly write extract-knowledge output under <path>/knowledge.
 `;
 }
 
@@ -104,6 +110,9 @@ function run(options) {
   }
   if (options.command === 'extract-evals') {
     return `${JSON.stringify(extractEvalCandidates(options), null, 2)}\n`;
+  }
+  if (options.command === 'extract-knowledge') {
+    return `${JSON.stringify(extractKnowledgeCandidates(options), null, 2)}\n`;
   }
   throw new Error(`Unknown command: ${options.command}`);
 }

@@ -68,7 +68,7 @@ macOS / POSIX:
 ./install.sh pack-quality      # Claude Code quality baseline, no workflow
 ./install.sh all-tools         # Claude Code + Codex
 ./install.sh all-with-workflow # Claude Code + Codex + bundled workflow; recommended for review/QA
-./install.sh status            # Check status
+./install.sh status            # Check install and app-surface status
 ```
 
 Windows:
@@ -100,6 +100,17 @@ If `goldband@goldband` and installer-managed Claude assets are both installed,
 `./install.sh status` reports duplicate assets, the active sources, remediation,
 and exits non-zero to avoid a false all-green status.
 
+### Support Matrix
+
+| Surface | Status | Install path | Notes |
+| --- | --- | --- | --- |
+| Claude Code CLI | supported | `goldband@goldband` plugin or installer | Claude Code hooks/settings apply only here |
+| Claude Desktop app | supported (portable subset) | local `.mcpb` extension | connects to first-party `goldband-mcp`; separate from Claude Code settings |
+| Claude web/mobile app | supported (portable subset) | remote MCP connector | requires a deployed remote MCP endpoint and connector registration |
+| Codex CLI | supported | `./install.sh codex-full` | shared Codex config |
+| Codex app | supported via shared config | `./install.sh codex-full` | `./install.sh status` reads back the shared config surfaces |
+| Codex plugin | supported (portable subset) | Codex repo marketplace package | skills + opt-in MCP wrapper; does not replace full setup |
+
 Dependencies:
 
 - Hook merging requires `jq`.
@@ -113,6 +124,9 @@ Dependencies:
 
 - Claude plugin: `goldband@goldband` provides commands, portable skills, the
   hook router, and a generated `goldband-rules` skill.
+- Codex plugin: portable skills, repo marketplace entry, and an opt-in MCP wrapper.
+- Claude app adapters: Claude Desktop `.mcpb` local extension package and a
+  remote MCP connector registration template.
 - Claude installer: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
 - Claude installer assets: `commands/`, `rules/`, `hooks/`, portable skills
@@ -129,6 +143,14 @@ This keeps the Claude/Codex skill list cleaner and prevents Goldband Loop workfl
 Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
 Goldband Loop workflows, commands, skills, hooks, and rules.
+
+Regenerate app support artifacts after changing Codex plugin or Claude app
+adapter sources:
+
+```bash
+npm run sync:app-support
+npm run test:app-support
+```
 
 ## Cross-Review Gate
 

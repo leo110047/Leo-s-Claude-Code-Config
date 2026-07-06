@@ -16,13 +16,16 @@ server by default.
 
 ## First-Party Goldband Server
 
-`goldband-mcp` exposes three read-only tools:
+`goldband-mcp` exposes four read-only tools:
 
 - `goldband_policy_check`: dry-runs Claude `PreToolUse` policy through the
   existing hook-router `evaluatePreToolUse` module. It does not execute shell
   commands and does not include Codex-only high-risk policy.
 - `goldband_telemetry_query`: reads hook-router usage telemetry and aggregates
   counts by rule or skill through the shared usage summary module.
+- `knowledge-query`: reads
+  `${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/index.json` and returns matching
+  knowledge entry paths plus one-line summaries.
 - `goldband_health_check`: runs only the fixed repo-validation allowlist:
   JSON/TOML syntax, hook script references, Goldband Loop inventory, and
   decision guidance parity.
@@ -88,7 +91,7 @@ npx -y @modelcontextprotocol/inspector@0.22.0 --cli --method tools/list -- node 
 ```
 
 - `goldband`: starts from `node mcp/server/dist/index.js` and exposes
-  `goldband_policy_check`, `goldband_telemetry_query`, and
+  `goldband_policy_check`, `goldband_telemetry_query`, `knowledge-query`, and
   `goldband_health_check`.
 
 The repo smoke gate also runs `npm run smoke:mcp-server`, which starts the

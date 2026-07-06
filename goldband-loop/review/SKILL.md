@@ -1155,18 +1155,24 @@ available (e.g., slop-scan not installed), skip this step silently.
 
 ---
 
-## Prior Learnings
+## Prior Knowledge
 
-Search for relevant learnings from previous sessions:
+Before starting, check one consolidated recall surface. This combines project
+learnings, curated local knowledge, and optional GBrain context when this host
+supports it. Read only the listed paths that look relevant.
 
 ```bash
+echo "LEARNINGS:"
 _CROSS_PROJ=$(~/.claude/skills/goldband/bin/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
 if [ "$_CROSS_PROJ" = "true" ]; then
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --cross-project 2>/dev/null || true
+  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "review diff sql race llm shell enum" --cross-project 2>/dev/null || true
 else
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 2>/dev/null || true
+  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "review diff sql race llm shell enum" 2>/dev/null || true
 fi
+echo ""
+echo "KNOWLEDGE:"
+~/.claude/skills/goldband/bin/goldband-knowledge search --domain "review" --query "review diff sql race llm shell enum" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"
 ```
 
 If `CROSS_PROJECT` is `unset` (first time): Use AskUserQuestion:
@@ -1185,13 +1191,11 @@ If B: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learn
 
 Then re-run the search with the appropriate flag.
 
-If learnings are found, incorporate them into your analysis. When a review finding
-matches a past learning, display:
-
-**"Prior learning applied: [key] (confidence N/10, from [date])"**
-
-This makes the compounding visible. The user should see that goldband is getting
-smarter on their codebase over time.
+If the curated knowledge search prints `KNOWLEDGE: no matching entries`, say
+"知識庫無相關條目" once and continue. If entries are listed, cite the path and
+one-line summary before deciding whether to read the full entry. When a finding
+or fix uses a prior learning, keep the existing visible note:
+`Prior learning applied: [key] (confidence N/10, from [date])`.
 
 ## Step 4: Critical pass (core review)
 
@@ -1805,6 +1809,17 @@ staleness detection: if those files are later deleted, the learning can be flagg
 
 **Only log genuine discoveries.** Don't log obvious things. Don't log things the user
 already knows. A good test: would this insight save time in a future session? If yes, log it.
+
+For high-value, verified material that may graduate into a skill or rule, capture
+a curated knowledge entry instead of leaving it only in append-only learnings:
+
+```bash
+~/.claude/skills/goldband/bin/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+```
+
+Use `problem-solution` for a pitfall with a known fix, `decision` for an
+architectural or workflow choice, and `practice` for a verified reusable
+method.
 
 If the review exits early before a real review completes (for example, no diff against the base branch), do **not** write this entry.
 

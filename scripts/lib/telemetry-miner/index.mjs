@@ -10,5 +10,6 @@ export {
   usageJsonlFiles,
   workflowJsonlFiles,
 } from './io.mjs';
+export { extractKnowledgeCandidates } from './knowledge-candidates.mjs';
 export { sanitizeEvent } from './sanitize.mjs';
 export { buildSummary, printSummaryMarkdown } from './summary.mjs';
