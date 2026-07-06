@@ -64,6 +64,7 @@ function isIgnoredPath(relativePath) {
     // Goldband Loop is first-party, but it owns a runtime-specific Bun gate.
     // CI runs check-goldband-loop-inventory plus `bun run test:free`.
     relativePath.startsWith('goldband-loop/') ||
+    relativePath.startsWith('plugin-assets/claude-code-plugin/') ||
     relativePath.startsWith('dist/') ||
     relativePath.startsWith('build/') ||
     relativePath.endsWith('.min.js')

@@ -1,0 +1,18 @@
+{
+  "name": "goldband",
+  "description": "Goldband Claude Code plugin marketplace for local distribution.",
+  "owner": {
+    "name": "Leo"
+  },
+  "plugins": [
+    {
+      "name": "goldband",
+      "source": "./plugin-assets/claude-code-plugin",
+      "description": "Production-focused Claude Code config with portable skills, commands, and hook guardrails.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Leo"
+      }
+    }
+  ]
+}

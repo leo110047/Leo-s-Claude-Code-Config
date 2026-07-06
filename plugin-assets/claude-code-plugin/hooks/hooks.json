@@ -1,0 +1,163 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Unified router lifecycle context restore hint"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/skill-activation-suggestions.js\""
+          }
+        ],
+        "description": "Prompt-time skill suggestions + prompt-trigger telemetry"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\""
+          }
+        ],
+        "description": "Unified router (blocking policies: careful-mode/freeze-mode/secrets/dev-server/doc-file)"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\""
+          }
+        ],
+        "description": "Unified router (context monitor + console warnings)"
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/post-edit-worker.js\" --task format",
+            "async": true
+          }
+        ],
+        "description": "Native async format worker with debounce"
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/post-edit-worker.js\" --task typecheck",
+            "async": true
+          }
+        ],
+        "description": "Native async typecheck worker with debounce"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Unified router failure attribution hint"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\""
+          }
+        ],
+        "description": "Unified router (console audit + desktop notifications)"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "general-purpose",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Review the subagent's final output. Check: (1) Did it claim completion? If so, does the output contain concrete evidence (file paths, test results, command output) — not just 'Done!' or 'All set!'? (2) Are there red flags like 'should work', 'probably', or missing verification steps? If the output lacks evidence of completion, respond with a brief note about what verification is missing. If the output contains proper evidence, respond with 'LGTM'.",
+            "timeout": 30
+          }
+        ],
+        "description": "Lightweight spec review for general-purpose subagent output"
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\""
+          }
+        ],
+        "description": "Unified router notification handling"
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Unified router pre-compact continuity hint"
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Unified router post-compact verification hint"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
+            "timeout": 2
+          }
+        ],
+        "description": "Unified router lifecycle context save hint"
+      }
+    ]
+  }
+}

@@ -30,7 +30,27 @@ Goldband Loop 自己的說明看 [goldband-loop/README.md](goldband-loop/README.
 
 ## 安裝
 
-請用完整 git checkout，不要只複製 `install.sh`：
+Claude Code 使用者建議先走 plugin。plugin 覆蓋核心 Claude surface：
+commands、portable skills、由 `rules/` 產生的規則 skill、以及 hook router。
+它不包含 Goldband Loop workflow runtime、Playwright/browser/iOS 工具鏈，也不
+安裝 Codex assets。
+
+```bash
+git clone https://github.com/leo110047/goldband.git
+cd goldband
+claude plugin marketplace add ./
+claude plugin install goldband@goldband --scope user
+./install.sh status
+```
+
+移除 plugin：
+
+```bash
+claude plugin uninstall goldband@goldband
+```
+
+需要 Codex、開發者 repo-linked 安裝、或 Goldband Loop workflow runtime 時，請用
+installer。請用完整 git checkout，不要只複製 `install.sh`：
 
 ```bash
 git clone https://github.com/leo110047/goldband.git
@@ -72,6 +92,10 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 ./install.sh uninstall          # 移除安裝
 ```
 
+若同時裝了 `goldband@goldband` plugin 和 installer-managed Claude assets，
+`./install.sh status` 會列出 duplicate asset、active source 和建議移除哪一路徑，
+並用非 0 exit code 表示狀態不是全綠。
+
 依賴：
 
 - hooks 合併需要 `jq`。
@@ -83,9 +107,11 @@ goldband 不再維護 native PowerShell installer。Windows 請用 Git Bash 或 
 
 ## 裝了什麼
 
-- Claude 全域守則：`claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
+- Claude plugin：`goldband@goldband` 提供 commands、portable skills、hook
+  router、以及 generated `goldband-rules` skill。
+- Claude installer：`claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex 全域守則：`codex/AGENTS.md` -> `~/.codex/AGENTS.md`
-- Claude assets：`commands/`、`rules/`、`hooks/`、portable skills
+- Claude installer assets：`commands/`、`rules/`、`hooks/`、portable skills
 - Codex assets：config、profiles、rules、hooks、custom agents、portable skills
 - Git style gate（選配）：`git-hooks/` -> global `core.hooksPath`
 - Goldband Loop runtime：Claude 在 `~/.claude/skills/goldband`，Codex 在 `~/.codex/skills/goldband`

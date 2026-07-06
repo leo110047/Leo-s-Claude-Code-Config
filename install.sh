@@ -177,7 +177,7 @@ case "$1" in
         ;;
     status)
         show_status
-        exit 0
+        exit $?
         ;;
     uninstall)
         do_uninstall

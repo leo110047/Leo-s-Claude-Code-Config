@@ -1,4 +1,5 @@
 {
+  "version": "0.1.0",
   "scripts": {
     "lint:style": "node scripts/check-code-style.mjs",
     "lint:style:staged": "node scripts/check-code-style.mjs --staged",
@@ -6,6 +7,7 @@
     "test:telemetry": "node scripts/test-telemetry-schema.mjs && node scripts/test-telemetry.mjs && node scripts/test-telemetry-otlp.mjs && node scripts/test-telemetry-miner.mjs",
     "test:hook-router:coverage": "node scripts/check-hook-router-coverage.mjs",
     "test:cross-review": "node scripts/test-cross-review.mjs && node scripts/test-cross-review-regressions.mjs",
+    "test:plugin-distribution": "node scripts/check-plugin-distribution.mjs",
     "test:mcp-server": "npm --prefix mcp/server test",
     "smoke:mcp-server": "npm --prefix mcp/server run smoke",
     "test:eval-budget-cap": "node scripts/test-eval-budget-cap.mjs",

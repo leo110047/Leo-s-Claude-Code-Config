@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "scripts/sync-plugin-assets.mjs",
+  "plugin": {
+    "name": "goldband",
+    "marketplace": "goldband",
+    "root": "plugin-assets/claude-code-plugin",
+    "manifest": "plugin-assets/claude-code-plugin/.claude-plugin/plugin.json",
+    "rootCompatibilityManifest": ".claude-plugin/plugin.json",
+    "marketplaceManifest": ".claude-plugin/marketplace.json"
+  },
+  "claude": {
+    "commands": [
+      "commands/discuss.md",
+      "commands/goldband-cross-review.md",
+      "commands/goldband-language.md",
+      "commands/plan.md",
+      "commands/verify-config.md",
+      "commands/verify.md"
+    ],
+    "skills": [
+      "careful-mode",
+      "ci-cd-integration",
+      "claude-config-verification",
+      "decision-log",
+      "evidence-based-coding",
+      "file-search",
+      "freeze-mode",
+      "frontend-design",
+      "implementation-contracts",
+      "performance-optimization",
+      "planning-workflow",
+      "prompt-hygiene",
+      "security-checklist",
+      "skill-developer",
+      "subagent-development",
+      "systematic-debugging",
+      "testing-strategy",
+      "goldband-rules"
+    ],
+    "hooks": {
+      "SessionStart": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "UserPromptSubmit": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "PreToolUse": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "PostToolUse": {
+        "entries": 3,
+        "commandHooks": 3,
+        "promptHooks": 0
+      },
+      "PostToolUseFailure": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "Stop": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "SubagentStop": {
+        "entries": 1,
+        "commandHooks": 0,
+        "promptHooks": 1
+      },
+      "Notification": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "PreCompact": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "PostCompact": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      },
+      "SessionEnd": {
+        "entries": 1,
+        "commandHooks": 1,
+        "promptHooks": 0
+      }
+    },
+    "runtimeDependencies": [
+      "scripts/lib/telemetry-schema.cjs"
+    ],
+    "hookScripts": [
+      "hooks/scripts/hooks/hook-router.js",
+      "hooks/scripts/hooks/post-edit-worker.js",
+      "hooks/scripts/hooks/skill-activation-suggestions.js"
+    ],
+    "rules": [
+      "rules/claim-verification.md",
+      "rules/coding-style.md",
+      "rules/git-workflow.md",
+      "rules/loop-engineering.md",
+      "rules/security.md"
+    ],
+    "generatedRuleSkill": "plugin-assets/claude-code-plugin/skills/goldband-rules/SKILL.md"
+  },
+  "codex": {
+    "distribution": "installer",
+    "reason": "Codex plugins exist but package Codex skills/apps/MCP, not Claude Code settings. Root Codex install remains install.sh."
+  },
+  "outOfScope": [
+    "goldband-loop workflow runtime",
+    "Playwright/browser/iOS toolchains",
+    "public marketplace submission"
+  ]
+}

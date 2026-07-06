@@ -34,7 +34,28 @@ docs live in [goldband-loop/README.md](goldband-loop/README.md).
 
 ## Installation
 
-Use a full git checkout. Do not copy `install.sh` by itself:
+Claude Code users should start with the plugin path. The plugin covers the core
+Claude surface: commands, portable skills, a generated rules skill from
+`rules/`, and the hook router. It does not include the Goldband Loop workflow
+runtime, Playwright/browser/iOS tooling, or Codex assets.
+
+```bash
+git clone https://github.com/leo110047/goldband.git
+cd goldband
+claude plugin marketplace add ./
+claude plugin install goldband@goldband --scope user
+./install.sh status
+```
+
+Uninstall the plugin:
+
+```bash
+claude plugin uninstall goldband@goldband
+```
+
+Use the installer when you need Codex, developer repo-linked setup, or the
+Goldband Loop workflow runtime. Use a full git checkout. Do not copy
+`install.sh` by itself:
 
 ```bash
 git clone https://github.com/leo110047/goldband.git
@@ -75,6 +96,10 @@ Install individual pieces:
 ./install.sh uninstall          # remove install
 ```
 
+If `goldband@goldband` and installer-managed Claude assets are both installed,
+`./install.sh status` reports duplicate assets, the active sources, remediation,
+and exits non-zero to avoid a false all-green status.
+
 Dependencies:
 
 - Hook merging requires `jq`.
@@ -86,9 +111,11 @@ Dependencies:
 
 ## Installed Surface
 
-- Claude global guidance: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
+- Claude plugin: `goldband@goldband` provides commands, portable skills, the
+  hook router, and a generated `goldband-rules` skill.
+- Claude installer: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
-- Claude assets: `commands/`, `rules/`, `hooks/`, portable skills
+- Claude installer assets: `commands/`, `rules/`, `hooks/`, portable skills
 - Codex assets: config, profiles, rules, hooks, custom agents, portable skills
 - Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
 

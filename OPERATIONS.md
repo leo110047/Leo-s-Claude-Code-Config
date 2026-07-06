@@ -85,7 +85,47 @@ Temporary bypasses print a warning and write a local log under
 If a repo uses Husky or another local `core.hooksPath`, git uses the local value
 instead of the global goldband hook. That is expected.
 
-## Installer Distribution
+## Plugin and Installer Distribution
+
+Claude Code core distribution uses the local plugin marketplace:
+
+```bash
+claude plugin marketplace add ./
+claude plugin install goldband@goldband --scope user
+claude plugin list --json
+```
+
+Before releasing plugin changes:
+
+```bash
+node scripts/sync-plugin-assets.mjs --check
+npm run test:plugin-distribution
+claude plugin validate plugin-assets/claude-code-plugin
+```
+
+The sync script generates `plugin-assets/claude-code-plugin/`,
+`.claude-plugin/marketplace.json`, and
+`docs/reports/plugin-expected-assets.json` from the source `commands/`,
+`rules/`, `hooks/`, and `skills/global/` directories. Do not hand-edit generated
+plugin files.
+
+CI installs Claude Code with `npm install -g @anthropic-ai/claude-code` and runs
+the full `npm run test:plugin-distribution` gate. Local contributors should run
+the same command before committing plugin-affecting changes; the `--skip-cli`
+mode is only a structural/runtime-smoke fallback and does not validate Claude
+plugin manifest schema or installation behavior.
+
+Uninstall paths are intentionally separate:
+
+```bash
+claude plugin uninstall goldband@goldband
+./install.sh uninstall
+```
+
+`./install.sh status` detects when the plugin and installer-managed Claude
+assets both exist. Duplicate `commands`, `rules`, `hooks`, or `skills` are not a
+green state; status reports active sources, duplicate names, remediation, and
+exits non-zero.
 
 goldband's active installer path is the POSIX installer:
 
