@@ -34,7 +34,28 @@ docs live in [goldband-loop/README.md](goldband-loop/README.md).
 
 ## Installation
 
-Use a full git checkout. Do not copy `install.sh` by itself:
+Claude Code users should start with the plugin path. The plugin covers the core
+Claude surface: commands, portable skills, a generated rules skill from
+`rules/`, and the hook router. It does not include the Goldband Loop workflow
+runtime, Playwright/browser/iOS tooling, or Codex assets.
+
+```bash
+git clone https://github.com/leo110047/goldband.git
+cd goldband
+claude plugin marketplace add ./
+claude plugin install goldband@goldband --scope user
+./install.sh status
+```
+
+Uninstall the plugin:
+
+```bash
+claude plugin uninstall goldband@goldband
+```
+
+Use the installer when you need Codex, developer repo-linked setup, or the
+Goldband Loop workflow runtime. Use a full git checkout. Do not copy
+`install.sh` by itself:
 
 ```bash
 git clone https://github.com/leo110047/goldband.git
@@ -69,13 +90,15 @@ Install individual pieces:
 ./install.sh codex-agents       # Codex AGENTS.md + custom agents
 ./install.sh codex-hooks        # Codex hooks
 ./install.sh codex-requirements # Codex managed requirements
-./install.sh workflow           # Claude-side workflow (full profile, default)
-./install.sh workflow-slim      # Claude-side workflow (slim profile)
-./install.sh workflow-codex     # Codex-side workflow (full profile, default)
-./install.sh workflow-codex-slim # Codex-side workflow (slim profile)
+./install.sh workflow           # Claude-side workflow (standard profile)
+./install.sh workflow-codex     # Codex-side workflow (standard profile)
 ./install.sh launchers          # shell launcher integration
 ./install.sh uninstall          # remove install
 ```
+
+If `goldband@goldband` and installer-managed Claude assets are both installed,
+`./install.sh status` reports duplicate assets, the active sources, remediation,
+and exits non-zero to avoid a false all-green status.
 
 Dependencies:
 
@@ -88,18 +111,20 @@ Dependencies:
 
 ## Installed Surface
 
-- Claude global guidance: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
+- Claude plugin: `goldband@goldband` provides commands, portable skills, the
+  hook router, and a generated `goldband-rules` skill.
+- Claude installer: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
-- Claude assets: `commands/`, `rules/`, `hooks/`, portable skills
+- Claude installer assets: `commands/`, `rules/`, `hooks/`, portable skills
 - Codex assets: config, profiles, rules, hooks, custom agents, portable skills
 - Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
 
-Goldband Loop has two workflow discovery profiles:
+Goldband Loop uses one standard workflow discovery profile:
 
-- `full`: the default. Installs every `goldband-*` workflow as a top-level skill for backward compatibility.
-- `slim`: opt-in. Exposes only a few entrypoints such as `goldband` and `goldband-upgrade`; full workflow instructions remain installed under `workflows/*.workflow.md` in the runtime root and are loaded by the entrypoint skill.
+- It exposes only a few entrypoints such as `goldband` and `goldband-upgrade`.
+- Full workflow instructions remain installed under `workflows/*.workflow.md` in the runtime root and are loaded by the entrypoint skill.
 
-`slim` keeps the Claude/Codex skill list cleaner, but workflows such as `/goldband-qa` may not appear as top-level skills. Use `workflow-slim` / `workflow-codex-slim` when you want the smaller discovery surface; use the default `workflow` / `workflow-codex` when you need old entrypoint compatibility.
+This keeps the Claude/Codex skill list cleaner and prevents Goldband Loop workflow descriptions from crowding the skills context. The old fully expanded top-level `/goldband-qa`, `/goldband-review`, and similar workflow entries have been removed.
 
 Global guidance only covers daily response style, verification posture, and work
 boundaries. Review, debugging, security, planning, and QA flows live in
@@ -176,8 +201,8 @@ The installer does not enable it by default; build it first, then point the
 
 ## Common Entry Points
 
-These workflow entry points require `workflow`, `workflow-codex`,
-`workflow-slim`, `workflow-codex-slim`, or `all-with-workflow` first:
+These workflow entry points require `workflow`, `workflow-codex`, or
+`all-with-workflow` first:
 
 - `/plan`
 - `/verify`

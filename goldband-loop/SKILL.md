@@ -3,19 +3,22 @@ name: goldband
 preamble-tier: 1
 version: 1.1.0
 description: |
-  Fast headless browser for QA testing and site dogfooding. Navigate pages, interact with
-  elements, verify state, diff before/after, take annotated screenshots, test responsive
-  layouts, forms, uploads, dialogs, and capture bug evidence. Use when asked to open or
-  test a site, verify a deployment, dogfood a user flow, or file a bug with screenshots. (goldband)
+  Goldband workflow router for review, QA, investigation, shipping, deploy verification,
+  security audit, design review, benchmarking, docs, planning, browser testing, and
+  context restore. Use when the user asks for any Goldband workflow, task-level automation,
+  code review, QA, shipping, debugging, security, design, browser, docs, or planning help.
 allowed-tools:
   - Bash
   - Read
   - AskUserQuestion
 triggers:
+  - review this diff
+  - run qa
+  - investigate this bug
+  - ship this change
+  - audit security
+  - review design
   - browse this page
-  - take a screenshot
-  - navigate to url
-  - inspect the page
 
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
@@ -483,15 +486,11 @@ matches a skill's purpose. Do NOT answer directly when a skill exists for the ta
 Use the Skill tool to invoke it. The skill has specialized workflows, checklists, and
 quality gates that produce better results than answering inline.
 
-## Workflow Routing In Slim Installs
+## Workflow Routing In Standard Installs
 
-Goldband Loop can be installed with either workflow discovery profile:
-
-- `full`: workflow skills such as `/qa`, `/review`, and `/ship` are installed as
-  top-level skills.
-- `slim`: only entrypoint skills are exposed. Full workflow instructions are still
-  installed as internal documents under the active Goldband runtime root's
-  `workflows/` directory.
+Goldband Loop uses a standard workflow discovery profile: only entrypoint skills
+are exposed. Full workflow instructions are still installed as internal
+documents under the active Goldband runtime root's `workflows/` directory.
 
 When a routing rule below matches, first invoke the top-level skill if it is
 available. If the host does not expose that skill, read the internal workflow
@@ -512,7 +511,7 @@ Internal workflow resolution:
    if it had been invoked as a top-level skill.
 
 Do not look for internal workflows in nested `SKILL.md` files. `*.workflow.md`
-is the non-discovery format used by slim installs.
+is the non-discovery format used by standard installs.
 
 **Routing rules — when you see these patterns, INVOKE the skill via the Skill tool:**
 - User describes a new idea, asks "is this worth building", brainstorms, pitches a concept → invoke `/office-hours`

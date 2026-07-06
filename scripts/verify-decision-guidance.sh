@@ -79,14 +79,18 @@ check_contains "skills/global/security-checklist/SKILL.md" "/goldband-cso" "secu
 check_contains "skills/global/decision-log/SKILL.md" "### Failure Signals" "decision-log failure signals section"
 check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exit Criteria" "decision-log revisit triggers section"
 
-check_contains "README.md" "## goldband 與 Goldband Loop 的邊界" "README documents Goldband Loop boundary"
+check_contains "README.md" "goldband-loop/" "README references Goldband Loop runtime source"
+check_contains "README.md" "workflow runtime" "README documents Goldband Loop as workflow runtime"
+check_contains "README.md" "ARCHITECTURE.md" "README points boundary details to architecture"
 check_contains_any "README.md" "README mentions decision recommendation guidance" \
   "decision recommendation standard" \
   "方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數"
 check_contains_any "README.md" "README documents healthiest-path default" \
   "預設優先健康且可維護的路徑" \
   "方向判斷預設優先健康且可維護的路徑"
-check_contains "README.en.md" "## goldband vs Goldband Loop" "README.en documents Goldband Loop boundary"
+check_contains "README.en.md" "goldband-loop/" "README.en references Goldband Loop runtime source"
+check_contains "README.en.md" "workflow runtime" "README.en documents Goldband Loop as workflow runtime"
+check_contains "README.en.md" "ARCHITECTURE.md" "README.en points boundary details to architecture"
 check_contains_any "README.en.md" "README.en mentions decision recommendation guidance" \
   "decision recommendation standard" \
   "directional recommendations are expected to surface assumptions, failure modes, alternatives, and unknowns"

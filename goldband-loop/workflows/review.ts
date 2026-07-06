@@ -4,8 +4,14 @@ import { basename, join, relative, resolve } from 'node:path';
 import { adapterFor, workflowLabelFromTemplate } from './host-adapter';
 import { evidencePath, stateRoot } from './evidence';
 import { workflowAssetPath } from './paths';
-import { findingsSchema, normalizeFindings, textSchema, type ReviewFinding } from './schema';
-import type { WorkflowContext, WorkflowStep } from './types';
+import { findingsSchema, normalizeFindings, textSchema } from './schema';
+import type {
+  EvaluationSignalSnapshot,
+  ReviewFinding,
+  SeverityCounts,
+  WorkflowContext,
+  WorkflowStep,
+} from './types';
 
 type DiffOutput = {
   source: string;
@@ -37,6 +43,28 @@ export const reviewSteps: WorkflowStep[] = [
   { name: 'verify-findings', kind: 'typed', produces: findingsSchema, run: verifyFindings },
   { name: 'render-report', kind: 'typed', produces: textSchema, run: renderReport },
 ];
+
+export function reviewSignalFromOutput(
+  output: unknown,
+  _ctx: WorkflowContext,
+  stepName: string,
+): EvaluationSignalSnapshot | undefined {
+  if (!['run-review', 'parse-findings', 'verify-findings'].includes(stepName)) return undefined;
+  return reviewFindingsSignal(findingsSchema.validate(output));
+}
+
+export function reviewTargetMet(signal: EvaluationSignalSnapshot): boolean {
+  return signal.kind === 'review-findings' && signal.findingCount === 0;
+}
+
+export function captureReviewIterationState(
+  output: unknown,
+  _ctx: WorkflowContext,
+  stepName: string,
+) {
+  if (stepName !== 'verify-findings') return undefined;
+  return { previousFindings: findingsSchema.validate(output) };
+}
 
 function collectDiff(ctx: WorkflowContext): DiffOutput {
   if (ctx.options.diffFile) {
@@ -87,7 +115,7 @@ function renderReport(ctx: WorkflowContext): string {
   const report = `${lines.join('\n')}\n`;
   const dir = join(stateRoot(ctx.options), 'workflow-runs', 'artifacts');
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${ctx.runId}-${basename(ctx.workflow.name)}.md`);
+  const file = join(dir, reportArtifactName(ctx));
   writeFileSync(file, report);
   ctx.artifacts.push(file, evidencePath(ctx.workflow.name, ctx.options));
   return report;
@@ -239,6 +267,7 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
   const label = workflowLabelFromTemplate(template);
   return [
     `${label}`,
+    reviewIterationPromptContext(ctx),
     'Return only JSON matching the provided findings schema.',
     'Review this diff for concrete, evidence-backed issues.',
     'DIFF_START',
@@ -246,6 +275,92 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
     'DIFF_END',
   ].join('\n');
 }
+
+function reviewIterationPromptContext(ctx: WorkflowContext): string {
+  const iteration = ctx.iterationContext?.iteration;
+  if (!iteration) return 'GOLDBAND_SINGLE_PASS=1';
+  const previous = ctx.iterationContext?.previousFindings ?? [];
+  return [
+    `GOLDBAND_LOOP_ITERATION=${iteration}`,
+    'Previous validated findings:',
+    JSON.stringify(previous),
+    'Focus this round on whether previous findings are resolved and whether new issues appeared.',
+  ].join('\n');
+}
+
+function reviewFindingsSignal(findings: ReviewFinding[]): EvaluationSignalSnapshot {
+  const severityCounts = emptySeverityCounts();
+  for (const finding of findings) severityCounts[finding.severity] += 1;
+  return {
+    kind: 'review-findings',
+    findingCount: findings.length,
+    severityCounts,
+    blockerKey: findings.length > 0 ? findings.map(findingKey).sort().join('|') : undefined,
+  };
+}
+
+function emptySeverityCounts(): SeverityCounts {
+  return { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+}
+
+function findingKey(finding: ReviewFinding): string {
+  return [
+    finding.file,
+    finding.line ?? '',
+    finding.severity,
+    normalizeEvidenceKey(finding.evidence),
+  ].join(':');
+}
+
+function reportArtifactName(ctx: WorkflowContext): string {
+  const name = basename(ctx.workflow.name);
+  const iteration = ctx.iterationContext?.iteration;
+  return iteration ? `${ctx.runId}-${name}-iteration-${iteration}.md` : `${ctx.runId}-${name}.md`;
+}
+
+function normalizeEvidenceKey(value: string | undefined): string {
+  if (!value) return 'no-evidence';
+  const snippets = Array.from(value.matchAll(/`([^`]+)`/g), (match) => match[1]);
+  const source = snippets.length > 0 ? snippets.join(' ') : value;
+  const tokens = Array.from(source.matchAll(/[A-Za-z_$][A-Za-z0-9_$-]*/g), (match) => match[0].toLowerCase())
+    .filter((token) => !EVIDENCE_KEY_STOPWORDS.has(token));
+  const unique = [...new Set(tokens)].sort();
+  if (unique.length > 0) return unique.join(' ');
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+const EVIDENCE_KEY_STOPWORDS = new Set([
+  'a',
+  'add',
+  'added',
+  'adds',
+  'and',
+  'as',
+  'contains',
+  'declaration',
+  'define',
+  'definition',
+  'diff',
+  'export',
+  'file',
+  'for',
+  'function',
+  'import',
+  'inside',
+  'local',
+  'no',
+  'or',
+  'return',
+  'shown',
+  'still',
+  'symbol',
+  'the',
+  'this',
+  'true',
+  'updated',
+  'visible',
+  'with',
+]);
 
 const findingsJsonSchema = {
   type: 'array',

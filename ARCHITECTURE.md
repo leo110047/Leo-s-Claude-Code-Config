@@ -12,9 +12,14 @@ Codex. It has two first-party layers:
 - Goldband Loop runtime, owned by `goldband-loop/`
 - optional local sandbox execution, owned by `sandbox/`
 
-The user-facing workflow surface is `goldband-*`. The installer installs
-Goldband Loop directly and verifies the result against a machine-readable
-inventory.
+The Claude Code distribution surface is the `goldband@goldband` plugin for core
+commands, portable skills, rules-as-skill packaging, and hooks. The installer
+remains the developer/Codex/workflow-runtime path. This is a scope boundary, not
+a claim that Codex lacks plugins: Codex plugins can distribute Codex workflows,
+but goldband's Codex full setup currently owns host-level configuration that is
+still installer-managed. The user-facing workflow surface is `goldband-*`. The
+installer installs Goldband Loop directly and verifies the result against a
+machine-readable inventory.
 
 ## Responsibility Boundary
 
@@ -32,6 +37,12 @@ inventory.
   - `commands/`
   - `rules/`
   - `hooks/`
+- Claude plugin distribution:
+  - `.claude-plugin/marketplace.json`
+  - `plugin-assets/claude-code-plugin/`
+  - `docs/reports/plugin-expected-assets.json`
+  - `scripts/sync-plugin-assets.mjs`
+  - `scripts/check-plugin-distribution.mjs`
 - first-party MCP surface:
   - `mcp/server/`
   - `mcp/first-party-servers.json`
@@ -61,6 +72,34 @@ Concrete ownership signals include:
 - [goldband-loop/inventory.json](goldband-loop/inventory.json)
 
 ## Integration Contract
+
+### Claude Plugin Contract
+
+The Claude plugin is a generated distribution artifact, not a second source of
+truth. `scripts/sync-plugin-assets.mjs` copies the core source assets into
+`plugin-assets/claude-code-plugin/`, rewrites plugin hooks to use
+`${CLAUDE_PLUGIN_ROOT}`, generates the `goldband-rules` skill from `rules/`, and
+updates `docs/reports/plugin-expected-assets.json`. The drift gate is
+`node scripts/sync-plugin-assets.mjs --check`; the install verifier is
+`node scripts/check-plugin-distribution.mjs`.
+
+The plugin deliberately excludes `goldband-loop/`, Playwright/browser/iOS
+tooling, and public marketplace publishing. Codex has its own plugin ecosystem,
+but goldband's Codex config/rules/hooks still use `install.sh` because this
+plugin packages Claude Code assets.
+
+Codex distribution is intentionally not symmetric yet. A future Codex-specific
+plugin could package the portable Codex-facing subset, such as skills, MCP
+configuration, or app/workflow integrations. It must not be described as a
+replacement for `install.sh codex-full` until it can install and verify the
+full Codex contract. That contract currently includes `codex/config.toml`,
+`codex/requirements.toml`, `codex/rules/`, `codex/hooks.json`, `codex/hooks/`,
+`codex/profiles/`, `codex/permission-profiles/`, `codex/agents/`, and the
+Goldband Loop runtime assets installed under the Codex skill root.
+
+Until that contract is redesigned and verified, `install.sh` is the canonical
+Codex full-setup path. Do not claim Claude/Codex plugin parity in README,
+installer status output, or verification reports.
 
 goldband installs Goldband Loop through [shell/install/workflow.sh](shell/install/workflow.sh).
 That installer is responsible for:
@@ -105,9 +144,13 @@ For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like
 content are materialized into the prompt, while skipped files are recorded as
 no-content markers.
-The workflow runner is currently single-pass: iteration caps and stop
-conditions are recorded as contract metadata, but convergence loops are not yet
-autonomously executed by the runtime.
+`runWorkflow` remains the single-pass compatibility entrypoint. `runWorkflowLoop`
+is the convergence-loop entrypoint for workflows that expose typed evaluation
+signals. Today `goldband-review` and `goldband-qa` can autonomously re-run until
+their target predicate matches, the same blocker repeats, the signal stops
+improving, or the registry iteration cap is reached. Loop runs add `iteration`,
+`signalSnapshot`, and a `loop-summary` event to the same JSONL evidence path so
+readback can reconstruct why each round continued or stopped.
 
 ## Cross-Review Gate
 
@@ -162,6 +205,10 @@ toolchains and file-shape rules.
 
 - Root policy, installer, hooks, commands, and portable skills are covered by
   `node scripts/check-code-style.mjs` and the root validation scripts.
+- Claude plugin drift and clean-home install shape are covered by
+  `node scripts/check-plugin-distribution.mjs`; CI runs the same structural
+  check with `--skip-cli` so source drift still fails without requiring Claude
+  CLI on the runner.
 - Telemetry schema, legacy JSONL compatibility, and OTLP exporter behavior are
   covered by `npm run test:telemetry`.
 - The first-party stdio MCP server is a separate TypeScript package under

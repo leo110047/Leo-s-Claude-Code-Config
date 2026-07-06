@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { StepEvidenceEvent, StepStatus, WorkflowRunOptions } from './types';
+import type {
+  EvaluationSignalSnapshot,
+  SignalTrailEntry,
+  StepEvidenceEvent,
+  StepStatus,
+  StopHistoryEntry,
+  WorkflowRunOptions,
+} from './types';
 
 export function evidencePath(workflow: string, options: WorkflowRunOptions = {}): string {
   return join(stateRoot(options), 'workflow-runs', `${workflow}.jsonl`);
@@ -24,6 +31,12 @@ export function buildEvidenceEvent(input: {
   status: StepStatus;
   output: unknown;
   artifacts?: string[];
+  iteration?: number;
+  signalSnapshot?: EvaluationSignalSnapshot;
+  iterationCount?: number;
+  stopReason?: string;
+  signalTrail?: SignalTrailEntry[];
+  stopHistory?: StopHistoryEntry[];
   error?: string;
 }): StepEvidenceEvent {
   return {
@@ -35,6 +48,12 @@ export function buildEvidenceEvent(input: {
     status: input.status,
     outputDigest: digest(input.output),
     artifacts: input.artifacts ?? [],
+    ...(input.iteration ? { iteration: input.iteration } : {}),
+    ...(input.signalSnapshot ? { signalSnapshot: input.signalSnapshot } : {}),
+    ...(input.iterationCount ? { iterationCount: input.iterationCount } : {}),
+    ...(input.stopReason ? { stopReason: input.stopReason } : {}),
+    ...(input.signalTrail ? { signalTrail: input.signalTrail } : {}),
+    ...(input.stopHistory ? { stopHistory: input.stopHistory } : {}),
     ...(input.error ? { error: input.error } : {}),
   };
 }

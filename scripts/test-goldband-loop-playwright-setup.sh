@@ -69,7 +69,7 @@ run_explicit_skip_succeeds() {
 
   grep -q "Skipping Playwright Chromium install" "$log_file"
   grep -q "Browser workflows will be unavailable" "$log_file"
-  grep -q "goldband ready (claude, full profile)." "$log_file"
+  grep -q "goldband ready (claude, standard profile)." "$log_file"
 }
 
 ensure_setup_preconditions

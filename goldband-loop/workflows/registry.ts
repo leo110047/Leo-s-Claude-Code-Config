@@ -4,7 +4,13 @@ import { defineWorkflow } from './definition';
 import { workflowAssetPath } from './paths';
 import { objectSchema } from './schema';
 import type { HostName, RiskLevel, WorkflowDefinition, WorkflowStep } from './types';
-import { reviewSteps } from './review';
+import {
+  captureReviewIterationState,
+  reviewSignalFromOutput,
+  reviewSteps,
+  reviewTargetMet,
+} from './review';
+import { captureQaIterationState, qaSignalFromOutput, qaSteps, qaTargetMet } from './qa';
 
 const ALL_HOSTS: HostName[] = [
   'claude',
@@ -90,7 +96,7 @@ export const WORKFLOW_REGISTRY: WorkflowDefinition[] = WORKFLOW_NAMES.map((name)
     name,
     target: targetFor(name),
     evaluationSignal: evaluationFor(name),
-    iterationCap: name === 'goldband-review' ? 2 : 1,
+    iterationCap: iterationCapFor(name),
     stopConditions: stopConditionsFor(name),
     sourceTemplate: sourceTemplateFor(name),
     entrypointType: entrypointTypeFor(name),
@@ -101,6 +107,7 @@ export const WORKFLOW_REGISTRY: WorkflowDefinition[] = WORKFLOW_NAMES.map((name)
     migrationNotes: migrationFor(name),
     nextStep: nextStepFor(name),
     steps: stepsFor(name),
+    ...loopHooksFor(name),
   }),
 );
 
@@ -124,6 +131,7 @@ function isCore(name: string): boolean {
 
 function stepsFor(name: string): WorkflowStep[] {
   if (name === 'goldband-review') return reviewSteps;
+  if (name === 'goldband-qa') return qaSteps;
   if (isCore(name)) return compatibilitySteps(name);
   return [];
 }
@@ -150,7 +158,7 @@ function compatibilitySteps(name: string): WorkflowStep[] {
 }
 
 function entrypointTypeFor(name: string) {
-  if (name === 'goldband-review') return 'typed' as const;
+  if (name === 'goldband-review' || name === 'goldband-qa') return 'typed' as const;
   if (isCore(name)) return 'compatibility' as const;
   return 'legacy-thin' as const;
 }
@@ -184,19 +192,29 @@ function evaluationFor(name: string): string {
 
 function stopConditionsFor(name: string): string[] {
   if (name === 'goldband-review') {
-    return ['findings-converged', 'same-blocker-repeated', 'iteration-cap'];
+    return ['findings-converged', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
+  }
+  if (name === 'goldband-qa') {
+    return ['target-met', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
   }
   return ['target-met', 'same-blocker-repeated', 'iteration-cap'];
 }
 
+function iterationCapFor(name: string): number {
+  if (name === 'goldband-review' || name === 'goldband-qa') return 2;
+  return 1;
+}
+
 function migrationFor(name: string): string {
   if (name === 'goldband-review') return 'First fully typed workflow.';
+  if (name === 'goldband-qa') return 'Minimal typed mock adapter for convergence-loop runtime.';
   if (isCore(name)) return 'Core compatibility runtime; typed migration still pending.';
   return 'Registered for inventory coverage; runtime integration pending.';
 }
 
 function nextStepFor(name: string): string {
   if (name === 'goldband-review') return 'Keep schema and evidence fixtures stable.';
+  if (name === 'goldband-qa') return 'Promote real browser checks and screenshot artifacts after mock loop settles.';
   if (name.includes('investigate')) return 'Promote hypothesis and evidence loop to typed steps.';
   if (name.includes('qa')) return 'Promote browser checks and screenshot artifacts to typed steps.';
   if (name.includes('plan')) return 'Type non-interactive review pieces while preserving HITL prompts.';
@@ -209,4 +227,22 @@ function riskFor(name: string): RiskLevel {
   if (/(ship|deploy|canary|upgrade|sync|setup|land-and-deploy|ios-qa)/.test(name)) return 'high';
   if (/(qa|browse|cso|review|investigate|scrape|pair-agent|make-pdf)/.test(name)) return 'medium';
   return 'low';
+}
+
+function loopHooksFor(name: string): Partial<WorkflowDefinition> {
+  if (name === 'goldband-review') {
+    return {
+      evaluateSignal: reviewSignalFromOutput,
+      isTargetMet: reviewTargetMet,
+      captureIterationState: captureReviewIterationState,
+    };
+  }
+  if (name === 'goldband-qa') {
+    return {
+      evaluateSignal: qaSignalFromOutput,
+      isTargetMet: qaTargetMet,
+      captureIterationState: captureQaIterationState,
+    };
+  }
+  return {};
 }

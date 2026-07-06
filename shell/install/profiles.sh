@@ -120,7 +120,7 @@ install_all_tools() {
 
 install_all_with_workflow() {
     install_all_tools
-    install_workflow_host "auto"
+    install_workflow_host "auto" "standard"
 }
 
 install_commands() {

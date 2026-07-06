@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
 import { getWorkflow } from './registry';
+import { runWorkflowLoop } from './loop';
 import { runWorkflow } from './runtime';
 import type { WorkflowRunOptions } from './types';
 
 async function main() {
-  const { workflowName, options } = parseArgs(process.argv.slice(2));
+  const { workflowName, options, loop } = parseArgs(process.argv.slice(2));
   const workflow = getWorkflow(workflowName);
-  const result = await runWorkflow(workflow, options);
+  warnIgnoredOptions(options, loop);
+  const result = loop ? await runWorkflowLoop(workflow, options) : await runWorkflow(workflow, options);
   console.log(JSON.stringify(result, null, 2));
 }
 
-function parseArgs(args: string[]): { workflowName: string; options: WorkflowRunOptions } {
+function parseArgs(args: string[]): { workflowName: string; options: WorkflowRunOptions; loop: boolean } {
   const workflowName = args.shift();
   if (!workflowName || workflowName === '-h' || workflowName === '--help') {
     usage();
@@ -18,6 +20,7 @@ function parseArgs(args: string[]): { workflowName: string; options: WorkflowRun
   }
 
   const options: WorkflowRunOptions = {};
+  let loop = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === '--input') options.inputFile = takeValue(args, ++index, arg);
@@ -28,11 +31,13 @@ function parseArgs(args: string[]): { workflowName: string; options: WorkflowRun
     else if (arg === '--staged') options.staged = true;
     else if (arg === '--worktree') options.worktree = true;
     else if (arg === '--include-untracked') options.includeUntracked = true;
+    else if (arg === '--loop') loop = true;
+    else if (arg === '--max-iterations') options.maxIterations = takeNumber(args, ++index, arg);
     else usageError(`unknown argument: ${arg}`);
   }
   validateOptions(options);
 
-  return { workflowName, options };
+  return { workflowName, options, loop };
 }
 
 function validateOptions(options: WorkflowRunOptions): void {
@@ -50,9 +55,21 @@ function validateOptions(options: WorkflowRunOptions): void {
   }
 }
 
+function warnIgnoredOptions(options: WorkflowRunOptions, loop: boolean): void {
+  if (!loop && options.maxIterations !== undefined) {
+    console.error('--max-iterations is ignored without --loop');
+  }
+}
+
 function takeValue(args: string[], index: number, flag: string): string {
   const value = args[index];
   if (!value) usageError(`${flag} requires a value`);
+  return value;
+}
+
+function takeNumber(args: string[], index: number, flag: string): number {
+  const value = Number.parseInt(takeValue(args, index, flag), 10);
+  if (!Number.isInteger(value) || value < 1) usageError(`${flag} requires a positive integer`);
   return value;
 }
 
@@ -63,7 +80,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <workflow-name> [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <workflow-name> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

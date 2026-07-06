@@ -11,8 +11,12 @@ describe('setup: Conductor worktree guard', () => {
   test('setup contains the real-dir guard before the symlink-or-copy into ~/.claude/skills/', () => {
     const content = fs.readFileSync(SETUP_SCRIPT, 'utf-8');
     const guardIdx = content.indexOf('_SKIP_CLAUDE_REGISTER=0');
-    // v1.36.0.0: symlink work routes through _link_or_copy helper for Windows fallback.
-    const lnIdx = content.indexOf('_link_or_copy "$SOURCE_GOLDBAND_DIR" "$CLAUDE_GOLDBAND_LINK"');
+    // Claude registration now builds a runtime root, whose asset writes route
+    // through _link_or_copy for Windows fallback.
+    const lnIdx = content.indexOf(
+      'create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"',
+      guardIdx,
+    );
     expect(guardIdx).toBeGreaterThan(-1);
     expect(lnIdx).toBeGreaterThan(-1);
     expect(guardIdx).toBeLessThan(lnIdx);

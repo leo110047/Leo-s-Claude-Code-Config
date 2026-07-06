@@ -813,7 +813,7 @@ Prefer the programmatic path when you need structured evidence, mock smoke
 tests, or comparable findings:
 
 ```bash
-bun run workflows/run.ts goldband-review --mode mock --worktree
+bun run workflows/run.ts goldband-review --loop --mode mock --worktree
 ```
 
 `--worktree` includes staged tracked changes, unstaged tracked changes, and
@@ -823,6 +823,8 @@ of being sent to the host.
 For real LLM execution, `--mode real` must be paired with `--host codex` or
 `--host claude`; otherwise the runtime fails closed instead of falling back to
 mock mode.
+Omit `--loop` when you explicitly need the legacy single-pass runtime; keep
+`--loop` for convergence runs that should re-check previous validated findings.
 
 Use `--mode real --host codex` or `--mode real --host claude` only for an
 explicitly authorized LLM run. Step evidence is written to:

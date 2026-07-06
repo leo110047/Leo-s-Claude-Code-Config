@@ -15,7 +15,7 @@ jobs:
           echo "=== Validating JSON files ==="
           errors=0
 
-          for f in hooks/hooks.json skills/global/skill-rules.json .claude-plugin/plugin.json; do
+          for f in hooks/hooks.json skills/global/skill-rules.json .claude-plugin/plugin.json .claude-plugin/marketplace.json plugin-assets/claude-code-plugin/.claude-plugin/plugin.json docs/reports/plugin-expected-assets.json; do
             if [ -f "$f" ]; then
               if python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
                 echo "  [OK] $f"
@@ -43,11 +43,26 @@ jobs:
         with:
           bun-version: 1.3.11
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Install Node dependencies
         run: npm install
 
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Check coding style gate
         run: node scripts/check-code-style.mjs
+
+      - name: Check plugin distribution artifacts and runtime smoke
+        run: |
+          node scripts/sync-plugin-assets.mjs --check
+          node scripts/check-plugin-distribution.mjs --skip-cli
+
+      - name: Test plugin distribution with Claude Code CLI
+        run: npm run test:plugin-distribution
 
       - name: Test coding style gate
         run: npm run test:style-gate

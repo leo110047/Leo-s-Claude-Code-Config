@@ -26,10 +26,7 @@ function main() {
   try {
     runInstall(tmpHome, 'workflow');
     runInstall(tmpHome, 'workflow-codex');
-    assertInstalledInventory(tmpHome, inventory);
-    runInstall(tmpHome, 'workflow-slim');
-    runInstall(tmpHome, 'workflow-codex-slim');
-    assertInstalledSlimInventory(tmpHome);
+    assertInstalledStandardInventory(tmpHome, inventory);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -223,66 +220,19 @@ function assertLegacyConfigMigration() {
   }
 }
 
-function assertInstalledInventory(home, inventory) {
-  const claudeSkillsDir = path.join(home, '.claude', 'skills');
-  const codexSkillsDir = path.join(home, '.codex', 'skills');
-  const claudeRuntime = path.join(claudeSkillsDir, inventory.runtimeRoot);
-  const codexRuntime = path.join(codexSkillsDir, inventory.runtimeRoot);
-
-  assert.ok(fs.existsSync(claudeRuntime), 'Claude runtime root missing');
-  assert.ok(fs.existsSync(codexRuntime), 'Codex runtime root missing');
-  assert.ok(
-    fs.existsSync(path.join(home, '.goldband', 'projects')),
-    'Goldband state directory missing',
-  );
-
-  const expectedClaude = [
-    inventory.runtimeRoot,
-    ...inventory.internalClaudeSkills,
-    ...inventory.skills,
-  ].sort();
-  const actualClaude = skillDirectories(claudeSkillsDir);
-  assertDeepSetEqual('Claude visible skills', actualClaude, expectedClaude);
-
-  const expectedCodex = [
-    inventory.runtimeRoot,
-    ...inventory.skills.map(
-      (skill) => inventory.codexSkillReplacements?.[skill] ?? skill,
-    ),
-  ].sort();
-  const actualCodex = skillDirectories(codexSkillsDir);
-  assertDeepSetEqual('Codex visible skills', actualCodex, expectedCodex);
-
-  assertDeepSetEqual(
-    'installed Claude binaries',
-    executableFiles(path.join(claudeRuntime, 'bin')),
-    inventory.binaries,
-  );
-  assertDeepSetEqual(
-    'installed Codex binaries',
-    executableFiles(path.join(codexRuntime, 'bin')),
-    inventory.binaries,
-  );
-
-  assertInstalledRuntimeSupportFiles(claudeRuntime, codexRuntime);
-  assertNoForbiddenEntries('Claude skills', actualClaude, inventory);
-  assertNoForbiddenEntries('Codex skills', actualCodex, inventory);
-  assertNoLegacyCommands(home, inventory);
-}
-
-function assertInstalledSlimInventory(home) {
+function assertInstalledStandardInventory(home, inventory) {
   const claudeSkillsDir = path.join(home, '.claude', 'skills');
   const codexSkillsDir = path.join(home, '.codex', 'skills');
   const claudeRuntime = path.join(claudeSkillsDir, 'goldband');
   const codexRuntime = path.join(codexSkillsDir, 'goldband');
 
   assertDeepSetEqual(
-    'Claude slim visible skills',
+    'Claude standard visible skills',
     skillDirectories(claudeSkillsDir),
     ['_goldband-command', 'goldband', 'goldband-upgrade'],
   );
   assertDeepSetEqual(
-    'Codex slim visible skills',
+    'Codex standard visible skills',
     skillDirectories(codexSkillsDir),
     ['goldband', 'goldband-upgrade'],
   );
@@ -290,13 +240,13 @@ function assertInstalledSlimInventory(home) {
     fs.existsSync(
       path.join(claudeRuntime, 'workflows', 'goldband-review.workflow.md'),
     ),
-    'Claude slim workflow document missing',
+    'Claude standard workflow document missing',
   );
   assert.ok(
     fs.existsSync(
       path.join(codexRuntime, 'workflows', 'goldband-review.workflow.md'),
     ),
-    'Codex slim workflow document missing',
+    'Codex standard workflow document missing',
   );
   assert.equal(
     fs
@@ -305,7 +255,7 @@ function assertInstalledSlimInventory(home) {
         'utf8',
       )
       .trim(),
-    'slim',
+    'standard',
   );
   assert.equal(
     fs
@@ -314,8 +264,10 @@ function assertInstalledSlimInventory(home) {
         'utf8',
       )
       .trim(),
-    'slim',
+    'standard',
   );
+  assertInstalledRuntimeSupportFiles(claudeRuntime, codexRuntime);
+  assertNoLegacyCommands(home, inventory);
 }
 
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
@@ -372,15 +324,6 @@ function readSkillName(skillPath) {
     throw new Error(`missing skill name: ${skillPath}`);
   }
   return match[1];
-}
-
-function assertNoForbiddenEntries(label, entries, inventory) {
-  const forbidden = entries.filter((entry) =>
-    inventory.forbiddenSkillPrefixParts
-      .map((parts) => parts.join(''))
-      .some((prefix) => entry === prefix || entry.startsWith(`${prefix}-`)),
-  );
-  assert.deepEqual(forbidden, [], `${label} contains forbidden entries`);
 }
 
 function assertNoLegacyCommands(home, inventory) {

@@ -13,9 +13,12 @@ profile_skill_count() {
 }
 
 show_status() {
+    GOLDBAND_STATUS_EXIT_CODE=0
     echo -e "${BLUE}安裝狀態檢查${NC}"
     echo ""
     show_claude_install_status
+    echo ""
+    show_claude_plugin_status
     echo ""
     show_claude_settings_status
     echo ""
@@ -27,6 +30,7 @@ show_status() {
     echo ""
     echo -e "${BLUE}Goldband Loop 狀態${NC}"
     show_workflow_status
+    return "$GOLDBAND_STATUS_EXIT_CODE"
 }
 
 show_claude_install_status() {
@@ -104,6 +108,111 @@ show_claude_settings_status() {
     else
         echo -e "  ${RED}[未安裝]${NC} settings.json 不存在"
     fi
+}
+
+show_claude_plugin_status() {
+    echo -e "${BLUE}Claude plugin 狀態${NC}"
+    if ! claude_plugin_status_prerequisites; then
+        return 0
+    fi
+
+    local plugin_state
+    plugin_state="$(read_goldband_claude_plugin_state)"
+    print_goldband_claude_plugin_state "$plugin_state"
+}
+
+claude_plugin_status_prerequisites() {
+    if ! command -v claude >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}[無法檢查]${NC} claude CLI 不可用"
+        return 1
+    fi
+    if ! command -v node >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}[無法檢查]${NC} node 不可用，無法解析 claude plugin list"
+        return 1
+    fi
+    return 0
+}
+
+read_goldband_claude_plugin_state() {
+    local plugin_json
+    plugin_json="$(claude plugin list --json 2>/dev/null || printf '[]')"
+    PLUGIN_JSON="$plugin_json" node -e '
+const plugins = JSON.parse(process.env.PLUGIN_JSON || "[]");
+const plugin = plugins.find((entry) => entry.id === "goldband@goldband");
+if (!plugin) {
+  console.log("missing");
+} else {
+  const errors = Array.isArray(plugin.errors) ? plugin.errors.join("; ") : "";
+  console.log([
+    "installed",
+    plugin.enabled ? "enabled" : "disabled",
+    plugin.version || "unknown",
+    plugin.installPath || "",
+    errors
+  ].join("\t"));
+}
+'
+}
+
+print_goldband_claude_plugin_state() {
+    local plugin_state="$1"
+    if [ "$plugin_state" = "missing" ]; then
+        echo -e "  ${YELLOW}[未安裝]${NC} goldband@goldband plugin"
+        return 0
+    fi
+
+    local state enabled version install_path errors
+    IFS=$'\t' read -r state enabled version install_path errors <<<"$plugin_state"
+    if [ "$state" != "installed" ]; then
+        echo -e "  ${YELLOW}[無法檢查]${NC} claude plugin list 回傳格式不明"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+
+    if [ "$enabled" = "enabled" ] && [ -z "$errors" ]; then
+        echo -e "  ${GREEN}[OK]${NC} goldband@goldband plugin (${version}) -> $install_path"
+    elif [ "$enabled" = "disabled" ]; then
+        echo -e "  ${YELLOW}[已安裝但停用]${NC} goldband@goldband plugin (${version}) -> $install_path"
+    else
+        echo -e "  ${RED}[錯誤]${NC} goldband@goldband plugin (${version}) -> $install_path"
+        echo -e "    plugin errors: $errors"
+        GOLDBAND_STATUS_EXIT_CODE=2
+    fi
+
+    if [ "$enabled" = "enabled" ]; then
+        show_claude_plugin_duplicate_status
+    fi
+}
+
+show_claude_plugin_duplicate_status() {
+    local duplicates=()
+
+    if repo_path_installed_from "$REPO_DIR/commands" "$CLAUDE_DIR/commands"; then
+        duplicates+=("commands")
+    fi
+    if repo_path_installed_from "$REPO_DIR/rules" "$CLAUDE_DIR/rules"; then
+        duplicates+=("rules")
+    fi
+    if repo_path_installed_from "$REPO_DIR/hooks/scripts" "$CLAUDE_DIR/hooks/scripts"; then
+        duplicates+=("hooks")
+    fi
+    if [ -d "$SKILLS_DIR" ] && [ -f "$SKILL_PROFILE_FILE" ]; then
+        duplicates+=("skills")
+    elif repo_link_points_to "$SKILLS_DIR" "$REPO_DIR/skills/global"; then
+        duplicates+=("skills")
+    fi
+
+    if [ "${#duplicates[@]}" -eq 0 ]; then
+        echo -e "  ${GREEN}[OK]${NC} plugin 與 installer 沒有偵測到 duplicate core asset"
+        return 0
+    fi
+
+    local duplicate_list
+    duplicate_list="$(join_by_comma "${duplicates[@]}")"
+    echo -e "  ${YELLOW}[重複]${NC} plugin 與 installer 同時提供 core asset: $duplicate_list"
+    echo "    active source: goldband@goldband plugin + installer-managed Claude files"
+    echo "    建議: 外部使用者保留 plugin 並執行 ./install.sh uninstall；開發者保留 installer 時執行 claude plugin uninstall goldband@goldband。"
+    GOLDBAND_STATUS_EXIT_CODE=2
 }
 
 show_codex_install_status() {
@@ -317,6 +426,10 @@ workflow_generated_root_for_runtime() {
     link_dir="$(dirname "$resolved_path")"
     resolved_path="$(cd "$link_dir" 2>/dev/null && pwd -P)/$(basename "$resolved_path")" || return 1
     skill_dir="$(dirname "$resolved_path")"
+    if [ -f "$skill_dir/setup" ] && [ -d "$skill_dir/goldband-upgrade" ]; then
+        printf '%s\n' "$skill_dir"
+        return 0
+    fi
     [ "$(basename "$skill_dir")" = "goldband" ] || return 1
     dirname "$skill_dir"
 }

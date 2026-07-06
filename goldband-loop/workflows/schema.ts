@@ -1,13 +1,4 @@
-import type { SchemaValidator } from './types';
-
-export type ReviewFinding = {
-  file: string;
-  line?: number;
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  summary: string;
-  evidence?: string;
-  recommendation?: string;
-};
+import type { QaCheck, QaCheckResult, ReviewFinding, SchemaValidator } from './types';
 
 const severities = new Set(['critical', 'high', 'medium', 'low', 'info']);
 
@@ -41,6 +32,22 @@ export const findingsSchema: SchemaValidator<ReviewFinding[]> = {
   validate(value) {
     if (!Array.isArray(value)) throw new Error('expected findings array');
     return value.map(validateFinding);
+  },
+};
+
+export const qaChecksSchema: SchemaValidator<QaCheck[]> = {
+  name: 'qa-checks',
+  validate(value) {
+    if (!Array.isArray(value)) throw new Error('expected qa checks array');
+    return value.map(validateQaCheck);
+  },
+};
+
+export const qaCheckResultsSchema: SchemaValidator<QaCheckResult[]> = {
+  name: 'qa-check-results',
+  validate(value) {
+    if (!Array.isArray(value)) throw new Error('expected qa check results array');
+    return value.map(validateQaCheckResult);
   },
 };
 
@@ -80,9 +87,33 @@ function validateFinding(value: unknown): ReviewFinding {
   };
 }
 
-function requiredString(value: unknown, field: string): string {
+function validateQaCheck(value: unknown): QaCheck {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('qa check must be an object');
+  }
+  const item = value as Record<string, unknown>;
+  return {
+    id: requiredString(item.id, 'id', 'qa check'),
+    label: requiredString(item.label, 'label', 'qa check'),
+  };
+}
+
+function validateQaCheckResult(value: unknown): QaCheckResult {
+  const check = validateQaCheck(value);
+  const status = (value as Record<string, unknown>).status;
+  if (status !== 'pass' && status !== 'fail') {
+    throw new Error('qa check status must be pass or fail');
+  }
+  return {
+    ...check,
+    status,
+    evidence: requiredString((value as Record<string, unknown>).evidence, 'evidence', 'qa check'),
+  };
+}
+
+function requiredString(value: unknown, field: string, scope = 'finding'): string {
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`finding.${field} must be a non-empty string`);
+    throw new Error(`${scope}.${field} must be a non-empty string`);
   }
   return value.trim();
 }
