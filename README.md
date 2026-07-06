@@ -18,6 +18,13 @@ workflow runtime。
 - 用 hooks、rules、requirements 和 permissions 降低誤操作風險。
 - 透過 `goldband-*` workflow 入口提供 review、debug、QA、planning 等重流程。
 
+方向建議時會要求交代假設、失敗模式、替代方案與待驗證未知數；方向判斷預設優先健康且可維護的路徑。
+
+goldband 是設定與安裝層；`goldband-loop/` 是 first-party workflow runtime。
+Claude plugin 不包含 Goldband Loop。需要 `goldband-*` review、QA、debug、
+planning workflow 時，請走 `./install.sh all-with-workflow`。完整 ownership 看
+[ARCHITECTURE.md](ARCHITECTURE.md)。
+
 ## 安裝路徑
 
 | 需求 | 建議路徑 |
