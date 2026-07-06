@@ -317,10 +317,11 @@ Anything that lives only in the conversation is lost when the session ends.
   `docs/DECISIONS.md` (decision, why, implementation contract), or the repo's
   equivalent decision log.
 - Cross-session task state, direction reversals, and user preferences not
-  derivable from the repo: the assistant's persistent memory, with absolute
-  dates.
+  derivable from the repo: persistent memory only when host policy allows it
+  and the user explicitly asks; otherwise use a repo-local handoff/report.
+  Use absolute dates and omit or redact sensitive data.
 - Investigations that ended without a fix: a short written record of findings
-  and the next step, in a report file or memory — never only in the
+  and the next step, in a report file or authorized memory — never only in the
   conversation.
 - Nothing the repo already records (git history, code structure, past fixes):
   do not duplicate it into memory or decision logs.
