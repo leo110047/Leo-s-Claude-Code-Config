@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractNameAndDescription } from '../scripts/resolvers/codex-helpers';
-import type { ReviewFinding } from './schema';
+import type { ReviewFinding } from './types';
 
 export type HostResult = {
   text: string;
@@ -18,18 +18,34 @@ export type HostAdapter = {
 export class MockHostAdapter implements HostAdapter {
   name = 'mock' as const;
 
-  async runJson(): Promise<HostResult> {
-    const findings: ReviewFinding[] = [{
-      file: 'src/example.ts',
-      line: 2,
-      severity: 'medium',
-      summary: 'Mock review finding with concrete diff evidence.',
-      evidence: '+ riskyChange();',
-      recommendation: 'Add a guard and a focused regression test.',
-    }];
+  async runJson(prompt = ''): Promise<HostResult> {
+    const findings = mockFindingsForPrompt(prompt);
     const parsed = { findings };
     return { text: JSON.stringify(parsed), parsed };
   }
+}
+
+function mockFindingsForPrompt(prompt: string): ReviewFinding[] {
+  const iteration = loopIteration(prompt);
+  if (iteration === 1) return [mockFinding(1), mockFinding(2)];
+  if (iteration === 2) return [];
+  return [mockFinding(1)];
+}
+
+function loopIteration(prompt: string): number | undefined {
+  const match = prompt.match(/^GOLDBAND_LOOP_ITERATION=(\d+)$/m);
+  return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function mockFinding(index: number): ReviewFinding {
+  return {
+      file: 'src/example.ts',
+      line: index + 1,
+      severity: 'medium',
+      summary: `Mock review finding ${index} with concrete diff evidence.`,
+      evidence: '+ riskyChange();',
+      recommendation: 'Add a guard and a focused regression test.',
+  };
 }
 
 export class CodexHostAdapter implements HostAdapter {

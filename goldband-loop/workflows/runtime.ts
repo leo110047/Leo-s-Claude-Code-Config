@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { assertRunnableWorkflow } from './definition';
 import { buildEvidenceEvent, writeEvidence } from './evidence';
-import type { WorkflowDefinition, WorkflowRunOptions } from './types';
+import type {
+  EvaluationSignalSnapshot,
+  IterationContext,
+  WorkflowContext,
+  WorkflowDefinition,
+  WorkflowRunOptions,
+  WorkflowStep,
+} from './types';
 
 export type WorkflowRunResult = {
   runId: string;
@@ -10,78 +17,193 @@ export type WorkflowRunResult = {
   output: unknown;
   evidencePath: string;
   artifacts: string[];
+  signalSnapshot?: EvaluationSignalSnapshot;
+  iterationState: Partial<Pick<IterationContext, 'previousFindings' | 'previousFailedChecks'>>;
+};
+
+type WorkflowPass = {
+  runId: string;
+  workflow: WorkflowDefinition;
+  options: WorkflowRunOptions;
+  artifacts: string[];
+  iterationContext?: IterationContext;
+};
+
+type WorkflowPassState = {
+  input: unknown;
+  signalSnapshot?: EvaluationSignalSnapshot;
+  iterationState: WorkflowRunResult['iterationState'];
+};
+
+type StepRunResult = {
+  output: unknown;
+  evidencePath: string;
 };
 
 export async function runWorkflow(
   workflow: WorkflowDefinition,
   options: WorkflowRunOptions = {},
 ): Promise<WorkflowRunResult> {
+  return executeWorkflowPass(workflow, options);
+}
+
+export async function executeWorkflowPass(
+  workflow: WorkflowDefinition,
+  options: WorkflowRunOptions = {},
+  pass: { runId?: string; iterationContext?: IterationContext } = {},
+): Promise<WorkflowRunResult> {
   assertRunnableWorkflow(workflow);
   assertIteration(workflow, options);
-  const runId = randomUUID();
-  let input = await readInput(options);
-  const artifacts: string[] = [];
+  const workflowPass = await createWorkflowPass(workflow, options, pass);
+  const state = await initialPassState(options);
 
   for (const step of workflow.steps) {
-    const startedAt = new Date().toISOString();
-    const started = performance.now();
-    try {
-      const raw = await step.run({
-        runId,
-        workflow,
-        cwd: options.cwd || process.cwd(),
-        input,
-        options,
-        artifacts,
-      });
-      const output = step.produces.validate(raw);
-      const event = buildEvidenceEvent({
-        runId,
-        workflow: workflow.name,
-        step: step.name,
-        startedAt,
-        durationMs: Math.round(performance.now() - started),
-        status: 'ok',
-        output,
-        artifacts,
-      });
-      const evidenceFile = writeEvidence(event, options);
-      input = output;
-      if (shouldStop(workflow, options)) {
-        return { runId, workflow: workflow.name, output, evidencePath: evidenceFile, artifacts };
-      }
-    } catch (error) {
-      const event = buildEvidenceEvent({
-        runId,
-        workflow: workflow.name,
-        step: step.name,
-        startedAt,
-        durationMs: Math.round(performance.now() - started),
-        status: 'failed',
-        output: null,
-        artifacts,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      writeEvidence(event, options);
-      throw error;
+    const result = await runWorkflowStep(step, workflowPass, state);
+    state.input = result.output;
+    if (shouldStop(workflow, options)) {
+      return buildRunResult(workflowPass, state, result.evidencePath);
     }
   }
 
+  return completeWorkflowPass(workflowPass, state);
+}
+
+async function createWorkflowPass(
+  workflow: WorkflowDefinition,
+  options: WorkflowRunOptions,
+  pass: { runId?: string; iterationContext?: IterationContext },
+): Promise<WorkflowPass> {
   return {
-    runId,
-    workflow: workflow.name,
-    output: input,
-    evidencePath: writeEvidence(buildEvidenceEvent({
-      runId,
-      workflow: workflow.name,
-      step: 'workflow-complete',
-      startedAt: new Date().toISOString(),
-      durationMs: 0,
-      status: 'ok',
-      output: input,
-      artifacts,
-    }), options),
-    artifacts,
+    runId: pass.runId ?? randomUUID(),
+    workflow,
+    options,
+    artifacts: [],
+    iterationContext: pass.iterationContext,
+  };
+}
+
+async function initialPassState(options: WorkflowRunOptions): Promise<WorkflowPassState> {
+  return {
+    input: await readInput(options),
+    iterationState: {},
+  };
+}
+
+async function runWorkflowStep(
+  step: WorkflowStep,
+  pass: WorkflowPass,
+  state: WorkflowPassState,
+): Promise<StepRunResult> {
+  const startedAt = new Date().toISOString();
+  const started = performance.now();
+  try {
+    return await runSuccessfulStep(step, pass, state, startedAt, started);
+  } catch (error) {
+    writeFailedStep(step, pass, state, startedAt, started, error);
+    throw error;
+  }
+}
+
+async function runSuccessfulStep(
+  step: WorkflowStep,
+  pass: WorkflowPass,
+  state: WorkflowPassState,
+  startedAt: string,
+  started: number,
+): Promise<StepRunResult> {
+  const raw = await step.run(stepContext(pass, state.input));
+  const output = step.produces.validate(raw);
+  captureStepState(step, pass, state, output);
+  const evidencePath = writeEvidence(buildEvidenceEvent({
+    runId: pass.runId,
+    workflow: pass.workflow.name,
+    step: step.name,
+    startedAt,
+    durationMs: Math.round(performance.now() - started),
+    status: 'ok',
+    output,
+    artifacts: pass.artifacts,
+    iteration: pass.iterationContext?.iteration,
+    signalSnapshot: state.signalSnapshot,
+  }), pass.options);
+  return { output, evidencePath };
+}
+
+function captureStepState(
+  step: WorkflowStep,
+  pass: WorkflowPass,
+  state: WorkflowPassState,
+  output: unknown,
+): void {
+  const ctx = stepContext(pass, state.input);
+  state.signalSnapshot = pass.workflow.evaluateSignal?.(output, ctx, step.name) ?? state.signalSnapshot;
+  Object.assign(state.iterationState, pass.workflow.captureIterationState?.(output, ctx, step.name));
+}
+
+function writeFailedStep(
+  step: WorkflowStep,
+  pass: WorkflowPass,
+  state: WorkflowPassState,
+  startedAt: string,
+  started: number,
+  error: unknown,
+): void {
+  writeEvidence(buildEvidenceEvent({
+    runId: pass.runId,
+    workflow: pass.workflow.name,
+    step: step.name,
+    startedAt,
+    durationMs: Math.round(performance.now() - started),
+    status: 'failed',
+    output: null,
+    artifacts: pass.artifacts,
+    iteration: pass.iterationContext?.iteration,
+    signalSnapshot: state.signalSnapshot,
+    error: error instanceof Error ? error.message : String(error),
+  }), pass.options);
+}
+
+function completeWorkflowPass(pass: WorkflowPass, state: WorkflowPassState): WorkflowRunResult {
+  const evidencePath = writeEvidence(buildEvidenceEvent({
+    runId: pass.runId,
+    workflow: pass.workflow.name,
+    step: 'workflow-complete',
+    startedAt: new Date().toISOString(),
+    durationMs: 0,
+    status: 'ok',
+    output: state.input,
+    artifacts: pass.artifacts,
+    iteration: pass.iterationContext?.iteration,
+    signalSnapshot: state.signalSnapshot,
+  }), pass.options);
+  return buildRunResult(pass, state, evidencePath);
+}
+
+function buildRunResult(
+  pass: WorkflowPass,
+  state: WorkflowPassState,
+  evidencePath: string,
+): WorkflowRunResult {
+  return {
+    runId: pass.runId,
+    workflow: pass.workflow.name,
+    output: state.input,
+    evidencePath,
+    artifacts: pass.artifacts,
+    signalSnapshot: state.signalSnapshot,
+    iterationState: state.iterationState,
+  };
+}
+
+function stepContext(pass: WorkflowPass, input: unknown): WorkflowContext {
+  return {
+    runId: pass.runId,
+    workflow: pass.workflow,
+    cwd: pass.options.cwd || process.cwd(),
+    input,
+    options: pass.options,
+    artifacts: pass.artifacts,
+    iterationContext: pass.iterationContext,
   };
 }
 

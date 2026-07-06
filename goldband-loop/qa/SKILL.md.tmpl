@@ -42,17 +42,19 @@ The runtime contract for this workflow lives in `goldband-loop/workflows/`.
 Use the programmatic path for mock smoke tests and structured evidence:
 
 ```bash
-bun run workflows/run.ts goldband-qa --mode mock
+bun run workflows/run.ts goldband-qa --loop --mode mock
 ```
 
-The compatibility runtime reads this legacy prompt source and writes step
-evidence to:
+The typed mock adapter runs a fixed check list, records schema-validated
+pass/fail results, and reruns only failed checks on the next loop iteration.
+Step evidence is written to:
 
 ```bash
 ${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-qa.jsonl
 ```
 
-Live QA still uses the markdown flow below until typed migration is complete.
+Live browser QA still uses the markdown flow below until browser actions and
+screenshot artifacts are migrated into typed runtime steps.
 
 # /qa: Test → Fix → Verify
 

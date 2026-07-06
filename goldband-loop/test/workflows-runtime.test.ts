@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defineWorkflow } from '../workflows/definition';
 import { digest, evidencePath, stateRoot } from '../workflows/evidence';
+import { evaluateStopConditions, runWorkflowLoop } from '../workflows/loop';
 import {
   CORE_WORKFLOWS,
   getWorkflow,
@@ -12,7 +13,10 @@ import {
 } from '../workflows/registry';
 import { objectSchema } from '../workflows/schema';
 import { runWorkflow } from '../workflows/runtime';
-import { reviewSteps } from '../workflows/review';
+import type { EvaluationSignalSnapshot } from '../workflows/types';
+import { reviewSignalFromOutput, reviewSteps } from '../workflows/review';
+import { qaChecksSchema } from '../workflows/schema';
+import { MockHostAdapter } from '../workflows/host-adapter';
 
 const ROOT = resolve(import.meta.dir, '..');
 let tmpHome: string;
@@ -39,7 +43,7 @@ describe('workflow runtime', () => {
       });
       expect(result.workflow).toBe(workflow.name);
       expect(readJsonl(workflow.name).length).toBeGreaterThan(0);
-      if (workflow.name !== 'goldband-review') {
+      if (workflow.entrypointType === 'compatibility') {
         const output = result.output as Record<string, unknown>;
         expect(output.mode).toBe('compatibility');
         expect(typeof output.sourceTemplate).toBe('string');
@@ -77,6 +81,121 @@ describe('workflow runtime', () => {
       cwd: ROOT,
     });
     expect(readJsonl(result.workflow)).toHaveLength(1);
+  });
+
+  test('loop stops at iteration cap with the right reason', async () => {
+    const result = await runWorkflowLoop(signalWorkflow({
+      stopConditions: ['target-met', 'iteration-cap'],
+      signals: [
+        { kind: 'generic', score: 2 },
+        { kind: 'generic', score: 1 },
+      ],
+    }), { goldbandHome: tmpHome });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('iteration-cap');
+    expect(result.signalTrail.map((entry) => entry.signal.kind)).toEqual(['generic', 'generic']);
+  });
+
+  test('iteration cap is an implicit loop stop condition', async () => {
+    const result = await runWorkflowLoop(signalWorkflow({
+      stopConditions: ['target-met'],
+      signals: [
+        { kind: 'generic', score: 2 },
+        { kind: 'generic', score: 1 },
+      ],
+    }), { goldbandHome: tmpHome });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('iteration-cap');
+  });
+
+  test('target-met can stop the loop after the first iteration', async () => {
+    const result = await runWorkflowLoop(signalWorkflow({
+      signals: [{ kind: 'generic', score: 0, targetMet: true }],
+    }), { goldbandHome: tmpHome });
+
+    expect(result.iterationCount).toBe(1);
+    expect(result.stopReason).toBe('target-met');
+  });
+
+  test('loop rejects workflows without signal hooks before writing evidence', () => {
+    const result = runCli(['goldband-investigate', '--loop', '--mode', 'mock'], {
+      GOLDBAND_HOME: tmpHome,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('does not support --loop');
+    expect(existsSync(evidencePath('goldband-investigate', { goldbandHome: tmpHome }))).toBe(false);
+  });
+
+  test('same-blocker-repeated is inferred from consecutive signals', () => {
+    const decision = evaluateStopConditions(signalWorkflow({
+      stopConditions: ['same-blocker-repeated'],
+      signals: [],
+    }), {
+      iteration: 2,
+      previousSignal: { kind: 'generic', score: 5, blockerKey: 'missing-config' },
+      stopHistory: [],
+    }, { kind: 'generic', score: 5, blockerKey: 'missing-config' });
+
+    expect(decision.matched).toBe(true);
+    expect(decision.condition).toBe('same-blocker-repeated');
+  });
+
+  test('same-blocker-repeated stops a loop without external flags', async () => {
+    const result = await runWorkflowLoop(signalWorkflow({
+      stopConditions: ['same-blocker-repeated', 'iteration-cap'],
+      signals: [
+        { kind: 'generic', score: 5, blockerKey: 'missing-config' },
+        { kind: 'generic', score: 5, blockerKey: 'missing-config' },
+      ],
+    }), { goldbandHome: tmpHome });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('same-blocker-repeated');
+  });
+
+  test('review same-blocker key ignores summary wording changes', () => {
+    const workflow = getWorkflow('goldband-review');
+    const previousSignal = reviewSignalFromOutput([{
+      file: 'src/example.ts',
+      line: 2,
+      severity: 'high',
+      summary: 'First wording for the defect.',
+      evidence: '`+ riskyChange();` is still present.',
+    }], workflowContext(workflow), 'verify-findings');
+    const currentSignal = reviewSignalFromOutput([{
+      file: 'src/example.ts',
+      line: 2,
+      severity: 'high',
+      summary: 'Different wording for the same defect.',
+      evidence: '  `+ riskyChange();`   is still present. ',
+    }], workflowContext(workflow), 'verify-findings');
+
+    expect(previousSignal?.blockerKey).not.toContain('First wording');
+    expect(previousSignal?.blockerKey).toBe(currentSignal?.blockerKey);
+    const decision = evaluateStopConditions(workflow, {
+      iteration: 2,
+      previousSignal,
+      stopHistory: [],
+    }, currentSignal!);
+    expect(decision.condition).toBe('same-blocker-repeated');
+    expect(decision.matched).toBe(true);
+  });
+
+  test('no-improvement stops when signal score is flat', async () => {
+    const result = await runWorkflowLoop(signalWorkflow({
+      stopConditions: ['target-met', 'no-improvement', 'iteration-cap'],
+      iterationCap: 3,
+      signals: [
+        { kind: 'generic', score: 1 },
+        { kind: 'generic', score: 1 },
+      ],
+    }), { goldbandHome: tmpHome });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('no-improvement');
   });
 
   test('schema validation failures write failed evidence', async () => {
@@ -123,6 +242,76 @@ describe('workflow runtime', () => {
     expect(events.every((event) => event.runId === result.runId)).toBe(true);
   });
 
+  test('goldband-review loop converges after previous findings reach zero', async () => {
+    const result = await runWorkflowLoop(getWorkflow('goldband-review'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      diffFile: 'test/fixtures/workflows/review.diff',
+    });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('findings-converged');
+    expect(result.signalTrail.map((entry) => signalCount(entry.signal))).toEqual([2, 0]);
+
+    const runEvents = readJsonl('goldband-review').filter((event) => event.runId === result.runId);
+    expect(runEvents.some((event) => event.step === 'loop-summary')).toBe(true);
+    expect(runEvents.filter((event) => event.step === 'run-review').map((event) => event.iteration))
+      .toEqual([1, 2]);
+    const secondReview = runEvents.find((event) => event.step === 'run-review' && event.iteration === 2);
+    expect(secondReview?.signalSnapshot.findingCount).toBe(0);
+
+    const reportArtifacts = runEvents
+      .filter((event) => event.step === 'render-report')
+      .map((event) => event.artifacts[0]);
+    expect(reportArtifacts).toHaveLength(2);
+    expect(reportArtifacts[0]).toContain('iteration-1.md');
+    expect(reportArtifacts[1]).toContain('iteration-2.md');
+    expect(reportArtifacts[0]).not.toBe(reportArtifacts[1]);
+  });
+
+  test('mock review adapter reads exact loop iteration token', async () => {
+    const adapter = new MockHostAdapter();
+    const result = await adapter.runJson('GOLDBAND_LOOP_ITERATION=12', {});
+    const findings = (result.parsed as { findings: unknown[] }).findings;
+
+    expect(findings).toHaveLength(1);
+  });
+
+  test('goldband-qa loop reruns only failed checks', async () => {
+    const result = await runWorkflowLoop(getWorkflow('goldband-qa'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    });
+
+    expect(result.iterationCount).toBe(2);
+    expect(result.stopReason).toBe('target-met');
+    expect(result.signalTrail.map((entry) => signalCount(entry.signal))).toEqual([1, 0]);
+
+    const events = readJsonl('goldband-qa').filter((event) => event.runId === result.runId);
+    const selectEvents = events.filter((event) => event.step === 'select-checks');
+    expect(selectEvents).toHaveLength(2);
+    expect(selectEvents[0].outputDigest).not.toBe(selectEvents[1].outputDigest);
+    const secondChecks = events.find((event) => event.step === 'run-checks' && event.iteration === 2);
+    expect(secondChecks?.signalSnapshot.checkCount).toBe(1);
+  });
+
+  test('qa schema errors use qa check field labels', () => {
+    expect(() => qaChecksSchema.validate([{ label: 'Missing id' }]))
+      .toThrow('qa check.id must be a non-empty string');
+  });
+
+  test('loop max iterations cannot exceed registry cap', async () => {
+    await expect(runWorkflowLoop(getWorkflow('goldband-review'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      maxIterations: 3,
+      diffFile: 'test/fixtures/workflows/review.diff',
+    })).rejects.toThrow('cannot exceed registry cap');
+  });
+
   test('CLI rejects real mode without a real host and invalid enums', () => {
     const noHost = runCli(['goldband-review', '--mode', 'real']);
     expect(noHost.status).toBe(2);
@@ -135,6 +324,21 @@ describe('workflow runtime', () => {
     const badHost = runCli(['goldband-review', '--mode', 'real', '--host', 'mock']);
     expect(badHost.status).toBe(2);
     expect(badHost.stderr).toContain('--mode real requires --host claude or --host codex');
+  });
+
+  test('CLI warns when max-iterations is provided without loop', () => {
+    const result = runCli([
+      'goldband-review',
+      '--mode',
+      'mock',
+      '--max-iterations',
+      '1',
+      '--diff-file',
+      'test/fixtures/workflows/review.diff',
+    ], { GOLDBAND_HOME: tmpHome });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('--max-iterations is ignored without --loop');
   });
 
   test('worktree diff includes safe untracked files', async () => {
@@ -313,12 +517,30 @@ describe('workflow runtime', () => {
       expect(Array.isArray(event.artifacts)).toBe(true);
     }
   });
+
+  test('real LLM loop evidence fixture keeps convergence readback shape', () => {
+    const file = resolve(ROOT, 'test/fixtures/workflows/real-llm-loop-evidence.jsonl');
+    const events = readFileSync(file, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    const runIds = new Set(events.map((event) => event.runId));
+    const summary = events.find((event) => event.step === 'loop-summary');
+
+    expect(runIds.size).toBe(1);
+    expect(summary?.iterationCount).toBe(2);
+    expect(summary?.stopReason).toBe('same-blocker-repeated');
+    expect(summary?.signalTrail.map((entry: any) => entry.iteration)).toEqual([1, 2]);
+    expect(events.filter((event) => event.step === 'run-review').map((event) => event.iteration))
+      .toEqual([1, 2]);
+  });
 });
 
-function runCli(args: string[]): { status: number | null; stderr: string } {
+function runCli(
+  args: string[],
+  env: Record<string, string | undefined> = {},
+): { status: number | null; stderr: string } {
   const result = spawnSync('bun', ['run', 'workflows/run.ts', ...args], {
     cwd: ROOT,
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
   return { status: result.status, stderr: result.stderr };
 }
@@ -351,4 +573,51 @@ function commitAll(repo: string, message: string): void {
     message,
   ], { cwd: repo, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+}
+
+function signalWorkflow(input: {
+  signals: EvaluationSignalSnapshot[];
+  stopConditions?: string[];
+  iterationCap?: number;
+}) {
+  let index = 0;
+  return defineWorkflow({
+    name: `signal-workflow-${Math.random()}`,
+    target: 'Converge on a generic signal.',
+    evaluationSignal: 'Generic score.',
+    iterationCap: input.iterationCap ?? 2,
+    stopConditions: input.stopConditions ?? ['target-met', 'iteration-cap'],
+    sourceTemplate: 'README.md',
+    entrypointType: 'typed',
+    integrationStatus: 'integrated',
+    hostSupport: ['claude'],
+    riskLevel: 'low',
+    evidencePolicy: 'JSONL',
+    migrationNotes: 'test',
+    nextStep: 'test',
+    steps: [{
+      name: 'signal',
+      kind: 'typed',
+      produces: objectSchema,
+      run: () => ({ ok: true }),
+    }],
+    evaluateSignal: () => input.signals[Math.min(index++, input.signals.length - 1)],
+    isTargetMet: (signal) => signal.kind === 'generic' && signal.targetMet === true,
+  });
+}
+
+function signalCount(signal: EvaluationSignalSnapshot): number {
+  if (signal.kind === 'review-findings') return signal.findingCount;
+  if (signal.kind === 'qa-checks') return signal.failedCount;
+  return signal.score;
+}
+
+function workflowContext(workflow = getWorkflow('goldband-review')) {
+  return {
+    runId: 'test-run',
+    workflow,
+    cwd: ROOT,
+    options: {},
+    artifacts: [],
+  };
 }

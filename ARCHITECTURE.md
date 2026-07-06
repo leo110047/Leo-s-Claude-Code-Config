@@ -105,9 +105,13 @@ For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like
 content are materialized into the prompt, while skipped files are recorded as
 no-content markers.
-The workflow runner is currently single-pass: iteration caps and stop
-conditions are recorded as contract metadata, but convergence loops are not yet
-autonomously executed by the runtime.
+`runWorkflow` remains the single-pass compatibility entrypoint. `runWorkflowLoop`
+is the convergence-loop entrypoint for workflows that expose typed evaluation
+signals. Today `goldband-review` and `goldband-qa` can autonomously re-run until
+their target predicate matches, the same blocker repeats, the signal stops
+improving, or the registry iteration cap is reached. Loop runs add `iteration`,
+`signalSnapshot`, and a `loop-summary` event to the same JSONL evidence path so
+readback can reconstruct why each round continued or stopped.
 
 ## Cross-Review Gate
 

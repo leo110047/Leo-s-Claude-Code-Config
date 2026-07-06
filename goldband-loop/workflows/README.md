@@ -43,6 +43,8 @@ conditions, source template, or host support are missing.
 
 ```bash
 bun run workflows/run.ts <workflow-name> \
+  [--loop] \
+  [--max-iterations <n>] \
   [--input <file>] \
   [--base <ref>] \
   [--mode mock|real] \
@@ -58,6 +60,14 @@ Compatibility workflows currently support mock mode only: they read their
 legacy prompt source, emit a digest-backed evidence event, and fail closed in
 real mode until their typed migration is complete. Real LLM execution is only
 enabled for typed runtime steps such as `goldband-review`.
+
+By default, `workflows/run.ts` uses the single-pass `runWorkflow` entrypoint.
+Pass `--loop` to use `runWorkflowLoop` for typed convergence workflows. The
+loop controller evaluates structured signals after each iteration and stops
+when the target is met, the same blocker repeats, the signal stops improving,
+or the effective iteration cap is reached. `--max-iterations <n>` may lower the
+registry cap for a run, including real mode budget control, but it cannot raise
+the cap above the registry value.
 
 For `goldband-review`, diff selection is:
 
@@ -90,11 +100,19 @@ the report but downgraded to `info` with an `unverified` prefix. This is an
 explicit trust policy: the runtime does not present high severity claims unless
 the host supplied diff-backed evidence.
 
-The current runner is single-pass. `iterationCap` and `stopConditions` are
-registered as contract metadata and `iterationCap` is enforced when an external
-caller supplies an iteration number, but the runtime does not yet autonomously
-re-run a workflow until convergence. Today only the externally supplied
-`same-blocker-repeated` stop gate is enforced during a run.
+For `goldband-review --loop`, one iteration is the typed review pipeline:
+collect diff, run review, parse findings, verify findings, and render the
+report. Later iterations receive the previous validated findings in their
+iteration context so the review can focus on whether those findings resolved
+and whether new issues appeared. The review target predicate is exposed as the
+registry stop condition `findings-converged`, which matches when the validated
+finding count reaches zero.
+
+For `goldband-qa --loop`, the current typed adapter is intentionally narrow:
+mock mode selects a fixed check list, records schema-validated pass/fail
+results, and retries only failed checks on the next iteration. Real browser QA
+still uses the markdown `/qa` skill until its browser actions and screenshot
+artifacts are migrated into typed runtime steps.
 
 ## Evidence
 
@@ -109,9 +127,24 @@ Each step writes one JSONL event:
   "durationMs": 12,
   "status": "ok",
   "outputDigest": "...",
+  "iteration": 1,
+  "signalSnapshot": {
+    "kind": "review-findings",
+    "findingCount": 0,
+    "severityCounts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0
+    }
+  },
   "artifacts": []
 }
 ```
+
+Loop runs also write a `loop-summary` event with `iterationCount`,
+`stopReason`, `signalTrail`, and `stopHistory`.
 
 Readback path:
 
@@ -181,9 +214,9 @@ The current core set was chosen from repository fallback guidance because local
 to rank workflows. Fallback sources were root `CLAUDE.md`, `rules/git-workflow.md`,
 and `goldband-loop/CLAUDE.md`.
 
-- `goldband-review`: typed runtime.
+- `goldband-review`: typed runtime with convergence loop support.
 - `goldband-investigate`: compatibility runtime.
-- `goldband-qa`: compatibility runtime.
+- `goldband-qa`: typed mock convergence adapter; real browser QA remains markdown-driven.
 - `plan`: compatibility runtime.
 - `goldband-cso`: compatibility runtime.
 - `goldband-ship`: compatibility runtime.

@@ -10,7 +10,7 @@ the documented fallback: root `CLAUDE.md`, `rules/git-workflow.md`, and
 | --- | --- | --- |
 | `goldband-review` | Code review is named in root guidance and git workflow. | `typed` |
 | `goldband-investigate` | Bug/root-cause workflow is named in routing guidance. | `compatibility` |
-| `goldband-qa` | QA/testing workflow is named in routing guidance. | `compatibility` |
+| `goldband-qa` | QA/testing workflow is named in routing guidance. | `typed mock loop adapter` |
 | `plan` | Plan-first workflow is named in git workflow. | `compatibility` |
 | `goldband-cso` | Security review is named in root preferred entrypoints. | `compatibility` |
 | `goldband-ship` | Ship/release workflow is named in routing guidance. | `compatibility` |
@@ -28,17 +28,29 @@ ${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/<workflow>.jsonl
 | --- | --- | --- | --- | --- |
 | goldband-cso | integrated | compatibility | medium | Add typed security checklist and evidence gates. |
 | goldband-investigate | integrated | compatibility | medium | Promote hypothesis and evidence loop to typed steps. |
-| goldband-qa | integrated | compatibility | medium | Promote browser checks and screenshot artifacts to typed steps. |
+| goldband-qa | integrated | typed | medium | Promote real browser checks and screenshot artifacts after mock loop settles. |
 | goldband-review | integrated | typed | medium | Keep schema and evidence fixtures stable. |
 | goldband-ship | integrated | compatibility | high | Add safety-gate typed steps before side effects. |
 | plan | integrated | compatibility | low | Type non-interactive review pieces while preserving HITL prompts. |
 
-Real LLM e2e readback for `goldband-review`:
+Real LLM loop e2e readback for `goldband-review`:
 
-- Command: `GOLDBAND_HOME=/private/tmp/goldband-workflow-real-e2e-codex bun run workflows/run.ts goldband-review --mode real --host codex --diff-file test/fixtures/workflows/review.diff`
-- Evidence path: `/private/tmp/goldband-workflow-real-e2e-codex/workflow-runs/goldband-review.jsonl`
-- Fixture copy: `test/fixtures/workflows/real-llm-evidence.jsonl`
-- Result: one validated high-severity finding and a rendered report artifact.
+- Command: `GOLDBAND_HOME=/private/tmp/goldband-workflow-real-e2e-convergence bun run workflows/run.ts goldband-review --loop --mode real --host codex --diff-file test/fixtures/workflows/review.diff`
+- Evidence path: `/private/tmp/goldband-workflow-real-e2e-convergence/workflow-runs/goldband-review.jsonl`
+- Fixture copy: `test/fixtures/workflows/real-llm-loop-evidence.jsonl`
+- Result: two real LLM iterations stopped by `same-blocker-repeated`, with one validated
+  high-severity finding in each iteration and a rendered report artifact.
+
+Mock convergence readback:
+
+- `goldband-review --loop`: first iteration returns two mock findings, second
+  iteration receives the previous validated findings and converges with zero
+  findings. Evidence includes per-step `iteration` fields and a `loop-summary`
+  event.
+- `goldband-qa --loop`: first iteration runs the fixed mock check list with one
+  failed check, second iteration reruns only that failed check and converges
+  with zero failures. Real browser QA remains markdown-driven until browser
+  actions and screenshot artifacts are migrated into typed steps.
 
 ## Pending Registered-Only
 
@@ -100,8 +112,8 @@ remaining registry-only workflows.
 
 1. `goldband-investigate`: root-cause loop maps cleanly to hypothesis, evidence,
    and verified-cause steps.
-2. `goldband-qa` / `goldband-qa-only`: browser checks and screenshots are
-   naturally typed artifacts.
+2. `goldband-qa-only` and the real-browser side of `goldband-qa`: browser
+   checks and screenshots are naturally typed artifacts.
 3. `plan-*`: type the non-interactive audit parts while preserving
    `AskUserQuestion` and HITL boundaries.
 4. `goldband-ship`, `goldband-land-and-deploy`, deploy/setup workflows: keep

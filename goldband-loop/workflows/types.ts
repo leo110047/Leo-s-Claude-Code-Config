@@ -15,6 +15,13 @@ export type IntegrationStatus = 'integrated' | 'registered-only';
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type StepKind = 'typed' | 'llm' | 'legacyPrompt';
 export type StepStatus = 'ok' | 'failed' | 'skipped';
+export type StopPredicateName =
+  | 'target-met'
+  | 'findings-converged'
+  | 'iteration-cap'
+  | 'same-blocker-repeated'
+  | 'no-improvement'
+  | string;
 
 export type SchemaValidator<T = unknown> = {
   name: string;
@@ -28,6 +35,7 @@ export type WorkflowContext = {
   input?: unknown;
   options: WorkflowRunOptions;
   artifacts: string[];
+  iterationContext?: IterationContext;
 };
 
 export type WorkflowStep<T = unknown> = {
@@ -52,6 +60,9 @@ export type WorkflowDefinition = {
   migrationNotes: string;
   nextStep: string;
   steps: WorkflowStep[];
+  evaluateSignal?: WorkflowSignalEvaluator;
+  isTargetMet?: WorkflowTargetEvaluator;
+  captureIterationState?: WorkflowIterationStateCapture;
 };
 
 export type WorkflowRunOptions = {
@@ -67,6 +78,7 @@ export type WorkflowRunOptions = {
   cwd?: string;
   iteration?: number;
   repeatedBlocker?: boolean;
+  maxIterations?: number;
 };
 
 export type StepEvidenceEvent = {
@@ -78,5 +90,97 @@ export type StepEvidenceEvent = {
   status: StepStatus;
   outputDigest: string;
   artifacts: string[];
+  iteration?: number;
+  signalSnapshot?: EvaluationSignalSnapshot;
+  iterationCount?: number;
+  stopReason?: string;
+  signalTrail?: SignalTrailEntry[];
+  stopHistory?: StopHistoryEntry[];
   error?: string;
 };
+
+export type ReviewFinding = {
+  file: string;
+  line?: number;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  summary: string;
+  evidence?: string;
+  recommendation?: string;
+};
+
+export type QaCheck = {
+  id: string;
+  label: string;
+};
+
+export type QaCheckResult = QaCheck & {
+  status: 'pass' | 'fail';
+  evidence: string;
+};
+
+export type SeverityCounts = Record<ReviewFinding['severity'], number>;
+
+export type ReviewFindingsSignal = {
+  kind: 'review-findings';
+  findingCount: number;
+  severityCounts: SeverityCounts;
+  blockerKey?: string;
+};
+
+export type QaChecksSignal = {
+  kind: 'qa-checks';
+  checkCount: number;
+  passedCount: number;
+  failedCount: number;
+  failedCheckIds: string[];
+  blockerKey?: string;
+};
+
+export type GenericSignal = {
+  kind: 'generic';
+  score: number;
+  targetMet?: boolean;
+  blockerKey?: string;
+};
+
+export type EvaluationSignalSnapshot =
+  | ReviewFindingsSignal
+  | QaChecksSignal
+  | GenericSignal;
+
+export type StopHistoryEntry = {
+  iteration: number;
+  condition: StopPredicateName;
+  matched: boolean;
+  reason: string;
+};
+
+export type IterationContext = {
+  iteration: number;
+  previousSignal?: EvaluationSignalSnapshot;
+  previousFindings?: ReviewFinding[];
+  previousFailedChecks?: QaCheckResult[];
+  stopHistory: StopHistoryEntry[];
+};
+
+export type SignalTrailEntry = {
+  iteration: number;
+  signal: EvaluationSignalSnapshot;
+};
+
+export type WorkflowSignalEvaluator = (
+  output: unknown,
+  ctx: WorkflowContext,
+  stepName: string,
+) => EvaluationSignalSnapshot | undefined;
+
+export type WorkflowTargetEvaluator = (
+  signal: EvaluationSignalSnapshot,
+  ctx: IterationContext,
+) => boolean;
+
+export type WorkflowIterationStateCapture = (
+  output: unknown,
+  ctx: WorkflowContext,
+  stepName: string,
+) => Partial<Pick<IterationContext, 'previousFindings' | 'previousFailedChecks'>> | undefined;
