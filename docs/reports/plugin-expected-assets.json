@@ -104,11 +104,14 @@
       "hooks/scripts/hooks/skill-activation-suggestions.js"
     ],
     "rules": [
+      "rules/change-scope.md",
       "rules/claim-verification.md",
       "rules/coding-style.md",
+      "rules/escalation.md",
       "rules/git-workflow.md",
       "rules/loop-engineering.md",
-      "rules/security.md"
+      "rules/security.md",
+      "rules/session-handoff.md"
     ],
     "generatedRuleSkill": "plugin-assets/claude-code-plugin/skills/goldband-rules/SKILL.md"
   },

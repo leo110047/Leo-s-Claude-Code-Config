@@ -75,6 +75,28 @@
     }
   },
   {
+    "id": "pretool-allow-rules-dir-write",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "doc-file-blocker",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "rules-dir-allowlist"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "rules/escalation.md",
+        "content": "# Escalation policy"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
     "id": "pretool-allow-readme-write",
     "coverage": {
       "category": "pretool-policy",

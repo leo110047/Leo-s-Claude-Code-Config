@@ -1,5 +1,41 @@
 # Goldband Decisions
 
+## 2026-07-06: Always-On Judgment Rules for Weaker-Model Sessions
+
+Decision: encode cross-cutting judgment as three new always-on rules —
+`rules/escalation.md` (stop/ask/proceed contract with hard tripwires),
+`rules/change-scope.md` (right-sizing fixes to the root cause), and
+`rules/session-handoff.md` (what to persist where between sessions). Claude
+loads them automatically through the `~/.claude/rules` symlink; Codex gets a
+condensed `Judgment Defaults` section in `codex/AGENTS.md` because Codex has
+no prose-rules autoload surface.
+
+Why:
+
+- Day-to-day sessions will run on smaller models. The failure modes that most
+  need compensation are not style or security (already gated) but judgment:
+  when to stop retrying, when to ask versus proceed, how large a fix should
+  be, and what survives the end of a session.
+- Rules are the highest-leverage injection point: they enter every session's
+  context without the model having to decide to invoke a skill. A model that
+  is confidently wrong will not invoke a corrective skill, so tripwires must
+  be always-on.
+- Tripwires are written as mechanics (counts, concrete triggers), not vibes,
+  so a weaker model can apply them without judgment.
+
+Implementation contract:
+
+- Full policy text lives only in `rules/*.md`; `codex/AGENTS.md` carries a
+  condensed mirror and must be updated when the rules change materially. The
+  Claude adapter `claude/CLAUDE.md` intentionally does not duplicate rules.
+- Always-on rules must stay lean: target under ~60 lines per rule; anything
+  larger belongs in a skill or workflow, not in `rules/`.
+- The plugin distribution regenerates `goldband-rules` from `rules/` via
+  `node scripts/sync-plugin-assets.mjs`; run it after any rules change.
+- The hook-router doc-file blocker allowlists `rules/` (with replay fixture
+  `pretool-allow-rules-dir-write`) so policy files are not treated as ad hoc
+  documentation.
+
 ## 2026-07-06: App Surface Support Uses Shared Config or Separate Adapters
 
 Decision: support app surfaces without rewriting the existing CLI setup paths.
