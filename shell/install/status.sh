@@ -25,6 +25,9 @@ show_status() {
     echo -e "${BLUE}Codex 狀態${NC}"
     show_codex_install_status
     echo ""
+    echo -e "${BLUE}App surface 狀態${NC}"
+    show_app_surface_status
+    echo ""
     echo -e "${BLUE}Git style gate 狀態${NC}"
     show_git_style_gate_status
     echo ""

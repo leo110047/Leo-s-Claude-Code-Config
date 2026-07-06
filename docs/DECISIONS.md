@@ -1,5 +1,55 @@
 # Goldband Decisions
 
+## 2026-07-06: App Surface Support Uses Shared Config or Separate Adapters
+
+Decision: support app surfaces without rewriting the existing CLI setup paths.
+Codex app support uses the same shared Codex config surfaces as Codex CLI, while
+Claude app support uses a separate MCP-based adapter instead of Claude Code
+settings or hooks.
+
+Why:
+
+- Codex app, Codex CLI, and the Codex IDE extension share agent configuration,
+  skills, and MCP settings through Codex config layers.
+- Codex plugins are useful for a portable subset: skills plus optional app/MCP
+  integration. They do not replace the installer-managed full Codex setup.
+- Claude Desktop and Claude web/mobile connector support are app surfaces, not
+  Claude Code runtime surfaces. They need a local extension or remote MCP
+  connector, not copied Claude Code hooks.
+- Goldband Loop remains installer-managed. It is too broad for the portable app
+  adapter contract.
+
+Implementation contract:
+
+- `scripts/sync-app-support-assets.mjs` generates `.codex-plugin/plugin.json`,
+  `.agents/plugins/marketplace.json`, `plugin-assets/codex-plugin/`, the Claude
+  Desktop extension source, the remote connector template, and
+  `docs/reports/app-support-expected-assets.json`.
+- `scripts/build-claude-app-adapters.mjs` builds the local
+  `goldband-local-extension.mcpb` package from the generated Claude Desktop
+  extension source.
+- `scripts/check-app-support.mjs` verifies generated drift, Codex plugin shape,
+  repo marketplace shape, Claude Desktop package buildability, remote connector
+  template shape, wrapper fail-closed behavior, and wording boundaries.
+- `install.sh status` reports Codex app shared-config readiness, Codex plugin
+  package availability, Claude Desktop local extension package/readback, and
+  Claude remote connector template/readback separately.
+
+External facts checked on 2026-07-06:
+
+- Codex manual documents that Codex app agents inherit the same configuration
+  as IDE and CLI, and that MCP configuration lives in `config.toml`:
+  https://developers.openai.com/codex/codex-manual.md
+- Codex manual documents plugins as bundles for skills, app integrations, and
+  MCP servers, with repo and personal marketplace support:
+  https://developers.openai.com/codex/codex-manual.md
+- Claude support docs document remote MCP custom connectors for Claude web,
+  mobile, and Desktop:
+  https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp
+- Claude support docs document local MCP servers for Claude Desktop and link
+  Desktop Extensions for `.mcpb` packaging:
+  https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop
+
 ## 2026-07-06: Claude Plugin as Primary Claude Core Distribution
 
 Decision: distribute goldband's core Claude Code surface through a local

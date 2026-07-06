@@ -1,0 +1,31 @@
+{
+  "name": "goldband-remote-connector",
+  "displayName": "Goldband Remote MCP",
+  "type": "remote-mcp-registration-template",
+  "transport": "streamable-http",
+  "remoteMcpUrl": "https://YOUR_GOLDBAND_MCP_HOST.example.com/mcp",
+  "oauth": {
+    "clientId": "YOUR_OAUTH_CLIENT_ID",
+    "clientSecret": "YOUR_OAUTH_CLIENT_SECRET",
+    "scopes": [
+      "goldband.read"
+    ]
+  },
+  "claudeSetup": {
+    "teamEnterpriseOwner": "Organization settings > Connectors > Add > Custom > Web",
+    "proMaxUser": "Customize > Connectors > + > Add custom connector",
+    "conversationEnablement": "Use the + button in the chat composer, choose Connectors, and enable Goldband Remote MCP for that conversation."
+  },
+  "security": {
+    "exposeOnlyPortableSubset": true,
+    "requireAuthentication": true,
+    "doNotExposeClaudeCodeHooks": true,
+    "doNotExposeGoldbandLoopRuntime": true
+  },
+  "expectedTools": [
+    "goldband_policy_check",
+    "goldband_telemetry_query",
+    "knowledge-query",
+    "goldband_health_check"
+  ]
+}

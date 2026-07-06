@@ -31,16 +31,32 @@ planning workflow 時，請走 `./install.sh all-with-workflow`。完整 ownersh
 | --- | --- |
 | 只要 Claude Code core guardrails | Claude plugin：`goldband@goldband` |
 | Codex full setup | installer：`./install.sh codex-full` |
+| Codex app shared config | installer：`./install.sh codex-full` |
+| Codex plugin portable subset | repo marketplace：`.agents/plugins/marketplace.json` |
+| Claude Desktop app portable subset | `app-adapters/claude-desktop/dist/goldband-local-extension.mcpb` |
+| Claude web/mobile app portable subset | remote MCP connector template：`app-adapters/claude-remote/goldband-connector.template.json` |
 | Claude Code + Codex | installer：`./install.sh all-tools` |
 | Claude Code + Codex + Goldband Loop workflow runtime | installer：`./install.sh all-with-workflow` |
 | 開發者 repo-linked setup | installer |
 | 只看 workflow runtime | [goldband-loop/README.md](goldband-loop/README.md) |
 
-Claude plugin 是 Claude core 的主路徑。Codex 也有 plugin 生態，但 goldband
-目前的 Codex full setup 仍由 installer 管理，因為它包含 `config.toml`、
-`requirements.toml`、rules、hooks、profiles、permission profiles、custom
-agents 和 workflow runtime assets。不要把目前的 Claude plugin 說成
-Claude/Codex plugin parity。
+Claude plugin 是 Claude Code core 的主路徑。Codex app 和 Codex CLI 共用
+Codex 設定層，所以 app shared-config support 走 `codex-full`。Codex plugin
+則是 portable subset：skills 加 opt-in MCP wrapper，不取代 `codex-full`。
+Claude Desktop / Claude app support 走獨立 app adapter：local `.mcpb`
+extension 或 remote MCP connector，不是 Claude Code 的 `~/.claude/settings.json`
+或 hooks runtime。
+
+## 支援矩陣
+
+| Surface | 支援狀態 | 安裝方式 | 備註 |
+| --- | --- | --- | --- |
+| Claude Code CLI | supported | `goldband@goldband` plugin or installer | Claude Code hooks/settings 只適用這裡 |
+| Claude Desktop app | supported (portable subset) | local `.mcpb` extension | 連到 first-party `goldband-mcp`；不是 `~/.claude/settings.json` |
+| Claude web/mobile app | supported (portable subset) | remote MCP connector | 需部署 remote MCP endpoint 並在 Claude connector 設定註冊 |
+| Codex CLI | supported | `./install.sh codex-full` | shared Codex config |
+| Codex app | supported via shared config | `./install.sh codex-full` | `./install.sh status` 會 read back shared config surfaces |
+| Codex plugin | supported (portable subset) | Codex repo marketplace package | skills + opt-in MCP wrapper；不取代 full setup |
 
 ## Quickstart
 
@@ -75,7 +91,7 @@ checkout 執行同一組 POSIX 指令。
 ## 常用指令
 
 ```bash
-./install.sh status            # 檢查 Claude plugin、Claude/Codex install、style gate、workflow runtime
+./install.sh status            # 檢查 Claude plugin、Claude/Codex install、app surface、style gate、workflow runtime
 ./install.sh pack-quality      # Claude Code 基礎品質包，不含 workflow runtime
 ./install.sh codex-full        # Codex full setup
 ./install.sh all-tools         # Claude Code + Codex
@@ -115,6 +131,9 @@ git pull --ff-only
 
 - Claude plugin：commands、portable skills、generated `goldband-rules` skill、
   hook router。
+- Codex plugin：portable skills、repo marketplace entry、opt-in MCP wrapper。
+- Claude app adapters：Claude Desktop `.mcpb` local extension package、remote
+  MCP connector registration template。
 - Claude installer assets：global `CLAUDE.md`、commands、rules、hooks、
   portable skills。
 - Codex installer assets：`AGENTS.md`、config、requirements、rules、hooks、
@@ -145,6 +164,7 @@ code 表示狀態不是全綠。
   Goldband Loop 的 ownership 和邊界。
 - [docs/DECISIONS.md](docs/DECISIONS.md)：重要決策紀錄。
 - [docs/reports/plugin-distribution-verification.md](docs/reports/plugin-distribution-verification.md)：Claude plugin scope、驗證與 Codex plugin 邊界。
+- [docs/reports/app-support-verification.md](docs/reports/app-support-verification.md)：Codex app/plugin 與 Claude app adapter 驗證。
 - [CONTRIBUTING.md](CONTRIBUTING.md)：開發流程與 plugin sync/check。
 - [OPERATIONS.md](OPERATIONS.md)：安裝、Codex overlay、style gate、MCP token、
   telemetry 等操作細節。
@@ -160,6 +180,13 @@ code 表示狀態不是全綠。
 ```bash
 node scripts/sync-plugin-assets.mjs
 npm run test:plugin-distribution
+```
+
+改到 Codex plugin 或 Claude app adapter 來源後，也要重產 app support assets：
+
+```bash
+npm run sync:app-support
+npm run test:app-support
 ```
 
 常用驗證：

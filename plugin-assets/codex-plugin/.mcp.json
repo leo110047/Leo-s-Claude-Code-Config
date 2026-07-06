@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "goldband": {
+      "command": "node",
+      "args": [
+        "./mcp/goldband-mcp-wrapper.mjs"
+      ],
+      "cwd": ".",
+      "env": {
+        "GOLDBAND_REPO_DIR": "${GOLDBAND_REPO_DIR}"
+      },
+      "enabled": false
+    }
+  }
+}

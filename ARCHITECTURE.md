@@ -13,13 +13,15 @@ Codex. It has two first-party layers:
 - optional local sandbox execution, owned by `sandbox/`
 
 The Claude Code distribution surface is the `goldband@goldband` plugin for core
-commands, portable skills, rules-as-skill packaging, and hooks. The installer
-remains the developer/Codex/workflow-runtime path. This is a scope boundary, not
-a claim that Codex lacks plugins: Codex plugins can distribute Codex workflows,
-but goldband's Codex full setup currently owns host-level configuration that is
-still installer-managed. The user-facing workflow surface is `goldband-*`. The
-installer installs Goldband Loop directly and verifies the result against a
-machine-readable inventory.
+commands, portable skills, rules-as-skill packaging, and hooks. Codex has a
+separate portable plugin package under `plugin-assets/codex-plugin/`, exposed by
+the repo marketplace at `.agents/plugins/marketplace.json`. The installer
+remains the developer/full-Codex/workflow-runtime path because `codex-full`
+owns host-level configuration that the portable plugin does not replace. The
+Claude app surface uses separate app adapters: a Claude Desktop local MCP
+extension and a remote MCP connector template. The user-facing workflow surface
+is `goldband-*`. The installer installs Goldband Loop directly and verifies the
+result against a machine-readable inventory.
 
 ## Responsibility Boundary
 
@@ -43,6 +45,15 @@ machine-readable inventory.
   - `docs/reports/plugin-expected-assets.json`
   - `scripts/sync-plugin-assets.mjs`
   - `scripts/check-plugin-distribution.mjs`
+- Codex plugin and app adapter distribution:
+  - `.codex-plugin/plugin.json`
+  - `.agents/plugins/marketplace.json`
+  - `plugin-assets/codex-plugin/`
+  - `app-adapters/claude-desktop/`
+  - `app-adapters/claude-remote/`
+  - `docs/reports/app-support-expected-assets.json`
+  - `scripts/sync-app-support-assets.mjs`
+  - `scripts/check-app-support.mjs`
 - first-party MCP surface:
   - `mcp/server/`
   - `mcp/first-party-servers.json`
@@ -84,22 +95,35 @@ updates `docs/reports/plugin-expected-assets.json`. The drift gate is
 `node scripts/check-plugin-distribution.mjs`.
 
 The plugin deliberately excludes `goldband-loop/`, Playwright/browser/iOS
-tooling, and public marketplace publishing. Codex has its own plugin ecosystem,
-but goldband's Codex config/rules/hooks still use `install.sh` because this
-plugin packages Claude Code assets.
+tooling, Codex config/rules/hooks/requirements, and public marketplace
+publishing.
 
-Codex distribution is intentionally not symmetric yet. A future Codex-specific
-plugin could package the portable Codex-facing subset, such as skills, MCP
-configuration, or app/workflow integrations. It must not be described as a
-replacement for `install.sh codex-full` until it can install and verify the
-full Codex contract. That contract currently includes `codex/config.toml`,
+### Codex Plugin Contract
+
+The Codex plugin is generated from shared portable sources by
+`scripts/sync-app-support-assets.mjs`. It packages `skills/global/` and an
+opt-in MCP wrapper that can launch the first-party `goldband-mcp` server from a
+local checkout. The repo marketplace at `.agents/plugins/marketplace.json`
+exposes this package to Codex as a portable subset.
+
+The Codex plugin must not be described as a replacement for
+`install.sh codex-full`. The full Codex contract includes `codex/config.toml`,
 `codex/requirements.toml`, `codex/rules/`, `codex/hooks.json`, `codex/hooks/`,
 `codex/profiles/`, `codex/permission-profiles/`, `codex/agents/`, and the
 Goldband Loop runtime assets installed under the Codex skill root.
 
 Until that contract is redesigned and verified, `install.sh` is the canonical
-Codex full-setup path. Do not claim Claude/Codex plugin parity in README,
+Codex full-setup path. Do not claim Claude/Codex plugin symmetry in README,
 installer status output, or verification reports.
+
+### Claude App Adapter Contract
+
+Claude Desktop and Claude web/mobile support are separate from Claude Code. The
+Desktop path packages a local MCP extension under
+`app-adapters/claude-desktop/`; the remote path provides a connector
+registration template under `app-adapters/claude-remote/`. These adapters expose
+the portable MCP/tooling subset and do not install Claude Code hooks,
+permissions, statusline settings, or `~/.claude/settings.json` behavior.
 
 goldband installs Goldband Loop through [shell/install/workflow.sh](shell/install/workflow.sh).
 That installer is responsible for:

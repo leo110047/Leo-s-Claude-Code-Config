@@ -120,6 +120,7 @@ load_install_modules() {
         "$REPO_DIR/shell/install/launchers.sh" \
         "$REPO_DIR/shell/install/workflow.sh" \
         "$REPO_DIR/shell/install/profiles.sh" \
+        "$REPO_DIR/shell/install/app-support-status.sh" \
         "$REPO_DIR/shell/install/status.sh" \
         "$REPO_DIR/shell/install/uninstall.sh"
     do

@@ -1,0 +1,40 @@
+{
+  "name": "goldband",
+  "version": "0.1.0",
+  "description": "Goldband portable Codex plugin with shared engineering skills and opt-in MCP configuration. Full Codex setup remains install.sh codex-full.",
+  "author": {
+    "name": "Leo",
+    "url": "https://github.com/leo110047"
+  },
+  "homepage": "https://github.com/leo110047/goldband",
+  "repository": "https://github.com/leo110047/goldband",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "skills",
+    "mcp",
+    "guardrails",
+    "review",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Goldband",
+    "shortDescription": "Portable engineering skills and optional Goldband MCP readbacks for Codex.",
+    "longDescription": "Installs the portable Goldband skills for Codex app, CLI, and IDE extension. The plugin includes an opt-in MCP wrapper for a local goldband checkout, but does not replace install.sh codex-full or package Goldband Loop.",
+    "developerName": "Leo",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills",
+      "MCP"
+    ],
+    "websiteURL": "https://github.com/leo110047/goldband",
+    "defaultPrompt": [
+      "Use Goldband skills to review this change.",
+      "Check this repo with evidence-based coding.",
+      "Plan a safe implementation with Goldband."
+    ],
+    "brandColor": "#1F8A70"
+  }
+}

@@ -58,6 +58,29 @@ Also report Codex profile metadata when `~/.agents/skills/.goldband-profile` exi
 - active profile (`core` / `full`)
 - installed skill count
 
+### 2.1. App Surface Checks
+
+Run `./install.sh status` and report the App surface section:
+
+- Codex app compatible shared config:
+  - `~/.codex/config.toml`
+  - `~/.codex/hooks.json`
+  - `~/.codex/hooks/`
+  - `~/.codex/AGENTS.md`
+  - `~/.agents/skills`
+- Codex plugin package:
+  - `plugin-assets/codex-plugin/.codex-plugin/plugin.json`
+  - `.agents/plugins/marketplace.json`
+  - `plugin-assets/codex-plugin/.mcp.json`
+- Claude Desktop local extension:
+  - `app-adapters/claude-desktop/dist/goldband-local-extension.mcpb`
+  - local install readback if available
+- Claude remote MCP connector:
+  - `app-adapters/claude-remote/goldband-connector.template.json`
+  - local registration marker if available
+
+Run `npm run test:app-support` from the repo. Report ERROR if it fails.
+
 ### 2.5. Optional Goldband Loop Runtime Checks
 
 If Goldband Loop is installed, also check:
@@ -117,6 +140,8 @@ JSON:
 - `hooks/hooks.json`
 - `skills/global/skill-rules.json`
 - `.claude-plugin/plugin.json`
+- `.codex-plugin/plugin.json`
+- `.agents/plugins/marketplace.json`
 
 TOML:
 - `codex/config.toml`
@@ -144,6 +169,9 @@ Goldband Loop inventory:
 
 Hook script references:
 - `python3 scripts/verify-hook-script-references.py` → should report `[OK]` for every hook script path referenced by `hooks/hooks.json`
+
+App support:
+- `npm run test:app-support` → should report `[OK] app support check passed`
 
 If the `codex` CLI is unavailable, report a WARNING and skip the execpolicy step.
 
