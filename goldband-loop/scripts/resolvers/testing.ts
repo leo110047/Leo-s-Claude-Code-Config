@@ -159,7 +159,8 @@ Only commit if there are changes. Stage all bootstrap files (config, test direct
 // ─── Test Coverage Audit ────────────────────────────────────
 //
 // Shared methodology for codepath tracing, ASCII diagrams, and test gap analysis.
-// Three modes, three placeholders, one inner function:
+// Shared inner covers plan/review. Ship uses a separate compact resolver so
+// ship/SKILL.md stays below the generated skill token ceiling.
 //
 //   {{TEST_COVERAGE_AUDIT_PLAN}}   → plan-eng-review: adds missing tests to the plan
 //   {{TEST_COVERAGE_AUDIT_SHIP}}   → ship: auto-generates tests, coverage summary
@@ -173,19 +174,16 @@ Only commit if there are changes. Stage all bootstrap files (config, test direct
 //   │    regression rule                             │
 //   │                                                │
 //   │  plan:   edit plan file, write artifact        │
-//   │  ship:   auto-generate tests, write artifact   │
 //   │  review: Fix-First ASK, INFORMATIONAL gaps     │
 //   └────────────────────────────────────────────────┘
 
-type CoverageAuditMode = 'plan' | 'ship' | 'review';
+type CoverageAuditMode = 'plan' | 'review';
 
 function generateTestCoverageAuditInner(mode: CoverageAuditMode): string {
   const sections: string[] = [];
 
   // ── Intro (mode-specific) ──
-  if (mode === 'ship') {
-    sections.push(`100% coverage is the goal — every untested path is a path where bugs hide and vibe coding becomes yolo coding. Evaluate what was ACTUALLY coded (from the diff), not what was planned.`);
-  } else if (mode === 'plan') {
+  if (mode === 'plan') {
     sections.push(`100% coverage is the goal. Evaluate every codepath in the plan and ensure the plan includes tests for each one. If the plan is missing tests, add them — the plan should be complete enough that implementation includes full test coverage from the start.`);
   } else {
     sections.push(`100% coverage is the goal. Evaluate every codepath changed in the diff and identify test gaps. Gaps become INFORMATIONAL findings that follow the Fix-First flow.`);
@@ -213,27 +211,14 @@ ls jest.config.* vitest.config.* playwright.config.* cypress.config.* .rspec pyt
 ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 \`\`\`
 
-3. **If no framework detected:**${mode === 'ship' ? ' falls through to the Test Framework Bootstrap step (Step 4) which handles full setup.' : ' still produce the coverage diagram, but skip test generation.'}`);
-
-  // ── Before/after count (ship only) ──
-  if (mode === 'ship') {
-    sections.push(`
-**0. Before/after test count:**
-
-\`\`\`bash
-# Count test files before any generation
-find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec.*' | grep -v node_modules | wc -l
-\`\`\`
-
-Store this number for the PR body.`);
-  }
+3. **If no framework detected:** still produce the coverage diagram, but skip test generation.`);
 
   // ── Codepath tracing methodology (shared, with mode-specific source) ──
   const traceSource = mode === 'plan'
     ? `**Step 1. Trace every codepath in the plan:**
 
 Read the plan document. For each new feature, service, endpoint, or component described, trace how data will flow through the code — don't just list planned functions, actually follow the planned execution:`
-    : `**${mode === 'ship' ? '1' : 'Step 1'}. Trace every codepath changed** using \`git diff origin/<base>...HEAD\`:
+    : `**Step 1. Trace every codepath changed** using \`git diff origin/<base>...HEAD\`:
 
 Read every changed file. For each one, trace how data flows through the code — don't just list functions, actually follow the execution:`;
 
@@ -261,7 +246,7 @@ This is the critical step — you're building a map of every line of code that c
 
   // ── User flow coverage (shared) ──
   sections.push(`
-**${mode === 'ship' ? '2' : 'Step 2'}. Map user flows, interactions, and error states:**
+**Step 2. Map user flows, interactions, and error states:**
 
 Code coverage isn't enough — you need to cover how real users interact with the changed code. For each changed feature, think through:
 
@@ -282,7 +267,7 @@ Add these to your diagram alongside the code branches. A user flow with no test 
 
   // ── Check branches against tests + quality rubric (shared) ──
   sections.push(`
-**${mode === 'ship' ? '3' : 'Step 3'}. Check each branch against existing tests:**
+**Step 3. Check each branch against existing tests:**
 
 Go through your diagram branch by branch — both code paths AND user flows. For each one, search for a test that exercises it:
 - Function \`processPayment()\` → look for \`billing.test.ts\`, \`billing.spec.ts\`, \`test/billing_test.rb\`
@@ -333,7 +318,7 @@ When uncertain whether a change is a regression, err on the side of writing the 
 
   // ── ASCII coverage diagram (shared) ──
   sections.push(`
-**${mode === 'ship' ? '4' : 'Step 4'}. Output ASCII coverage diagram:**
+**Step 4. Output ASCII coverage diagram:**
 
 Include BOTH code paths and user flows in the same diagram. Mark E2E-worthy and eval-worthy paths:
 
@@ -357,7 +342,7 @@ QUALITY: ★★★:2 ★★:2 ★:1  |  GAPS: 8 (2 E2E, 1 eval)
 Legend: ★★★ behavior + edge + error  |  ★★ happy path  |  ★ smoke check
 [→E2E] = needs integration test  |  [→EVAL] = needs LLM eval
 
-**Fast path:** All paths covered → "${mode === 'ship' ? 'Step 7' : mode === 'review' ? 'Step 4.75' : 'Test review'}: All new code paths have test coverage ✓" Continue.`);
+**Fast path:** All paths covered → "${mode === 'review' ? 'Step 4.75' : 'Test review'}: All new code paths have test coverage ✓" Continue.`);
 
   // ── Mode-specific action section ──
   if (mode === 'plan') {
@@ -406,101 +391,6 @@ Repo: {owner/repo}
 \`\`\`
 
 This file is consumed by \`/qa\` and \`/qa-only\` as primary test input. Include only the information that helps a QA tester know **what to test and where** — not implementation details.`);
-  } else if (mode === 'ship') {
-    sections.push(`
-**5. Generate tests for uncovered paths:**
-
-If test framework detected (or bootstrapped in Step 4):
-- Prioritize error handlers and edge cases first (happy paths are more likely already tested)
-- Read 2-3 existing test files to match conventions exactly
-- Generate unit tests. Mock all external dependencies (DB, API, Redis).
-- For paths marked [→E2E]: generate integration/E2E tests using the project's E2E framework (Playwright, Cypress, Capybara, etc.)
-- For paths marked [→EVAL]: generate eval tests using the project's eval framework, or flag for manual eval if none exists
-- Write tests that exercise the specific uncovered path with real assertions
-- Run each test. Passes → commit as \`test: coverage for {feature}\`
-- Fails → fix once. Still fails → revert, note gap in diagram.
-
-Caps: 30 code paths max, 20 tests generated max (code + user flow combined), 2-min per-test exploration cap.
-
-If no test framework AND user declined bootstrap → diagram only, no generation. Note: "Test generation skipped — no test framework configured."
-
-**Diff is test-only changes:** Skip Step 7 entirely: "No new application code paths to audit."
-
-**6. After-count and coverage summary:**
-
-\`\`\`bash
-# Count test files after generation
-find . -name '*.test.*' -o -name '*.spec.*' -o -name '*_test.*' -o -name '*_spec.*' | grep -v node_modules | wc -l
-\`\`\`
-
-For PR body: \`Tests: {before} → {after} (+{delta} new)\`
-Coverage line: \`Test Coverage Audit: N new code paths. M covered (X%). K tests generated, J committed.\`
-
-**7. Coverage gate:**
-
-Before proceeding, check CLAUDE.md for a \`## Test Coverage\` section with \`Minimum:\` and \`Target:\` fields. If found, use those percentages. Otherwise use defaults: Minimum = 60%, Target = 80%.
-
-Using the coverage percentage from the diagram in substep 4 (the \`COVERAGE: X/Y (Z%)\` line):
-
-- **>= target:** Pass. "Coverage gate: PASS ({X}%)." Continue.
-- **>= minimum, < target:** Use AskUserQuestion:
-  - "AI-assessed coverage is {X}%. {N} code paths are untested. Target is {target}%."
-  - RECOMMENDATION: Choose A because untested code paths are where production bugs hide.
-  - Options:
-    A) Generate more tests for remaining gaps (recommended)
-    B) Ship anyway — I accept the coverage risk
-    C) These paths don't need tests — mark as intentionally uncovered
-  - If A: Loop back to substep 5 (generate tests) targeting the remaining gaps. After second pass, if still below target, present AskUserQuestion again with updated numbers. Maximum 2 generation passes total.
-  - If B: Continue. Include in PR body: "Coverage gate: {X}% — user accepted risk."
-  - If C: Continue. Include in PR body: "Coverage gate: {X}% — {N} paths intentionally uncovered."
-
-- **< minimum:** Use AskUserQuestion:
-  - "AI-assessed coverage is critically low ({X}%). {N} of {M} code paths have no tests. Minimum threshold is {minimum}%."
-  - RECOMMENDATION: Choose A because less than {minimum}% means more code is untested than tested.
-  - Options:
-    A) Generate tests for remaining gaps (recommended)
-    B) Override — ship with low coverage (I understand the risk)
-  - If A: Loop back to substep 5. Maximum 2 passes. If still below minimum after 2 passes, present the override choice again.
-  - If B: Continue. Include in PR body: "Coverage gate: OVERRIDDEN at {X}%."
-
-**Coverage percentage undetermined:** If the coverage diagram doesn't produce a clear numeric percentage (ambiguous output, parse error), **skip the gate** with: "Coverage gate: could not determine percentage — skipping." Do not default to 0% or block.
-
-**Test-only diffs:** Skip the gate (same as the existing fast-path).
-
-**100% coverage:** "Coverage gate: PASS (100%)." Continue.`);
-
-    // ── Test plan artifact (ship mode) ──
-    sections.push(`
-### Test Plan Artifact
-
-After producing the coverage diagram, write a test plan artifact so \`/qa\` and \`/qa-only\` can consume it:
-
-\`\`\`bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
-USER=$(whoami)
-DATETIME=$(date +%Y%m%d-%H%M%S)
-\`\`\`
-
-Write to \`~/.goldband/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md\`:
-
-\`\`\`markdown
-# Test Plan
-Generated by /ship on {date}
-Branch: {branch}
-Repo: {owner/repo}
-
-## Affected Pages/Routes
-- {URL path} — {what to test and why}
-
-## Key Interactions to Verify
-- {interaction description} on {page}
-
-## Edge Cases
-- {edge case} on {page}
-
-## Critical Paths
-- {end-to-end flow that must work}
-\`\`\``);
   } else {
     // review mode
     sections.push(`

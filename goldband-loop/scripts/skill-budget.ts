@@ -1,0 +1,1 @@
+export const TOKEN_CEILING_BYTES = 160_000;

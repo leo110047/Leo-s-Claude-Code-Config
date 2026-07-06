@@ -4,6 +4,7 @@ import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { TOKEN_CEILING_BYTES } from '../scripts/skill-budget';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
@@ -240,7 +241,7 @@ describe('gen-skill-docs', () => {
 
   test('ship SKILL.md stays under the token ceiling', () => {
     const content = fs.readFileSync(path.join(ROOT, 'ship/SKILL.md'), 'utf-8');
-    expect(Buffer.byteLength(content, 'utf-8')).toBeLessThanOrEqual(160000);
+    expect(Buffer.byteLength(content, 'utf-8')).toBeLessThanOrEqual(TOKEN_CEILING_BYTES);
   });
 
   test('templates contain placeholders', () => {
@@ -735,6 +736,14 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
   const planSkill = fs.readFileSync(path.join(ROOT, 'plan-eng-review', 'SKILL.md'), 'utf-8');
   const shipSkill = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
   const reviewSkill = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+  const testingResolver = fs.readFileSync(path.join(ROOT, 'scripts', 'resolvers', 'testing.ts'), 'utf-8');
+
+  test('ship coverage audit uses its compact resolver, not shared inner mode branches', () => {
+    expect(testingResolver).toContain("type CoverageAuditMode = 'plan' | 'review'");
+    expect(testingResolver).not.toContain("generateTestCoverageAuditInner('ship')");
+    expect(testingResolver).not.toContain("mode === 'ship'");
+    expect(testingResolver).not.toContain('mode === "ship"');
+  });
 
   test('plan and ship modes share codepath tracing methodology', () => {
     // Review mode delegates test coverage to the Testing specialist subagent (Review Army)
