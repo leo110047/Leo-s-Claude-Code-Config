@@ -21,7 +21,7 @@ Date: 2026-07-05
 - Reaching max rounds or an `ESCALATE` verdict writes an escalation summary under `${GOLDBAND_HOME:-$HOME/.goldband}/cross-review/summaries/`; Stop human-arbitration messages include that path when available.
 - Cross-review runtime telemetry records arm, round verdict, implementer response, escalation, override, and done events as v1-compatible usage events.
 - `CHANGES_REQUESTED` never rewrites to `APPROVED`; malformed or missing findings for a non-approval verdict fail closed through `ESCALATE`.
-- Round 2+ moving-goalpost protection still allows a new `HIGH` `regression.clear` blocker introduced by the implementer's latest fix.
+- Round 2+ review allows new `CRITICAL` and `HIGH` blockers while preventing previously accepted rebuttals from being reopened.
 - Re-sending a cross-review trigger for an already active session does not reset `roundsUsed` or `baseCommit`; it only fills a missing `planFile` when the prompt supplies one.
 
 ## Rejected

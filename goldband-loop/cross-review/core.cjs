@@ -694,7 +694,7 @@ function normalizeReviewResult(result, round, history = []) {
   const findings = Array.isArray(result.findings)
     ? result.findings.map((finding, index) => normalizeFinding(finding, index, round))
     : [];
-  const boundedFindings = applyRoundBoundary(findings, history, round);
+  const boundedFindings = applyRebuttalBoundary(findings, history, round);
   const blockingCount = boundedFindings.filter((finding) => isBlockingFinding(finding)).length;
   const finalVerdict = verdict === 'APPROVED' && blockingCount > 0 ? 'ESCALATE' : verdict;
   return { verdict: finalVerdict, findings: boundedFindings, blockingCount };
@@ -709,15 +709,9 @@ function isBlockingFinding(finding) {
   );
 }
 
-function applyRoundBoundary(findings, history, round) {
+function applyRebuttalBoundary(findings, history, round) {
   if (round <= 1) return findings;
 
-  const previousBlockingIds = new Set(
-    history
-      .flatMap((artifact) => artifact.findings || [])
-      .filter((finding) => isBlockingFinding(finding))
-      .map((finding) => finding.id),
-  );
   const acceptedRebuttals = new Set(
     history
       .flatMap((artifact) => artifact.findings || [])
@@ -729,14 +723,7 @@ function applyRoundBoundary(findings, history, round) {
     if (acceptedRebuttals.has(finding.id)) {
       return downgradeFinding(finding, 'Accepted rebuttals cannot be reopened.');
     }
-    if (!isBlockingFinding(finding)) return finding;
-    if (previousBlockingIds.has(finding.id)) return finding;
-    if (finding.severity === 'CRITICAL') return finding;
-    if (finding.severity === 'HIGH' && finding.ruleId === 'regression.clear') return finding;
-    return downgradeFinding(
-      finding,
-      'New non-CRITICAL/non-HIGH-regression blockers after round 1 are advisory by the moving-goalpost rule.',
-    );
+    return finding;
   });
 }
 

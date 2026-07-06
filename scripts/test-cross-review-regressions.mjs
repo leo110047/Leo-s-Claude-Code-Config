@@ -176,7 +176,7 @@ function testUntrackedPlanMarkerRoundTripAllows() {
   assertUntrackedPlanTextAllows('# Plan\n\ncontent\n', 'content');
 }
 
-function testRoundTwoHighRegressionCanBlock() {
+function testRoundTwoNewHighCanBlock() {
   const normalized = core.normalizeReviewResult(
     {
       verdict: 'CHANGES_REQUESTED',
@@ -184,8 +184,9 @@ function testRoundTwoHighRegressionCanBlock() {
         {
           id: 'CR-REG-HIGH',
           severity: 'HIGH',
-          ruleId: 'regression.clear',
-          failureScenario: 'Latest fix introduced a high-impact regression.',
+          ruleId: 'correctness.contract',
+          failureScenario:
+            'Latest fix introduced a high-impact contract failure.',
           status: 'open',
         },
       ],
@@ -314,7 +315,7 @@ testMissingFindingsLineEscalates();
 testApprovedWithBlockingFindingEscalates();
 testNonZeroReviewerExitEscalates();
 testUntrackedPlanMarkerRoundTripAllows();
-testRoundTwoHighRegressionCanBlock();
+testRoundTwoNewHighCanBlock();
 testPromptArmDoesNotResetActiveContract();
 testSlashCommandArmParsesPlanReviewerAndModel();
 testSlashCommandRequiresPlanAndAvoidsInlineMentions();

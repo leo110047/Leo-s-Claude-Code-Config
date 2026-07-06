@@ -342,7 +342,7 @@ function testMaxRoundsAndRubricDowngrade() {
   assert.match(result.stderr, /人類仲裁/);
 }
 
-function testRoundBoundaryDowngradesMovingGoalposts() {
+function testRebuttalBoundaryKeepsAcceptedRebuttalsClosed() {
   const history = [
     {
       findings: [
@@ -385,7 +385,7 @@ function testRoundBoundaryDowngradesMovingGoalposts() {
           id: 'CR-NEW',
           severity: 'HIGH',
           ruleId: 'correctness.contract',
-          failureScenario: 'New non-critical blocker.',
+          failureScenario: 'New high-severity contract blocker.',
           status: 'open',
         },
         {
@@ -406,9 +406,9 @@ function testRoundBoundaryDowngradesMovingGoalposts() {
   );
   assert.equal(byId.get('CR-001').severity, 'HIGH');
   assert.equal(byId.get('CR-002').severity, 'MEDIUM');
-  assert.equal(byId.get('CR-NEW').severity, 'MEDIUM');
+  assert.equal(byId.get('CR-NEW').severity, 'HIGH');
   assert.equal(byId.get('CR-CRIT').severity, 'CRITICAL');
-  assert.equal(normalized.blockingCount, 2);
+  assert.equal(normalized.blockingCount, 3);
 }
 
 function testImplementerResponsesEnterNextReviewerPrompt() {
@@ -574,7 +574,7 @@ function testEscalationSummaryAndTelemetry() {
 testCanonicalHashCoversReviewScope();
 testGateLifecycle();
 testMaxRoundsAndRubricDowngrade();
-testRoundBoundaryDowngradesMovingGoalposts();
+testRebuttalBoundaryKeepsAcceptedRebuttalsClosed();
 testImplementerResponsesEnterNextReviewerPrompt();
 testCodexStopHardBlocksWithExitCode();
 testCliRunDoesNotClaimGatePassed();
