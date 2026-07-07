@@ -2297,8 +2297,12 @@ describe('setup script validation', () => {
     const fnStart = setupContent.indexOf('link_codex_selected_skill_dirs()');
     const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
     const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('rm -rf "$target"');
-    expect(fnBody).toContain('_link_or_copy "$skill_dir" "$target"');
+    const helperStart = setupContent.indexOf('_materialize_codex_skill_dir()');
+    const helperEnd = setupContent.indexOf('\n}', helperStart);
+    const helperBody = setupContent.slice(helperStart, helperEnd);
+    expect(fnBody).toContain('_materialize_codex_skill_dir "$skill_dir" "$target"');
+    expect(helperBody).toContain('rm -rf "$dst"');
+    expect(helperBody).toContain('mv "$tmp" "$dst"');
   });
 
   test('link_claude_selected_skill_dirs creates real directories with absolute SKILL.md symlinks', () => {
