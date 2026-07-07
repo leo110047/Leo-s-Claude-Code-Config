@@ -30,18 +30,21 @@ allowed-tools:
 
 ## Scripts
 
-- `scripts/probe-plugin-data.js`
+Scripts live next to this skill in `./scripts/`. From the goldband repo root,
+use `skills/global/claude-config-verification/scripts/...`.
+
+- `./scripts/probe-plugin-data.js`
   - Confirms whether `${CLAUDE_PLUGIN_DATA}` is available in the current runtime
   - Verifies the target directory can be created, written, and read back
   - Falls back to temp storage when the current execution context does not expose plugin data
-- `scripts/verify-claude-config.js`
+- `./scripts/verify-claude-config.js`
   - Validates JSON and TOML files
   - Checks `SKILL.md` frontmatter and linked reference files
   - Verifies hook script references in `hooks/hooks.json`
   - Verifies required Codex repo files exist
   - Runs `codex execpolicy check` against `codex/rules/default.rules` when the `codex` CLI is available
   - Records a verification history entry in stable plugin data when available
-- `scripts/verify-claude-config.js --router-replay`
+- `./scripts/verify-claude-config.js --router-replay`
   - Runs the hook router replay harness when router behavior changed
 
 ## Gotchas
@@ -64,9 +67,9 @@ allowed-tools:
 
 ## Suggested Workflow
 
-1. Run `node scripts/probe-plugin-data.js`
-2. Run `node scripts/verify-claude-config.js`
-3. If hooks/router changed, run `node scripts/verify-claude-config.js --router-replay`
+1. Run `node skills/global/claude-config-verification/scripts/probe-plugin-data.js`
+2. Run `node skills/global/claude-config-verification/scripts/verify-claude-config.js`
+3. If hooks/router changed, run `node skills/global/claude-config-verification/scripts/verify-claude-config.js --router-replay`
 4. Summarize results using `assets/verification-report-template.md`
 
 ## Completion Check
