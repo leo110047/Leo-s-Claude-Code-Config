@@ -33,7 +33,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 |------|------|
 | `evidence-based-coding` | 所有 claim 都要有文件、命令、測試或 log 證據 |
 | `implementation-contracts` | 實作 contract 變更時明確失敗、不猜資料、不做未授權副作用或假泛化 |
-| `systematic-debugging` | bug / test failure 的 shared policy；完整調查 defer `/goldband-investigate` |
+| `systematic-debugging` | bug / test failure 的 shared policy；完整調查 defer Goldband investigate workflow |
 | `file-search` | 用 `rg` 建圖與查定位 |
 | `planning-workflow` | 多步實作前的 shared planning policy；完整規劃 defer `/plan` |
 
@@ -43,7 +43,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 |------|------|
 | `testing-strategy` | coverage、TDD、integration / E2E test strategy |
 | `performance-optimization` | profiling、bottleneck、latency / throughput |
-| `security-checklist` | auth、input validation、secret handling 的防守檢查；深度審查 defer `/goldband-cso` |
+| `security-checklist` | auth、input validation、secret handling 的防守檢查；深度審查 defer Goldband cso workflow |
 | `frontend-design` | 高品質前端畫面設計與避免 generic AI aesthetics |
 | `prompt-hygiene` | 撰寫 prompt / system prompt / agent handoff 時，只保留必要目標、背景、硬邊界與成果標準 |
 
@@ -61,7 +61,7 @@ goldband 的 `skills/global/` 是可攜式 skill 集合，提供 Claude Code 與
 | `careful-mode` | 高風險 Bash 操作防呆 |
 | `freeze-mode` | 唯讀調查模式 |
 | `claude-config-verification` | Claude config / hook / plugin 驗證 |
-| `skill-developer` | 維護 skill trigger / structure / references；大型 scaffold/extraction defer `/goldband-skillify` |
+| `skill-developer` | 維護 skill trigger / structure / references；大型 scaffold/extraction defer Goldband skillify workflow |
 | `subagent-development` | 可切給 subagent 的實作 / 審查流程 |
 
 ## 什麼時候看哪份文件

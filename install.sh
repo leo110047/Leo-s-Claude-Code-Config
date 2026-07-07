@@ -27,6 +27,8 @@ CODEX_CONFIG_FILE="$CODEX_DIR/config.toml"
 CODEX_REQUIREMENTS_FILE="${CODEX_REQUIREMENTS_FILE:-/etc/codex/requirements.toml}"
 CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
 CODEX_CUSTOM_AGENTS_DIR="$CODEX_DIR/agents"
+CODEX_PROMPTS_DIR="$CODEX_DIR/prompts"
+CODEX_GOLDBAND_PROMPT_FILE="$CODEX_PROMPTS_DIR/goldband.md"
 CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
 CODEX_HOOKS_DIR="$CODEX_DIR/hooks"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
@@ -77,6 +79,7 @@ show_help_codex_options() {
     echo "  codex-config 只安裝 ~/.codex/config.toml + profile config files"
     echo "  codex-requirements 安裝 Codex managed requirements（需要 /etc 寫入權限）"
     echo "  codex-agents 安裝 ~/.codex/AGENTS.md + ~/.codex/agents"
+    echo "  codex-prompts 安裝 ~/.codex/prompts/goldband.md（/prompts:goldband selector）"
     echo "  codex-hooks  安裝 ~/.codex/hooks.json + ~/.codex/hooks"
     echo "  codex-rules  只安裝 ~/.codex/rules"
     echo "  repair-codex-rules 將本機 approvals 從 tracked rules 移到 ignored local overlay"
@@ -267,6 +270,9 @@ for arg in "$@"; do
         codex-agents)
             install_codex_agents
             ;;
+        codex-prompts)
+            install_codex_prompts
+            ;;
         codex-hooks)
             install_codex_hooks
             ;;
@@ -330,6 +336,6 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 echo -e "${YELLOW}下一步：${NC}"
 echo "  1. 重啟 Claude Code / Codex（若本次有安裝）"
-echo "  2. 試試 /plan、/verify、/goldband-review、/goldband-investigate、/discuss、/verify-config 等命令"
+echo "  2. 試試 Claude 的 /goldband，或 Codex 的 /prompts:goldband"
 echo "  3. 查看 ./install.sh status 確認安裝狀態"
 echo ""

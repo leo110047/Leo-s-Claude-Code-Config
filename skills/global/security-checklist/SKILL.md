@@ -5,7 +5,7 @@ description: |
   handling, sensitive data storage, API hardening, deployment security, or
   security review.
 
-  Prefer `/goldband-cso` or the workflow CSO skill for deep security review.
+  Prefer the Goldband cso workflow for deep security review.
   Best fit for defensive security checks and secure coding, not offensive
   testing.
 allowed-tools:
@@ -17,7 +17,7 @@ allowed-tools:
 # Security Checklist
 
 This is a thin shared-policy entrypoint. Deep security review belongs in
-`/goldband-cso` / workflow so Claude and Codex do not carry duplicate OWASP and
+the Goldband cso workflow so Claude and Codex do not carry duplicate OWASP and
 STRIDE playbooks in portable skills.
 
 ## Scope
@@ -32,9 +32,9 @@ Use this skill when changes touch:
 
 ## Workflow Handoff
 
-Use `/goldband-cso` when available for threat modeling, OWASP/STRIDE review,
-large PRs, auth changes, file upload handling, payment/admin flows, or production
-security gates.
+Use the Goldband cso workflow when available for threat modeling, OWASP/STRIDE
+review, large PRs, auth changes, file upload handling, payment/admin flows, or
+production security gates.
 
 Use this skill directly only for local defensive checks or when workflow is not
 installed.

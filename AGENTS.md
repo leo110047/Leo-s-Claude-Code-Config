@@ -32,10 +32,9 @@ If the portable goldband skills are installed for Codex, prefer:
 - `$performance-optimization`
 
 For full review, investigation, planning, security review, design review, QA,
-benchmarking, and skill-authoring flows, prefer workflow entrypoints such as
-`/goldband-review`, `/goldband-investigate`, `/plan`, `/goldband-cso`,
-`/goldband-design-review`, `/goldband-qa`, `/goldband-benchmark`, and
-`/goldband-skillify`. The matching portable skills are thin policy/defer
+benchmarking, and skill-authoring flows, prefer the workflow selectors:
+Claude uses `/goldband`; Codex uses `/prompts:goldband`. `/plan` remains the
+direct planning command. The matching portable skills are thin policy/defer
 entrypoints, not duplicate workflow manuals.
 
 Use repo-specific skills only when the task is actually about maintaining goldband itself.

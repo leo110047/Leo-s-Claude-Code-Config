@@ -76,6 +76,14 @@ install_codex_agents() {
     link_component "$REPO_DIR/codex/agents" "$CODEX_CUSTOM_AGENTS_DIR" "Codex custom agents"
 }
 
+install_codex_prompts() {
+    if repo_link_points_to "$CODEX_PROMPTS_DIR" "$REPO_DIR/codex/prompts"; then
+        rm "$CODEX_PROMPTS_DIR"
+    fi
+    mkdir -p "$CODEX_PROMPTS_DIR"
+    link_component "$REPO_DIR/codex/prompts/goldband.md" "$CODEX_GOLDBAND_PROMPT_FILE" "Codex prompt goldband.md"
+}
+
 install_codex_hooks() {
     link_component "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" "Codex hooks.json"
     link_component "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" "Codex hook scripts"
@@ -93,6 +101,7 @@ install_claude_guidance() {
 install_codex_core() {
     install_codex_config
     install_codex_agents
+    install_codex_prompts
     install_codex_hooks
     install_codex_rules
     install_codex_skills_core
@@ -102,6 +111,7 @@ install_codex_core() {
 install_codex_full() {
     install_codex_config
     install_codex_agents
+    install_codex_prompts
     install_codex_hooks
     install_codex_rules
     install_codex_skills

@@ -4,7 +4,7 @@ description: |
   Use when creating, merging, or editing portable skills, trigger descriptions,
   progressive-disclosure layouts, or hook-backed skill tooling in this repo.
 
-  Prefer `/goldband-skillify` or the workflow skillify skill for full scaffold,
+  Prefer the Goldband skillify workflow for full scaffold,
   extraction, and reusable-workflow authoring.
 allowed-tools:
   - Read
@@ -18,7 +18,7 @@ allowed-tools:
 # Skill Developer
 
 This is a thin shared-policy entrypoint. Full skill creation and extraction
-belongs in `/goldband-skillify` / workflow so Claude and Codex do not carry
+belongs in the Goldband skillify workflow so Claude and Codex do not carry
 duplicate skill-scaffold tooling in portable skills.
 
 ## When to Use
@@ -31,8 +31,8 @@ duplicate skill-scaffold tooling in portable skills.
 
 ## Workflow Handoff
 
-Use `/goldband-skillify` when available for new skills, scaffold generation,
-workflow extraction, or larger skill refactors.
+Use the Goldband skillify workflow when available for new skills, scaffold
+generation, workflow extraction, or larger skill refactors.
 
 Use this skill directly only for small metadata or trigger changes, or when
 workflow is not installed.

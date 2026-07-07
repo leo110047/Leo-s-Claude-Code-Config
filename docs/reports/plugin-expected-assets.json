@@ -14,6 +14,7 @@
       "commands/discuss.md",
       "commands/goldband-cross-review.md",
       "commands/goldband-language.md",
+      "commands/goldband.md",
       "commands/plan.md",
       "commands/verify-config.md",
       "commands/verify.md"

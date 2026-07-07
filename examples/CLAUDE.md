@@ -44,7 +44,7 @@ src/
 
 - `/plan` - 開始新功能前的規劃
 - `/verify` - 提交前的完整檢查
-- `/goldband-review` - 完整程式碼審查
+- `/goldband` - 列出並執行 Goldband workflows，例如 `/goldband review`
 
 ## Git Workflow
 

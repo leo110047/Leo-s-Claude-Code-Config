@@ -24,7 +24,7 @@ bash scripts/check-skills.sh
 → 應偏向 performance-optimization
 
 Review 這個 PR
-→ 應偏向 /goldband-review workflow
+→ 應偏向 Goldband review workflow
 
 Review 這個 PR，測試一直失敗
 → 應先偏向 systematic-debugging

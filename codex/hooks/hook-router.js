@@ -28,28 +28,28 @@ const WORKFLOW_HINTS = [
     name: 'review',
     pattern: /\b(code\s*review|review|pr\s*review)\b|審查|檢查/i,
     message:
-      'For full code review, prefer /goldband-review. Use bounded reviewer agents only as a second pass.',
+      'For full code review, run the Goldband review workflow via /prompts:goldband review when installed. Use bounded reviewer agents only as a second pass.',
   },
   {
     name: 'debug',
     pattern:
       /\b(debug|bug|error|failure|failing|failed|root cause|regression)\b|除錯|錯誤|失敗|異常|根因/i,
     message:
-      'For bugs or failing commands, capture the exact failure first and prefer /goldband-investigate before fixing.',
+      'For bugs or failing commands, capture the exact failure first and run the Goldband investigate workflow via /prompts:goldband investigate when installed before fixing.',
   },
   {
     name: 'security',
     pattern:
       /\b(security|secret|token|credential|auth|permission|cve|vulnerability)\b|安全|權限|憑證|密鑰|漏洞/i,
     message:
-      'For security-sensitive work, prefer /goldband-cso or the security checklist before changing behavior.',
+      'For security-sensitive work, run the Goldband cso workflow via /prompts:goldband cso when installed or use the security checklist before changing behavior.',
   },
   {
     name: 'planning',
     pattern:
       /\b(plan|planning|proposal|roadmap|architecture|design)\b|計畫|規劃|拆解|架構/i,
     message:
-      'For multi-file or risky planning, prefer /plan and use /goldband-plan-eng-review before implementation.',
+      'For multi-file or risky planning, prefer /plan and run the Goldband plan-eng-review workflow via /prompts:goldband plan-eng-review when installed before implementation.',
   },
 ];
 
@@ -361,7 +361,7 @@ function evaluateLifecycleResult(input) {
     if (!markOnce(input, 'session-start-context-restore-hint')) return null;
     return resultAdditionalContext(
       'SessionStart',
-      'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.',
+      'For resumed or context-sensitive work, run the Goldband context-restore workflow via /prompts:goldband context-restore when installed before editing.',
     );
   }
   if (eventName === 'Stop') {

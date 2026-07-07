@@ -359,6 +359,8 @@ echo "[1/4] prepare fixture"
 copy_repo_subset
 create_fake_goldband_loop
 seed_old_workflow_entries
+mkdir -p "$TMP_HOME/.codex/prompts"
+printf 'custom prompt\n' > "$TMP_HOME/.codex/prompts/custom.md"
 
 echo "[2/4] installer smoke"
 if HOME="$TMP_HOME" FAIL_GOLDBAND_LOOP_SETUP=1 "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-fail.log 2>&1; then
@@ -396,6 +398,9 @@ assert_exists "$TMP_HOME/.claude/skills/goldband-upgrade/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband-upgrade/SKILL.md"
 assert_exists "$TMP_HOME/.claude/skills/goldband/workflows/goldband-review.workflow.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/workflows/goldband-review.workflow.md"
+assert_exists "$TMP_HOME/.claude/commands/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/custom.md"
 
 assert_absent "$TMP_HOME/.claude/skills/workflow"
 assert_absent "$TMP_HOME/.codex/skills/workflow"
@@ -441,6 +446,16 @@ assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband-upgrade/SKILL.md"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/goldband-review.workflow.md"
 
+PROMPT_LEGACY_HOME="$TMP_ROOT/prompt-legacy-home"
+mkdir -p "$PROMPT_LEGACY_HOME/.codex"
+ln -s "$TMP_ROOT/codex/prompts" "$PROMPT_LEGACY_HOME/.codex/prompts"
+HOME="$PROMPT_LEGACY_HOME" "$TMP_ROOT/install.sh" codex-prompts >/tmp/goldband-loop-codex-prompts-legacy.log
+if [ -L "$PROMPT_LEGACY_HOME/.codex/prompts" ]; then
+  echo "legacy codex prompts directory symlink was not migrated" >&2
+  exit 1
+fi
+assert_exists "$PROMPT_LEGACY_HOME/.codex/prompts/goldband.md"
+
 LEGACY_ENV_HOME="$TMP_ROOT/legacy-env-home"
 LEGACY_ENV_SOURCE="$TMP_ROOT/legacy-env-source/goldband-loop"
 create_minimal_real_setup_fixture "$LEGACY_ENV_SOURCE"
@@ -463,10 +478,15 @@ assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard
 
 echo "[4/4] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
+assert_contains "$STATUS_OUTPUT" "codex prompt goldband.md"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop state dir (~/.goldband/projects)"
+
+CODEX_REQUIREMENTS_FILE="$TMP_ROOT/etc/codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-loop-uninstall.log
+assert_absent "$TMP_HOME/.codex/prompts/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/custom.md"
 
 echo "[OK] Goldband Loop installer integration smoke test passed"
