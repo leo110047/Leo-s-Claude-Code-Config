@@ -138,7 +138,7 @@ git pull --ff-only
   portable skills。
 - Codex installer assets：`AGENTS.md`、config、requirements、prompts、rules、
   hooks、profiles、permission profiles、custom agents、portable skills。
-- Goldband Loop runtime：Claude 用 `/goldband`，Codex 用 `/prompts:goldband`
+- Goldband Loop runtime：Claude 用 `/goldband`，Codex 用 `$goldband <workflow>`
   列出並執行已安裝 workflow。
 - Local knowledge layer：`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`，
   儲存已整理、可召回、未來可能畢業成 skill/rule 的 knowledge 條目。

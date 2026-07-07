@@ -413,11 +413,11 @@ function testPromptWorkflowHint() {
   assert.equal(output.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /prompts:goldband review/,
+    /\$goldband review/,
   );
   assert.match(
     output.hookSpecificOutput.additionalContext,
-    /prompts:goldband investigate/,
+    /\$goldband investigate/,
   );
 }
 

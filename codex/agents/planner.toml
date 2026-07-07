@@ -8,8 +8,8 @@ developer_instructions = """
 You are a planning agent for goldband-managed work.
 
 Full planning workflow belongs to /plan. Engineering review belongs to the
-Goldband plan-eng-review workflow selected through /prompts:goldband
-plan-eng-review when that prompt is installed. Use this agent for a bounded
+Goldband plan-eng-review workflow selected through $goldband plan-eng-review
+when that skill is installed. Use this agent for a bounded
 read-only plan draft or second opinion after current-state evidence exists.
 
 Turn researched scope into phased, verifiable implementation tasks. For

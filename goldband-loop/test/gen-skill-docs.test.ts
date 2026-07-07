@@ -256,6 +256,20 @@ describe('gen-skill-docs', () => {
     expect(browseTmpl).toContain('{{PREAMBLE}}');
   });
 
+  test('root router shows a menu for empty goldband invocation', () => {
+    for (const file of ['SKILL.md.tmpl', 'SKILL.md']) {
+      const content = fs.readFileSync(path.join(ROOT, file), 'utf-8');
+      expect(content).toContain('## Empty Invocation Menu');
+      expect(content).toContain('If the user\'s prompt is only `$goldband`');
+      expect(content).toContain('$goldband review');
+      expect(content).toContain('$goldband cross-review <plan-file>');
+      expect(content).toContain('$goldband investigate');
+      expect(content).toContain('$goldband context-restore');
+      expect(content).toContain('is a separate workflow entrypoint from `$goldband review`');
+      expect(content).toContain('Do not route `$goldband cross-review` to `/review`');
+    }
+  });
+
   test('generated SKILL.md contains operational self-improvement (replaced contributor mode)', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
     expect(content).not.toContain('Contributor Mode');
@@ -999,6 +1013,23 @@ describe('PLAN_COMPLETION_AUDIT placeholders', () => {
     expect(reviewSkill).toContain('INFORMATIONAL');
     expect(reviewSkill).toContain('MISSING REQUIREMENTS');
     expect(reviewSkill).toContain('SCOPE CREEP');
+  });
+
+  test('review workflow requires strict change review framing', () => {
+    expect(reviewSkill).toContain('## Strict Change Review Contract');
+    expect(reviewSkill).toContain('Original problem');
+    expect(reviewSkill).toContain('Correctness of the fix');
+    expect(reviewSkill).toContain('Architecture and design health');
+    expect(reviewSkill).toContain('Risk and error scan');
+    expect(reviewSkill).toContain('Strict Review Frame');
+  });
+
+  test('review checklist covers correctness, architecture, and risk', () => {
+    const checklist = fs.readFileSync(path.join(ROOT, 'review', 'checklist.md'), 'utf-8');
+    expect(checklist).toContain('#### Problem-Fix Correctness');
+    expect(checklist).toContain('#### Architecture & Design Health');
+    expect(checklist).toContain('runtime path users actually invoke');
+    expect(checklist).toContain('Fallbacks that mask broken contracts');
   });
 
   test('item extraction has 50-item cap', () => {

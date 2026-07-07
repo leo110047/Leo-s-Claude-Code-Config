@@ -1,22 +1,22 @@
 ---
-description: List and run installed Goldband Loop workflows through one selector entrypoint.
+description: Legacy fallback for Goldband Loop workflow selection.
 argument-hint: [workflow-name or search terms]
 ---
 
-# Goldband Workflow Selector
+# Goldband Workflow Selector (Legacy Fallback)
 
-Use this custom prompt as the single visible Codex entrypoint for Goldband Loop
-workflows. The user invokes it as:
+Codex CLI 0.142.5 no longer recognizes `/prompts:*` custom prompt commands in
+the TUI. Use the installed Goldband skill as the primary Codex entrypoint:
 
 ```text
-/prompts:goldband
-/prompts:goldband review
-/prompts:goldband qa
-/prompts:goldband investigate
+$goldband
+$goldband review
+$goldband qa
+$goldband investigate
 ```
 
-Do not require the user to memorize individual workflow names, and do not look
-for top-level `goldband-*` skills.
+This file remains only as a legacy fallback for surfaces that still expand
+custom prompt files. Do not document it as the primary Codex CLI selector.
 
 ## Process
 

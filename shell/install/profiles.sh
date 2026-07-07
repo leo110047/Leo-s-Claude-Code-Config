@@ -81,7 +81,26 @@ install_codex_prompts() {
         rm "$CODEX_PROMPTS_DIR"
     fi
     mkdir -p "$CODEX_PROMPTS_DIR"
-    link_component "$REPO_DIR/codex/prompts/goldband.md" "$CODEX_GOLDBAND_PROMPT_FILE" "Codex prompt goldband.md"
+
+    # Codex no longer exposes custom prompts in the slash menu, but keep the
+    # legacy prompt as a materialized fallback for debug/readback compatibility.
+    local src="$REPO_DIR/codex/prompts/goldband.md"
+    if [ ! -e "$src" ]; then
+        echo -e "  ${YELLOW}[跳過] Codex prompt goldband.md — 來源不存在${NC}"
+        return
+    fi
+    if [ -f "$CODEX_GOLDBAND_PROMPT_FILE" ] && [ ! -L "$CODEX_GOLDBAND_PROMPT_FILE" ] && cmp -s "$src" "$CODEX_GOLDBAND_PROMPT_FILE"; then
+        echo -e "  ${GREEN}[已安裝] Codex prompt goldband.md${NC}"
+        return
+    fi
+    if [ -L "$CODEX_GOLDBAND_PROMPT_FILE" ]; then
+        rm "$CODEX_GOLDBAND_PROMPT_FILE"
+    elif [ -e "$CODEX_GOLDBAND_PROMPT_FILE" ]; then
+        backup_existing_path "$CODEX_GOLDBAND_PROMPT_FILE"
+    fi
+    materialize_file_copy "$src" "$CODEX_GOLDBAND_PROMPT_FILE"
+    echo -e "  ${GREEN}[安裝] Codex prompt goldband.md${NC}"
+    echo -e "  ${YELLOW}note:${NC} Codex prompt fallback is a file copy; rerun ./install.sh after git pull to refresh it."
 }
 
 install_codex_hooks() {

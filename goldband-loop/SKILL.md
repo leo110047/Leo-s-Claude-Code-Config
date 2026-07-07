@@ -477,6 +477,55 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
+## Empty Invocation Menu
+
+If the user's prompt is only `$goldband`, `goldband`, or an equivalent empty
+Goldband invocation with no workflow name and no task description, do not start
+any workflow. Reply with this concise menu and stop:
+
+```text
+Goldband workflows:
+- $goldband review — review current code changes
+- $goldband cross-review <plan-file> — require opposite-host review gate
+- $goldband investigate — debug a bug or failing behavior
+- $goldband qa — test app/site behavior
+- $goldband ship — prepare landing, PR, or release work
+- $goldband cso — security review
+- $goldband design-review — visual/product design review
+- $goldband benchmark — performance check
+- $goldband context-restore — restore previous working context
+
+Tell me which one to run, or describe the task and I will choose.
+```
+
+## Cross-Review Gate
+
+`$goldband cross-review <plan-file> [--reviewer codex|claude] [--model <model>]`
+is a separate workflow entrypoint from `$goldband review`.
+
+- `$goldband review` means normal code review of the current changes.
+- `$goldband cross-review` means arm the Claude/Codex opposite-host review gate
+  for a specific implementation plan before this session can finish.
+- Do not route `$goldband cross-review` to `/review`.
+- Do not describe cross-review as a second pass of `$goldband review`.
+- If the user asks for cross-review without a plan file, ask for the plan path
+  before starting.
+
+When a plan file is provided, run the cross-review CLI from the active runtime:
+
+```bash
+$GOLDBAND_BIN/goldband-cross-review start --plan <plan-file> [--reviewer <codex|claude>] [--model <model>]
+```
+
+Then run or offer to run the review round:
+
+```bash
+$GOLDBAND_BIN/goldband-cross-review run [--model <model>]
+```
+
+Follow any `CHANGES_REQUESTED` or `ESCALATE` output as the active cross-review
+contract. Only mark the task complete after the cross-review contract allows it.
+
 If `PROACTIVE` is `false`: do NOT proactively invoke or suggest other goldband skills during
 this session. Only run skills the user explicitly invokes. This preference persists across
 sessions via `goldband-config`.
@@ -524,6 +573,7 @@ is the non-discovery format used by standard installs.
 - User reports a bug, error, broken behavior, "why is this broken", "this doesn't work", "wtf", "something's wrong" → invoke `/investigate`
 - User asks to test the site, find bugs, QA, "does this work", "check the deploy" → invoke `/qa`
 - User asks to just report bugs without fixing → invoke `/qa-only`
+- User explicitly asks for cross-review, cross review, opposite-host review gate, or `$goldband cross-review` → use `Cross-Review Gate`; do not invoke `/review`
 - User asks to review code, check the diff, pre-landing review, "look at my changes" → invoke `/review`
 - User asks about visual polish, design audit of a live site, "this looks off" → invoke `/design-review`
 - User asks to audit the live developer experience, time-to-hello-world → invoke `/devex-review`

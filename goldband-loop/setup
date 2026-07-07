@@ -74,6 +74,48 @@ _print_windows_copy_note_once() {
   fi
 }
 
+_CODEX_MATERIALIZED_NOTE_PRINTED=0
+_print_codex_materialized_note_once() {
+  if [ "$_CODEX_MATERIALIZED_NOTE_PRINTED" -eq 0 ]; then
+    echo "  note: Codex SKILL.md entrypoints are installed as file copies because Codex may skip symlinked SKILL.md files. Re-run ./setup after every 'git pull' to refresh them."
+    _CODEX_MATERIALIZED_NOTE_PRINTED=1
+  fi
+}
+
+_materialize_file_copy() {
+  local src="$1"
+  local dst="$2"
+  local tmp="${dst}.tmp.$$"
+
+  [ -f "$src" ] || return 0
+  mkdir -p "$(dirname "$dst")"
+  rm -f "$tmp"
+  cp -f "$src" "$tmp"
+  mv -f "$tmp" "$dst"
+}
+
+_materialize_codex_skill_file() {
+  local src="$1"
+  local dst="$2"
+
+  _materialize_file_copy "$src" "$dst"
+  _print_codex_materialized_note_once
+}
+
+_materialize_codex_skill_dir() {
+  local src="$1"
+  local dst="$2"
+  local tmp="${dst}.tmp.$$"
+
+  [ -d "$src" ] || return 0
+  mkdir -p "$(dirname "$dst")"
+  rm -rf "$tmp"
+  cp -R "$src" "$tmp"
+  rm -rf "$dst"
+  mv "$tmp" "$dst"
+  _print_codex_materialized_note_once
+}
+
 # ─── Quiet mode helper ────────────────────────────────────────
 QUIET=0
 log() { [ "$QUIET" -eq 0 ] && echo "$@" || true; }
@@ -575,8 +617,7 @@ link_codex_selected_skill_dirs() {
     local skill_dir="$agents_dir/$skill_name"
     [ -f "$skill_dir/SKILL.md" ] || continue
     local target="$skills_dir/$skill_name"
-    rm -rf "$target"
-    _link_or_copy "$skill_dir" "$target"
+    _materialize_codex_skill_dir "$skill_dir" "$target"
     write_goldband_managed_skill_marker "$target" "$skill_dir"
     linked+=("$skill_name")
   done
@@ -833,7 +874,9 @@ create_codex_runtime_root() {
   mkdir -p "$codex_goldband" "$codex_goldband/browse" "$codex_goldband/goldband-upgrade" "$codex_goldband/review" "$codex_goldband/workflows"
 
   if [ -f "$agents_dir/goldband/SKILL.md" ]; then
-    _link_or_copy "$agents_dir/goldband/SKILL.md" "$codex_goldband/SKILL.md"
+    # Codex discovers skills from SKILL.md files. Keep the root selector as a
+    # materialized file; symlinked SKILL.md files can be skipped by the scanner.
+    _materialize_codex_skill_file "$agents_dir/goldband/SKILL.md" "$codex_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$codex_goldband/bin"
@@ -848,7 +891,7 @@ create_codex_runtime_root() {
     _link_or_copy "$goldband_dir/browse/bin" "$codex_goldband/browse/bin"
   fi
   if [ -f "$agents_dir/goldband-upgrade/SKILL.md" ]; then
-    _link_or_copy "$agents_dir/goldband-upgrade/SKILL.md" "$codex_goldband/goldband-upgrade/SKILL.md"
+    _materialize_codex_skill_file "$agents_dir/goldband-upgrade/SKILL.md" "$codex_goldband/goldband-upgrade/SKILL.md"
   fi
   # Review runtime assets (individual files, NOT the whole review/ dir which has SKILL.md)
   for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
