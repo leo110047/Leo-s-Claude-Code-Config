@@ -117,17 +117,20 @@ function buildPromptContext({
     knowledgeAdvisory &&
       shouldEmitKnowledgeAdvisory(sessionId, knowledgeAdvisory.key),
   );
+  const crossReviewMessage = crossReviewContract
+    ? formatCrossReviewArmMessage(crossReviewContract)
+    : null;
+  const shouldEmitCrossReview = Boolean(crossReviewMessage);
 
   return {
     shouldEmit:
+      shouldEmitCrossReview ||
       shouldEmitBaseline ||
       shouldEmitSuggestionsForPrompt ||
       shouldEmitKnowledgeForPrompt,
     shouldEmitSuggestions: shouldEmitSuggestionsForPrompt,
     additionalContext: [
-      crossReviewContract
-        ? `Cross-review gate armed for this session. Reviewer: ${crossReviewContract.reviewer}. Plan: ${crossReviewContract.planFile || 'not bound yet'}.`
-        : null,
+      shouldEmitCrossReview ? crossReviewMessage : null,
       shouldEmitKnowledgeForPrompt ? knowledgeAdvisory.text : null,
       shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
       shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
@@ -135,6 +138,16 @@ function buildPromptContext({
       .filter(Boolean)
       .join('\n\n'),
   };
+}
+
+function formatCrossReviewArmMessage(contract) {
+  if (contract.error) {
+    return `Cross-review gate was requested but could not be armed: ${contract.error}`;
+  }
+  const modelText = contract.reviewerModel
+    ? ` Model: ${contract.reviewerModel}.`
+    : '';
+  return `Cross-review gate armed for this session. Reviewer: ${contract.reviewer}. Plan: ${contract.planFile || 'not bound yet'}.${modelText}`;
 }
 
 function armCrossReviewIfRequested(input) {

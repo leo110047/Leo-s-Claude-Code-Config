@@ -159,7 +159,7 @@ const RULES = [
   {
     skill: 'skill-developer',
     priority: 'low',
-    hint: 'Use for small skill trigger or structure edits; use /goldband-skillify for full scaffold or extraction.',
+    hint: 'Use for small skill trigger or structure edits; run the Goldband skillify workflow through /goldband skillify for full scaffold or extraction.',
     keywords: [
       'new skill',
       'create skill',
@@ -217,7 +217,7 @@ const GOLDBAND_LOOP_RULES = [
   {
     skill: 'goldband-investigate',
     priority: 'high',
-    hint: 'Use /goldband-investigate for workflow-driven root-cause debugging and scoped edit boundaries.',
+    hint: 'Run the Goldband investigate workflow through /goldband investigate for workflow-driven root-cause debugging and scoped edit boundaries.',
     keywords: [
       'investigate',
       'root cause',
@@ -229,7 +229,7 @@ const GOLDBAND_LOOP_RULES = [
   {
     skill: 'goldband-review',
     priority: 'high',
-    hint: 'Use /goldband-review for a staff-engineer style PR review pass.',
+    hint: 'Run the Goldband review workflow through /goldband review for a staff-engineer style PR review pass.',
     keywords: [
       'review pr',
       'review branch',
@@ -241,28 +241,28 @@ const GOLDBAND_LOOP_RULES = [
   {
     skill: 'goldband-qa',
     priority: 'high',
-    hint: 'Use /goldband-qa for browser-based UI, staging, and E2E verification.',
+    hint: 'Run the Goldband qa workflow through /goldband qa for browser-based UI, staging, and E2E verification.',
     keywords: ['qa', 'browser', 'staging url', 'ui bug', 'e2e', 'playwright'],
     patterns: [/\b(browser|ui|e2e|staging|qa)\b/i],
   },
   {
     skill: 'goldband-cso',
     priority: 'high',
-    hint: 'Use /cso for deeper OWASP + STRIDE security review.',
+    hint: 'Run the Goldband cso workflow through /goldband cso for deeper OWASP + STRIDE security review.',
     keywords: ['cso', 'owasp', 'stride', 'security audit', 'threat model'],
     patterns: [/\b(security|owasp|stride|threat model)\b/i],
   },
   {
     skill: 'goldband-ship',
     priority: 'medium',
-    hint: 'Use /goldband-ship for release workflow, PR creation, and pre-landing checks.',
+    hint: 'Run the Goldband ship workflow through /goldband ship for release workflow, PR creation, and pre-landing checks.',
     keywords: ['ship', 'release', 'open pr', 'deploy prep'],
     patterns: [/\b(ship|release|open pr|deployment)\b/i],
   },
   {
     skill: 'goldband-plan-eng-review',
     priority: 'medium',
-    hint: 'Use /goldband-plan-eng-review for architecture and implementation plan review.',
+    hint: 'Run the Goldband plan-eng-review workflow through /goldband plan-eng-review for architecture and implementation plan review.',
     keywords: ['eng review', 'architecture review', 'implementation review'],
     patterns: [
       /\b(plan|architecture|design)\b.{0,24}\b(review|feature|implementation)\b/i,
@@ -271,14 +271,14 @@ const GOLDBAND_LOOP_RULES = [
   {
     skill: 'goldband-guard',
     priority: 'medium',
-    hint: 'Use /goldband-guard for workflow-local safety rails (careful + scoped freeze).',
+    hint: 'Run the Goldband guard workflow through /goldband guard for workflow-local safety rails (careful + scoped freeze).',
     keywords: ['guard mode', 'safety net', 'be careful', 'guardrails'],
     patterns: [/\b(be careful|guard|safety net|guardrails)\b/i],
   },
   {
     skill: 'goldband-freeze',
     priority: 'medium',
-    hint: 'Use /goldband-freeze when you want to restrict edits to one directory, not a fully read-only session.',
+    hint: 'Run the Goldband freeze workflow through /goldband freeze when you want to restrict edits to one directory, not a fully read-only session.',
     keywords: [
       'restrict edits',
       'only edit this folder',

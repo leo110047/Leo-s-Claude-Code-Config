@@ -4,8 +4,8 @@ description: |
   Use when creating, restyling, or reviewing frontend pages, components,
   dashboards, tools, posters, artifacts, or application screens.
 
-  Prefer `/goldband-design-review` or workflow design skills for full design
-  review and iteration. This portable skill only defines shared design policy.
+  Prefer the Goldband design-review workflow for full design review and
+  iteration. This portable skill only defines shared design policy.
 license: Complete terms in LICENSE.txt
 allowed-tools:
   - Read
@@ -27,7 +27,7 @@ paths:
 # Frontend Design
 
 This is a thin shared-policy entrypoint. Full design review belongs in
-`/goldband-design-review` / workflow so Claude and Codex do not carry duplicate
+the Goldband design-review workflow so Claude and Codex do not carry duplicate
 frontend critique playbooks in portable skills.
 
 ## Source of Truth
@@ -45,7 +45,7 @@ Do not override an existing product system just to make the result more novel.
 
 ## Workflow Handoff
 
-Use `/goldband-design-review` when available for new UI, visual QA, design
+Use the Goldband design-review workflow when available for new UI, visual QA, design
 iterations, screenshot-based critique, or production UI polish.
 
 Use this skill directly only for small design decisions or when workflow is not

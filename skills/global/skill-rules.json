@@ -47,7 +47,7 @@
         "workflow": [
           "1. Invoke systematic-debugging to investigate bugs",
           "2. Fix bugs systematically",
-          "3. Resume /goldband-review after bugs are resolved"
+          "3. Resume the Goldband review workflow after bugs are resolved"
         ],
         "reason": "Cannot properly review code with active bugs; debugging must come first"
       }

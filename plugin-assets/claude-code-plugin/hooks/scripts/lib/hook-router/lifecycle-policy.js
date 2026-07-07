@@ -104,11 +104,11 @@ function evaluateSessionStart(input) {
 
   return allowOutcome({
     logs: [
-      '[Hook] SessionStart: context restore is available via /goldband-context-restore when needed.',
+      '[Hook] SessionStart: context restore is available via /goldband context-restore when needed.',
     ],
     outputJson: buildAdditionalContext(
       'SessionStart',
-      'For resumed or context-sensitive work, prefer /goldband-context-restore before editing.',
+      'For resumed or context-sensitive work, run the Goldband context-restore workflow via /goldband context-restore before editing.',
     ),
   });
 }
@@ -155,7 +155,7 @@ function evaluateLifecycle(input) {
   if (eventName === 'SessionEnd') {
     return allowOutcome({
       logs: [
-        '[Hook] SessionEnd: context save is available via /goldband-context-save for reusable handoff state.',
+        '[Hook] SessionEnd: context save is available via /goldband context-save for reusable handoff state.',
       ],
     });
   }

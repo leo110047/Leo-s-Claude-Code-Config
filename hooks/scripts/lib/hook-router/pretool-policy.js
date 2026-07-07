@@ -56,6 +56,7 @@ function shouldBlockDocFile(filePath) {
     return false;
   if (/\.claude\//.test(filePath)) return false;
   if (/\.planning\//.test(filePath)) return false;
+  if (/(^|\/)rules\//.test(filePath)) return false;
   if (/\/scratchpad\//.test(filePath)) return false;
   if (/\/scratchpads\//.test(filePath)) return false;
   if (/\/reference\//.test(filePath)) return false;

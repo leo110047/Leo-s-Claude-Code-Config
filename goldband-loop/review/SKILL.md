@@ -806,6 +806,29 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 You are running the `/review` workflow. Analyze the current branch's diff against the base branch for structural issues that tests don't catch.
 
+## Strict Change Review Contract
+
+Every review must answer these four questions before declaring the change clean:
+
+1. **Original problem:** What problem, bug, requirement, or intent was this
+   branch supposed to address? Use plan file, PR body, TODOs, commit messages,
+   branch name, and changed tests as evidence. If intent is unclear, say so.
+2. **Correctness of the fix:** Did the diff actually address that problem at
+   the layer where the root cause lives? Trace the changed code path far enough
+   to verify the new behavior is reachable. Flag cosmetic fixes, partial fixes,
+   dead code, and fixes that only hide the symptom.
+3. **Architecture and design health:** Is the change shaped correctly for the
+   existing system? Check ownership boundaries, contracts, data flow, naming,
+   coupling, duplicated logic, fallback behavior, state transitions, and whether
+   the solution matches established local patterns.
+4. **Risk and error scan:** What can break because of this diff? Check
+   regressions, edge cases, failure paths, migrations, config/runtime drift,
+   concurrency, security, observability, and test gaps.
+
+Include a concise `Strict Review Frame` in the output with those four headings.
+Do not output "No issues found" unless each heading has evidence or an explicit
+"unknown / not applicable" note.
+
 ## Programmatic runtime entrypoint
 
 The runtime contract for this workflow lives in `goldband-loop/workflows/`.

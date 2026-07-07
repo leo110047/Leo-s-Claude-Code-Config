@@ -201,8 +201,8 @@ append_fake_setup_codex() {
 install_codex() {
   mkdir -p "$HOME/.codex/skills"
   rm -rf "$HOME/.codex/skills/goldband"
-  mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/review" "$HOME/.codex/skills/goldband/workflows"
-  ln -s "$ROOT/SKILL.md" "$HOME/.codex/skills/goldband/SKILL.md"
+  mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/goldband-upgrade" "$HOME/.codex/skills/goldband/review" "$HOME/.codex/skills/goldband/workflows"
+  cp "$ROOT/SKILL.md" "$HOME/.codex/skills/goldband/SKILL.md"
   ln -s "$ROOT/bin/goldband-config" "$HOME/.codex/skills/goldband/bin/goldband-config"
   ln -s "$ROOT/bin/goldband-repo-mode" "$HOME/.codex/skills/goldband/bin/goldband-repo-mode"
   ln -s "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"
@@ -214,8 +214,10 @@ install_codex() {
     ln -s "$skill_dir/SKILL.md" "$HOME/.codex/skills/goldband/workflows/$skill_name.workflow.md"
     ln -s "$skill_dir/SKILL.md" "$HOME/.codex/skills/goldband/workflows/${skill_name#goldband-}.workflow.md"
     if [ "$skill_name" = "goldband-upgrade" ]; then
+      cp "$skill_dir/SKILL.md" "$HOME/.codex/skills/goldband/goldband-upgrade/SKILL.md"
       rm -rf "$HOME/.codex/skills/$skill_name"
-      ln -s "$skill_dir" "$HOME/.codex/skills/$skill_name"
+      mkdir -p "$HOME/.codex/skills/$skill_name"
+      cp "$skill_dir/SKILL.md" "$HOME/.codex/skills/$skill_name/SKILL.md"
     else
       rm -rf "$HOME/.codex/skills/$skill_name"
     fi
@@ -248,6 +250,13 @@ assert_exists() {
 assert_absent() {
   if [ -e "$1" ] || [ -L "$1" ]; then
     echo "unexpected path exists: $1" >&2
+    exit 1
+  fi
+}
+
+assert_not_symlink() {
+  if [ -L "$1" ]; then
+    echo "unexpected symlink: $1" >&2
     exit 1
   fi
 }
@@ -359,6 +368,8 @@ echo "[1/4] prepare fixture"
 copy_repo_subset
 create_fake_goldband_loop
 seed_old_workflow_entries
+mkdir -p "$TMP_HOME/.codex/prompts"
+printf 'custom prompt\n' > "$TMP_HOME/.codex/prompts/custom.md"
 
 echo "[2/4] installer smoke"
 if HOME="$TMP_HOME" FAIL_GOLDBAND_LOOP_SETUP=1 "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-fail.log 2>&1; then
@@ -382,6 +393,7 @@ assert_exists "$TMP_HOME/.goldband/projects"
 assert_exists "$TMP_HOME/.claude/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.claude/skills/_goldband-command/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/SKILL.md"
+assert_not_symlink "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/greptile-triage.md"
@@ -394,8 +406,14 @@ assert_absent "$TMP_HOME/.codex/skills/goldband-qa"
 assert_absent "$TMP_HOME/.codex/skills/goldband-ship"
 assert_exists "$TMP_HOME/.claude/skills/goldband-upgrade/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband-upgrade/SKILL.md"
+assert_not_symlink "$TMP_HOME/.codex/skills/goldband-upgrade/SKILL.md"
+assert_not_symlink "$TMP_HOME/.codex/skills/goldband/goldband-upgrade/SKILL.md"
 assert_exists "$TMP_HOME/.claude/skills/goldband/workflows/goldband-review.workflow.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/workflows/goldband-review.workflow.md"
+assert_exists "$TMP_HOME/.claude/commands/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/goldband.md"
+assert_not_symlink "$TMP_HOME/.codex/prompts/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/custom.md"
 
 assert_absent "$TMP_HOME/.claude/skills/workflow"
 assert_absent "$TMP_HOME/.codex/skills/workflow"
@@ -439,7 +457,19 @@ run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host 
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband-upgrade/SKILL.md"
+assert_not_symlink "$CODEX_LEGACY_HOME/.codex/skills/goldband-upgrade/SKILL.md"
+assert_not_symlink "$CODEX_LEGACY_HOME/.codex/skills/goldband/goldband-upgrade/SKILL.md"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/goldband-review.workflow.md"
+
+PROMPT_LEGACY_HOME="$TMP_ROOT/prompt-legacy-home"
+mkdir -p "$PROMPT_LEGACY_HOME/.codex"
+ln -s "$TMP_ROOT/codex/prompts" "$PROMPT_LEGACY_HOME/.codex/prompts"
+HOME="$PROMPT_LEGACY_HOME" "$TMP_ROOT/install.sh" codex-prompts >/tmp/goldband-loop-codex-prompts-legacy.log
+if [ -L "$PROMPT_LEGACY_HOME/.codex/prompts" ]; then
+  echo "legacy codex prompts directory symlink was not migrated" >&2
+  exit 1
+fi
+assert_exists "$PROMPT_LEGACY_HOME/.codex/prompts/goldband.md"
 
 LEGACY_ENV_HOME="$TMP_ROOT/legacy-env-home"
 LEGACY_ENV_SOURCE="$TMP_ROOT/legacy-env-source/goldband-loop"
@@ -463,10 +493,15 @@ assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard
 
 echo "[4/4] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
+assert_contains "$STATUS_OUTPUT" "codex prompt goldband.md"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop state dir (~/.goldband/projects)"
+
+CODEX_REQUIREMENTS_FILE="$TMP_ROOT/etc/codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-loop-uninstall.log
+assert_absent "$TMP_HOME/.codex/prompts/goldband.md"
+assert_exists "$TMP_HOME/.codex/prompts/custom.md"
 
 echo "[OK] Goldband Loop installer integration smoke test passed"

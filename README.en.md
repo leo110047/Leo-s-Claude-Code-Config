@@ -88,6 +88,7 @@ Install individual pieces:
 ./install.sh claude-guidance    # Claude global CLAUDE.md
 ./install.sh codex-full         # Full Codex setup
 ./install.sh codex-agents       # Codex AGENTS.md + custom agents
+./install.sh codex-prompts      # Legacy Codex prompt fallback
 ./install.sh codex-hooks        # Codex hooks
 ./install.sh codex-requirements # Codex managed requirements
 ./install.sh workflow           # Claude-side workflow (standard profile)
@@ -130,13 +131,14 @@ Dependencies:
 - Claude installer: `claude/CLAUDE.md` -> `~/.claude/CLAUDE.md`
 - Codex global guidance: `codex/AGENTS.md` -> `~/.codex/AGENTS.md`
 - Claude installer assets: `commands/`, `rules/`, `hooks/`, portable skills
-- Codex assets: config, profiles, rules, hooks, custom agents, portable skills
+- Codex assets: config, profiles, prompts, rules, hooks, custom agents, portable skills
 - Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
 
 Goldband Loop uses one standard workflow discovery profile:
 
 - It exposes only a few entrypoints such as `goldband` and `goldband-upgrade`.
 - Full workflow instructions remain installed under `workflows/*.workflow.md` in the runtime root and are loaded by the entrypoint skill.
+- Claude users list and run workflows through `/goldband`; Codex users list and run workflows through `$goldband <workflow>`.
 
 This keeps the Claude/Codex skill list cleaner and prevents Goldband Loop workflow descriptions from crowding the skills context. The old fully expanded top-level `/goldband-qa`, `/goldband-review`, and similar workflow entries have been removed.
 
@@ -226,18 +228,15 @@ The installer does not enable it by default; build it first, then point the
 These workflow entry points require `workflow`, `workflow-codex`, or
 `all-with-workflow` first:
 
-- `/plan`
-- `/verify`
-- `/goldband-review`
-- `/goldband-investigate`
-- `/goldband-cso`
-- `/goldband-design-review`
-- `/goldband-qa`
-- `/goldband-benchmark`
-- `/goldband-skillify`
+- Claude: `/goldband`
+- Codex: `$goldband <workflow>`
+- Planning command: `/plan`
+- Verification command: `/verify`
 
-Full reviews use the `/goldband-review` workflow. A `pack-quality`-only install
-does not expose a review entry point.
+Run `/goldband` or `$goldband` with no argument to list installed
+workflows, then choose by number or name. Direct examples:
+`/goldband review` on Claude, `$goldband review` on Codex. A
+`pack-quality`-only install does not expose Goldband Loop workflows.
 
 ## Updates
 

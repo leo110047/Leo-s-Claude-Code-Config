@@ -342,7 +342,7 @@ function testMaxRoundsAndRubricDowngrade() {
   assert.match(result.stderr, /人類仲裁/);
 }
 
-function testRoundBoundaryDowngradesMovingGoalposts() {
+function testRebuttalBoundaryKeepsAcceptedRebuttalsClosed() {
   const history = [
     {
       findings: [
@@ -385,7 +385,7 @@ function testRoundBoundaryDowngradesMovingGoalposts() {
           id: 'CR-NEW',
           severity: 'HIGH',
           ruleId: 'correctness.contract',
-          failureScenario: 'New non-critical blocker.',
+          failureScenario: 'New high-severity contract blocker.',
           status: 'open',
         },
         {
@@ -406,9 +406,9 @@ function testRoundBoundaryDowngradesMovingGoalposts() {
   );
   assert.equal(byId.get('CR-001').severity, 'HIGH');
   assert.equal(byId.get('CR-002').severity, 'MEDIUM');
-  assert.equal(byId.get('CR-NEW').severity, 'MEDIUM');
+  assert.equal(byId.get('CR-NEW').severity, 'HIGH');
   assert.equal(byId.get('CR-CRIT').severity, 'CRITICAL');
-  assert.equal(normalized.blockingCount, 2);
+  assert.equal(normalized.blockingCount, 3);
 }
 
 function testImplementerResponsesEnterNextReviewerPrompt() {
@@ -459,25 +459,10 @@ function testCodexStopHardBlocksWithExitCode() {
   assert.match(result.stderr, /交互審查閘門/);
 }
 
-function testPromptArm() {
-  const dir = makeRepo();
-  const stateDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'goldband-cross-review-state-'),
-  );
-  const env = envFor(dir, stateDir);
-  const contract = core.armFromPrompt(
-    {
-      session_id: 'prompt-session',
-      prompt: '請做這件事 [[cross-review]] --plan PLAN.md',
-    },
-    { cwd: dir, env, implementer: 'claude' },
-  );
-  assert.equal(contract.reviewer, 'codex');
-  assert.equal(contract.planFile, 'PLAN.md');
-}
-
 function testCliRunDoesNotClaimGatePassed() {
-  const { dir, env, sessionId } = makeContractFixture('cli-status');
+  const { dir, env, sessionId } = makeContractFixture('cli-status', {
+    reviewerModel: 'gpt-5.5',
+  });
   const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-fake-bin-'));
   fs.writeFileSync(
     path.join(fakeBin, 'codex'),
@@ -496,7 +481,9 @@ function testCliRunDoesNotClaimGatePassed() {
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, 'approved-marker-written');
   assert.equal(output.artifact.reviewMode, 'real');
+  assert.equal(output.artifact.reviewerModel, 'gpt-5.5');
   assert.match(output.artifact.reviewerCommand, /^codex exec/);
+  assert.match(output.artifact.reviewerCommand, /--model gpt-5\.5/);
   assert.equal(core.readContract(sessionId, env).status, 'active');
 }
 function makeEscalationFixture() {
@@ -587,10 +574,9 @@ function testEscalationSummaryAndTelemetry() {
 testCanonicalHashCoversReviewScope();
 testGateLifecycle();
 testMaxRoundsAndRubricDowngrade();
-testRoundBoundaryDowngradesMovingGoalposts();
+testRebuttalBoundaryKeepsAcceptedRebuttalsClosed();
 testImplementerResponsesEnterNextReviewerPrompt();
 testCodexStopHardBlocksWithExitCode();
-testPromptArm();
 testCliRunDoesNotClaimGatePassed();
 testEscalationSummaryAndTelemetry();
 

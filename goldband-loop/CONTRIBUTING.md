@@ -66,13 +66,11 @@ your local edits instead of the global install.
 goldband/                          <- your working tree
 ├── .claude/skills/              <- created by dev-setup (gitignored)
 │   ├── goldband -> ../../         <- symlink back to repo root
-│   ├── review/                  <- real directory (short name, default)
-│   │   └── SKILL.md -> goldband/review/SKILL.md
-│   ├── ship/                    <- or goldband-review/, goldband-ship/ if --prefix
-│   │   └── SKILL.md -> goldband/ship/SKILL.md
+│   ├── _goldband-command/        <- selector entrypoint for /goldband
+│   ├── goldband-upgrade/         <- maintenance entrypoint
 │   └── ...                      <- one directory per skill
 ├── review/
-│   └── SKILL.md                 <- edit this, test with /review
+│   └── SKILL.md                 <- edit this, test with /goldband review
 ├── ship/
 │   └── SKILL.md
 ├── browse/
@@ -81,11 +79,10 @@ goldband/                          <- your working tree
 └── ...
 ```
 
-Setup creates real directories (not symlinks) at the top level with a SKILL.md
-symlink inside. This ensures Claude discovers them as top-level skills, not nested
-under `goldband/`. Names depend on your prefix setting (`~/.goldband/config.yaml`).
-Short names (`/review`, `/ship`) are the default. Run `./setup --prefix` if you
-prefer namespaced names (`/goldband-review`, `/goldband-ship`).
+Setup uses the standard workflow profile. It keeps full workflow instructions
+under `goldband/workflows/*.workflow.md` and exposes a small selector surface
+instead of one top-level skill per workflow. In Claude, use `/goldband` to list
+workflows or `/goldband review` to run one directly.
 
 ## Day-to-day workflow
 
@@ -359,24 +356,22 @@ do real work.
 ln -sfn /path/to/your/goldband-checkout .claude/skills/goldband
 ```
 
-### Step 2: Run setup to create per-skill symlinks
+### Step 2: Run setup to create standard entrypoints
 
-The `goldband` symlink alone isn't enough. Claude Code discovers skills through
-individual top-level directories (`qa/SKILL.md`, `ship/SKILL.md`, etc.), not through
-the `goldband/` directory itself. Run `./setup` to create them:
+The `goldband` symlink alone isn't enough. Run `./setup` to create the standard
+entrypoint skills and internal workflow files:
 
 ```bash
 cd .claude/skills/goldband && bun install && bun run build && ./setup
 ```
 
-Setup will ask whether you want short names (`/qa`) or namespaced (`/goldband-qa`).
-Your choice is saved to `~/.goldband/config.yaml` and remembered for future runs.
-To skip the prompt, pass `--no-prefix` (short names) or `--prefix` (namespaced).
+The old `--no-prefix` and `--prefix` modes are accepted as legacy aliases, but
+setup normalizes them to the standard selector profile.
 
 ### Step 3: Develop
 
-Edit a template, run `bun run gen:skill-docs`, and the next `/review` or `/qa`
-call picks it up immediately. No restart needed.
+Edit a template, run `bun run gen:skill-docs`, and the next `/goldband review`
+or `/goldband qa` call picks it up immediately. No restart needed.
 
 ### Going back to the stable global install
 
@@ -386,19 +381,14 @@ Remove the project-local symlink. Claude Code falls back to `~/.claude/skills/go
 rm .claude/skills/goldband
 ```
 
-The per-skill directories (`qa/`, `ship/`, etc.) contain SKILL.md symlinks that point
-to `goldband/...`, so they'll resolve to the global install automatically.
+The standard entrypoint directories contain SKILL.md symlinks that point to
+`goldband/...`, so they'll resolve to the global install automatically.
 
-### Switching prefix mode
+### Cleaning legacy workflow entries
 
-If you installed goldband with one prefix setting and want to switch:
-
-```bash
-cd .claude/skills/goldband && ./setup --no-prefix   # switch to /qa, /ship
-cd .claude/skills/goldband && ./setup --prefix       # switch to /goldband-qa, /goldband-ship
-```
-
-Setup cleans up the old symlinks automatically. No manual cleanup needed.
+If an old install left top-level workflow skills such as `goldband-review/` or
+`goldband-qa/`, rerun setup. The standard profile removes those legacy entries
+and keeps workflow documents under `goldband/workflows/`.
 
 ### Alternative: point your global install at a branch
 

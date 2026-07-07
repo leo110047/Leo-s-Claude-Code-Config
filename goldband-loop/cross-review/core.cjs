@@ -101,6 +101,12 @@ function normalizeHost(value) {
   return normalized;
 }
 
+function normalizeOptionalText(value) {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
 function contractPath(sessionId, env = process.env) {
   return path.join(crossReviewDir(env), `${safeSegment(sessionId)}.json`);
 }
@@ -169,6 +175,13 @@ function validateContract(contract) {
   if (contract.reviewer === contract.implementer) {
     throw new Error('cross-review requires reviewer != implementer');
   }
+  if (
+    contract.reviewerModel !== undefined &&
+    contract.reviewerModel !== null &&
+    typeof contract.reviewerModel !== 'string'
+  ) {
+    throw new Error('contract.reviewerModel must be a string when provided');
+  }
   if (!VALID_STATUSES.has(contract.status)) {
     throw new Error(`invalid contract.status: ${contract.status}`);
   }
@@ -197,6 +210,7 @@ function createContract(options, env = process.env) {
     host: implementer,
     implementer,
     reviewer,
+    reviewerModel: normalizeOptionalText(options.reviewerModel),
     planFile: options.planFile || null,
     baseCommit: options.baseCommit || gitHead(options.cwd || process.cwd()),
     reviewScope: 'tracked-and-untracked-vs-base',
@@ -216,6 +230,7 @@ function createContract(options, env = process.env) {
       detail: {
         implementer: written.implementer,
         reviewer: written.reviewer,
+        reviewerModel: written.reviewerModel,
         planFile: written.planFile,
         maxRounds: written.maxRounds,
       },
@@ -542,7 +557,7 @@ function evaluateCrossReviewGate(input = {}, options = {}) {
   if (!contract.planFile) {
     return block(
       'cross-review-plan-missing',
-      `本工作已開啟交互審查，但尚未綁定 plan 檔。請執行 \`${crossReviewCommand('start --plan <path> --reviewer <claude|codex>')}\` 後再收工。`,
+      `本工作已啟用 cross-review gate，但尚未綁定 plan 檔。請執行 \`${crossReviewCommand('start --plan <path>')}\` 後再收工。`,
     );
   }
 
@@ -679,7 +694,7 @@ function normalizeReviewResult(result, round, history = []) {
   const findings = Array.isArray(result.findings)
     ? result.findings.map((finding, index) => normalizeFinding(finding, index, round))
     : [];
-  const boundedFindings = applyRoundBoundary(findings, history, round);
+  const boundedFindings = applyRebuttalBoundary(findings, history, round);
   const blockingCount = boundedFindings.filter((finding) => isBlockingFinding(finding)).length;
   const finalVerdict = verdict === 'APPROVED' && blockingCount > 0 ? 'ESCALATE' : verdict;
   return { verdict: finalVerdict, findings: boundedFindings, blockingCount };
@@ -694,15 +709,9 @@ function isBlockingFinding(finding) {
   );
 }
 
-function applyRoundBoundary(findings, history, round) {
+function applyRebuttalBoundary(findings, history, round) {
   if (round <= 1) return findings;
 
-  const previousBlockingIds = new Set(
-    history
-      .flatMap((artifact) => artifact.findings || [])
-      .filter((finding) => isBlockingFinding(finding))
-      .map((finding) => finding.id),
-  );
   const acceptedRebuttals = new Set(
     history
       .flatMap((artifact) => artifact.findings || [])
@@ -714,14 +723,7 @@ function applyRoundBoundary(findings, history, round) {
     if (acceptedRebuttals.has(finding.id)) {
       return downgradeFinding(finding, 'Accepted rebuttals cannot be reopened.');
     }
-    if (!isBlockingFinding(finding)) return finding;
-    if (previousBlockingIds.has(finding.id)) return finding;
-    if (finding.severity === 'CRITICAL') return finding;
-    if (finding.severity === 'HIGH' && finding.ruleId === 'regression.clear') return finding;
-    return downgradeFinding(
-      finding,
-      'New non-CRITICAL/non-HIGH-regression blockers after round 1 are advisory by the moving-goalpost rule.',
-    );
+    return finding;
   });
 }
 
@@ -763,17 +765,24 @@ function runMockReviewer(verdict, round) {
   };
 }
 
-function runCliReviewer(reviewer, prompt, cwd = process.cwd(), env = process.env) {
+function runCliReviewer(reviewer, prompt, cwd = process.cwd(), env = process.env, model = null) {
   const command = reviewer === 'claude' ? 'claude' : 'codex';
   const args =
     reviewer === 'claude'
-      ? ['-p', '--output-format', 'text', '--no-session-persistence']
+      ? [
+          '-p',
+          ...(model ? ['--model', model] : []),
+          '--output-format',
+          'text',
+          '--no-session-persistence',
+        ]
       : [
           'exec',
           '--ephemeral',
           '--sandbox',
           'read-only',
           '--skip-git-repo-check',
+          ...(model ? ['--model', model] : []),
           '-',
         ];
   const result = spawnSync(command, args, {
@@ -841,9 +850,16 @@ function runReviewRound(options, env = process.env) {
   if (!['real', 'mock'].includes(reviewMode)) {
     throw new Error(`invalid reviewMode: ${reviewMode}`);
   }
+  const reviewerModel = normalizeOptionalText(options.model) || contract.reviewerModel;
   const reviewerResult =
     reviewMode === 'real'
-      ? runCliReviewer(contract.reviewer, buildReviewerPrompt(contract, cwd, env), cwd, env)
+      ? runCliReviewer(
+          contract.reviewer,
+          buildReviewerPrompt(contract, cwd, env),
+          cwd,
+          env,
+          reviewerModel,
+        )
       : runMockReviewer(options.mockVerdict || 'APPROVED', round);
   if (reviewerResult.exitCode !== 0) {
     reviewerResult.parsed = {
@@ -873,6 +889,7 @@ function runReviewRound(options, env = process.env) {
     round,
     verdict: normalized.verdict,
     reviewMode,
+    reviewerModel,
     findings: normalized.findings,
     reviewerCommand: reviewerResult.command,
     reviewerExitCode: reviewerResult.exitCode,
@@ -895,6 +912,7 @@ function runReviewRound(options, env = process.env) {
         reviewMode,
         reviewer: contract.reviewer,
         implementer: contract.implementer,
+        reviewerModel,
         artifactId,
       },
     },
@@ -1019,40 +1037,150 @@ function appendResponse(sessionId, response, env = process.env) {
   return payload;
 }
 
-function promptRequestsCrossReview(prompt) {
-  const text = String(prompt || '')
+function promptTextWithoutInlineCode(prompt) {
+  return String(prompt || '')
     .replace(CODE_FENCE_PATTERN, ' ')
     .replace(INLINE_CODE_PATTERN, ' ');
-  return (
-    /(?:^|\s)\[\[cross-review\]\](?:$|\s)/i.test(text) ||
-    /(?:^|\s|請)開啟交互審查(?:$|\s|--)/.test(text)
-  );
 }
 
-function inferPlanFile(prompt) {
-  const match = String(prompt || '').match(/(?:--plan\s+|plan(?:File)?[:=]\s*)([^\s]+)/i);
-  return match ? match[1].replace(/^["']|["']$/g, '') : null;
+function promptRequestsCrossReview(prompt) {
+  const text = promptTextWithoutInlineCode(prompt);
+  return /(?:^|\n)\s*\/goldband-cross-review(?:\s|$)/i.test(text);
+}
+
+function tokenizeRequestText(text) {
+  const tokens = [];
+  let token = '';
+  let quote = null;
+  let escaped = false;
+  for (const char of String(text || '')) {
+    if (escaped) {
+      token += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        token += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (token) {
+        tokens.push(token);
+        token = '';
+      }
+      continue;
+    }
+    token += char;
+  }
+  if (token) tokens.push(token);
+  return tokens;
+}
+
+function optionValue(tokens, index, key) {
+  const token = tokens[index];
+  if (token === `--${key}`) return tokens[index + 1] || null;
+  if (token.startsWith(`--${key}=`)) return token.slice(key.length + 3) || null;
+  return null;
+}
+
+function parseCrossReviewArgs(tokens, options = {}) {
+  const allowPositionalPlan = Boolean(options.allowPositionalPlan);
+  const parsed = { planFile: null, reviewer: null, reviewerModel: null };
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const plan = optionValue(tokens, index, 'plan');
+    if (plan) {
+      parsed.planFile = plan;
+      if (token === '--plan') index += 1;
+      continue;
+    }
+    const reviewer = optionValue(tokens, index, 'reviewer');
+    if (reviewer) {
+      parsed.reviewer = normalizeHost(reviewer);
+      if (token === '--reviewer') index += 1;
+      continue;
+    }
+    const model = optionValue(tokens, index, 'model');
+    if (model) {
+      parsed.reviewerModel = model;
+      if (token === '--model') index += 1;
+      continue;
+    }
+    if (VALID_HOSTS.has(token.toLowerCase()) && !parsed.reviewer) {
+      parsed.reviewer = normalizeHost(token);
+      continue;
+    }
+    if (allowPositionalPlan && !token.startsWith('-') && !parsed.planFile) {
+      parsed.planFile = token;
+    }
+  }
+  return parsed;
+}
+
+function parseCrossReviewRequest(prompt) {
+  const text = promptTextWithoutInlineCode(prompt);
+  const commandMatch = text.match(/(?:^|\n)\s*\/goldband-cross-review(?:\s|$)/i);
+  if (!commandMatch) {
+    return {
+      requested: false,
+      source: null,
+      planFile: null,
+      reviewer: null,
+      reviewerModel: null,
+    };
+  }
+  const tail = text.slice(commandMatch.index + commandMatch[0].length).trim();
+  return {
+    requested: true,
+    source: 'command',
+    ...parseCrossReviewArgs(tokenizeRequestText(tail), { allowPositionalPlan: true }),
+  };
 }
 
 function armFromPrompt(input = {}, options = {}) {
   const prompt = String(input.prompt || '');
-  if (!promptRequestsCrossReview(prompt)) return null;
+  const request = parseCrossReviewRequest(prompt);
+  if (!request.requested) return null;
   const env = options.env || process.env;
   const implementer = options.implementer || detectHost(env);
   const sessionId = sessionIdFromInput(input, env);
   const existing = readContract(sessionId, env);
-  const inferredPlan = inferPlanFile(prompt);
+  const inferredPlan = request.planFile;
+  const reviewer = request.reviewer || oppositeHost(implementer);
+  const reviewerModel = normalizeOptionalText(request.reviewerModel);
   if (existing && existing.status === 'active') {
-    if (!existing.planFile && inferredPlan) {
-      return writeContract({ ...existing, planFile: inferredPlan }, env);
+    const updates = {};
+    if (!existing.planFile && !inferredPlan) {
+      throw new Error('missing implementation plan path for /goldband-cross-review');
+    }
+    if (!existing.planFile && inferredPlan) updates.planFile = inferredPlan;
+    if (!existing.reviewerModel && reviewerModel) updates.reviewerModel = reviewerModel;
+    if (Object.keys(updates).length > 0) {
+      return writeContract({ ...existing, ...updates }, env);
     }
     return existing;
+  }
+  if (!inferredPlan) {
+    throw new Error('missing implementation plan path for /goldband-cross-review');
   }
   const contract = createContract(
     {
       sessionId,
       implementer,
-      reviewer: oppositeHost(implementer),
+      reviewer,
+      reviewerModel,
       planFile: inferredPlan,
       cwd: options.cwd || process.cwd(),
     },
@@ -1121,12 +1249,12 @@ module.exports = {
   crossReviewDir,
   detectHost,
   evaluateCrossReviewGate,
-  inferPlanFile,
   isBlockingFinding,
   markDone,
   buildReviewerPrompt,
   normalizeReviewResult,
   oppositeHost,
+  parseCrossReviewRequest,
   parseMarker,
   promptRequestsCrossReview,
   readArtifact,

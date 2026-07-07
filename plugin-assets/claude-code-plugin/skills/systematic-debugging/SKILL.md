@@ -4,9 +4,8 @@ description: |
   Use when encountering any bug, test failure, build failure, or unexpected
   behavior before proposing fixes.
 
-  Prefer `/goldband-investigate` or the workflow investigate skill for full
-  root-cause work. This portable skill only defines the shared debugging
-  contract used by both hosts.
+  Prefer the Goldband investigate workflow for full root-cause work. This
+  portable skill only defines the shared debugging contract used by both hosts.
 allowed-tools:
   - Read
   - Grep
@@ -17,7 +16,7 @@ allowed-tools:
 # Systematic Debugging
 
 This is a thin shared-policy entrypoint. The full investigation workflow belongs
-in `/goldband-investigate` / workflow so Claude and Codex do not carry duplicate
+in the Goldband investigate workflow so Claude and Codex do not carry duplicate
 debugging playbooks in portable skills.
 
 ## The Iron Law
@@ -50,9 +49,9 @@ you are not ready to propose a fix.
 
 ## Workflow Handoff
 
-Use `/goldband-investigate` when available for multi-component failures,
-production incidents, flaky tests, unclear ownership, or work that needs a
-written investigation record.
+Use the Goldband investigate workflow when available for multi-component
+failures, production incidents, flaky tests, unclear ownership, or work that
+needs a written investigation record.
 
 Use this skill directly only for small local failures or when workflow is not
 installed.

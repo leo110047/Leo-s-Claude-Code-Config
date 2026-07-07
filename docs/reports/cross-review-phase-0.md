@@ -11,17 +11,17 @@ Date: 2026-07-05
 - The reviewer prompt uses the same bounded review scope family as the hash: tracked diff plus sorted untracked file names, sha256 values, and text content or base64 bytes.
 - Reviewer and implementer must be different host families in the runtime contract and schema.
 - Mock reviewer mode can write a reviewer artifact and plan marker for contract tests, but Stop rejects mock artifacts as production approval evidence.
-- UserPromptSubmit trigger arming is implemented for `[[cross-review]]` and `開啟交互審查`, scoped by `session_id`.
+- UserPromptSubmit trigger arming is implemented for line-start `/goldband-cross-review <plan>`, scoped by `session_id`.
 - The local Codex CLI can produce a parseable cross-review verdict in headless mode when run with the required local app-server permissions. A real `codex` reviewer smoke produced an `APPROVED` artifact through `goldband-cross-review run --review-mode real`.
 - The local Claude CLI is logged in when run with normal user keychain access. A real `claude` reviewer smoke produced an `APPROVED` artifact through `goldband-cross-review run --review-mode real`.
 - A real Codex reviewer E2E produced `CHANGES_REQUESTED` for a contract-violating diff, then produced `APPROVED` after the diff was fixed.
 - A real Claude reviewer accepted an implementer rebuttal from the recorded response log. Round 1 had `CR-001` open; round 2 returned `APPROVED` with `CR-001` set to `status: "rebutted-accepted"`.
 - Codex Stop hard-blocking works through hook process exit code `2` with a stderr message. A live probe showed `hook: Stop Blocked`, the turn did not complete on the blocked response, and a second Stop pass completed only after the hook returned success.
-- The repo-wired Codex cross-review gate now reaches the same `Stop Blocked` path in a live `codex exec` probe. The probe armed a contract from `[[cross-review]]`, left it `active`, and timed out after Codex re-entered the turn instead of finishing.
+- The repo-wired Codex cross-review gate now reaches the same `Stop Blocked` path in a live `codex exec` probe. The probe armed a contract from `/goldband-cross-review PLAN.md`, left it `active`, and timed out after Codex re-entered the turn instead of finishing.
 - Reaching max rounds or an `ESCALATE` verdict writes an escalation summary under `${GOLDBAND_HOME:-$HOME/.goldband}/cross-review/summaries/`; Stop human-arbitration messages include that path when available.
 - Cross-review runtime telemetry records arm, round verdict, implementer response, escalation, override, and done events as v1-compatible usage events.
 - `CHANGES_REQUESTED` never rewrites to `APPROVED`; malformed or missing findings for a non-approval verdict fail closed through `ESCALATE`.
-- Round 2+ moving-goalpost protection still allows a new `HIGH` `regression.clear` blocker introduced by the implementer's latest fix.
+- Round 2+ review allows new `CRITICAL` and `HIGH` blockers while preventing previously accepted rebuttals from being reopened.
 - Re-sending a cross-review trigger for an already active session does not reset `roundsUsed` or `baseCommit`; it only fills a missing `planFile` when the prompt supplies one.
 
 ## Rejected

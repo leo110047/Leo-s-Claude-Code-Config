@@ -76,6 +76,33 @@ install_codex_agents() {
     link_component "$REPO_DIR/codex/agents" "$CODEX_CUSTOM_AGENTS_DIR" "Codex custom agents"
 }
 
+install_codex_prompts() {
+    if repo_link_points_to "$CODEX_PROMPTS_DIR" "$REPO_DIR/codex/prompts"; then
+        rm "$CODEX_PROMPTS_DIR"
+    fi
+    mkdir -p "$CODEX_PROMPTS_DIR"
+
+    # Codex no longer exposes custom prompts in the slash menu, but keep the
+    # legacy prompt as a materialized fallback for debug/readback compatibility.
+    local src="$REPO_DIR/codex/prompts/goldband.md"
+    if [ ! -e "$src" ]; then
+        echo -e "  ${YELLOW}[跳過] Codex prompt goldband.md — 來源不存在${NC}"
+        return
+    fi
+    if [ -f "$CODEX_GOLDBAND_PROMPT_FILE" ] && [ ! -L "$CODEX_GOLDBAND_PROMPT_FILE" ] && cmp -s "$src" "$CODEX_GOLDBAND_PROMPT_FILE"; then
+        echo -e "  ${GREEN}[已安裝] Codex prompt goldband.md${NC}"
+        return
+    fi
+    if [ -L "$CODEX_GOLDBAND_PROMPT_FILE" ]; then
+        rm "$CODEX_GOLDBAND_PROMPT_FILE"
+    elif [ -e "$CODEX_GOLDBAND_PROMPT_FILE" ]; then
+        backup_existing_path "$CODEX_GOLDBAND_PROMPT_FILE"
+    fi
+    materialize_file_copy "$src" "$CODEX_GOLDBAND_PROMPT_FILE"
+    echo -e "  ${GREEN}[安裝] Codex prompt goldband.md${NC}"
+    echo -e "  ${YELLOW}note:${NC} Codex prompt fallback is a file copy; rerun ./install.sh after git pull to refresh it."
+}
+
 install_codex_hooks() {
     link_component "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" "Codex hooks.json"
     link_component "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" "Codex hook scripts"
@@ -93,6 +120,7 @@ install_claude_guidance() {
 install_codex_core() {
     install_codex_config
     install_codex_agents
+    install_codex_prompts
     install_codex_hooks
     install_codex_rules
     install_codex_skills_core
@@ -102,6 +130,7 @@ install_codex_core() {
 install_codex_full() {
     install_codex_config
     install_codex_agents
+    install_codex_prompts
     install_codex_hooks
     install_codex_rules
     install_codex_skills
@@ -287,6 +316,47 @@ install_style_gate() {
 
     git config --global core.hooksPath "$GIT_HOOKS_DIR"
     echo -e "  ${GREEN}[安裝] Git style gate -> global core.hooksPath=$GIT_HOOKS_DIR${NC}"
+    install_goldband_project_style_gate
+}
+
+install_goldband_project_style_gate() {
+    local project_gate="$REPO_DIR/scripts/check-goldband-project-style-gate.mjs"
+    if [ ! -f "$project_gate" ]; then
+        return
+    fi
+
+    local common_dir
+    common_dir="$(git -C "$REPO_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -z "$common_dir" ]; then
+        return
+    fi
+    case "$common_dir" in
+        /*) ;;
+        *) common_dir="$REPO_DIR/$common_dir" ;;
+    esac
+
+    local hook_path="$common_dir/hooks/pre-commit"
+    local marker="scripts/check-goldband-project-style-gate.mjs --staged"
+    if [ -f "$hook_path" ] && grep -q "$marker" "$hook_path"; then
+        chmod +x "$hook_path" 2>/dev/null || true
+        echo -e "  ${GREEN}[已安裝] goldband repo project style gate${NC}"
+        return
+    fi
+    if [ -e "$hook_path" ] || [ -L "$hook_path" ]; then
+        backup_existing_path "$hook_path"
+    fi
+
+    mkdir -p "$(dirname "$hook_path")"
+    local tmp="${hook_path}.tmp.$$"
+    {
+        echo '#!/usr/bin/env bash'
+        echo 'set -euo pipefail'
+        echo ''
+        echo 'node scripts/check-goldband-project-style-gate.mjs --staged'
+    } > "$tmp"
+    mv -f "$tmp" "$hook_path"
+    chmod +x "$hook_path"
+    echo -e "  ${GREEN}[安裝] goldband repo project style gate -> $hook_path${NC}"
 }
 
 install_unity() {

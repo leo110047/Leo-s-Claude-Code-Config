@@ -75,7 +75,7 @@ check_contains "commands/plan.md" "Fallback Path:" "plan command includes fallba
 
 check_contains "skills/global/planning-workflow/SKILL.md" "## Decision-Quality Block" "planning-workflow decision-quality block"
 check_contains "skills/global/planning-workflow/SKILL.md" "/plan" "planning-workflow defers full workflow planning"
-check_contains "skills/global/security-checklist/SKILL.md" "/goldband-cso" "security-checklist defers deep security workflow"
+check_contains "skills/global/security-checklist/SKILL.md" "Goldband cso workflow" "security-checklist defers deep security workflow"
 check_contains "skills/global/decision-log/SKILL.md" "### Failure Signals" "decision-log failure signals section"
 check_contains "skills/global/decision-log/SKILL.md" "### Revisit Triggers / Exit Criteria" "decision-log revisit triggers section"
 

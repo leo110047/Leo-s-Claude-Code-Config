@@ -5,7 +5,7 @@
 Review the `git diff origin/main` output for the issues listed below. Be specific — cite `file:line` and suggest fixes. Skip anything that's fine. Only flag real problems.
 
 **Two-pass review:**
-- **Pass 1 (CRITICAL):** Run SQL & Data Safety, Race Conditions, LLM Output Trust Boundary, Shell Injection, and Enum Completeness first. Highest severity.
+- **Pass 1 (CRITICAL):** Run Problem-Fix Correctness, SQL & Data Safety, Race Conditions, LLM Output Trust Boundary, Shell Injection, and Enum Completeness first. Highest severity.
 - **Pass 2 (INFORMATIONAL):** Run remaining categories below. Lower severity but still actioned.
 - **Specialist categories (handled by parallel subagents, NOT this checklist):** Test Gaps, Dead Code, Magic Numbers, Conditional Side Effects, Performance & Bundle Impact, Crypto & Entropy. See `review/specialists/` for these.
 
@@ -15,6 +15,12 @@ genuinely ambiguous issues are batched into a single user question.
 **Output format:**
 
 ```
+Strict Review Frame:
+- Original problem: <intent source and one-line intent, or unknown>
+- Correctness of fix: <verified / partial / not verified, with evidence>
+- Architecture/design health: <healthy / concern / not applicable, with reason>
+- Risk/error scan: <main remaining risks, or none found after checks>
+
 Pre-Landing Review: N issues (X critical, Y informational)
 
 **AUTO-FIXED:**
@@ -25,7 +31,8 @@ Pre-Landing Review: N issues (X critical, Y informational)
   Recommended fix: suggested fix
 ```
 
-If no issues found: `Pre-Landing Review: No issues found.`
+If no issues found: include the `Strict Review Frame`, then output
+`Pre-Landing Review: No issues found.`
 
 Be terse. For each issue: one line describing the problem, one line with the fix. No preamble, no summaries, no "looks good overall."
 
@@ -34,6 +41,18 @@ Be terse. For each issue: one line describing the problem, one line with the fix
 ## Review Categories
 
 ### Pass 1 — CRITICAL
+
+#### Problem-Fix Correctness
+- For bugfixes, trace the original failure mode through the changed code path.
+  Flag fixes that only silence the symptom, change an unreachable path, or leave
+  the failing input/state unhandled.
+- For feature or workflow changes, verify the implementation is wired into the
+  runtime path users actually invoke. A file or config existing on disk is not
+  enough if the runtime never reads it.
+- For contract changes, verify all producers and consumers agree on required
+  fields, state names, permissions, side effects, and error behavior.
+- For test-only claims, verify the test would fail against the old behavior and
+  exercises the stated bug or requirement, not just a nearby happy path.
 
 #### SQL & Data Safety
 - String interpolation in SQL (even if values are `.to_i`/`.to_f` — use parameterized queries (Rails: sanitize_sql_array/Arel; Node: prepared statements; Python: parameterized queries))
@@ -112,6 +131,24 @@ To do this: use Grep to find all references to the sibling values (e.g., grep fo
 - Version tag format consistency: `v1.2.3` vs `1.2.3` — must match across VERSION file, git tags, and publish scripts
 - Publish step idempotency: re-running the publish workflow should not fail (e.g., `gh release delete` before `gh release create`)
 
+#### Architecture & Design Health
+- New abstractions that only serve one call site without reducing real
+  complexity. Prefer direct code until duplication or ownership boundaries justify
+  the abstraction.
+- Logic placed in the wrong layer: UI enforcing server rules, hooks hiding core
+  runtime behavior, installers owning policy that belongs in skills/rules, or
+  tests depending on implementation details instead of behavior.
+- Fallbacks that mask broken contracts. If missing config, data, permissions, or
+  runtime assets should be explicit, flag best-effort behavior that silently
+  proceeds.
+- Duplicated source of truth: command names, workflow lists, schema fields,
+  status values, or release metadata declared in multiple places without a
+  generator, test, or readback.
+- State transitions without clear ownership, rollback, idempotency, or replay
+  behavior.
+- Changes that conflict with established local patterns, naming, module
+  boundaries, or existing helper APIs without a reason in the diff or plan.
+
 **DO NOT flag:**
 - Web services with existing auto-deploy pipelines (Docker build + K8s deploy)
 - Internal tools not distributed outside the team
@@ -123,15 +160,16 @@ To do this: use Grep to find all references to the sibling values (e.g., grep fo
 
 ```
 CRITICAL (highest severity):      INFORMATIONAL (main agent):      SPECIALIST (parallel subagents):
-├─ SQL & Data Safety              ├─ Async/Sync Mixing             ├─ Testing specialist
-├─ Race Conditions & Concurrency  ├─ Column/Field Name Safety      ├─ Maintainability specialist
-├─ LLM Output Trust Boundary      ├─ Dead Code (version only)      ├─ Security specialist
-├─ Shell Injection                ├─ LLM Prompt Issues             ├─ Performance specialist
-└─ Enum & Value Completeness      ├─ Completeness Gaps             ├─ Data Migration specialist
-                                   ├─ Time Window Safety            ├─ API Contract specialist
+├─ Problem-Fix Correctness        ├─ Async/Sync Mixing             ├─ Testing specialist
+├─ SQL & Data Safety              ├─ Column/Field Name Safety      ├─ Maintainability specialist
+├─ Race Conditions & Concurrency  ├─ Dead Code (version only)      ├─ Security specialist
+├─ LLM Output Trust Boundary      ├─ LLM Prompt Issues             ├─ Performance specialist
+├─ Shell Injection                ├─ Completeness Gaps             ├─ Data Migration specialist
+└─ Enum & Value Completeness      ├─ Time Window Safety            ├─ API Contract specialist
                                    ├─ Type Coercion at Boundaries   └─ Red Team (conditional)
                                    ├─ View/Frontend
-                                   └─ Distribution & CI/CD Pipeline
+                                   ├─ Distribution & CI/CD Pipeline
+                                   └─ Architecture & Design Health
 
 All findings are actioned via Fix-First Review. Severity determines
 presentation order and classification of AUTO-FIX vs ASK — critical

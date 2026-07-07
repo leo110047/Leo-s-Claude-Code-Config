@@ -34,7 +34,7 @@ portable skills.
 
 ## Workflow Handoff
 
-Use `/plan`, `/goldband-plan-eng-review`, or workflow planning skills when
+Use `/plan`, the Goldband plan-eng-review workflow, or workflow planning skills when
 available for multi-file implementation, cross-host policy work, refactors,
 release plans, or work that needs reviewable phases.
 

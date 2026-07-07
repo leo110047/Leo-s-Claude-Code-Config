@@ -224,6 +224,7 @@ show_codex_install_status() {
     show_codex_requirements_status
     show_repo_path_status "codex AGENTS.md" "$CODEX_AGENTS_FILE" "$REPO_DIR/codex/AGENTS.md" "codex-agents"
     show_repo_path_status "codex custom agents" "$CODEX_CUSTOM_AGENTS_DIR" "$REPO_DIR/codex/agents" "codex-agents"
+    show_codex_prompts_status
     show_repo_path_status "codex hooks.json" "$CODEX_HOOKS_FILE" "$REPO_DIR/codex/hooks.json" "codex-hooks"
     show_repo_path_status "codex hook scripts" "$CODEX_HOOKS_DIR" "$REPO_DIR/codex/hooks" "codex-hooks"
     show_codex_rules_status
@@ -287,6 +288,16 @@ show_codex_requirements_status() {
     else
         echo -e "  ${YELLOW}[未安裝]${NC} codex requirements — 執行 ./install.sh codex-requirements"
     fi
+}
+
+show_codex_prompts_status() {
+    if repo_link_points_to "$CODEX_PROMPTS_DIR" "$REPO_DIR/codex/prompts"; then
+        local target
+        target=$(readlink "$CODEX_PROMPTS_DIR")
+        echo -e "  ${YELLOW}[legacy symlink]${NC} codex prompts -> $target — 建議重跑 ./install.sh codex-prompts"
+        return
+    fi
+    show_repo_path_status "codex prompt goldband.md" "$CODEX_GOLDBAND_PROMPT_FILE" "$REPO_DIR/codex/prompts/goldband.md" "codex-prompts"
 }
 
 show_codex_rules_status() {

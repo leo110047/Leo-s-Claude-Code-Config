@@ -7,6 +7,7 @@ do_uninstall() {
     uninstall_claude_paths
     uninstall_claude_settings
     uninstall_codex_skills
+    uninstall_codex_prompt
     uninstall_codex_paths
     uninstall_codex_requirements
     uninstall_style_gate
@@ -113,6 +114,21 @@ uninstall_codex_skills() {
         remove_profile_skills "$CODEX_SKILLS_DIR" "$CODEX_SKILL_PROFILE_FILE"
         remove_empty_dir "$CODEX_SKILLS_DIR"
         echo -e "  ${GREEN}[移除] Codex skills${NC}"
+    fi
+}
+
+uninstall_codex_prompt() {
+    local src="$REPO_DIR/codex/prompts/goldband.md"
+    if repo_link_points_to "$CODEX_PROMPTS_DIR" "$REPO_DIR/codex/prompts"; then
+        rm "$CODEX_PROMPTS_DIR"
+        echo -e "  ${GREEN}[移除] $CODEX_PROMPTS_DIR legacy symlink${NC}"
+        return
+    fi
+    if repo_path_installed_from "$src" "$CODEX_GOLDBAND_PROMPT_FILE"; then
+        rm "$CODEX_GOLDBAND_PROMPT_FILE"
+        echo -e "  ${GREEN}[移除] $CODEX_GOLDBAND_PROMPT_FILE${NC}"
+    elif [ -e "$CODEX_GOLDBAND_PROMPT_FILE" ]; then
+        echo -e "  ${YELLOW}[保留] Codex prompt goldband.md — 不是 goldband 管理的檔案: $CODEX_GOLDBAND_PROMPT_FILE${NC}"
     fi
 }
 

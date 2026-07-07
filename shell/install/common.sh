@@ -66,6 +66,18 @@ create_repo_link() {
     CREATE_REPO_LINK_MODE="copy"
 }
 
+materialize_file_copy() {
+    local src="$1"
+    local dest="$2"
+    local tmp="${dest}.tmp.$$"
+
+    [ -f "$src" ] || return 1
+    mkdir -p "$(dirname "$dest")"
+    rm -f "$tmp"
+    cp "$src" "$tmp"
+    mv -f "$tmp" "$dest"
+}
+
 repo_link_points_to() {
     local link_path="$1"
     local expected_target="$2"

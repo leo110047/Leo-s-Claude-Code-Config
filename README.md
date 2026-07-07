@@ -136,9 +136,10 @@ git pull --ff-only
   MCP connector registration template。
 - Claude installer assets：global `CLAUDE.md`、commands、rules、hooks、
   portable skills。
-- Codex installer assets：`AGENTS.md`、config、requirements、rules、hooks、
-  profiles、permission profiles、custom agents、portable skills。
-- Goldband Loop runtime：Claude/Codex 的 `goldband-*` workflow entrypoints。
+- Codex installer assets：`AGENTS.md`、config、requirements、prompts、rules、
+  hooks、profiles、permission profiles、custom agents、portable skills。
+- Goldband Loop runtime：Claude 用 `/goldband`，Codex 用 `$goldband <workflow>`
+  列出並執行已安裝 workflow。
 - Local knowledge layer：`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`，
   儲存已整理、可召回、未來可能畢業成 skill/rule 的 knowledge 條目。
 - Optional assets：global git style gate、MCP templates、container-first

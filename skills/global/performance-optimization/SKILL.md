@@ -5,7 +5,7 @@ description: |
   bundle size, Core Web Vitals, memory pressure, or any measured bottleneck.
 
   PRIORITY: takes precedence when the request is about slowness, lag, bottlenecks, or optimization.
-  Prefer `/goldband-benchmark` for repeatable benchmark workflow and regression tracking.
+  Prefer the Goldband benchmark workflow for repeatable benchmark workflow and regression tracking.
   EXCLUDE: architectural design without a measured performance problem.
 allowed-tools:
   - Read

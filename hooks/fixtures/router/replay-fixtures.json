@@ -1,5 +1,33 @@
 [
   {
+    "id": "userprompt-cross-review-missing-plan-emits-error",
+    "script": "skill-activation-suggestions",
+    "coverage": {
+      "category": "prompt-advisory",
+      "policy": "cross-review-command",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "cross-review-missing-plan-emit"
+    },
+    "env": {
+      "CLAUDE_PLUGIN_DATA": "__FIXTURE_DIR__/cross-review-plugin-data",
+      "GOLDBAND_CROSS_REVIEW_DIR": "__RUN_TMP__/cross-review-state"
+    },
+    "input": {
+      "hook_event_name": "UserPromptSubmit",
+      "session_id": "cross-review-missing-plan",
+      "prompt": "/goldband-cross-review"
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stdoutIncludes": [
+        "Cross-review gate was requested but could not be armed",
+        "missing implementation plan path"
+      ]
+    }
+  },
+  {
     "id": "userprompt-knowledge-advisory",
     "script": "skill-activation-suggestions",
     "coverage": {
@@ -72,6 +100,28 @@
       "stderrIncludes": [
         "Unnecessary documentation"
       ]
+    }
+  },
+  {
+    "id": "pretool-allow-rules-dir-write",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "doc-file-blocker",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "rules-dir-allowlist"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "rules/escalation.md",
+        "content": "# Escalation policy"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
     }
   },
   {

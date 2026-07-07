@@ -31,6 +31,26 @@ Keep durable workflow policy in skills, commands, hooks, or project-level
 - Use workflow entrypoints and portable skills only when the task actually calls
   for them.
 
+## Judgment Defaults
+
+Condensed from the shared `rules/` policies (escalation, change-scope,
+session-handoff), which Codex does not auto-load:
+
+- Proceed autonomously on reversible, in-scope, verifiable work. Stop and ask
+  for irreversible or outward-facing actions, materially ambiguous requests,
+  or scope expansion beyond what the user named.
+- Stop after two failed fix attempts on the same failing signal. Report what
+  was tried and observed instead of trying a third variation.
+- Never weaken, skip, or delete a test, assertion, or lint rule to make a
+  check pass.
+- Fix at the layer where the root cause lives. Prefer reuse and deletion over
+  addition; no new abstraction or flag for a single call site.
+- When the minimal fix and the structurally healthy fix diverge, present both
+  and let the user choose; recommend the healthy path.
+- Persist durable decisions to `docs/DECISIONS.md`-style records and leave a
+  written handoff (tried, verified vs suspected, next step) when stopping
+  partway.
+
 ## UI and Skills
 
 - For UI, frontend, and visual work, read `DESIGN.md` first when the repo has

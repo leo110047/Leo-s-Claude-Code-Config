@@ -72,6 +72,29 @@ the machine. The commit-msg Conventional Commits gate is installed but enforced
 only when the repo has `.goldband-git-workflow.json` or
 `GOLDBAND_GIT_WORKFLOW_GATE=1`.
 
+When the global hook is active, goldband runs first. After the goldband
+pre-commit or commit-msg gate passes or soft-skips, it looks for an executable
+project hook in the repo's default git hook directory:
+
+- `.git/hooks/pre-commit`
+- `.git/hooks/commit-msg`
+
+If that project hook exists, goldband runs it next. If it does not exist, the
+hook chain ends without requiring any project configuration. There is no order
+setting; goldband-first is the default contract.
+
+This repository also has a project style gate script:
+
+```bash
+node scripts/check-goldband-project-style-gate.mjs --staged
+```
+
+It selects fast goldband-specific checks by staged path: selector parity,
+plugin distribution artifacts, hook script references, Codex portability, and
+style-gate self-tests. `./install.sh style-gate` installs a thin
+`.git/hooks/pre-commit` shim for this checkout; the global goldband hook will
+invoke that project hook after the global gate passes.
+
 A repo can opt out permanently by adding `.goldband-no-style-gate`, or
 temporarily with:
 
@@ -83,7 +106,9 @@ Temporary bypasses print a warning and write a local log under
 `${XDG_STATE_HOME:-$HOME/.local/state}/goldband/style-gate-bypass.log`.
 
 If a repo uses Husky or another local `core.hooksPath`, git uses the local value
-instead of the global goldband hook. That is expected.
+instead of the global goldband hook. That is expected; in that setup, the
+project hook owns the chain and must invoke goldband explicitly if it wants both
+checks.
 
 ## Plugin and Installer Distribution
 

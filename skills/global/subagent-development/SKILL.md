@@ -252,4 +252,4 @@ If a subagent fails, the prompt was insufficient. Fix the prompt, not just the s
 
 - **planning-workflow**: Break plans into subagent-sized tasks (2-5 min each)
 - **evidence-based-coding**: Apply the Iron Law to all subagent output
-- **goldband-review**: Use the workflow review pass for subagent deliverables
+- **Goldband review workflow**: Use the workflow review pass for subagent deliverables
