@@ -75,6 +75,9 @@ jobs:
       - name: Test coding style gate
         run: npm run test:style-gate
 
+      - name: Test project style gate
+        run: npm run test:project-style-gate
+
       - name: Replay hook router golden dataset
         run: npm run test:hook-router
 

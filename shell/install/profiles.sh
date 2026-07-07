@@ -316,6 +316,47 @@ install_style_gate() {
 
     git config --global core.hooksPath "$GIT_HOOKS_DIR"
     echo -e "  ${GREEN}[安裝] Git style gate -> global core.hooksPath=$GIT_HOOKS_DIR${NC}"
+    install_goldband_project_style_gate
+}
+
+install_goldband_project_style_gate() {
+    local project_gate="$REPO_DIR/scripts/check-goldband-project-style-gate.mjs"
+    if [ ! -f "$project_gate" ]; then
+        return
+    fi
+
+    local common_dir
+    common_dir="$(git -C "$REPO_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [ -z "$common_dir" ]; then
+        return
+    fi
+    case "$common_dir" in
+        /*) ;;
+        *) common_dir="$REPO_DIR/$common_dir" ;;
+    esac
+
+    local hook_path="$common_dir/hooks/pre-commit"
+    local marker="scripts/check-goldband-project-style-gate.mjs --staged"
+    if [ -f "$hook_path" ] && grep -q "$marker" "$hook_path"; then
+        chmod +x "$hook_path" 2>/dev/null || true
+        echo -e "  ${GREEN}[已安裝] goldband repo project style gate${NC}"
+        return
+    fi
+    if [ -e "$hook_path" ] || [ -L "$hook_path" ]; then
+        backup_existing_path "$hook_path"
+    fi
+
+    mkdir -p "$(dirname "$hook_path")"
+    local tmp="${hook_path}.tmp.$$"
+    {
+        echo '#!/usr/bin/env bash'
+        echo 'set -euo pipefail'
+        echo ''
+        echo 'node scripts/check-goldband-project-style-gate.mjs --staged'
+    } > "$tmp"
+    mv -f "$tmp" "$hook_path"
+    chmod +x "$hook_path"
+    echo -e "  ${GREEN}[安裝] goldband repo project style gate -> $hook_path${NC}"
 }
 
 install_unity() {

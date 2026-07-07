@@ -13,6 +13,27 @@ const tests = [
   ['real merge conflict block is blocked', testMergeConflictBlock],
   ['commit-msg accepts scope and breaking marker', testCommitMsgScope],
   ['commit-msg remains opt-in', testCommitMsgOptIn],
+  [
+    'pre-commit runs project hook after goldband',
+    testPreCommitProjectHookOrder,
+  ],
+  [
+    'pre-commit stops before project hook when goldband fails',
+    testPreCommitProjectHookSkippedOnGoldbandFailure,
+  ],
+  [
+    'pre-commit warns when project hook is not executable',
+    testPreCommitWarnsWhenProjectHookNotExecutable,
+  ],
+  [
+    'pre-commit warns when project hook path is a directory',
+    testPreCommitWarnsWhenProjectHookIsDirectory,
+  ],
+  ['commit-msg runs project hook after goldband', testCommitMsgProjectHook],
+  [
+    'commit-msg stops before project hook when goldband fails',
+    testCommitMsgProjectHookSkippedOnGoldbandFailure,
+  ],
   ['pre-commit missing checker fails soft', testPreCommitMissingChecker],
   ['pre-commit missing node fails soft', testPreCommitMissingNode],
 ];
@@ -71,6 +92,142 @@ function testCommitMsgOptIn() {
   );
 }
 
+function testPreCommitProjectHookOrder() {
+  const dir = createRepo();
+  const log = path.join(dir, 'hook-order.log');
+  const gate = path.join(dir, 'goldband-gate.mjs');
+  fs.writeFileSync(
+    gate,
+    `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, 'goldband\\n');\n`,
+  );
+  writeProjectHook(
+    dir,
+    'pre-commit',
+    `#!/usr/bin/env bash\nprintf 'project\\n' >> ${shellQuote(log)}\n`,
+  );
+
+  const result = run('bash', [preCommitHook], {
+    cwd: dir,
+    env: hookEnv({ GOLDBAND_STYLE_GATE_SCRIPT: gate }),
+  });
+
+  assertEqual(result.status, 0, result.stdout + result.stderr);
+  assertEqual(fs.readFileSync(log, 'utf8'), 'goldband\nproject\n');
+}
+
+function testPreCommitProjectHookSkippedOnGoldbandFailure() {
+  const dir = createRepo();
+  const log = path.join(dir, 'hook-order.log');
+  const gate = path.join(dir, 'goldband-gate.mjs');
+  fs.writeFileSync(
+    gate,
+    `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, 'goldband\\n'); process.exit(1);\n`,
+  );
+  writeProjectHook(
+    dir,
+    'pre-commit',
+    `#!/usr/bin/env bash\nprintf 'project\\n' >> ${shellQuote(log)}\n`,
+  );
+
+  const result = run('bash', [preCommitHook], {
+    cwd: dir,
+    env: hookEnv({ GOLDBAND_STYLE_GATE_SCRIPT: gate }),
+  });
+
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertEqual(fs.readFileSync(log, 'utf8'), 'goldband\n');
+}
+
+function testPreCommitWarnsWhenProjectHookNotExecutable() {
+  const dir = createRepo();
+  const log = path.join(dir, 'hook-order.log');
+  const gate = path.join(dir, 'goldband-gate.mjs');
+  fs.writeFileSync(
+    gate,
+    `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, 'goldband\\n');\n`,
+  );
+  writeProjectHook(
+    dir,
+    'pre-commit',
+    `#!/usr/bin/env bash\nprintf 'project\\n' >> ${shellQuote(log)}\n`,
+    0o644,
+  );
+
+  const result = run('bash', [preCommitHook], {
+    cwd: dir,
+    env: hookEnv({ GOLDBAND_STYLE_GATE_SCRIPT: gate }),
+  });
+
+  assertEqual(result.status, 0, result.stdout + result.stderr);
+  assertEqual(fs.readFileSync(log, 'utf8'), 'goldband\n');
+  assertIncludes(
+    result.stderr,
+    'project pre-commit hook exists but is not executable',
+  );
+}
+
+function testPreCommitWarnsWhenProjectHookIsDirectory() {
+  const dir = createRepo();
+  const log = path.join(dir, 'hook-order.log');
+  const gate = path.join(dir, 'goldband-gate.mjs');
+  fs.writeFileSync(
+    gate,
+    `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(log)}, 'goldband\\n');\n`,
+  );
+  fs.mkdirSync(path.join(dir, '.git', 'hooks', 'pre-commit'));
+
+  const result = run('bash', [preCommitHook], {
+    cwd: dir,
+    env: hookEnv({ GOLDBAND_STYLE_GATE_SCRIPT: gate }),
+  });
+
+  assertEqual(result.status, 0, result.stdout + result.stderr);
+  assertEqual(fs.readFileSync(log, 'utf8'), 'goldband\n');
+  assertIncludes(result.stderr, 'project pre-commit hook path is a directory');
+}
+
+function testCommitMsgProjectHook() {
+  const dir = createRepo();
+  const log = path.join(dir, 'commit-msg-project.log');
+  const message = path.join(dir, 'msg');
+  fs.writeFileSync(path.join(dir, '.goldband-git-workflow.json'), '{}\n');
+  fs.writeFileSync(message, 'fix: chain project hook\n');
+  writeProjectHook(
+    dir,
+    'commit-msg',
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$1" > ${shellQuote(log)}\n`,
+  );
+
+  const result = run('bash', [commitMsgHook, message], {
+    cwd: dir,
+    env: hookEnv(),
+  });
+
+  assertEqual(result.status, 0, result.stdout + result.stderr);
+  assertEqual(fs.readFileSync(log, 'utf8').trim(), message);
+}
+
+function testCommitMsgProjectHookSkippedOnGoldbandFailure() {
+  const dir = createRepo();
+  const log = path.join(dir, 'commit-msg-project.log');
+  const message = path.join(dir, 'msg');
+  fs.writeFileSync(path.join(dir, '.goldband-git-workflow.json'), '{}\n');
+  fs.writeFileSync(message, 'bad message\n');
+  writeProjectHook(
+    dir,
+    'commit-msg',
+    `#!/usr/bin/env bash\nprintf 'project\\n' > ${shellQuote(log)}\n`,
+  );
+
+  const result = run('bash', [commitMsgHook, message], {
+    cwd: dir,
+    env: hookEnv(),
+  });
+
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertEqual(fs.existsSync(log), false);
+}
+
 function testPreCommitMissingChecker() {
   const dir = createRepo();
   const result = run('bash', [preCommitHook], {
@@ -117,6 +274,23 @@ function createRepo() {
   run('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
   run('git', ['config', 'user.name', 'Test User'], { cwd: dir });
   return dir;
+}
+
+function writeProjectHook(repoDir, hookName, content, mode) {
+  const hookPath = path.join(repoDir, '.git', 'hooks', hookName);
+  fs.writeFileSync(hookPath, content);
+  fs.chmodSync(hookPath, mode ?? 0o755);
+  return hookPath;
+}
+
+function shellQuote(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function hookEnv(overrides = {}) {
+  const env = { ...process.env, ...overrides };
+  delete env.GOLDBAND_PROJECT_HOOK_RUNNING;
+  return env;
 }
 
 function run(command, args, options = {}) {
