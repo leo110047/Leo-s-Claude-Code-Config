@@ -4,11 +4,14 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "fs";
+import { createHash } from "crypto";
 import { basename, dirname, join, resolve } from "path";
 import { homedir } from "os";
 import { execFileSync } from "child_process";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { canonicalizeRemote } from "./goldband-memory-helpers";
 
@@ -38,12 +41,25 @@ export const KNOWLEDGE_SOURCES = [
   "manual",
   "telemetry-miner",
   "workflow-evidence",
+  "hook-advisory",
 ] as const;
+export const KNOWLEDGE_TRUST_LEVELS = [
+  "user-stated",
+  "verified",
+  "observed",
+  "inferred",
+  "telemetry-derived",
+] as const;
+export const KNOWLEDGE_REVIEWERS = ["user", "workflow", "agent", ""] as const;
+export const KNOWLEDGE_STALENESS = ["fresh", "needs-review", "stale"] as const;
 
 export type KnowledgeType = (typeof KNOWLEDGE_TYPES)[number];
 export type KnowledgeDomain = (typeof KNOWLEDGE_DOMAINS)[number];
 export type KnowledgeStatus = (typeof KNOWLEDGE_STATUSES)[number];
 export type KnowledgeSource = (typeof KNOWLEDGE_SOURCES)[number];
+export type KnowledgeTrustLevel = (typeof KNOWLEDGE_TRUST_LEVELS)[number];
+export type KnowledgeReviewer = (typeof KNOWLEDGE_REVIEWERS)[number];
+export type KnowledgeStaleness = (typeof KNOWLEDGE_STALENESS)[number];
 export type KnowledgeScope = "global" | "project";
 
 export interface KnowledgeEntry {
@@ -59,7 +75,11 @@ export interface KnowledgeEntry {
   created: string;
   updated: string;
   source: KnowledgeSource;
+  source_evidence: string;
+  trust_level: KnowledgeTrustLevel;
+  reviewed_by: KnowledgeReviewer;
   last_verified: string | null;
+  staleness: KnowledgeStaleness;
   graduated_to: string;
   links: string[];
   summary: string;
@@ -77,6 +97,11 @@ export interface KnowledgeIndexRow {
   status: KnowledgeStatus;
   confidence: number;
   updated: string;
+  last_verified: string | null;
+  source_evidence: string;
+  trust_level: KnowledgeTrustLevel;
+  reviewed_by: KnowledgeReviewer;
+  staleness: KnowledgeStaleness;
   summary: string;
   path: string;
 }
@@ -100,6 +125,20 @@ export interface KnowledgeSearchOptions {
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,80}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const require = createRequire(import.meta.url);
+const FALLBACK_SECRET_PATTERNS = [
+  { name: "AWS Access Key ID", pattern: /AKIA[0-9A-Z]{16}/ },
+  { name: "GitHub Token", pattern: /ghp_[A-Za-z0-9]{36}/ },
+  { name: "GitHub Fine-Grained Token", pattern: /github_pat_[A-Za-z0-9_]{22,}/ },
+  { name: "Stripe Secret Key", pattern: /sk_live_[A-Za-z0-9]{24,}/ },
+  { name: "Anthropic API Key", pattern: /sk-ant-[A-Za-z0-9\-_]{20,}/ },
+  { name: "OpenAI API Key", pattern: /sk-[A-Za-z0-9]{48,}/ },
+  {
+    name: "Generic API Key assignment",
+    pattern:
+      /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token)\s*[=:]\s*['"][A-Za-z0-9\-_]{20,}['"]/i,
+  },
+];
 
 export function goldbandHome(): string {
   return process.env.GOLDBAND_HOME || join(homedir(), ".goldband");
@@ -119,6 +158,23 @@ export function indexPath(root = knowledgeRoot()): string {
 
 export function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function deterministicCandidateId(input: {
+  sourceType: string;
+  sourcePointer: string;
+  summary: string;
+  date?: string;
+}): string {
+  const sourceType = slugPart(input.sourceType || "candidate");
+  const date = (input.date || todayIsoDate()).replaceAll("-", "");
+  const normalized = [
+    sourceType,
+    normalizePointer(input.sourcePointer),
+    normalizeSummary(input.summary),
+  ].join("\n");
+  const hash = createHash("sha256").update(normalized).digest("hex").slice(0, 8);
+  return `${sourceType}-${date}-${hash}`;
 }
 
 export function currentProjectSlug(cwd = process.cwd()): string {
@@ -177,6 +233,23 @@ export function writeKnowledgeEntry(entry: KnowledgeEntry, root = knowledgeRoot(
   renameSync(tmpPath, filePath);
   rebuildIndex(root);
   return filePath;
+}
+
+export function writeKnowledgeCandidate(
+  entry: KnowledgeEntry,
+  root = knowledgeRoot(),
+): { filePath: string; skipped: boolean } {
+  if (entry.status !== "candidate") {
+    throw new Error("candidate capture must write status=candidate");
+  }
+  ensureKnowledgeDirs(root);
+  const filePath = entryPath(entry.id, root);
+  if (existsSync(filePath)) {
+    rebuildIndex(root);
+    return { filePath, skipped: true };
+  }
+  writeKnowledgeEntry(entry, root);
+  return { filePath, skipped: false };
 }
 
 export function readIndex(root = knowledgeRoot()): KnowledgeIndex {
@@ -255,7 +328,9 @@ export function searchKnowledge(
     })
     .sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-      return b.updated.localeCompare(a.updated);
+      const bFreshness = b.last_verified || b.updated;
+      const aFreshness = a.last_verified || a.updated;
+      return bFreshness.localeCompare(aFreshness);
     })
     .slice(0, limit);
 }
@@ -263,7 +338,7 @@ export function searchKnowledge(
 export function transitionKnowledgeStatus(
   id: string,
   status: KnowledgeStatus,
-  updates: Partial<Pick<KnowledgeEntry, "graduated_to" | "summary">> = {},
+  updates: Partial<KnowledgeEntry> = {},
   root = knowledgeRoot(),
 ): KnowledgeEntry {
   const file = entryPath(id, root);
@@ -275,6 +350,10 @@ export function transitionKnowledgeStatus(
     status,
     updated: todayIsoDate(),
   };
+  if (status === "active") {
+    next.last_verified = updates.last_verified ?? todayIsoDate();
+    next.staleness = "fresh";
+  }
   if (status === "graduated" && !next.graduated_to) {
     throw new Error("graduate requires --to <skill-or-rule-path>");
   }
@@ -297,8 +376,12 @@ export function createKnowledgeEntry(input: Partial<KnowledgeEntry>): KnowledgeE
     created: input.created || today,
     updated: input.updated || today,
     source: input.source || "manual",
+    source_evidence: input.source_evidence || "",
+    trust_level: input.trust_level || defaultTrustLevel(input.source || "manual"),
+    reviewed_by: input.reviewed_by || "",
     last_verified:
       input.last_verified === undefined ? null : input.last_verified,
+    staleness: input.staleness || "fresh",
     graduated_to: input.graduated_to || "",
     links: input.links || [],
     summary: input.summary || "",
@@ -341,12 +424,23 @@ export function validateEntry(entry: KnowledgeEntry): void {
   if (!KNOWLEDGE_SOURCES.includes(entry.source)) {
     throw new Error(`invalid source: ${entry.source}`);
   }
+  if (!KNOWLEDGE_TRUST_LEVELS.includes(entry.trust_level)) {
+    throw new Error(`invalid trust_level: ${entry.trust_level}`);
+  }
+  if (!KNOWLEDGE_REVIEWERS.includes(entry.reviewed_by)) {
+    throw new Error(`invalid reviewed_by: ${entry.reviewed_by}`);
+  }
+  if (!KNOWLEDGE_STALENESS.includes(entry.staleness)) {
+    throw new Error(`invalid staleness: ${entry.staleness}`);
+  }
   validateFrontmatterRoundTrip(entry);
   if (entry.status === "graduated" && !entry.graduated_to) {
     throw new Error("graduated entries require graduated_to");
   }
   if (!entry.summary.trim()) throw new Error("summary is required");
   if (!entry.body.trim()) throw new Error("body is required");
+  validateSafeKnowledgeText("summary", entry.summary);
+  validateSafeKnowledgeText("body", entry.body);
   validateBodyShape(entry);
 }
 
@@ -354,7 +448,12 @@ export function renderSearchRows(rows: KnowledgeIndexRow[]): string {
   if (rows.length === 0) return "";
   const lines = [`KNOWLEDGE: ${rows.length} related entries`];
   for (const row of rows) {
-    lines.push(`- ${row.path} :: [${row.id}] ${row.summary}`);
+    const freshness = row.last_verified || row.updated;
+    lines.push(
+      `- ${row.path} :: [${row.id}] ${row.summary} ` +
+        `(confidence ${row.confidence}/10, updated ${row.updated}, ` +
+        `last_verified ${freshness || "unknown"}, staleness ${row.staleness})`,
+    );
   }
   return `${lines.join("\n")}\n`;
 }
@@ -384,7 +483,11 @@ function frontmatterToEntry(frontmatter: string, body: string): KnowledgeEntry {
     created: stringField(data, "created"),
     updated: stringField(data, "updated"),
     source: stringField(data, "source") as KnowledgeSource,
+    source_evidence: stringField(data, "source_evidence"),
+    trust_level: trustField(data),
+    reviewed_by: reviewerField(data),
     last_verified: data.last_verified === null ? null : stringField(data, "last_verified"),
+    staleness: stalenessField(data),
     graduated_to: stringField(data, "graduated_to"),
     links: arrayField(data, "links"),
     summary: stringField(data, "summary"),
@@ -447,7 +550,11 @@ function renderKnowledgeEntry(entry: KnowledgeEntry): string {
     `created: ${entry.created}`,
     `updated: ${entry.updated}`,
     `source: ${entry.source}`,
+    `source_evidence: ${yamlString(entry.source_evidence)}`,
+    `trust_level: ${entry.trust_level}`,
+    `reviewed_by: ${entry.reviewed_by}`,
     `last_verified: ${entry.last_verified === null ? "null" : entry.last_verified}`,
+    `staleness: ${entry.staleness}`,
     `graduated_to: ${entry.graduated_to}`,
     `links: [${entry.links.join(", ")}]`,
     `summary: ${yamlString(entry.summary)}`,
@@ -463,6 +570,7 @@ function yamlString(value: string): string {
 }
 
 function indexRowFromEntry(entry: KnowledgeEntry, filePath: string): KnowledgeIndexRow {
+  const staleness = effectiveStaleness(entry);
   return {
     id: entry.id,
     title: entry.title,
@@ -474,6 +582,11 @@ function indexRowFromEntry(entry: KnowledgeEntry, filePath: string): KnowledgeIn
     status: entry.status,
     confidence: entry.confidence,
     updated: entry.updated,
+    last_verified: entry.last_verified,
+    source_evidence: entry.source_evidence,
+    trust_level: entry.trust_level,
+    reviewed_by: entry.reviewed_by,
+    staleness,
     summary: entry.summary,
     path: filePath,
   };
@@ -500,6 +613,7 @@ function validateFrontmatterRoundTrip(entry: KnowledgeEntry): void {
     ["title", entry.title],
     ["project_slug", entry.project_slug],
     ["canonical_remote", entry.canonical_remote],
+    ["source_evidence", entry.source_evidence],
     ["graduated_to", entry.graduated_to],
     ["summary", entry.summary],
     ...entry.links.map((link, index) => [`links[${index}]`, link] as [string, string]),
@@ -509,6 +623,126 @@ function validateFrontmatterRoundTrip(entry: KnowledgeEntry): void {
       throw new Error(`${field} contains unsupported frontmatter characters: double quote, backslash, or newline`);
     }
   }
+}
+
+function trustField(data: Record<string, unknown>): KnowledgeTrustLevel {
+  const explicit = stringField(data, "trust_level");
+  if (explicit) return explicit as KnowledgeTrustLevel;
+  return defaultTrustLevel(stringField(data, "source") as KnowledgeSource);
+}
+
+function reviewerField(data: Record<string, unknown>): KnowledgeReviewer {
+  return stringField(data, "reviewed_by") as KnowledgeReviewer;
+}
+
+function stalenessField(data: Record<string, unknown>): KnowledgeStaleness {
+  return (stringField(data, "staleness") || "fresh") as KnowledgeStaleness;
+}
+
+function defaultTrustLevel(source: KnowledgeSource): KnowledgeTrustLevel {
+  if (source === "telemetry-miner") return "telemetry-derived";
+  if (source === "workflow-evidence") return "verified";
+  if (source === "hook-advisory") return "observed";
+  return "user-stated";
+}
+
+function effectiveStaleness(entry: KnowledgeEntry): KnowledgeStaleness {
+  if (entry.status === "candidate") return "needs-review";
+  if (entry.staleness === "stale") return "stale";
+  if (entry.source_evidence && sourceEvidencePathMissing(entry.source_evidence)) {
+    return "needs-review";
+  }
+  if (entry.last_verified && daysSince(entry.last_verified) > 180) return "needs-review";
+  return entry.staleness || "fresh";
+}
+
+function sourceEvidencePathMissing(sourceEvidence: string): boolean {
+  if (!sourceEvidence) return false;
+  if (/^[a-z]+:/i.test(sourceEvidence)) return false;
+  if (/^[a-z0-9_.-]+$/i.test(sourceEvidence)) return false;
+  const candidates = [
+    sourceEvidence,
+    resolve(process.cwd(), sourceEvidence),
+  ];
+  return candidates.every((candidate) => !existsSync(candidate));
+}
+
+function daysSince(date: string): number {
+  const parsed = Date.parse(`${date}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.floor((Date.now() - parsed) / 86_400_000);
+}
+
+export function candidateAgeDays(entry: KnowledgeEntry, filePath = entryPath(entry.id)): number {
+  const date = entry.last_verified || entry.created || entry.updated;
+  if (DATE_RE.test(date)) return daysSince(date);
+  try {
+    return Math.floor((Date.now() - statSync(filePath).mtimeMs) / 86_400_000);
+  } catch {
+    return 0;
+  }
+}
+
+function validateSafeKnowledgeText(field: string, value: string): void {
+  const secretFindings = detectSecretLikeContent(value);
+  if (secretFindings.length > 0) {
+    throw new Error(
+      `${field} contains secret-shaped content: ${secretFindings.join(", ")}`,
+    );
+  }
+
+  const patterns = [
+    /ignore\s+(all\s+)?previous\s+(instructions|context|rules)/i,
+    /you\s+are\s+now\s+/i,
+    /always\s+output\s+no\s+findings/i,
+    /skip\s+(all\s+)?(security|review|checks)/i,
+    /override[:\s]/i,
+    /\bsystem\s*:/i,
+    /\bassistant\s*:/i,
+    /\buser\s*:/i,
+    /do\s+not\s+(report|flag|mention)/i,
+    /approve\s+(all|every|this)/i,
+  ];
+  for (const pattern of patterns) {
+    if (pattern.test(value)) {
+      throw new Error(`${field} contains suspicious instruction-like content`);
+    }
+  }
+}
+
+function detectSecretLikeContent(value: string): string[] {
+  const shared = loadSharedSecretScanner();
+  if (shared) return shared(value).map((finding) => finding.name);
+  return FALLBACK_SECRET_PATTERNS
+    .filter((rule) => rule.pattern.test(value))
+    .map((rule) => rule.name);
+}
+
+function loadSharedSecretScanner():
+  | ((value: string) => Array<{ name: string }>)
+  | null {
+  try {
+    const module = require("../../hooks/scripts/lib/hook-router/secret-patterns.js");
+    return typeof module.detectSecrets === "function" ? module.detectSecrets : null;
+  } catch {
+    return null;
+  }
+}
+
+function slugPart(value: string): string {
+  return String(value || "candidate")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 32) || "candidate";
+}
+
+function normalizePointer(value: string): string {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeSummary(value: string): string {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function writeJsonAtomic(filePath: string, payload: unknown): void {

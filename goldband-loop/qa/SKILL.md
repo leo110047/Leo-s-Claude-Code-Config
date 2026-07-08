@@ -822,7 +822,7 @@ else
 fi
 echo ""
 echo "KNOWLEDGE:"
-~/.claude/skills/goldband/bin/goldband-knowledge search --domain "qa" --query "qa testing bug regression flake fixture" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"
+~/.claude/skills/goldband/bin/goldband-knowledge search --domain "qa" --status active --query "qa testing bug regression flake fixture" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"
 ```
 
 If `CROSS_PROJECT` is `unset` (first time): Use AskUserQuestion:
@@ -1663,15 +1663,15 @@ staleness detection: if those files are later deleted, the learning can be flagg
 already knows. A good test: would this insight save time in a future session? If yes, log it.
 
 For high-value, verified material that may graduate into a skill or rule, capture
-a curated knowledge entry instead of leaving it only in append-only learnings:
+a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
 ```
 
 Use `problem-solution` for a pitfall with a known fix, `decision` for an
 architectural or workflow choice, and `practice` for a verified reusable
-method.
+method. This writes `status: candidate`; promote it only after explicit review.
 
 
 

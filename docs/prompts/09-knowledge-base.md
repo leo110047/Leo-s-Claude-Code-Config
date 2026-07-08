@@ -170,6 +170,21 @@ remote 取代 slug 當 knowledge 的主 scope key。
 - 畢業流程：`graduate` 時要求填寫去向（skill/rule 路徑），條目保留但標記
   graduated，避免知識庫與 skill 長期雙份維護。
 
+### Prompt 10 lifecycle refinement
+
+Prompt 10 tightens this first version into a lifecycle system:
+
+- Automatic sources write deterministic `candidate` entries only; they do not
+  become default recall until reviewed and promoted.
+- Recall defaults to `active` and prints path, summary, confidence,
+  updated/last_verified, and staleness rather than full entry text.
+- Entries carry `source_evidence`, `trust_level`, `reviewed_by`, `staleness`,
+  and `graduated_to` metadata so CLI, workflow resolver, and MCP expose the same
+  trust contract.
+- `goldband-knowledge-review` owns candidate list/show/promote/edit/retire and
+  graduation review flow; overdue candidates are sorted first for review but are
+  not auto-deleted or auto-retired.
+
 ## 不做什麼
 
 - 不做泛用筆記軟體：不收讀書筆記、生活記錄、自由發想；只收上述三種形狀。

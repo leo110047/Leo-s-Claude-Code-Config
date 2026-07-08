@@ -352,7 +352,23 @@ function evaluateStopResult(input) {
       'The response appears to claim completion without concrete evidence. Re-check files or commands before relying on it.',
     );
   }
-  return null;
+  return buildKnowledgeCaptureAdvisory(input);
+}
+
+function buildKnowledgeCaptureAdvisory(input) {
+  if (process.env.GOLDBAND_KNOWLEDGE_CAPTURE_ADVISORY === '0') return null;
+  const message = input.last_assistant_message || '';
+  if (!hasEvidence(message) || !looksReusableInsight(message)) return null;
+  if (!markOnce(input, 'knowledge-capture-advisory')) return null;
+  const evidence = `codex-hook:${markerSegment(sessionId(input) || 'unknown')}:Stop`;
+  return resultAdditionalContext(
+    'Stop',
+    [
+      'Knowledge capture advisory: if this turn produced a non-obvious verified reusable finding, capture it as a candidate only:',
+      `$GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type hook-advisory --source-evidence "${evidence}" --type practice --domains general --summary "One-line recall summary" --body-file path/to/sanitized-entry.md`,
+      'Do not promote it to active knowledge without explicit review.',
+    ].join(' '),
+  );
 }
 
 function evaluateLifecycleResult(input) {
@@ -499,6 +515,12 @@ function hasEvidence(message) {
     /測試\s*(?:通過|失敗)|驗證\s*(?:通過|失敗)|指令[:：]|檔案[:：]|路徑[:：]/,
   ];
   return evidencePatterns.some((pattern) => pattern.test(text));
+}
+
+function looksReusableInsight(message) {
+  return /\b(root cause|lesson|pattern|pitfall|practice|decision|verified|regression|reusable|future sessions?)\b|根因|模式|教訓|決策|驗證|可重用|下次/i.test(
+    message || '',
+  );
 }
 
 async function main() {

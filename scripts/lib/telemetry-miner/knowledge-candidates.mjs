@@ -48,8 +48,15 @@ function knowledgeRoot(options) {
 }
 
 function writeKnowledgeCandidate(item, entriesDir) {
-  const id = knowledgeCandidateId(item);
+  const sourceEvidence = sourceEvidenceForItem(item);
+  const summary = summaryForClassification(item);
+  const id = knowledgeCandidateId({
+    sourceType: 'telemetry-miner',
+    sourcePointer: sourceEvidence,
+    summary,
+  });
   const filePath = path.join(entriesDir, `${id}.md`);
+  if (fs.existsSync(filePath)) return knowledgeRowFromEntryFile(filePath);
   const row = {
     id,
     title: `Telemetry candidate: ${item.category}`,
@@ -63,10 +70,14 @@ function writeKnowledgeCandidate(item, entriesDir) {
     created: today(),
     updated: today(),
     source: 'telemetry-miner',
+    source_evidence: sourceEvidence,
+    trust_level: 'telemetry-derived',
+    reviewed_by: '',
     last_verified: null,
+    staleness: 'needs-review',
     graduated_to: '',
     links: [],
-    summary: summaryForClassification(item),
+    summary,
     path: filePath,
   };
   fs.writeFileSync(
@@ -104,7 +115,11 @@ confidence: ${row.confidence}
 created: ${row.created}
 updated: ${row.updated}
 source: ${row.source}
+source_evidence: ${frontmatterString(row.source_evidence)}
+trust_level: ${row.trust_level}
+reviewed_by: ""
 last_verified: null
+staleness: ${row.staleness}
 graduated_to: ""
 links: []
 summary: ${frontmatterString(row.summary)}
@@ -172,19 +187,28 @@ function knowledgeRowFromEntryFile(filePath) {
   const data = readKnowledgeFrontmatter(filePath);
   if (!data) return null;
   return {
-    id: data.id || '',
-    title: data.title || '',
-    type: data.type || '',
-    domains: data.domains || [],
-    scope: data.scope || '',
-    project_slug: data.project_slug || '',
-    canonical_remote: data.canonical_remote || '',
-    status: data.status || '',
+    id: stringValue(data, 'id'),
+    title: stringValue(data, 'title'),
+    type: stringValue(data, 'type'),
+    domains: Array.isArray(data.domains) ? data.domains : [],
+    scope: stringValue(data, 'scope'),
+    project_slug: stringValue(data, 'project_slug'),
+    canonical_remote: stringValue(data, 'canonical_remote'),
+    status: stringValue(data, 'status'),
     confidence: Number(data.confidence || 0),
-    updated: data.updated || '',
-    summary: data.summary || '',
+    updated: stringValue(data, 'updated'),
+    source_evidence: stringValue(data, 'source_evidence'),
+    trust_level: stringValue(data, 'trust_level'),
+    reviewed_by: stringValue(data, 'reviewed_by'),
+    last_verified: data.last_verified || null,
+    staleness: stringValue(data, 'staleness'),
+    summary: stringValue(data, 'summary'),
     path: filePath,
   };
+}
+
+function stringValue(data, key) {
+  return typeof data[key] === 'string' ? data[key] : '';
 }
 
 function readKnowledgeFrontmatter(filePath) {
@@ -237,8 +261,20 @@ function writeJsonAtomic(filePath, payload) {
   fs.renameSync(tmpPath, filePath);
 }
 
-function knowledgeCandidateId(item) {
-  return `telemetry-${slugPart(item.category)}-${caseHash(item.source_event_id)}`;
+export function knowledgeCandidateId({ sourceType, sourcePointer, summary }) {
+  const date = today().replaceAll('-', '');
+  const hash = crypto
+    .createHash('sha256')
+    .update(
+      [
+        slugPart(sourceType),
+        normalizeForHash(sourcePointer),
+        normalizeForHash(summary),
+      ].join('\n'),
+    )
+    .digest('hex')
+    .slice(0, 8);
+  return `${slugPart(sourceType)}-${date}-${hash}`;
 }
 
 function slugPart(value) {
@@ -270,12 +306,20 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function caseHash(value) {
-  return crypto
-    .createHash('sha256')
-    .update(String(value || 'unknown'))
-    .digest('hex')
-    .slice(0, 12);
+function sourceEvidenceForItem(item) {
+  return String(
+    item.source_event_id ||
+      item.sanitized_example?.eventId ||
+      item.category ||
+      'telemetry-event',
+  );
+}
+
+function normalizeForHash(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 }
 
 function sanitationSummary(discarded) {

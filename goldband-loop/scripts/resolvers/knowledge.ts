@@ -48,7 +48,7 @@ echo "LEARNINGS:"
 ${generateLearningsSearchBash(ctx, learningsArgs)}
 echo ""
 echo "KNOWLEDGE:"
-${binDir}/goldband-knowledge search --domain "${domain}" --query "${query}" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"${gbrainBlock}
+${binDir}/goldband-knowledge search --domain "${domain}" --status active --query "${query}" --limit 5 2>/dev/null || echo "KNOWLEDGE: no matching entries"${gbrainBlock}
 \`\`\`
 
 ${generateCrossProjectLearningsSetup(ctx)}

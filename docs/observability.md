@@ -126,3 +126,14 @@ Candidate outputs reuse `hooks/scripts/lib/hook-router/secret-patterns.js`,
 rewrite local absolute paths, anonymize run/event ids, and truncate content-like
 fields. See [failure taxonomy](failure-taxonomy.md) for category meanings and
 human-label requirements.
+
+Telemetry-derived knowledge stays below the trust boundary until reviewed:
+
+- ids are deterministic `telemetry-miner-YYYYMMDD-hash8` values from source
+  pointer plus sanitized summary, so duplicate mining does not create or
+  overwrite extra entries;
+- `trust_level` is `telemetry-derived`, `reviewed_by` is empty, and
+  `staleness` is `needs-review`;
+- default `goldband-knowledge search` and MCP `knowledge-query` recall only
+  `active` entries, so telemetry candidates appear only through explicit
+  candidate review or `--status candidate`.
