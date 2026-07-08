@@ -280,6 +280,23 @@ describe('gen-skill-docs', () => {
     expect(content).toContain('goldband-learnings-search --limit 3');
   });
 
+  test('all workflow completion footers require a knowledge candidate field', () => {
+    const generatedFiles = [path.join(ROOT, 'SKILL.md')];
+    for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const skillPath = path.join(ROOT, entry.name, 'SKILL.md');
+      if (fs.existsSync(skillPath)) generatedFiles.push(skillPath);
+    }
+
+    for (const skillPath of generatedFiles) {
+      const content = fs.readFileSync(skillPath, 'utf-8');
+      if (!content.includes('Completion Status Protocol')) continue;
+      expect(content, skillPath).toContain('Knowledge Capture Check');
+      expect(content, skillPath).toContain('Knowledge candidate: none');
+      expect(content, skillPath).toContain('not captured: insufficient evidence');
+    }
+  });
+
   test('qa and review use consolidated prior knowledge recall', () => {
     for (const skill of ['qa', 'review']) {
       const tmpl = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md.tmpl'), 'utf-8');
@@ -2870,10 +2887,15 @@ describe('LEARNINGS_LOG resolver', () => {
   const LOG_SKILLS = ['review', 'retro', 'investigate'];
 
   for (const skill of LOG_SKILLS) {
-    test(`${skill} generated SKILL.md contains learnings log`, () => {
+    test(`${skill} generated SKILL.md contains knowledge capture check`, () => {
       const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
-      expect(content).toContain('Capture Learnings');
+      expect(content).toContain('Knowledge Capture Check');
+      expect(content).toContain('Knowledge candidate: none');
+      expect(content).toContain('Knowledge candidate:');
+      expect(content).toContain('not captured: insufficient evidence');
+      expect(content).toContain('status: candidate');
       expect(content).toContain('goldband-learnings-log');
+      expect(content).toContain('goldband-knowledge capture-candidate');
     });
   }
 

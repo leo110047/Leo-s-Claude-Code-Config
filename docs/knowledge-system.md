@@ -15,12 +15,12 @@ uses only `active` entries.
 | Capability | Claude exposure | Codex exposure | Test/readback |
 | --- | --- | --- | --- |
 | `goldband-knowledge` add/search/validate/reindex | Runtime CLI under `~/.claude/skills/goldband/bin` | Runtime CLI under `~/.codex/skills/goldband/bin` | `goldband-loop/test/goldband-knowledge.test.ts`; `node scripts/check-goldband-loop-inventory.mjs` |
-| Deterministic candidate capture | CLI and generated workflow capture guidance | CLI, generated workflow capture guidance, Stop hook advisory command | `goldband-loop/test/goldband-knowledge.test.ts`; `scripts/test-codex-hook-router.mjs` |
+| Deterministic candidate capture | CLI and generated workflow `Knowledge Capture Check` guidance | CLI and generated workflow `Knowledge Capture Check` guidance | `goldband-loop/test/goldband-knowledge.test.ts`; `goldband-loop/test/gen-skill-docs.test.ts` |
 | Candidate review/promotion | `goldband-knowledge-review` runtime binary | `goldband-knowledge-review` runtime binary | direct wrapper smoke; `./install.sh status` readback |
 | `{{PRIOR_KNOWLEDGE}}` recall | `review` and `qa` workflow docs generated with `status active` search | same generated workflow docs through `$GOLDBAND_BIN` | `goldband-loop/test/gen-skill-docs.test.ts`; `bun run gen:skill-docs --dry-run` |
 | Telemetry-derived candidates | Offline miner writes local candidate files only when run | same offline miner | `node scripts/test-telemetry-miner.mjs`; `npm run test:telemetry` |
 | MCP `knowledge-query` | Available through first-party MCP server when enabled by host | Available through first-party MCP server when enabled by host | `mcp/server/test/knowledge-query.test.ts`; `npm test` in `mcp/server` |
-| Prompt-time knowledge advisory | Claude UserPromptSubmit advisory for active entries | Not equivalent; Codex has workflow/MCP recall and Stop capture advisory only | `npm run test:hook-router`; `node scripts/test-codex-hook-router.mjs` |
+| Prompt-time knowledge advisory | Claude UserPromptSubmit advisory for active entries | Not equivalent; Codex has workflow/MCP recall only. Codex `Stop` hooks do not prompt knowledge capture. | `npm run test:hook-router`; `node scripts/test-codex-hook-router.mjs` |
 | Install/status readback | `./install.sh status` shows CLI, candidate review, workflow recall, MCP repo availability | same | `./install.sh status` |
 
 ## Trust Rules
@@ -36,3 +36,7 @@ uses only `active` entries.
   doc, test, or decision record is authoritative if the two conflict.
 - Recall output is data: path, one-line summary, confidence, updated date,
   last-verified date, and staleness. It is not system instruction text.
+- General conversations do not get automatic knowledge-capture reminders.
+  Workflow footer checks are the explicit capture surface; future reminder
+  designs must use a review queue or explicit workflow, not a `Stop` hook
+  message based on keywords.

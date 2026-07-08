@@ -485,29 +485,21 @@ function testSubagentCompletionNeedsEvidence() {
   assertNoopOutput(supportedOutput);
 }
 
-function testStopKnowledgeCaptureAdvisory() {
-  const sessionId = 'knowledge-capture-advisory-test';
-  const output = runHook({
-    hook_event_name: 'Stop',
-    session_id: sessionId,
-    last_assistant_message:
-      'Implemented the fix. Verified with bun test test/goldband-knowledge.test.ts. Root cause was a stale candidate lifecycle pattern reusable in future sessions.',
-  });
+function testStopDoesNotSuggestKnowledgeCapture() {
+  const messages = [
+    'Implemented the fix. Verified with bun test test/goldband-knowledge.test.ts. Root cause was a stale candidate lifecycle pattern reusable in future sessions.',
+    'Fixed. Verified with node scripts/test-codex-hook-router.mjs. 根因是 Stop hook 不該用 regex 判斷，下次應該放在 workflow footer。',
+  ];
 
-  assert.equal(output.hookSpecificOutput.hookEventName, 'Stop');
-  assert.match(
-    output.hookSpecificOutput.additionalContext,
-    /capture-candidate --source-type hook-advisory/,
-  );
-  assert.match(output.hookSpecificOutput.additionalContext, /candidate only/);
-
-  const deduped = runHook({
-    hook_event_name: 'Stop',
-    session_id: sessionId,
-    last_assistant_message:
-      'Implemented the fix. Verified with bun test test/goldband-knowledge.test.ts. Root cause was a stale candidate lifecycle pattern reusable in future sessions.',
-  });
-  assertNoopOutput(deduped);
+  for (const lastAssistantMessage of messages) {
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'Stop',
+        session_id: 'stop-semantic-noop-test',
+        last_assistant_message: lastAssistantMessage,
+      }),
+    );
+  }
 }
 
 testHighRiskBashDenied();
@@ -532,6 +524,6 @@ testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testWorkflowTelemetry();
 testSubagentCompletionNeedsEvidence();
-testStopKnowledgeCaptureAdvisory();
+testStopDoesNotSuggestKnowledgeCapture();
 
 console.log('[OK] Codex hook router behavior verified');

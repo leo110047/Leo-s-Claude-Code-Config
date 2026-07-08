@@ -104,10 +104,11 @@ function queryFlagFromArgs(args?: string[]): string {
 export function generateLearningsLog(ctx: TemplateContext): string {
   const binDir = ctx.host === 'codex' ? '$GOLDBAND_BIN' : ctx.paths.binDir;
 
-  return `## Capture Learnings
+  return `## Learning Log Reference
 
-If you discovered a non-obvious pattern, pitfall, or architectural insight during
-this session, log it for future sessions:
+If you discovered a lower-level operational pattern, pitfall, or architectural
+insight during this session, you may log it for future sessions in addition to
+the required \`Knowledge candidate\` final-report field:
 
 \`\`\`bash
 ${binDir}/goldband-learnings-log '{"skill":"${ctx.skillName}","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
@@ -133,7 +134,7 @@ For high-value, verified material that may graduate into a skill or rule, captur
 a curated candidate instead of leaving it only in append-only learnings:
 
 \`\`\`bash
-${binDir}/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+${binDir}/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 \`\`\`
 
 Use \`problem-solution\` for a pitfall with a known fix, \`decision\` for an
