@@ -241,7 +241,7 @@ function assertInstalledStandardInventory(home, inventory) {
   assertDeepSetEqual(
     'Claude standard visible skills',
     skillDirectories(claudeSkillsDir),
-    ['_goldband-command', 'goldband', 'goldband-upgrade'],
+    ['goldband', 'goldband-upgrade'],
   );
   assertDeepSetEqual(
     'Codex standard visible skills',

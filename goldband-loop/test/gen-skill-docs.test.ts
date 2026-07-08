@@ -2261,7 +2261,7 @@ describe('setup script validation', () => {
     );
     expect(claudeSection).toContain('create_claude_runtime_root');
     expect(claudeSection).toContain('link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"');
-    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
     expect(claudeSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
     expect(setupContent).not.toContain('link_claude_skill_dirs');
     expect(claudeSection).not.toContain('link_codex_skill_dirs');
@@ -2342,18 +2342,19 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('rm -f "$target"');
   });
 
-  test('setup links root goldband skill through a thin Claude wrapper alias', () => {
-    const fnStart = setupContent.indexOf('link_claude_root_skill_alias()');
+  test('setup removes the legacy root goldband skill wrapper alias', () => {
+    const fnStart = setupContent.indexOf('cleanup_claude_root_skill_alias()');
     const fnEnd = setupContent.indexOf('link_claude_selected_skill_dirs()', fnStart);
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_goldband-command');
-    expect(fnBody).toContain('_link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"');
+    expect(fnBody).toContain('rm -rf "$target"');
+    expect(fnBody).not.toContain('_link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"');
 
     const claudeSection = setupContent.slice(
       setupContent.indexOf('# 4. Install for Claude'),
       setupContent.indexOf('# 5. Install for Codex')
     );
-    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
   });
 
   test('setup supports --host auto|claude|codex|kiro|opencode', () => {

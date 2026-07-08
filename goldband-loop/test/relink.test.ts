@@ -187,11 +187,19 @@ describe('goldband-relink (#578)', () => {
     expect(fs.lstatSync(path.join(skillsDir, 'qa', 'SKILL.md')).isSymbolicLink()).toBe(true);
   });
 
-  test('creates a thin root alias wrapper for the /goldband slash command', () => {
+  test('removes the legacy root alias wrapper for the /goldband slash command', () => {
     setupMockInstall(['qa']);
     fs.writeFileSync(
       path.join(installDir, 'SKILL.md'),
       '---\nname: goldband\ndescription: root\n---\n# goldband',
+    );
+    const aliasDir = path.join(skillsDir, '_goldband-command');
+    const aliasSkill = path.join(aliasDir, 'SKILL.md');
+    fs.mkdirSync(aliasDir, { recursive: true });
+    fs.symlinkSync(path.join(installDir, 'SKILL.md'), aliasSkill);
+    fs.writeFileSync(
+      path.join(aliasDir, '.goldband-managed-skill'),
+      `source=${installDir}\n`,
     );
 
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
@@ -203,19 +211,17 @@ describe('goldband-relink (#578)', () => {
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
 
-    const aliasDir = path.join(skillsDir, '_goldband-command');
-    const aliasSkill = path.join(aliasDir, 'SKILL.md');
-    expect(fs.lstatSync(aliasDir).isDirectory()).toBe(true);
-    expect(fs.lstatSync(aliasDir).isSymbolicLink()).toBe(false);
-    expect(fs.lstatSync(aliasSkill).isSymbolicLink()).toBe(true);
-    expect(fs.readlinkSync(aliasSkill)).toBe(path.join(installDir, 'SKILL.md'));
-    expect(fs.readFileSync(aliasSkill, 'utf-8')).toContain('name: goldband');
+    expect(fs.existsSync(aliasDir)).toBe(false);
 
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
-    expect(fs.existsSync(aliasSkill)).toBe(true);
+    run(`${path.join(installDir, 'bin', 'goldband-relink')}`, {
+      GOLDBAND_INSTALL_DIR: installDir,
+      GOLDBAND_SKILLS_DIR: skillsDir,
+    });
+    expect(fs.existsSync(aliasDir)).toBe(false);
   });
 
   // FIRST INSTALL: --no-prefix must create ONLY flat names, zero goldband-* pollution

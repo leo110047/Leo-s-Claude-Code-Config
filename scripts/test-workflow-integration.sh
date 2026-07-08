@@ -173,9 +173,6 @@ install_claude() {
   else
     ln -s "$ROOT" "$HOME/.claude/skills/goldband"
   fi
-  rm -rf "$HOME/.claude/skills/_goldband-command"
-  mkdir -p "$HOME/.claude/skills/_goldband-command"
-  ln -s "$HOME/.claude/skills/goldband/SKILL.md" "$HOME/.claude/skills/_goldband-command/SKILL.md"
   if [ "$PROFILE" = "standard" ]; then
     rm -rf "$HOME/.claude/skills/goldband-upgrade"
     ln -s "$ROOT/goldband-upgrade" "$HOME/.claude/skills/goldband-upgrade"
@@ -266,6 +263,16 @@ assert_contains() {
   local needle="$2"
   if ! printf '%s\n' "$haystack" | grep -q "$needle"; then
     echo "missing expected output: $needle" >&2
+    printf '%s\n' "$haystack" >&2
+    exit 1
+  fi
+}
+
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  if printf '%s\n' "$haystack" | grep -q "$needle"; then
+    echo "unexpected output: $needle" >&2
     printf '%s\n' "$haystack" >&2
     exit 1
   fi
@@ -379,6 +386,7 @@ fi
 assert_exists "$TMP_HOME/.claude/skills/workflow"
 assert_exists "$TMP_HOME/.codex/skills/workflow-old"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow >/tmp/goldband-loop-claude.log
+assert_exists "$TMP_HOME/.claude/commands/goldband.md"
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-loop-codex.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" all-with-workflow >/tmp/goldband-loop-all.log
 HOME="$TMP_HOME" "$TMP_ROOT/install.sh" workflow-full >/tmp/goldband-loop-claude-legacy-full.log 2>&1
@@ -391,7 +399,7 @@ grep -q "已棄用" /tmp/goldband-loop-auto-legacy-full.log
 echo "[3/4] verify Goldband Loop entries"
 assert_exists "$TMP_HOME/.goldband/projects"
 assert_exists "$TMP_HOME/.claude/skills/goldband/SKILL.md"
-assert_exists "$TMP_HOME/.claude/skills/_goldband-command/SKILL.md"
+assert_absent "$TMP_HOME/.claude/skills/_goldband-command"
 assert_exists "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_not_symlink "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
@@ -442,7 +450,11 @@ COPY_HOME="$TMP_ROOT/copy-home"
 COPY_SOURCE="$TMP_ROOT/copy-source/goldband-loop"
 create_minimal_real_setup_fixture "$COPY_SOURCE"
 plant_legacy_workflow_entries "$COPY_HOME" "$COPY_SOURCE"
+mkdir -p "$COPY_HOME/.claude/skills/_goldband-command"
+ln -s "$COPY_SOURCE/SKILL.md" "$COPY_HOME/.claude/skills/_goldband-command/SKILL.md"
+printf 'source=%s\n' "$COPY_SOURCE" > "$COPY_HOME/.claude/skills/_goldband-command/.goldband-managed-skill"
 GOLDBAND_FORCE_COPY=1 run_minimal_real_setup "$COPY_HOME" "$COPY_SOURCE/setup" --host claude --profile standard --quiet >/tmp/goldband-loop-copy-standard.log
+assert_absent "$COPY_HOME/.claude/skills/_goldband-command"
 assert_absent "$COPY_HOME/.claude/skills/goldband-review"
 assert_absent "$COPY_HOME/.claude/skills/goldband-qa"
 assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
@@ -489,7 +501,15 @@ create_minimal_real_setup_fixture "$COUNT_SOURCE"
 write_skill "$COUNT_HOME/.claude/skills/external-tool" "external-tool"
 run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile standard --no-prefix --quiet >/tmp/goldband-loop-count-standard.log
 COUNT_STATUS="$(HOME="$COUNT_HOME" "$TMP_ROOT/install.sh" status)"
-assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard (3 exposed skills, 0 top-level workflows)"
+assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard (2 exposed skills, 0 top-level workflows)"
+
+STATUS_ALIAS_HOME="$TMP_ROOT/status-alias-home"
+mkdir -p "$STATUS_ALIAS_HOME/.claude/skills/goldband" "$STATUS_ALIAS_HOME/.claude/skills/_goldband-command"
+printf '%s\n' '---' 'name: goldband' '---' > "$STATUS_ALIAS_HOME/.claude/skills/goldband/SKILL.md"
+ln -s "$STATUS_ALIAS_HOME/.claude/skills/goldband/SKILL.md" "$STATUS_ALIAS_HOME/.claude/skills/_goldband-command/SKILL.md"
+STATUS_ALIAS_OUTPUT="$(HOME="$STATUS_ALIAS_HOME" "$TMP_ROOT/install.sh" status 2>&1 || true)"
+assert_contains "$STATUS_ALIAS_OUTPUT" "legacy /goldband skill alias"
+assert_not_contains "$STATUS_ALIAS_OUTPUT" "command not found"
 
 echo "[4/4] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"

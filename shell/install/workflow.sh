@@ -107,6 +107,14 @@ write_workflow_installed_versions() {
     fi
 }
 
+install_workflow_claude_command_selector() {
+    local src="$REPO_DIR/commands/goldband.md"
+    local dest="$CLAUDE_DIR/commands/goldband.md"
+
+    [ -f "$src" ] || return 0
+    link_component "$src" "$dest" "Goldband workflow selector command"
+}
+
 install_workflow_host() {
     local host="$1"
     local profile="${2:-standard}"
@@ -143,6 +151,9 @@ install_workflow_host() {
     run_workflow_setup "$repo_dir" "$host" "$profile" || setup_status="$?"
     if [ "$setup_status" -ne 0 ]; then
         exit "$setup_status"
+    fi
+    if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
+        install_workflow_claude_command_selector
     fi
     cleanup_workflow_user_entries
     write_workflow_installed_versions "$host" "$version"
