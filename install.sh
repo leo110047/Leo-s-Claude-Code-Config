@@ -118,6 +118,7 @@ load_install_modules() {
     local install_module
     for install_module in \
         "$REPO_DIR/shell/install/common.sh" \
+        "$REPO_DIR/shell/install/install-state.sh" \
         "$REPO_DIR/shell/install/codex.sh" \
         "$REPO_DIR/shell/install/managed-profiles.sh" \
         "$REPO_DIR/shell/install/launchers.sh" \
@@ -184,13 +185,19 @@ case "$1" in
         show_status
         exit $?
         ;;
+    auto-refresh)
+        run_auto_refresh "${GOLDBAND_AUTO_REFRESH_OLD_HEAD:-}" "${GOLDBAND_AUTO_REFRESH_NEW_HEAD:-}"
+        exit $?
+        ;;
     uninstall)
         do_uninstall
+        clear_install_state
         exit 0
         ;;
 esac
 
 for arg in "$@"; do
+    _record_arg="$arg"
     case "$arg" in
         pack-core)
             echo -e "${GREEN}安裝 core-security pack（預設）...${NC}"
@@ -328,7 +335,9 @@ for arg in "$@"; do
             exit 1
             ;;
     esac
+    record_installed_target "$_record_arg"
 done
+unset _record_arg
 
 echo ""
 echo -e "${BLUE}════════════════════════════════════════${NC}"

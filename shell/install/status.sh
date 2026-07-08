@@ -5,11 +5,7 @@ profile_skill_count() {
     local skills_line skills_csv
     skills_line=$(grep '^skills=' "$profile_file" 2>/dev/null || true)
     skills_csv="${skills_line#skills=}"
-    if [ -n "$skills_csv" ]; then
-        echo "$skills_csv" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' '
-    else
-        printf '0\n'
-    fi
+    [ -n "$skills_csv" ] && echo "$skills_csv" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' ' || printf '0\n'
 }
 
 show_status() {
@@ -24,6 +20,9 @@ show_status() {
     echo ""
     echo -e "${BLUE}Codex 狀態${NC}"
     show_codex_install_status
+    echo ""
+    echo -e "${BLUE}Auto update 狀態${NC}"
+    show_auto_update_status
     echo ""
     echo -e "${BLUE}App surface 狀態${NC}"
     show_app_surface_status
