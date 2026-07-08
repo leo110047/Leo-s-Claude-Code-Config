@@ -548,25 +548,25 @@ fi
 # 3. Ensure ~/.goldband global state directory exists
 mkdir -p "$HOME/.goldband/projects"
 
-# Claude Code skips the repo-shaped ~/.claude/skills/goldband directory when
-# building the user-facing slash-command list. Keep the repo path for runtime
-# assets, and add a separate thin wrapper whose frontmatter name remains
-# `goldband` so `/goldband` can autocomplete.
-link_claude_root_skill_alias() {
+# Older installs created ~/.claude/skills/_goldband-command as a second
+# `name: goldband` entrypoint. The user-facing /goldband surface is now the
+# slash command selector in ~/.claude/commands/goldband.md, so remove the
+# legacy alias when it is clearly goldband-managed.
+cleanup_claude_root_skill_alias() {
   local goldband_dir="$1"
   local skills_dir="$2"
   local target="$skills_dir/_goldband-command"
 
-  [ -f "$goldband_dir/SKILL.md" ] || return 0
-  if [ -L "$target" ]; then
-    rm -f "$target"
+  [ -e "$target" ] || [ -L "$target" ] || return 0
+  if [ -f "$target/.goldband-managed-skill" ]; then
+    rm -rf "$target"
+    echo "  removed legacy root skill alias: _goldband-command"
+    return 0
   fi
-  mkdir -p "$target"
-  if [ -L "$target/SKILL.md" ]; then rm "$target/SKILL.md"; fi
-  _link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"
-  write_goldband_managed_skill_marker "$target" "$goldband_dir"
-  echo "  linked root skill alias: goldband"
-  _print_windows_copy_note_once
+  if [ -d "$target" ] && [ -L "$target/SKILL.md" ] && symlink_target_under_dir "$target/SKILL.md" "$goldband_dir"; then
+    rm -rf "$target"
+    echo "  removed legacy root skill alias: _goldband-command"
+  fi
 }
 
 link_claude_selected_skill_dirs() {
@@ -1141,7 +1141,7 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
     create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
     cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
     link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"
-    link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+    cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
     if [ "$LOCAL_INSTALL" -eq 1 ]; then
       log "goldband ready (project-local)."
       log "  skills: $INSTALL_SKILLS_DIR"
@@ -1195,7 +1195,7 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
       create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
       cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
       link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"
-      link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
+      cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"
       log "goldband ready (claude, $WORKFLOW_PROFILE profile)."
       log "  browse: $BROWSE_BIN"
       write_workflow_profile_marker "claude" "$WORKFLOW_PROFILE"

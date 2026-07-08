@@ -181,13 +181,29 @@ readback can reconstruct why each round continued or stopped.
 The curated knowledge layer lives under
 `${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`. It is local runtime state, not a
 repo artifact. The repo owns only schema, CLI tooling, recall adapters, MCP
-query support, and synthetic fixtures.
+query support, and synthetic fixtures. The capability audit and lifecycle
+readback live in [`docs/knowledge-system.md`](docs/knowledge-system.md).
 
 Knowledge entries are markdown files with frontmatter, one entry per file, plus
 `knowledge/index.json`. `index.json` is the low-cost recall surface: hooks,
 workflow resolvers, and MCP can read path plus one-line summary without parsing
 every full entry. Entry files stay authoritative; the index is rebuilt by
 `goldband-knowledge reindex` or any write command.
+
+The lifecycle is raw evidence -> candidate -> active -> graduated/retired.
+Raw telemetry, workflow evidence, and session reports stay separate from
+curated entries. Automatic capture writes only `status: candidate`, with a
+deterministic id derived from source type, sanitized source pointer, and
+summary. Duplicate candidate ids are skipped rather than overwriting a file
+that may have been manually reviewed.
+
+Knowledge frontmatter carries the trust contract used by CLI, workflow
+resolver, and MCP: `source_evidence`, `trust_level`, `reviewed_by`,
+`last_verified`, `staleness`, and `graduated_to`. Default recall is
+`status=active` and prints only path, summary, confidence, updated date,
+last-verified date, and staleness. Candidate review is explicit through
+`goldband-knowledge-review`; overdue candidates are surfaced for review but are
+not auto-deleted, auto-retired, or auto-promoted.
 
 This layer does not replace existing storage:
 
@@ -208,10 +224,13 @@ not currently have an equivalent prompt-time advisory adapter in this repo;
 Codex reaches the same knowledge through generated workflow instructions and
 the first-party MCP `knowledge-query` tool.
 
-Promotion is explicit. `goldband-knowledge graduate --to <skill-or-rule-path>`
-marks a knowledge entry as graduated while preserving the historical record.
-High-frequency active entries should become skills or rules so the knowledge
-layer does not become a second source of truth.
+Promotion is explicit. `goldband-knowledge-review promote` records review
+metadata before a candidate becomes active. `goldband-knowledge graduate --to
+<skill-or-rule-path>` marks a knowledge entry as graduated while preserving the
+historical record. High-frequency active entries should become skills, rules,
+hooks, docs, tests, or decision records so the knowledge layer does not become a
+second source of truth. When a graduated entry conflicts with its target
+artifact, the artifact wins and the knowledge entry must be updated or retired.
 
 ## Cross-Review Gate
 

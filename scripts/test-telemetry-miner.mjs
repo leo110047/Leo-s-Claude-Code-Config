@@ -235,9 +235,16 @@ assert.equal(
 for (const entry of knowledge.entries) {
   assert.equal(entry.status, 'candidate');
   assert.equal(entry.source, 'telemetry-miner');
+  assert.match(entry.id, /^telemetry-miner-\d{8}-[a-f0-9]{8}$/);
+  assert.equal(entry.trust_level, 'telemetry-derived');
+  assert.equal(entry.reviewed_by, '');
+  assert.equal(entry.staleness, 'needs-review');
+  assert.ok(entry.source_evidence);
   assert.ok(fs.existsSync(entry.path));
   const rawEntry = fs.readFileSync(entry.path, 'utf8');
   assert.match(rawEntry, /title: "Telemetry candidate:/);
+  assert.match(rawEntry, /trust_level: telemetry-derived/);
+  assert.match(rawEntry, /staleness: needs-review/);
   assert.match(rawEntry, /## 情境/);
 }
 

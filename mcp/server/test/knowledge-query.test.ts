@@ -12,6 +12,7 @@ test('knowledge-query returns matching entry paths and summaries', () => {
       domains: ['qa', 'browser'],
       confidence: 8,
       summary: 'Use synthetic browser fixtures before staging QA.',
+      source_evidence: 'workflow-runs/qa.jsonl#event-1',
       path: '/tmp/knowledge/qa-fixture-replay.md',
     }),
     entry({
@@ -39,6 +40,11 @@ test('knowledge-query returns matching entry paths and summaries', () => {
     status: 'active',
     confidence: 8,
     updated: '2026-07-06',
+    last_verified: '2026-07-06',
+    source_evidence: 'workflow-runs/qa.jsonl#event-1',
+    trust_level: 'verified',
+    reviewed_by: 'workflow',
+    staleness: 'fresh',
   });
 });
 
@@ -50,6 +56,29 @@ test('knowledge-query handles missing index as empty result set', () => {
 
   assert.equal(result.structuredContent.count, 0);
   assert.deepEqual(result.structuredContent.results, []);
+});
+
+test('knowledge-query sorts by confidence then last_verified freshness', () => {
+  const knowledgeHome = writeKnowledgeIndex([
+    entry({
+      id: 'older-verified',
+      confidence: 8,
+      updated: '2026-07-08',
+      last_verified: '2026-01-01',
+      summary: 'Older verified result.',
+    }),
+    entry({
+      id: 'newer-verified',
+      confidence: 8,
+      updated: '2026-07-01',
+      last_verified: '2026-07-07',
+      summary: 'Newer verified result.',
+    }),
+  ]);
+
+  const result = runKnowledgeQuery({ knowledgeHome, keyword: 'verified' });
+
+  assert.equal(result.structuredContent.results[0].id, 'newer-verified');
 });
 
 function writeKnowledgeIndex(entries: object[]) {
@@ -84,6 +113,11 @@ function entry(overrides: Record<string, unknown>) {
     status: 'active',
     confidence: 5,
     updated: '2026-07-06',
+    last_verified: '2026-07-06',
+    source_evidence: 'workflow-runs/default.jsonl#event-1',
+    trust_level: 'verified',
+    reviewed_by: 'workflow',
+    staleness: 'fresh',
     summary: 'Default summary.',
     path: '/tmp/knowledge/default.md',
     ...overrides,

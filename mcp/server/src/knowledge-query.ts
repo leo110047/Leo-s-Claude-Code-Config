@@ -21,6 +21,11 @@ type KnowledgeIndexRow = {
   status?: string;
   confidence?: number;
   updated?: string;
+  last_verified?: string | null;
+  source_evidence?: string;
+  trust_level?: string;
+  reviewed_by?: string;
+  staleness?: string;
   summary?: string;
   path?: string;
 };
@@ -34,22 +39,35 @@ export function runKnowledgeQuery(input: KnowledgeQueryInput) {
   const rows = readRows(indexPath);
   const results = filterRows(rows, input)
     .slice(0, clampLimit(input.limit))
-    .map((row) => ({
-      id: row.id || '',
-      path: row.path || '',
-      summary: row.summary || row.title || '',
-      type: row.type || '',
-      domains: row.domains || [],
-      status: row.status || '',
-      confidence: row.confidence ?? null,
-      updated: row.updated || '',
-    }));
+    .map(resultFromRow);
 
   return jsonToolResult({
     indexPath,
     count: results.length,
     results,
   });
+}
+
+function resultFromRow(row: KnowledgeIndexRow) {
+  return {
+    id: text(row.id),
+    path: text(row.path),
+    summary: text(row.summary || row.title),
+    type: text(row.type),
+    domains: row.domains || [],
+    status: text(row.status),
+    confidence: row.confidence ?? null,
+    updated: text(row.updated),
+    last_verified: row.last_verified || null,
+    source_evidence: text(row.source_evidence),
+    trust_level: text(row.trust_level),
+    reviewed_by: text(row.reviewed_by),
+    staleness: text(row.staleness),
+  };
+}
+
+function text(value: string | null | undefined): string {
+  return value || '';
 }
 
 function resolveKnowledgeHome(input: KnowledgeQueryInput): string {
@@ -70,7 +88,7 @@ function filterRows(rows: KnowledgeIndexRow[], input: KnowledgeQueryInput) {
   const status = input.status || 'active';
   const tokens = tokenize(input.keyword || '');
   // MCP mirrors the CLI recall contract over index.json: active by default,
-  // optional filters, then confidence/update ordering. Keep this in sync with
+  // optional filters, then confidence/freshness ordering. Keep this in sync with
   // goldband-loop/lib/knowledge.ts when the public query semantics change.
   return rows
     .filter((row) => status === 'all' || row.status === status)
@@ -80,8 +98,12 @@ function filterRows(rows: KnowledgeIndexRow[], input: KnowledgeQueryInput) {
     .sort((a, b) => {
       const confidenceDelta = (b.confidence || 0) - (a.confidence || 0);
       if (confidenceDelta !== 0) return confidenceDelta;
-      return String(b.updated || '').localeCompare(String(a.updated || ''));
+      return freshness(b).localeCompare(freshness(a));
     });
+}
+
+function freshness(row: KnowledgeIndexRow): string {
+  return row.last_verified || row.updated || '';
 }
 
 function matchesTokens(row: KnowledgeIndexRow, tokens: string[]) {

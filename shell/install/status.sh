@@ -38,12 +38,27 @@ show_status() {
 
 show_claude_install_status() {
     show_claude_skills_status
+    show_claude_goldband_entrypoint_status
     show_repo_path_status "claude CLAUDE.md" "$CLAUDE_GLOBAL_INSTRUCTIONS_FILE" "$REPO_DIR/claude/CLAUDE.md" "claude-guidance"
     show_repo_path_status "commands" "$CLAUDE_DIR/commands" "$REPO_DIR/commands" "commands"
     show_repo_path_status "rules" "$CLAUDE_DIR/rules" "$REPO_DIR/rules" "rules"
     show_repo_path_status "hooks" "$CLAUDE_DIR/hooks/scripts" "$REPO_DIR/hooks/scripts" "hooks"
     show_repo_path_status "statusline" "$CLAUDE_DIR/statusline-command.sh" "$REPO_DIR/hooks/statusline-command.sh" "hooks"
     show_shell_launcher_status
+}
+
+show_claude_goldband_entrypoint_status() {
+    local alias="$SKILLS_DIR/_goldband-command" runtime_dir="$SKILLS_DIR/goldband"
+    [ -e "$alias" ] || [ -L "$alias" ] || return 0
+
+    if [ -f "$alias/.goldband-managed-skill" ] || { [ -d "$alias" ] && [ -L "$alias/SKILL.md" ] && workflow_status_symlink_target_under_dir "$alias/SKILL.md" "$runtime_dir"; }; then
+        echo -e "  ${RED}[重複]${NC} legacy /goldband skill alias -> $alias"
+        echo "    active selector should be: $CLAUDE_DIR/commands/goldband.md"
+        echo "    建議: 重跑 ./install.sh workflow，或刪除 goldband-managed 的 _goldband-command alias。"
+        GOLDBAND_STATUS_EXIT_CODE=2
+    else
+        echo -e "  ${YELLOW}[外部設定]${NC} _goldband-command exists but is not goldband-managed -> $alias"
+    fi
 }
 
 show_claude_skills_status() {
@@ -161,6 +176,7 @@ print_goldband_claude_plugin_state() {
     local plugin_state="$1"
     if [ "$plugin_state" = "missing" ]; then
         echo -e "  ${YELLOW}[未安裝]${NC} goldband@goldband plugin"
+        show_goldband_claude_plugin_cache_status
         return 0
     fi
 
@@ -185,6 +201,17 @@ print_goldband_claude_plugin_state() {
     if [ "$enabled" = "enabled" ]; then
         show_claude_plugin_duplicate_status
     fi
+}
+
+show_goldband_claude_plugin_cache_status() {
+    local cache_root="$CLAUDE_DIR/plugins/cache/goldband/goldband" cache_versions
+
+    [ -d "$cache_root" ] || return 0
+    cache_versions="$(find "$cache_root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | tr '\n' ' ')"
+    [ -n "$cache_versions" ] || return 0
+
+    echo -e "  ${YELLOW}[殘留]${NC} goldband@goldband plugin cache (${cache_versions}) -> $cache_root"
+    echo "    plugin 未安裝；這是 stale cache，不是 active /goldband 入口。"
 }
 
 show_claude_plugin_duplicate_status() {
@@ -372,6 +399,7 @@ show_workflow_status() {
     show_workflow_runtime_status "Codex runtime" "$workflow_codex_dir"
     show_workflow_profile_status "Claude" "claude" "$HOME/.claude/skills" "$workflow_claude_dir"
     show_workflow_profile_status "Codex" "codex" "$HOME/.codex/skills" "$workflow_codex_dir"
+    show_knowledge_system_status "$workflow_claude_dir" "$workflow_codex_dir"
     show_workflow_state_dir_status
     show_goldband_wrapper_language_status
 }

@@ -66,7 +66,6 @@ your local edits instead of the global install.
 goldband/                          <- your working tree
 ├── .claude/skills/              <- created by dev-setup (gitignored)
 │   ├── goldband -> ../../         <- symlink back to repo root
-│   ├── _goldband-command/        <- selector entrypoint for /goldband
 │   ├── goldband-upgrade/         <- maintenance entrypoint
 │   └── ...                      <- one directory per skill
 ├── review/

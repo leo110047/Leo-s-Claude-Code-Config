@@ -744,6 +744,35 @@ When completing a skill workflow, report status using one of:
 
 Escalate after 3 failed attempts, uncertain security-sensitive changes, or scope you cannot verify. Format: `STATUS`, `REASON`, `ATTEMPTED`, `RECOMMENDATION`.
 
+## Knowledge Capture Check
+
+Every workflow final report must include one of these fields:
+
+```text
+Knowledge candidate: none
+```
+
+or:
+
+```text
+Knowledge candidate:
+- summary: <one-line reusable lesson>
+  type: problem-solution | decision | practice
+  scope: global | project | machine
+  evidence: <file/command/report path or workflow evidence id>
+  why reusable: <one sentence>
+  capture: ~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "<evidence>" --title "<one-line title>" --type <problem-solution|decision|practice> --domains <domain> --summary "<one-line recall summary>" --confidence N --body-file path/to/sanitized-entry.md
+```
+
+This is an agent semantic judgment, not runtime keyword matching. Use
+`Knowledge candidate: none` when there is no verified reusable lesson, or
+`not captured: insufficient evidence` when the lesson might be useful but the
+workflow did not produce enough evidence. Do not guess.
+
+Candidate summaries and bodies must not contain secrets, full transcripts, or
+unsanitized customer data. Capture commands must write `status: candidate`;
+do not promote to active knowledge without explicit review.
+
 ## Operational Self-Improvement
 
 Before completing, if you discovered a durable project quirk or command fix that would save 5+ minutes next time, log it:
@@ -1549,10 +1578,11 @@ After shipping DESIGN.md, if the session produced screen-level mockups or page l
 
 ---
 
-## Capture Learnings
+## Learning Log Reference
 
-If you discovered a non-obvious pattern, pitfall, or architectural insight during
-this session, log it for future sessions:
+If you discovered a lower-level operational pattern, pitfall, or architectural
+insight during this session, you may log it for future sessions in addition to
+the required `Knowledge candidate` final-report field:
 
 ```bash
 ~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"design-consultation","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
@@ -1575,15 +1605,15 @@ staleness detection: if those files are later deleted, the learning can be flagg
 already knows. A good test: would this insight save time in a future session? If yes, log it.
 
 For high-value, verified material that may graduate into a skill or rule, capture
-a curated knowledge entry instead of leaving it only in append-only learnings:
+a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/entry.md
+~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
 Use `problem-solution` for a pitfall with a known fix, `decision` for an
 architectural or workflow choice, and `practice` for a verified reusable
-method.
+method. This writes `status: candidate`; promote it only after explicit review.
 
 
 

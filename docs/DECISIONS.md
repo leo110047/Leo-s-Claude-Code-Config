@@ -160,3 +160,48 @@ External facts checked on 2026-07-05:
 - OpenTelemetry GenAI semantic conventions have moved to
   `open-telemetry/semantic-conventions-genai` and are marked Development:
   https://github.com/open-telemetry/semantic-conventions-genai
+
+## 2026-07-08: Knowledge Lifecycle Trust Boundary
+
+Decision: keep curated knowledge as local markdown plus `index.json`, and make
+automatic capture candidate-only until explicit review promotes it.
+
+Why:
+
+- Workflow evidence, hook telemetry, and telemetry miner output are useful raw
+  signals, but they can include stale context, host-specific noise, or
+  prompt-injection shaped text.
+- Default recall feeds future agent context, so it must not treat unreviewed
+  candidates as trusted rules.
+- A second persistent store would make lifecycle and install behavior harder to
+  verify across Claude, Codex, MCP, and workflow templates.
+
+Implementation contract:
+
+- Automatic capture writes `status: candidate` with a deterministic
+  `<source_type>-<YYYYMMDD>-<hash8>` id based on source type, sanitized source
+  pointer, and summary.
+- Duplicate candidate ids are skipped and never overwrite a file that may have
+  been manually edited.
+- `goldband-knowledge-review` is the explicit review surface for list, show,
+  promote, edit, retire, and graduate actions.
+- Default CLI, resolver, and MCP recall use `status=active`; candidate recall
+  requires explicit candidate review or `--status candidate`.
+- Frontmatter carries `source_evidence`, `trust_level`, `reviewed_by`,
+  `last_verified`, `staleness`, and `graduated_to`.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Auto-promote verified workflow findings | Too easy to turn host-specific or stale findings into future rules without human review. |
+| Store knowledge in a vector database | Outside the local-first, inspectable first-party runtime boundary for this phase. |
+| Merge learnings, telemetry candidates, and curated knowledge into one store | Blurs raw evidence, append-only memory, and reviewed knowledge lifecycles. |
+
+Failure signals:
+
+- Default recall returns candidate entries without explicit candidate status.
+- Knowledge entries accumulate without review, graduation, or retirement.
+- `install.sh status` claims host parity when a host only has advisory or CLI
+  exposure.
+- Sanitizer tests stop covering secret-shaped and instruction-like content.

@@ -280,6 +280,23 @@ describe('gen-skill-docs', () => {
     expect(content).toContain('goldband-learnings-search --limit 3');
   });
 
+  test('all workflow completion footers require a knowledge candidate field', () => {
+    const generatedFiles = [path.join(ROOT, 'SKILL.md')];
+    for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const skillPath = path.join(ROOT, entry.name, 'SKILL.md');
+      if (fs.existsSync(skillPath)) generatedFiles.push(skillPath);
+    }
+
+    for (const skillPath of generatedFiles) {
+      const content = fs.readFileSync(skillPath, 'utf-8');
+      if (!content.includes('Completion Status Protocol')) continue;
+      expect(content, skillPath).toContain('Knowledge Capture Check');
+      expect(content, skillPath).toContain('Knowledge candidate: none');
+      expect(content, skillPath).toContain('not captured: insufficient evidence');
+    }
+  });
+
   test('qa and review use consolidated prior knowledge recall', () => {
     for (const skill of ['qa', 'review']) {
       const tmpl = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md.tmpl'), 'utf-8');
@@ -2244,7 +2261,7 @@ describe('setup script validation', () => {
     );
     expect(claudeSection).toContain('create_claude_runtime_root');
     expect(claudeSection).toContain('link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"');
-    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
     expect(claudeSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
     expect(setupContent).not.toContain('link_claude_skill_dirs');
     expect(claudeSection).not.toContain('link_codex_skill_dirs');
@@ -2325,18 +2342,19 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('rm -f "$target"');
   });
 
-  test('setup links root goldband skill through a thin Claude wrapper alias', () => {
-    const fnStart = setupContent.indexOf('link_claude_root_skill_alias()');
+  test('setup removes the legacy root goldband skill wrapper alias', () => {
+    const fnStart = setupContent.indexOf('cleanup_claude_root_skill_alias()');
     const fnEnd = setupContent.indexOf('link_claude_selected_skill_dirs()', fnStart);
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_goldband-command');
-    expect(fnBody).toContain('_link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"');
+    expect(fnBody).toContain('rm -rf "$target"');
+    expect(fnBody).not.toContain('_link_or_copy "$goldband_dir/SKILL.md" "$target/SKILL.md"');
 
     const claudeSection = setupContent.slice(
       setupContent.indexOf('# 4. Install for Claude'),
       setupContent.indexOf('# 5. Install for Codex')
     );
-    expect(claudeSection).toContain('link_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
+    expect(claudeSection).toContain('cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
   });
 
   test('setup supports --host auto|claude|codex|kiro|opencode', () => {
@@ -2870,10 +2888,15 @@ describe('LEARNINGS_LOG resolver', () => {
   const LOG_SKILLS = ['review', 'retro', 'investigate'];
 
   for (const skill of LOG_SKILLS) {
-    test(`${skill} generated SKILL.md contains learnings log`, () => {
+    test(`${skill} generated SKILL.md contains knowledge capture check`, () => {
       const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
-      expect(content).toContain('Capture Learnings');
+      expect(content).toContain('Knowledge Capture Check');
+      expect(content).toContain('Knowledge candidate: none');
+      expect(content).toContain('Knowledge candidate:');
+      expect(content).toContain('not captured: insufficient evidence');
+      expect(content).toContain('status: candidate');
       expect(content).toContain('goldband-learnings-log');
+      expect(content).toContain('goldband-knowledge capture-candidate');
     });
   }
 

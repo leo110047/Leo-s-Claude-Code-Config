@@ -103,13 +103,17 @@ checkout 執行同一組 POSIX 指令。
 
 ```bash
 goldband-knowledge search --domain qa --query "fixture regression"
-goldband-knowledge capture --id "short-kebab-slug" --title "One-line title" --type practice --domains qa --summary "One-line recall summary" --body-file entry.md
+goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/qa.jsonl#event" --title "One-line title" --type practice --domains qa --summary "One-line recall summary" --body-file entry.md
+goldband-knowledge-review list
+goldband-knowledge-review promote --id "workflow-evidence-20260708-ab12cd34" --reviewed-by user
 goldband-knowledge graduate --id "short-kebab-slug" --to "skills/global/example/SKILL.md"
 ```
 
 `knowledge/` 不 commit 進 repo。它和 auto-memory 分工不同：auto-memory 記人和偏好；
 knowledge 記「這類問題怎麼解、哪些做法驗證過」。高頻條目應畢業成
-skill/rule，避免知識庫變成第二套真理來源。
+skill/rule，避免知識庫變成第二套真理來源。自動來源只寫 `candidate`，
+default recall 只查 `active`；candidate 需要 review/promote 後才會變成可信召回。
+完整 lifecycle 與 host exposure 表見 `docs/knowledge-system.md`。
 
 Plugin 移除：
 
