@@ -17,11 +17,13 @@ let goldbandDir: string;
 let stateDir: string;
 
 function run(extraEnv: Record<string, string> = {}, args: string[] = []) {
+  const resolvedStateDir = extraEnv.GOLDBAND_HOME ?? extraEnv.GOLDBAND_STATE_DIR ?? stateDir;
   const result = Bun.spawnSync(['bash', SCRIPT, ...args], {
     env: {
       ...process.env,
       GOLDBAND_DIR: goldbandDir,
-      GOLDBAND_STATE_DIR: stateDir,
+      GOLDBAND_HOME: resolvedStateDir,
+      GOLDBAND_STATE_DIR: resolvedStateDir,
       GOLDBAND_REMOTE_URL: `file://${join(goldbandDir, 'REMOTE_VERSION')}`,
       ...extraEnv,
     },
