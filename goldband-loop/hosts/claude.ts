@@ -29,7 +29,15 @@ const claude: HostConfig = {
   runtimeRoot: {
     globalSymlinks: ['bin', 'browse/dist', 'browse/bin', 'goldband-upgrade', 'ETHOS.md'],
     globalFiles: {
-      'review': ['checklist.md', 'TODOS-format.md'],
+      'review': [
+        'shared-rubric.md',
+        'findings-schema.md',
+        'checklist.md',
+        'ship-fix-first.md',
+        'design-checklist.md',
+        'greptile-triage.md',
+        'TODOS-format.md',
+      ],
     },
   },
 

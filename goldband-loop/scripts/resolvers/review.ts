@@ -459,6 +459,9 @@ export function generateAdversarialStep(ctx: TemplateContext): string {
 
   const isShip = ctx.skillName === 'ship';
   const stepNum = isShip ? '11' : '5.7';
+  const adversarialMergeInstruction = isShip
+    ? 'Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. **FIXABLE findings** flow into the same Fix-First pipeline as the structured review. **INVESTIGATE findings** are presented as informational.'
+    : 'Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.';
 
   return `## Step ${stepNum}: Adversarial review (always-on)
 
@@ -491,7 +494,7 @@ Dispatch via the Agent tool. The subagent has fresh context — no checklist bia
 Subagent prompt:
 "Read the diff for this branch with \`DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"\`. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production. Look for: edge cases, race conditions, security holes, resource leaks, failure modes, silent data corruption, logic errors that produce wrong results silently, error handling that swallows failures, and trust boundary violations. Be adversarial. Be thorough. No compliments — just the problems. For each finding, classify as FIXABLE (you know how to fix it) or INVESTIGATE (needs human judgment). After listing findings, end your output with ONE line in the canonical format \`Recommendation: <action> because <one-line reason naming the most exploitable finding>\` — examples: \`Recommendation: Fix the unbounded retry at queue.ts:78 because it'll DoS the worker pool under sustained 429s\` or \`Recommendation: Ship as-is because the strongest finding is a theoretical race that requires conditions we can't trigger in production\`. The reason must point to a specific finding (or no-fix rationale). Generic reasons like 'because it's safer' do not qualify."
 
-Present findings under an \`ADVERSARIAL REVIEW (Claude subagent):\` header. **FIXABLE findings** flow into the same Fix-First pipeline as the structured review. **INVESTIGATE findings** are presented as informational.
+${adversarialMergeInstruction}
 
 If the subagent fails or times out: "Claude adversarial subagent unavailable. Continuing."
 
@@ -525,35 +528,7 @@ If Codex is NOT available: "Codex CLI not found — running Claude adversarial o
 
 ---
 
-### Codex structured review (large diffs only, 200+ lines)
-
-If \`DIFF_TOTAL >= 200\` AND Codex is available AND \`OLD_CFG\` is NOT \`disabled\`:
-
-\`\`\`bash
-TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-cd "$_REPO_ROOT"
-codex review "${CODEX_BOUNDARY}Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes." -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
-\`\`\`
-
-Set the Bash tool's \`timeout\` parameter to \`300000\` (5 minutes). Do NOT use the \`timeout\` shell command — it doesn't exist on macOS. Present output under \`CODEX SAYS (code review):\` header.
-Check for \`[P1]\` markers: found → \`GATE: FAIL\`, not found → \`GATE: PASS\`.
-
-If GATE is FAIL, use AskUserQuestion:
-\`\`\`
-Codex found N critical issues in the diff.
-
-A) Investigate and fix now (recommended)
-B) Continue — review will still complete
-\`\`\`
-
-If A: address the findings${isShip ? '. After fixing, re-run tests (Step 5) since code has changed' : ''}. Re-run \`codex review\` to verify.
-
-Read stderr for errors (same error handling as Codex adversarial above).
-
-After stderr: \`rm -f "$TMPERR"\`
-
-If \`DIFF_TOTAL < 200\`: skip this section silently. The Claude + Codex adversarial passes provide sufficient coverage for smaller diffs.
+${generateCodexStructuredReviewBlock(isShip)}
 
 ---
 
@@ -585,6 +560,60 @@ ADVERSARIAL REVIEW SYNTHESIS (always-on, N lines):
 High-confidence findings (agreed on by multiple sources) should be prioritized for fixes.
 
 ---`;
+}
+
+function generateCodexStructuredReviewBlock(isShip: boolean): string {
+  if (!isShip) {
+    return `### Codex structured review (large diffs only, 200+ lines)
+
+If \`DIFF_TOTAL >= 200\` AND Codex is available AND \`OLD_CFG\` is NOT \`disabled\`:
+
+\`\`\`bash
+TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
+_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
+codex exec "${CODEX_BOUNDARY}Read-only structured review. Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes. Return findings only. Do not edit files, apply patches, commit, push, ask to fix now, or run repair workflows. For each finding include severity, file/line, failure scenario, evidence, recommendation, suggested verification, and blocking/advisory status." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
+\`\`\`
+
+Set the Bash tool's \`timeout\` parameter to \`300000\` (5 minutes). Do NOT use the \`timeout\` shell command — it doesn't exist on macOS. Present output under \`CODEX SAYS (read-only structured review):\` header.
+
+Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.
+
+Read stderr for errors (same error handling as Codex adversarial above).
+
+After stderr: \`rm -f "$TMPERR"\`
+
+If \`DIFF_TOTAL < 200\`: skip this section silently. The Claude + Codex adversarial passes provide sufficient coverage for smaller diffs.`;
+  }
+
+  return `### Codex structured review (large diffs only, 200+ lines)
+
+If \`DIFF_TOTAL >= 200\` AND Codex is available AND \`OLD_CFG\` is NOT \`disabled\`:
+
+\`\`\`bash
+TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
+_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
+cd "$_REPO_ROOT"
+codex review "${CODEX_BOUNDARY}Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes." -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
+\`\`\`
+
+Set the Bash tool's \`timeout\` parameter to \`300000\` (5 minutes). Do NOT use the \`timeout\` shell command — it doesn't exist on macOS. Present output under \`CODEX SAYS (code review):\` header.
+Check for \`[P1]\` markers: found → \`GATE: FAIL\`, not found → \`GATE: PASS\`.
+
+If GATE is FAIL, use AskUserQuestion:
+\`\`\`
+Codex found N critical issues in the diff.
+
+A) Investigate and fix now (recommended)
+B) Continue — review will still complete
+\`\`\`
+
+If A: address the findings. After fixing, re-run tests (Step 5) since code has changed. Re-run \`codex review\` to verify.
+
+Read stderr for errors (same error handling as Codex adversarial above).
+
+After stderr: \`rm -f "$TMPERR"\`
+
+If \`DIFF_TOTAL < 200\`: skip this section silently. The Claude + Codex adversarial passes provide sufficient coverage for smaller diffs.`;
 }
 
 export function generateCodexPlanReview(ctx: TemplateContext): string {

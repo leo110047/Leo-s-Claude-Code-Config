@@ -1,9 +1,8 @@
 # Testing Specialist Review Checklist
 
 Scope: Always-on (every review)
-Output: JSON objects, one finding per line. Schema:
-{"severity":"CRITICAL|INFORMATIONAL","confidence":N,"path":"file","line":N,"category":"testing","summary":"...","fix":"...","fingerprint":"path:line:testing","specialist":"testing"}
-Optional: line, fix, fingerprint, evidence, test_stub.
+Output: JSON objects, one finding per line using `findings-schema.md`.
+Set `category` to `testing` and `specialist` to `testing`.
 If no findings: output `NO FINDINGS` and nothing else.
 
 ---

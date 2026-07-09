@@ -23,6 +23,7 @@ import type { TemplateContext } from './types';
 const OVERLAY_DIR = path.resolve(import.meta.dir, '../../model-overlays');
 
 const INHERIT_RE = /^\s*\{\{INHERIT:([a-z0-9-]+(?:\.[0-9]+)*)\}\}\s*\n/;
+const READ_ONLY_SKILLS = new Set(['review']);
 
 export function readOverlay(model: string, seen: Set<string> = new Set()): string {
   if (seen.has(model)) return ''; // cycle guard
@@ -46,8 +47,14 @@ export function readOverlay(model: string, seen: Set<string> = new Set()): strin
 export function generateModelOverlay(ctx: TemplateContext): string {
   if (!ctx.model) return '';
 
-  const content = readOverlay(ctx.model);
+  let content = readOverlay(ctx.model);
   if (!content) return '';
+  if (READ_ONLY_SKILLS.has(ctx.skillName)) {
+    content = content.replace(
+      /\*\*Dedicated tools over Bash\.\*\* Prefer Read, Edit, Write, Glob, Grep over shell\nequivalents \(cat, sed, find, grep\)\. The dedicated tools are cheaper and clearer\./,
+      '**Dedicated tools over Bash.** Prefer Read, Glob, and Grep over shell\ninspection equivalents (cat, sed, find, grep). This skill is read-only; do not use\nEdit or Write.'
+    );
+  }
 
   return `## Model-Specific Behavioral Patch (${ctx.model})
 

@@ -1,5 +1,11 @@
 # Goldband Cross-Review Rubric
 
+This is the gate-specific adapter for the shared review standard. The reviewer
+receives `review/shared-rubric.md` and `review/findings-schema.md` in the prompt
+bundle. Use those files for review taxonomy, severity quality, and evidence
+requirements; use this file only for cross-review blocking rules and verdict
+mapping.
+
 ## Blocking Rules
 
 - `correctness.contract`: The implementation violates an explicit requirement, schema, gate, or source-of-truth contract.

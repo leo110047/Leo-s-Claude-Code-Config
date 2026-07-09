@@ -648,9 +648,15 @@ function block(blockedBy, message) {
   };
 }
 
-function buildPrompt({ contract, rubric, reviewerPrompt, diffText, planText, history, responses }) {
+function buildPrompt({ contract, rubric, sharedRubric, sharedFindingShape, reviewerPrompt, diffText, planText, history, responses }) {
   return [
     reviewerPrompt,
+    '',
+    '## Shared Review Standard',
+    sharedRubric,
+    '',
+    '## Shared Finding Shape',
+    sharedFindingShape,
     '',
     '## Rubric',
     rubric,
@@ -959,6 +965,8 @@ function buildReviewerPrompt(contract, cwd, env) {
   const runtimeDir = __dirname;
   const reviewerPrompt = fs.readFileSync(path.join(runtimeDir, 'reviewer-prompt.md'), 'utf8');
   const rubric = fs.readFileSync(path.join(runtimeDir, 'rubric.md'), 'utf8');
+  const sharedRubric = fs.readFileSync(path.join(runtimeDir, '..', 'review', 'shared-rubric.md'), 'utf8');
+  const sharedFindingShape = fs.readFileSync(path.join(runtimeDir, '..', 'review', 'findings-schema.md'), 'utf8');
   const planPath = resolvePlanFile(contract.planFile, cwd);
   const planText = planPath && fs.existsSync(planPath) ? fs.readFileSync(planPath, 'utf8') : '';
   const history = readArtifactHistory(contract.sessionId, env);
@@ -966,6 +974,8 @@ function buildReviewerPrompt(contract, cwd, env) {
   return buildPrompt({
     contract,
     rubric,
+    sharedRubric,
+    sharedFindingShape,
     reviewerPrompt,
     diffText: reviewScopePromptText(cwd, contract.baseCommit),
     planText,

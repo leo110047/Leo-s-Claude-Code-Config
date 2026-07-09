@@ -312,7 +312,7 @@ If multiple suites need to run, run them sequentially (each needs a test lane). 
 
 Review the diff for structural issues that tests don't catch.
 
-1. Read `.claude/skills/review/checklist.md`. If the file cannot be read, **STOP** and report the error.
+1. Read `.claude/skills/review/checklist.md` and `.claude/skills/review/ship-fix-first.md`; **STOP** if either is missing.
 
 2. Run `git diff origin/<base>` to get the full diff (scoped to feature changes against the freshly-fetched base branch).
 
@@ -330,8 +330,7 @@ Review the diff for structural issues that tests don't catch.
 
 {{CROSS_REVIEW_DEDUP}}
 
-4. **Classify each finding from both the checklist pass and specialist review (Step 9.1-Step 9.2) as AUTO-FIX or ASK** per the Fix-First Heuristic in
-   checklist.md. Critical findings lean toward ASK; informational lean toward AUTO-FIX.
+4. **Classify each finding from both the checklist pass and specialist review (Step 9.1-Step 9.2) as AUTO-FIX or ASK** per `ship-fix-first.md`.
 
 5. **Auto-fix all AUTO-FIX items.** Apply each fix. Output one line per fix:
    `[AUTO-FIXED] [file:line] Problem → what you did`
@@ -864,7 +863,7 @@ you missed it.>
 <findings from Step 9 code review, or "No issues found.">
 
 ## Design Review
-<If design review ran: "Design Review (lite): N findings — M auto-fixed, K skipped. AI Slop: clean/N issues.">
+<If design review ran: "Design Review (lite): N findings — 0 auto-fixed, K skipped. AI Slop: clean/N issues.">
 <If no frontend files changed: "No frontend files changed — design review skipped.">
 
 ## Eval Results

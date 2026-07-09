@@ -752,45 +752,44 @@ describe('investigate skill structure', () => {
 
 describe('Enum & Value Completeness in review checklist', () => {
   const checklist = fs.readFileSync(path.join(ROOT, 'review', 'checklist.md'), 'utf-8');
+  const sharedRubric = fs.readFileSync(path.join(ROOT, 'review', 'shared-rubric.md'), 'utf-8');
+  const shipFixFirst = fs.readFileSync(path.join(ROOT, 'review', 'ship-fix-first.md'), 'utf-8');
 
   test('checklist has Enum & Value Completeness section', () => {
     expect(checklist).toContain('Enum & Value Completeness');
   });
 
-  test('Enum & Value Completeness is classified as CRITICAL', () => {
-    // It should appear under Pass 1 — CRITICAL, not Pass 2
-    const pass1Start = checklist.indexOf('### Pass 1');
-    const pass2Start = checklist.indexOf('### Pass 2');
+  test('Enum & Value Completeness remains in the core read-only review pass', () => {
     const enumStart = checklist.indexOf('Enum & Value Completeness');
-    expect(enumStart).toBeGreaterThan(pass1Start);
-    expect(enumStart).toBeLessThan(pass2Start);
+    const apiStart = checklist.indexOf('### API, Host, Workflow');
+    expect(enumStart).toBeGreaterThan(0);
+    expect(enumStart).toBeLessThan(apiStart);
   });
 
   test('Enum & Value Completeness mentions tracing through consumers', () => {
-    expect(checklist).toContain('Trace it through every consumer');
-    expect(checklist).toContain('case');
-    expect(checklist).toContain('allowlist');
+    expect(checklist).toContain('trace sibling values through every consumer');
+    expect(checklist).toContain('Read matches');
   });
 
-  test('Enum & Value Completeness is in the severity classification as CRITICAL', () => {
-    const gateSection = checklist.slice(checklist.indexOf('## Severity Classification'));
-    // The ASCII art has CRITICAL on the left and INFORMATIONAL on the right
-    // Enum & Value Completeness should appear on a line with the CRITICAL tree (├─ or └─)
-    const enumLine = gateSection.split('\n').find(l => l.includes('Enum & Value Completeness'));
-    expect(enumLine).toBeDefined();
-    // It's on the left (CRITICAL) side — starts with ├─ or └─
-    expect(enumLine!.trimStart().startsWith('├─') || enumLine!.trimStart().startsWith('└─')).toBe(true);
+  test('shared rubric defines review severity and finding shape', () => {
+    expect(sharedRubric).toContain('## Severity');
+    expect(sharedRubric).toContain('## Finding Requirements');
+    expect(sharedRubric).toContain('failureScenario');
+    expect(sharedRubric).toContain('suggestedVerification');
   });
 
-  test('Fix-First Heuristic exists in checklist and is referenced by review + ship', () => {
-    expect(checklist).toContain('## Fix-First Heuristic');
-    expect(checklist).toContain('AUTO-FIX');
-    expect(checklist).toContain('ASK');
+  test('Fix-First Heuristic is ship-only and review remains read-only', () => {
+    expect(checklist).not.toContain('## Fix-First Heuristic');
+    expect(checklist).not.toContain('AUTO-FIX');
+    expect(shipFixFirst).toContain('Ship-Only Fix-First Heuristic');
+    expect(shipFixFirst).toContain('AUTO-FIX');
 
     const reviewSkill = fs.readFileSync(path.join(ROOT, 'review/SKILL.md'), 'utf-8');
     const shipSkill = fs.readFileSync(path.join(ROOT, 'ship/SKILL.md'), 'utf-8');
-    expect(reviewSkill).toContain('AUTO-FIX');
-    expect(reviewSkill).toContain('[AUTO-FIXED]');
+    expect(reviewSkill).toContain('Read-Only Pre-Landing PR Review');
+    expect(reviewSkill).not.toContain('[AUTO-FIXED]');
+    expect(reviewSkill).not.toContain('Auto-fix all AUTO-FIX items');
+    expect(shipSkill).toContain('ship-fix-first.md');
     expect(shipSkill).toContain('AUTO-FIX');
     expect(shipSkill).toContain('[AUTO-FIXED]');
   });

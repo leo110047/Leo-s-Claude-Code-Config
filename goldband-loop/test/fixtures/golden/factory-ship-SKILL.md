@@ -1823,7 +1823,7 @@ Before reviewing code quality, check: **did they build what was requested — no
 
 Review the diff for structural issues that tests don't catch.
 
-1. Read `.factory/skills/goldband/review/checklist.md`. If the file cannot be read, **STOP** and report the error.
+1. Read `.factory/skills/goldband/review/checklist.md` and `.factory/skills/goldband/review/ship-fix-first.md`; **STOP** if either is missing.
 
 2. Run `git diff origin/<base>` to get the full diff (scoped to feature changes against the freshly-fetched base branch).
 
@@ -1912,19 +1912,19 @@ source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null)
 3. **Read each changed frontend file** (full file, not just diff hunks). Frontend files are identified by the patterns listed in the checklist.
 
 4. **Apply the design checklist** against the changed files. For each item:
-   - **[HIGH] mechanical CSS fix** (`outline: none`, `!important`, `font-size < 16px`): classify as AUTO-FIX
-   - **[HIGH/MEDIUM] design judgment needed**: classify as ASK
+   - **[HIGH] definitive issue**: report with concrete evidence, text-only recommendation, and suggested verification
+   - **[MEDIUM] heuristic issue**: report with why the pattern is risky
    - **[LOW] intent-based detection**: present as "Possible — verify visually or run /design-review"
 
-5. **Include findings** in the review output under a "Design Review" header, following the output format in the checklist. Design findings merge with code review findings into the same Fix-First flow.
+5. **Include findings** in the review output under a "Design Review" header, following the output format in the checklist. Design findings merge with code review findings into the read-only findings aggregation.
 
 6. **Log the result** for the Review Readiness Dashboard:
 
 ```bash
-$GOLDBAND_BIN/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":M,"commit":"COMMIT"}'
+$GOLDBAND_BIN/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":0,"commit":"COMMIT"}'
 ```
 
-Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, M = auto-fixed count, COMMIT = output of `git rev-parse --short HEAD`.
+Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, COMMIT = output of `git rev-parse --short HEAD`.
 
 7. **Codex design voice** (optional, automatic if available):
 
@@ -1970,7 +1970,7 @@ DIFF_INS=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ insertion' 
 DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
 DIFF_LINES=$((DIFF_INS + DIFF_DEL))
 echo "DIFF_LINES: $DIFF_LINES"
-# Detect test framework for specialist test stub generation
+# Detect test framework for testing specialist context
 TEST_FW=""
 { [ -f jest.config.ts ] || [ -f jest.config.js ]; } && TEST_FW="jest"
 [ -f vitest.config.ts ] && TEST_FW="vitest"
@@ -2043,15 +2043,15 @@ If learnings are found, include them: "Past learnings for this domain: {learning
 "You are a specialist code reviewer. Read the checklist below, then run
 `DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"` to get the full diff. Apply the checklist against the diff.
 
+This is a read-only specialist review. Do not edit files, apply patches, commit,
+push, or run repair workflows.
+
 For each finding, output a JSON object on its own line:
-{\"severity\":\"CRITICAL|INFORMATIONAL\",\"confidence\":N,\"path\":\"file\",\"line\":N,\"category\":\"category\",\"summary\":\"description\",\"fix\":\"recommended fix\",\"fingerprint\":\"path:line:category\",\"specialist\":\"name\"}
+{\"severity\":\"critical|high|medium|low|info\",\"confidence\":N,\"file\":\"file\",\"line\":N,\"category\":\"category\",\"summary\":\"description\",\"failureScenario\":\"concrete failure\",\"evidence\":\"specific evidence\",\"recommendation\":\"text-only fix recommendation\",\"suggestedVerification\":\"test/readback/command\",\"blocking\":true,\"fingerprint\":\"file:line:category:failure\",\"specialist\":\"name\"}
 
-Required fields: severity, confidence, path, category, summary, specialist.
-Optional: line, fix, fingerprint, evidence, test_stub.
-
-If you can write a test that would catch this issue, include it in the `test_stub` field.
-Use the detected test framework ({TEST_FW}). Write a minimal skeleton — describe/it/test
-blocks with clear intent. Skip test_stub for architectural or design-only findings.
+Required fields: severity, confidence, file, category, summary,
+failureScenario, evidence, recommendation, suggestedVerification, blocking,
+specialist. Optional: line, fingerprint.
 
 If no findings: output `NO FINDINGS` and nothing else.
 Do not output anything else — no preamble, no summary, no commentary.
@@ -2098,25 +2098,27 @@ Group findings by fingerprint. For findings sharing the same fingerprint:
 
 **Compute PR Quality Score:**
 After merging, compute the quality score:
-`quality_score = max(0, 10 - (critical_count * 2 + informational_count * 0.5))`
+`quality_score = max(0, 10 - (blocking_count * 2 + advisory_count * 0.5))`
 Cap at 10. Log this in the review result at the end.
 
 **Output merged findings:**
 Present the merged findings in the same format as the current review:
 
 ```
-SPECIALIST REVIEW: N findings (X critical, Y informational) from Z specialists
+SPECIALIST REVIEW: N findings (X blocking, Y advisory) from Z specialists
 
-[For each finding, in order: CRITICAL first, then INFORMATIONAL, sorted by confidence descending]
-[SEVERITY] (confidence: N/10, specialist: name) path:line — summary
-  Fix: recommended fix
+[For each finding, in order: severity descending, then file, then line]
+[severity/blocking|advisory] (confidence: N/10, specialist: name) file:line — summary
+  Failure scenario: concrete failure
+  Evidence: specific evidence
+  Recommendation: text-only recommendation
+  Suggested verification: test/readback/command
   [If MULTI-SPECIALIST CONFIRMED: show confirmation note]
 
 PR Quality Score: X/10
 ```
 
 These findings flow into the Fix-First flow (item 4) alongside the checklist pass (Step 9).
-The Fix-First heuristic applies identically — specialist findings follow the same AUTO-FIX vs ASK classification.
 
 **Compile per-specialist stats:**
 After merging findings, compile a `specialists` object for the review-log persist.
@@ -2189,8 +2191,7 @@ If no prior reviews exist or none have a `findings` array, skip this step silent
 
 Output a summary header: `Pre-Landing Review: N issues (X critical, Y informational)`
 
-4. **Classify each finding from both the checklist pass and specialist review (Step 9.1-Step 9.2) as AUTO-FIX or ASK** per the Fix-First Heuristic in
-   checklist.md. Critical findings lean toward ASK; informational lean toward AUTO-FIX.
+4. **Classify each finding from both the checklist pass and specialist review (Step 9.1-Step 9.2) as AUTO-FIX or ASK** per `ship-fix-first.md`.
 
 5. **Auto-fix all AUTO-FIX items.** Apply each fix. Output one line per fix:
    `[AUTO-FIXED] [file:line] Problem → what you did`
@@ -2922,7 +2923,7 @@ you missed it.>
 <findings from Step 9 code review, or "No issues found.">
 
 ## Design Review
-<If design review ran: "Design Review (lite): N findings — M auto-fixed, K skipped. AI Slop: clean/N issues.">
+<If design review ran: "Design Review (lite): N findings — 0 auto-fixed, K skipped. AI Slop: clean/N issues.">
 <If no frontend files changed: "No frontend files changed — design review skipped.">
 
 ## Eval Results
