@@ -158,6 +158,7 @@ PY
 
 install_state_write_fallback() {
     local state_file="$1"
+    local tmp_file="${state_file}.tmp.$$"
     shift
     {
         printf '{\n'
@@ -177,7 +178,8 @@ install_state_write_fallback() {
         done
         printf ']\n'
         printf '}\n'
-    } > "$state_file"
+    } > "$tmp_file"
+    mv "$tmp_file" "$state_file"
 }
 
 record_installed_target() {
@@ -248,10 +250,17 @@ detect_installed_refresh_targets() {
     printf '%s\n' "${targets[@]}" | dedupe_lines
 }
 
+auto_refresh_security_target_allowed() {
+    [ "${GOLDBAND_AUTO_REFRESH_SECURITY_TARGETS:-}" = "1" ]
+}
+
 auto_refresh_safe_target() {
     case "$1" in
-        skills-core|skills-dev|skills-full|claude-guidance|commands|rules|hooks|launchers|\
-        codex-core|codex-full|codex-config|codex-agents|codex-prompts|codex-hooks|codex-rules|codex-skills|\
+        hooks|rules|codex-hooks|codex-rules)
+            auto_refresh_security_target_allowed
+            ;;
+        skills-core|skills-dev|skills-full|claude-guidance|commands|launchers|\
+        codex-core|codex-full|codex-config|codex-agents|codex-prompts|codex-skills|\
         workflow|workflow-codex|workflow-auto)
             return 0
             ;;

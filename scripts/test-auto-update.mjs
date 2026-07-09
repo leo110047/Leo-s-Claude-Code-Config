@@ -65,8 +65,7 @@ function testInstallStateAndAutoRefresh() {
   }
   assert.equal(state.targets.includes('pack-core'), false);
 
-  state.targets = ['codex-prompts', 'codex-requirements'];
-  fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+  writeAutoRefreshTargets(stateFile, state);
 
   run('bash', ['./install.sh', 'auto-refresh'], {
     env: {
@@ -81,16 +80,28 @@ function testInstallStateAndAutoRefresh() {
   assert.match(state.lastAutoRefresh.message, /refreshed: codex-prompts/);
   assert.match(
     state.lastAutoRefresh.message,
-    /skipped unsafe: codex-requirements/,
+    /skipped unsafe: hooks,rules,codex-hooks,codex-rules,codex-requirements/,
   );
   assert.equal(fs.existsSync(env.CODEX_REQUIREMENTS_FILE), false);
 
   const status = run('bash', ['./install.sh', 'status'], { env });
   assert.match(
     status.stdout,
-    /auto-update tracked targets: codex-prompts, codex-requirements/,
+    /auto-update tracked targets: codex-prompts, hooks, rules, codex-hooks, codex-rules, codex-requirements/,
   );
   assert.match(status.stdout, /last auto-refresh: success/);
+}
+
+function writeAutoRefreshTargets(stateFile, state) {
+  state.targets = [
+    'codex-prompts',
+    'hooks',
+    'rules',
+    'codex-hooks',
+    'codex-rules',
+    'codex-requirements',
+  ];
+  fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
 }
 
 function git(repo, args) {

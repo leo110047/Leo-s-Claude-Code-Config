@@ -5,7 +5,8 @@ profile_skill_count() {
     local skills_line skills_csv
     skills_line=$(grep '^skills=' "$profile_file" 2>/dev/null || true)
     skills_csv="${skills_line#skills=}"
-    [ -n "$skills_csv" ] && echo "$skills_csv" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' ' || printf '0\n'
+    if [ -z "$skills_csv" ]; then printf '0\n'; return; fi
+    echo "$skills_csv" | tr ',' '\n' | sed '/^$/d' | wc -l | tr -d ' '
 }
 
 show_status() {
