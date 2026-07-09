@@ -73,6 +73,7 @@ export type WorkflowRunOptions = {
   staged?: boolean;
   worktree?: boolean;
   includeUntracked?: boolean;
+  specialists?: 'off' | 'auto' | 'all';
   inputFile?: string;
   goldbandHome?: string;
   cwd?: string;
@@ -106,6 +107,12 @@ export type ReviewFinding = {
   summary: string;
   evidence?: string;
   recommendation?: string;
+  category?: string;
+  failureScenario?: string;
+  suggestedVerification?: string;
+  blocking?: boolean;
+  specialist?: string;
+  contributingSpecialists?: string[];
 };
 
 export type QaCheck = {

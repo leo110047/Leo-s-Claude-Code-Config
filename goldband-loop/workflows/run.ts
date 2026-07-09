@@ -31,6 +31,7 @@ function parseArgs(args: string[]): { workflowName: string; options: WorkflowRun
     else if (arg === '--staged') options.staged = true;
     else if (arg === '--worktree') options.worktree = true;
     else if (arg === '--include-untracked') options.includeUntracked = true;
+    else if (arg === '--specialists') options.specialists = takeValue(args, ++index, arg) as WorkflowRunOptions['specialists'];
     else if (arg === '--loop') loop = true;
     else if (arg === '--max-iterations') options.maxIterations = takeNumber(args, ++index, arg);
     else usageError(`unknown argument: ${arg}`);
@@ -52,6 +53,9 @@ function validateOptions(options: WorkflowRunOptions): void {
   }
   if (options.host && options.host !== 'mock' && options.mode !== 'real') {
     usageError('--host claude|codex requires --mode real');
+  }
+  if (options.specialists && !['off', 'auto', 'all'].includes(options.specialists)) {
+    usageError(`invalid --specialists: ${options.specialists}`);
   }
 }
 
@@ -80,7 +84,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <workflow-name> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <workflow-name> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

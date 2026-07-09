@@ -11,12 +11,23 @@ import {
   getWorkflow,
   integratedWorkflows,
 } from '../workflows/registry';
-import { objectSchema } from '../workflows/schema';
+import { findingsSchema, objectSchema } from '../workflows/schema';
 import { runWorkflow } from '../workflows/runtime';
 import type { EvaluationSignalSnapshot } from '../workflows/types';
 import { reviewSignalFromOutput, reviewSteps } from '../workflows/review';
 import { qaChecksSchema } from '../workflows/schema';
-import { MockHostAdapter } from '../workflows/host-adapter';
+import {
+  MockHostAdapter,
+  claudeRunJsonArgs,
+  codexRunJsonArgs,
+  runProcess,
+} from '../workflows/host-adapter';
+import {
+  REVIEW_SPECIALISTS,
+  aggregateReviewFindings,
+  runParallelSpecialistReview,
+  selectReviewSpecialists,
+} from '../workflows/review-engine';
 
 const ROOT = resolve(import.meta.dir, '..');
 let tmpHome: string;
@@ -324,6 +335,10 @@ describe('workflow runtime', () => {
     const badHost = runCli(['goldband-review', '--mode', 'real', '--host', 'mock']);
     expect(badHost.status).toBe(2);
     expect(badHost.stderr).toContain('--mode real requires --host claude or --host codex');
+
+    const badSpecialists = runCli(['goldband-review', '--specialists', 'banana']);
+    expect(badSpecialists.status).toBe(2);
+    expect(badSpecialists.stderr).toContain('invalid --specialists: banana');
   });
 
   test('CLI warns when max-iterations is provided without loop', () => {
@@ -476,7 +491,262 @@ describe('workflow runtime', () => {
       severity: 'info',
       summary: '[unverified high] Possibly serious issue.',
       evidence: 'High-severity finding lacked concrete diff evidence during runtime verification.',
+      blocking: false,
     }]);
+  });
+
+  test('review specialist selection includes host parity for workflow and prompt diffs', () => {
+    const selection = selectReviewSpecialists([
+      'diff --git a/goldband-loop/workflows/host-adapter.ts b/goldband-loop/workflows/host-adapter.ts',
+      '+codex exec --sandbox read-only',
+      'diff --git a/goldband-loop/review/SKILL.md.tmpl b/goldband-loop/review/SKILL.md.tmpl',
+      '+allowed-tools:',
+    ].join('\n'));
+
+    expect(selection.selected).toContain('correctness-contract');
+    expect(selection.selected).toContain('testing');
+    expect(selection.selected).toContain('maintainability');
+    expect(selection.selected).toContain('api-host-parity');
+  });
+
+  test('review specialist selection supports explicit all mode', () => {
+    const selection = selectReviewSpecialists('+tiny docs change', 'all');
+    expect(selection.selected).toEqual([...REVIEW_SPECIALISTS]);
+    expect(selection.skipped).toEqual([]);
+  });
+
+  test('review aggregation dedupes, merges specialists, downgrades unsupported blockers, and sorts deterministically', () => {
+    const result = aggregateReviewFindings([
+      {
+        file: 'b.ts',
+        line: 3,
+        severity: 'high',
+        category: 'testing',
+        summary: 'Missing regression test.',
+        failureScenario: 'Old behavior can return the wrong status.',
+        evidence: 'diff adds behavior without a failing test',
+        recommendation: 'Add a regression test.',
+        suggestedVerification: 'Run bun test b.test.ts',
+        blocking: true,
+        specialist: 'testing',
+      },
+      {
+        file: 'b.ts',
+        line: 3,
+        severity: 'medium',
+        category: 'testing',
+        summary: 'Test gap.',
+        failureScenario: 'Old behavior can return the wrong status.',
+        evidence: 'longer and more specific diff evidence from second specialist',
+        recommendation: 'Add focused coverage.',
+        suggestedVerification: 'Run bun test b.test.ts',
+        blocking: false,
+        specialist: 'correctness-contract',
+      },
+      {
+        file: 'a.ts',
+        line: 1,
+        severity: 'critical',
+        category: 'security',
+        summary: 'Possible auth issue.',
+        failureScenario: 'Admin route may be reachable.',
+        recommendation: 'Verify auth guard.',
+        suggestedVerification: 'Run auth regression test.',
+        blocking: true,
+        specialist: 'security',
+      },
+    ]);
+
+    expect(result.map((finding) => `${finding.severity}:${finding.file}:${finding.category}`)).toEqual([
+      'high:b.ts:testing',
+      'info:a.ts:security',
+    ]);
+    expect(result[0].contributingSpecialists).toEqual(['correctness-contract', 'testing']);
+    expect(result[0].evidence).toBe('longer and more specific diff evidence from second specialist');
+    expect(result[1].blocking).toBe(false);
+    expect(result[1].summary).toContain('[unverified critical]');
+  });
+
+  test('parallel specialist review uses bounded concurrent dispatch', async () => {
+    let active = 0;
+    let maxActive = 0;
+    let calls = 0;
+    const adapter = {
+      name: 'mock' as const,
+      capabilities: { readOnlyEnforced: true, parallelDispatch: true },
+      async runJson() {
+        calls += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        active -= 1;
+        return {
+          text: '{"findings":[]}',
+          parsed: { findings: [] },
+        };
+      },
+    };
+    const findings = await runParallelSpecialistReview(
+      {
+        runId: 'test-run',
+        workflow: getWorkflow('goldband-review'),
+        cwd: ROOT,
+        artifacts: [],
+        options: {},
+      },
+      adapter,
+      [
+        '+auth token check',
+        '+schema migration',
+        '+workflow host-adapter codex prompt',
+        '+performance cache query',
+      ].join('\n'),
+      {},
+    );
+
+    expect(calls).toBeGreaterThan(4);
+    expect(maxActive).toBeGreaterThan(1);
+    expect(maxActive).toBeLessThanOrEqual(4);
+    expect(findings.every((finding) => finding.category !== 'host-capability')).toBe(true);
+  });
+
+  test('parallel specialist review honors explicit off mode without dispatch', async () => {
+    let calls = 0;
+    const adapter = {
+      name: 'mock' as const,
+      capabilities: { readOnlyEnforced: false, parallelDispatch: false },
+      async runJson() {
+        calls += 1;
+        return {
+          text: '{"findings":[]}',
+          parsed: { findings: [] },
+        };
+      },
+    };
+    const findings = await runParallelSpecialistReview(
+      {
+        runId: 'test-run',
+        workflow: getWorkflow('goldband-review'),
+        cwd: ROOT,
+        artifacts: [],
+        options: { specialists: 'off' },
+      },
+      adapter,
+      '+auth token check',
+      {},
+      'off',
+    );
+
+    expect(calls).toBe(0);
+    expect(findings).toHaveLength(REVIEW_SPECIALISTS.length);
+    expect(findings.every((finding) => finding.category === 'specialist-skipped')).toBe(true);
+  });
+
+  test('parallel specialist review reports host capability degradation', async () => {
+    const noReadOnly = await runParallelSpecialistReview(
+      workflowContext(getWorkflow('goldband-review')),
+      {
+        name: 'mock' as const,
+        capabilities: { readOnlyEnforced: false, parallelDispatch: true },
+        async runJson() {
+          throw new Error('should not dispatch without read-only enforcement');
+        },
+      },
+      '+auth token check',
+      {},
+    );
+    expect(noReadOnly).toHaveLength(1);
+    expect(noReadOnly[0].category).toBe('host-capability');
+    expect(noReadOnly[0].evidence).toContain('read-only enforcement unavailable');
+
+    const noParallel = await runParallelSpecialistReview(
+      workflowContext(getWorkflow('goldband-review')),
+      {
+        name: 'mock' as const,
+        capabilities: { readOnlyEnforced: true, parallelDispatch: false },
+        async runJson() {
+          throw new Error('should not dispatch without parallel support');
+        },
+      },
+      '+tiny docs change',
+      {},
+    );
+    expect(noParallel[0].category).toBe('host-capability');
+    expect(noParallel[0].evidence).toContain('parallel specialist dispatch unavailable');
+    expect(noParallel.some((finding) => finding.category === 'specialist-skipped')).toBe(true);
+  });
+
+  test('parallel specialist review turns rejected specialists into blocking findings', async () => {
+    const findings = await runParallelSpecialistReview(
+      workflowContext(getWorkflow('goldband-review')),
+      {
+        name: 'mock' as const,
+        capabilities: { readOnlyEnforced: true, parallelDispatch: true },
+        async runJson() {
+          throw new Error('adapter crashed');
+        },
+      },
+      '+workflow host-adapter codex prompt',
+      {},
+    );
+    const failures = findings.filter((finding) => finding.category === 'specialist-runtime');
+    expect(failures.length).toBeGreaterThan(0);
+    expect(failures.every((finding) => finding.blocking)).toBe(true);
+    expect(failures[0].evidence).toContain('adapter crashed');
+  });
+
+  test('Codex JSON adapter args enforce read-only sandbox and output schema', () => {
+    const args = codexRunJsonArgs('prompt text', '/tmp/schema.json', '/tmp/out.json');
+    expect(args).toContain('--sandbox');
+    expect(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2)).toEqual([
+      '--sandbox',
+      'read-only',
+    ]);
+    expect(args).toContain('--output-schema');
+    expect(args).toContain('/tmp/schema.json');
+    expect(args).toContain('-o');
+    expect(args).toContain('/tmp/out.json');
+  });
+
+  test('Claude JSON adapter args deny mutating tools and cap budget', () => {
+    const args = claudeRunJsonArgs('prompt text', { type: 'object' });
+    expect(args.slice(args.indexOf('--disallowedTools'), args.indexOf('--disallowedTools') + 2)).toEqual([
+      '--disallowedTools',
+      'Bash,Edit,Write',
+    ]);
+    expect(args.slice(args.indexOf('--max-budget-usd'), args.indexOf('--max-budget-usd') + 2)).toEqual([
+      '--max-budget-usd',
+      '0.50',
+    ]);
+  });
+
+  test('runProcess resolves after killing a process that ignores SIGTERM', async () => {
+    const started = Date.now();
+    const result = await runProcess(
+      process.execPath,
+      ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'],
+      20,
+      20,
+    );
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.status).toBeNull();
+    expect(result.stderr).toContain('timed out after 20ms');
+    expect(result.stderr).toContain('killed after failing to exit on SIGTERM');
+  });
+
+  test('review findings schema rejects invalid optional field types', () => {
+    expect(() => findingsSchema.validate([{
+      file: 'src/example.ts',
+      severity: 'medium',
+      summary: 'Bad blocking type.',
+      blocking: 'yes',
+    }])).toThrow('optional field must be boolean');
+    expect(() => findingsSchema.validate([{
+      file: 'src/example.ts',
+      severity: 'medium',
+      summary: 'Bad specialists type.',
+      contributingSpecialists: ['testing', 123],
+    }])).toThrow('optional field must be string array');
   });
 
   test('workflow evidence state root follows goldband path precedence', () => {

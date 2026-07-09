@@ -1,0 +1,363 @@
+import { readFileSync } from 'node:fs';
+import type { HostAdapter } from './host-adapter';
+import { workflowAssetPath } from './paths';
+import type { ReviewFinding, WorkflowContext } from './types';
+
+export const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
+  'critical',
+  'high',
+  'medium',
+  'low',
+  'info',
+];
+
+export const REVIEW_SPECIALISTS = [
+  'correctness-contract',
+  'testing',
+  'security',
+  'performance',
+  'migration-data',
+  'api-host-parity',
+  'maintainability',
+] as const;
+
+export type ReviewSpecialist = (typeof REVIEW_SPECIALISTS)[number];
+
+export type SpecialistSelection = {
+  selected: ReviewSpecialist[];
+  skipped: Array<{ specialist: ReviewSpecialist; reason: string }>;
+};
+
+export type SpecialistMode = 'off' | 'auto' | 'all';
+
+export const SPECIALIST_CONCURRENCY = 4;
+
+const SPECIALIST_GUIDANCE: Record<ReviewSpecialist, string> = {
+  'correctness-contract':
+    'Check functional correctness, state transitions, contract fields, error handling, and data consistency.',
+  testing:
+    'Check whether tests would fail on the old behavior, cover the real risk, and include useful fixtures.',
+  security:
+    'Check auth/authz, secrets, injection, unsafe IO, supply chain, sandboxing, and trust boundaries.',
+  performance:
+    'Check N+1 patterns, hot paths, query or bundle growth, memory pressure, and clear scaling risks.',
+  'migration-data':
+    'Check migrations, schemas, backfills, backwards compatibility, rollback, and rollout safety.',
+  'api-host-parity':
+    'Check CLI/API contracts, Claude/Codex host parity, installer output, workflow routing, and prompt/runtime consistency.',
+  maintainability:
+    'Check duplicated logic, abstraction fit, module boundaries, naming, and long-term maintenance risk.',
+};
+
+export function selectReviewSpecialists(diff: string, mode: SpecialistMode = 'auto'): SpecialistSelection {
+  if (mode === 'off') {
+    return {
+      selected: [],
+      skipped: REVIEW_SPECIALISTS.map((specialist) => ({
+        specialist,
+        reason: 'specialists disabled by --specialists off',
+      })),
+    };
+  }
+
+  if (mode === 'all') {
+    return { selected: [...REVIEW_SPECIALISTS], skipped: [] };
+  }
+
+  const lower = diff.toLowerCase();
+  const selected = new Set<ReviewSpecialist>([
+    'correctness-contract',
+    'testing',
+    'maintainability',
+  ]);
+
+  if (/\b(auth|authorization|permission|secret|token|csrf|xss|sql injection|sandbox|trust boundary)\b/.test(lower)) {
+    selected.add('security');
+  }
+  if (/\b(migration|schema|prisma|knex|sequelize|database|sql|backfill|rollback|alter table)\b/.test(lower)) {
+    selected.add('migration-data');
+  }
+  if (/\b(performance|n\+1|bundle|cache|memory|latency|query|hot path|timeout)\b/.test(lower)) {
+    selected.add('performance');
+  }
+  if (/\b(workflow|host-adapter|codex|claude|installer|prompt|skill|hook|sandbox|allowed-tools|cross-review)\b/.test(lower)) {
+    selected.add('api-host-parity');
+  }
+
+  const changedLines = diff
+    .split('\n')
+    .filter((line) => /^[+-]/.test(line) && !/^(---|\+\+\+)/.test(line)).length;
+  if (changedLines > 800) {
+    selected.add('security');
+    selected.add('performance');
+    selected.add('migration-data');
+    selected.add('api-host-parity');
+  }
+
+  return {
+    selected: REVIEW_SPECIALISTS.filter((specialist) => selected.has(specialist)),
+    skipped: REVIEW_SPECIALISTS
+      .filter((specialist) => !selected.has(specialist))
+      .map((specialist) => ({ specialist, reason: 'diff scope not relevant' })),
+  };
+}
+
+export async function runParallelSpecialistReview(
+  ctx: WorkflowContext,
+  adapter: HostAdapter,
+  diff: string,
+  schema: unknown,
+  mode: SpecialistMode = 'auto',
+): Promise<ReviewFinding[]> {
+  const selection = selectReviewSpecialists(diff, mode);
+  if (mode === 'off') {
+    return aggregateReviewFindings(selection.skipped.map(skippedSpecialistFinding));
+  }
+
+  if (!adapter.capabilities.readOnlyEnforced) {
+    return [capabilityFinding(adapter.name, 'read-only enforcement unavailable')];
+  }
+
+  if (!adapter.capabilities.parallelDispatch) {
+    return [
+      capabilityFinding(adapter.name, 'parallel specialist dispatch unavailable'),
+      ...selection.skipped.map(skippedSpecialistFinding),
+    ];
+  }
+
+  const jobs = selection.selected.map((specialist) => async () => {
+    const result = await adapter.runJson(buildSpecialistPrompt(ctx, diff, specialist), schema);
+    return normalizeSpecialistFindings(unwrapFindings(result.parsed), specialist);
+  });
+
+  const settled = await runBounded(jobs, SPECIALIST_CONCURRENCY);
+  const findings: ReviewFinding[] = [];
+  for (let index = 0; index < settled.length; index += 1) {
+    const result = settled[index];
+    if (result.status === 'fulfilled') findings.push(...result.value);
+    else findings.push(specialistFailureFinding(selection.selected[index], result.reason));
+  }
+  findings.push(...selection.skipped.map(skippedSpecialistFinding));
+  return aggregateReviewFindings(findings);
+}
+
+export function aggregateReviewFindings(findings: ReviewFinding[]): ReviewFinding[] {
+  const byKey = new Map<string, ReviewFinding>();
+  for (const finding of findings.map(normalizeReviewFinding)) {
+    const key = stableFindingKey(finding);
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? mergeFindings(existing, finding) : finding);
+  }
+  return [...byKey.values()].sort(compareFindings);
+}
+
+export function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
+  const severity = normalizeSeverity(finding.severity);
+  const needsEvidenceDowngrade = (severity === 'critical' || severity === 'high') && !finding.evidence;
+  const nextSeverity = needsEvidenceDowngrade ? 'info' : severity;
+  return {
+    ...finding,
+    severity: nextSeverity,
+    summary: needsEvidenceDowngrade
+      ? `[unverified ${severity}] ${finding.summary}`
+      : finding.summary,
+    evidence: needsEvidenceDowngrade
+      ? 'High-severity finding lacked concrete diff evidence during runtime aggregation.'
+      : finding.evidence,
+    blocking: Boolean(finding.blocking && (nextSeverity === 'critical' || nextSeverity === 'high')),
+    contributingSpecialists: normalizeSpecialistList([
+      ...(finding.contributingSpecialists ?? []),
+      ...(finding.specialist ? [finding.specialist] : []),
+    ]),
+  };
+}
+
+export function buildSpecialistPrompt(
+  ctx: WorkflowContext,
+  diff: string,
+  specialist: ReviewSpecialist,
+): string {
+  const sharedRubric = readSharedReviewAsset('shared-rubric.md');
+  const schemaAsset = readSharedReviewAsset('findings-schema.md');
+  return [
+    `GOLDBAND_REVIEW_SPECIALIST=${specialist}`,
+    'Read-only specialist review. Do not edit files. Do not run repair workflows.',
+    'Use only the bounded diff and supplied shared review standard.',
+    `Responsibility: ${SPECIALIST_GUIDANCE[specialist]}`,
+    reviewIterationContext(ctx),
+    sharedRubric,
+    schemaAsset,
+    'Return only JSON matching the supplied output schema: {"findings":[...]}',
+    'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
+    'DIFF_START',
+    diff,
+    'DIFF_END',
+  ].join('\n\n');
+}
+
+export function unwrapFindings(parsed: unknown): ReviewFinding[] {
+  if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { findings?: unknown }).findings)) {
+    return (parsed as { findings: ReviewFinding[] }).findings;
+  }
+  if (Array.isArray(parsed)) return parsed as ReviewFinding[];
+  throw new Error('review output must be an array or { findings: [...] }');
+}
+
+async function runBounded<T>(
+  jobs: Array<() => Promise<T>>,
+  concurrency: number,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(jobs.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < jobs.length) {
+      const index = next;
+      next += 1;
+      try {
+        results[index] = { status: 'fulfilled', value: await jobs[index]() };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, () => worker()));
+  return results;
+}
+
+function normalizeSpecialistFindings(
+  findings: ReviewFinding[],
+  specialist: ReviewSpecialist,
+): ReviewFinding[] {
+  return findings.map((finding) => ({
+    ...finding,
+    specialist: finding.specialist ?? specialist,
+    category: finding.category ?? specialist,
+  }));
+}
+
+function capabilityFinding(host: string, reason: string): ReviewFinding {
+  return {
+    file: '__review_runtime__',
+    severity: 'info',
+    summary: `Specialist review degraded on ${host}: ${reason}.`,
+    evidence: reason,
+    recommendation: 'Use a host adapter with read-only parallel review support before treating specialist coverage as complete.',
+    suggestedVerification: 'Run goldband-review with --mode real --host codex or another adapter that advertises readOnlyEnforced and parallelDispatch.',
+    category: 'host-capability',
+    failureScenario: 'The report would otherwise imply specialist coverage that was not enforced by runtime capability.',
+    blocking: false,
+  };
+}
+
+function skippedSpecialistFinding(item: { specialist: ReviewSpecialist; reason: string }): ReviewFinding {
+  return {
+    file: '__review_specialists__',
+    severity: 'info',
+    summary: `Skipped ${item.specialist} specialist: ${item.reason}.`,
+    evidence: item.reason,
+    recommendation: 'No action unless the diff scope changes.',
+    suggestedVerification: 'Review the diff scope signals if this specialist was expected.',
+    category: 'specialist-skipped',
+    specialist: item.specialist,
+    failureScenario: 'Specialist was intentionally skipped and must not be counted as completed coverage.',
+    blocking: false,
+  };
+}
+
+function specialistFailureFinding(specialist: ReviewSpecialist, reason: unknown): ReviewFinding {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return {
+    file: '__review_specialists__',
+    severity: 'high',
+    summary: `${specialist} specialist review failed.`,
+    evidence: message,
+    recommendation: 'Treat specialist coverage as incomplete and rerun after fixing the host/runtime failure.',
+    suggestedVerification: `Rerun the ${specialist} specialist pass successfully.`,
+    category: 'specialist-runtime',
+    specialist,
+    failureScenario: 'A specialist pass failed, so the aggregate review can miss scoped risks.',
+    blocking: true,
+  };
+}
+
+function mergeFindings(a: ReviewFinding, b: ReviewFinding): ReviewFinding {
+  return {
+    ...a,
+    severity: higherSeverity(a.severity, b.severity),
+    evidence: mostSpecific(a.evidence, b.evidence),
+    recommendation: mostSpecific(a.recommendation, b.recommendation),
+    suggestedVerification: mostSpecific(a.suggestedVerification, b.suggestedVerification),
+    blocking: Boolean(a.blocking || b.blocking),
+    contributingSpecialists: normalizeSpecialistList([
+      ...(a.contributingSpecialists ?? []),
+      ...(b.contributingSpecialists ?? []),
+      ...(a.specialist ? [a.specialist] : []),
+      ...(b.specialist ? [b.specialist] : []),
+    ]),
+  };
+}
+
+function stableFindingKey(finding: ReviewFinding): string {
+  if (finding.category === 'specialist-skipped') {
+    return [
+      finding.file,
+      finding.category,
+      finding.specialist ?? '',
+      normalizeKeyText(finding.summary),
+    ].join('\0');
+  }
+
+  return [
+    finding.file,
+    finding.line ?? '',
+    finding.category ?? '',
+    normalizeKeyText(finding.failureScenario ?? finding.summary),
+  ].join('\0');
+}
+
+function compareFindings(a: ReviewFinding, b: ReviewFinding): number {
+  return (
+    REVIEW_SEVERITIES.indexOf(a.severity) - REVIEW_SEVERITIES.indexOf(b.severity) ||
+    a.file.localeCompare(b.file) ||
+    (a.line ?? 0) - (b.line ?? 0) ||
+    (a.category ?? '').localeCompare(b.category ?? '')
+  );
+}
+
+function higherSeverity(a: ReviewFinding['severity'], b: ReviewFinding['severity']): ReviewFinding['severity'] {
+  return REVIEW_SEVERITIES.indexOf(a) <= REVIEW_SEVERITIES.indexOf(b) ? a : b;
+}
+
+function normalizeSeverity(severity: ReviewFinding['severity']): ReviewFinding['severity'] {
+  return REVIEW_SEVERITIES.includes(severity) ? severity : 'info';
+}
+
+function mostSpecific(a: string | undefined, b: string | undefined): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return b.length > a.length ? b : a;
+}
+
+function normalizeSpecialistList(values: string[]): string[] | undefined {
+  const list = [...new Set(values.filter(Boolean))].sort();
+  return list.length > 0 ? list : undefined;
+}
+
+function normalizeKeyText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function readSharedReviewAsset(name: string): string {
+  return readFileSync(workflowAssetPath(`review/${name}`), 'utf8');
+}
+
+function reviewIterationContext(ctx: WorkflowContext): string {
+  const iteration = ctx.iterationContext?.iteration;
+  if (!iteration) return 'GOLDBAND_SINGLE_PASS=1';
+  return [
+    `GOLDBAND_LOOP_ITERATION=${iteration}`,
+    'Previous validated findings:',
+    JSON.stringify(ctx.iterationContext?.previousFindings ?? []),
+    'Focus on whether previous findings are resolved and whether new issues appeared.',
+  ].join('\n');
+}
