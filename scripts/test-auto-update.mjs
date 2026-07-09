@@ -144,6 +144,7 @@ function makeSelfUpdateRepo() {
   commitAll(repo, 'initial');
   git(repo, ['remote', 'add', 'origin', remote]);
   git(repo, ['push', '-u', 'origin', 'main']);
+  git(remote, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
   return { work, remote, repo };
 }
 
