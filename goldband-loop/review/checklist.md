@@ -1,18 +1,16 @@
-# Pre-Landing Review Checklist
+# Read-Only Review Checklist
 
 ## Instructions
 
-Review the `git diff origin/main` output for the issues listed below. Be specific — cite `file:line` and suggest fixes. Skip anything that's fine. Only flag real problems.
+Review the diff for concrete issues. Cite `file:line` when available. Flag only
+real problems with evidence. Do not edit files, apply patches, commit, push,
+or run repair workflows.
 
-**Two-pass review:**
-- **Pass 1 (CRITICAL):** Run Problem-Fix Correctness, SQL & Data Safety, Race Conditions, LLM Output Trust Boundary, Shell Injection, and Enum Completeness first. Highest severity.
-- **Pass 2 (INFORMATIONAL):** Run remaining categories below. Lower severity but still actioned.
-- **Specialist categories (handled by parallel subagents, NOT this checklist):** Test Gaps, Dead Code, Magic Numbers, Conditional Side Effects, Performance & Bundle Impact, Crypto & Entropy. See `review/specialists/` for these.
+Use `shared-rubric.md` as the canonical taxonomy, severity standard, finding
+shape, and merge rule source. This checklist gives the core review pass; the
+specialist passes cover the same taxonomy from narrower responsibilities.
 
-All findings get action via Fix-First Review: obvious mechanical fixes are applied automatically,
-genuinely ambiguous issues are batched into a single user question.
-
-**Output format:**
+## Output Format
 
 ```
 Strict Review Frame:
@@ -21,198 +19,97 @@ Strict Review Frame:
 - Architecture/design health: <healthy / concern / not applicable, with reason>
 - Risk/error scan: <main remaining risks, or none found after checks>
 
-Pre-Landing Review: N issues (X critical, Y informational)
+Read-Only Findings Review: N findings (X blocking, Y advisory)
 
-**AUTO-FIXED:**
-- [file:line] Problem → fix applied
-
-**NEEDS INPUT:**
-- [file:line] Problem description
-  Recommended fix: suggested fix
+- [severity/blocking|advisory] file:line category
+  Failure scenario: concrete way this fails
+  Evidence: current file, diff, command, or test evidence
+  Recommendation: text-only fix recommendation
+  Suggested verification: command, test, readback, or manual check
 ```
 
-If no issues found: include the `Strict Review Frame`, then output
-`Pre-Landing Review: No issues found.`
+If no issues are found, include the `Strict Review Frame`, then output:
 
-Be terse. For each issue: one line describing the problem, one line with the fix. No preamble, no summaries, no "looks good overall."
+`Read-Only Findings Review: No issues found.`
 
----
+Always include:
 
-## Review Categories
+`Read-only review: no files were modified.`
 
-### Pass 1 — CRITICAL
+## Core Review Categories
 
-#### Problem-Fix Correctness
+### Problem-Fix Correctness
+
 - For bugfixes, trace the original failure mode through the changed code path.
-  Flag fixes that only silence the symptom, change an unreachable path, or leave
-  the failing input/state unhandled.
+  Flag fixes that silence symptoms, change unreachable code, or leave the
+  failing input/state unhandled.
 - For feature or workflow changes, verify the implementation is wired into the
-  runtime path users actually invoke. A file or config existing on disk is not
-  enough if the runtime never reads it.
-- For contract changes, verify all producers and consumers agree on required
-  fields, state names, permissions, side effects, and error behavior.
-- For test-only claims, verify the test would fail against the old behavior and
-  exercises the stated bug or requirement, not just a nearby happy path.
+  runtime path users invoke. A file or config existing on disk is not enough.
+- For contract changes, verify producers and consumers agree on required
+  fields, states, permissions, side effects, and error behavior.
+- For test claims, verify the test would fail against the old behavior and
+  exercises the stated requirement.
 
-#### SQL & Data Safety
-- String interpolation in SQL (even if values are `.to_i`/`.to_f` — use parameterized queries (Rails: sanitize_sql_array/Arel; Node: prepared statements; Python: parameterized queries))
-- TOCTOU races: check-then-set patterns that should be atomic `WHERE` + `update_all`
-- Bypassing model validations for direct DB writes (Rails: update_column; Django: QuerySet.update(); Prisma: raw queries)
-- N+1 queries: Missing eager loading (Rails: .includes(); SQLAlchemy: joinedload(); Prisma: include) for associations used in loops/views
+### SQL & Data Safety
 
-#### Race Conditions & Concurrency
-- Read-check-write without uniqueness constraint or catch duplicate key error and retry (e.g., `where(hash:).first` then `save!` without handling concurrent insert)
-- find-or-create without unique DB index — concurrent calls can create duplicates
-- Status transitions that don't use atomic `WHERE old_status = ? UPDATE SET new_status` — concurrent updates can skip or double-apply transitions
-- Unsafe HTML rendering (Rails: .html_safe/raw(); React: dangerouslySetInnerHTML; Vue: v-html; Django: |safe/mark_safe) on user-controlled data (XSS)
+- String interpolation in SQL instead of parameterized queries.
+- Read-check-write races without atomic `WHERE` updates, uniqueness
+  constraints, or duplicate-key handling.
+- Bypassing model validations for direct DB writes.
+- N+1 queries from missing eager loading.
 
-#### LLM Output Trust Boundary
-- LLM-generated values (emails, URLs, names) written to DB or passed to mailers without format validation. Add lightweight guards (`EMAIL_REGEXP`, `URI.parse`, `.strip`) before persisting.
-- Structured tool output (arrays, hashes) accepted without type/shape checks before database writes.
-- LLM-generated URLs fetched without allowlist — SSRF risk if URL points to internal network (Python: `urllib.parse.urlparse` → check hostname against blocklist before `requests.get`/`httpx.get`)
-- LLM output stored in knowledge bases or vector DBs without sanitization — stored prompt injection risk
+### Race Conditions & Concurrency
 
-#### Shell Injection (Python-specific)
-- `subprocess.run()` / `subprocess.call()` / `subprocess.Popen()` with `shell=True` AND f-string/`.format()` interpolation in the command string — use argument arrays instead
-- `os.system()` with variable interpolation — replace with `subprocess.run()` using argument arrays
-- `eval()` / `exec()` on LLM-generated code without sandboxing
-
-#### Enum & Value Completeness
-When the diff introduces a new enum value, status string, tier name, or type constant:
-- **Trace it through every consumer.** Read (don't just grep — READ) each file that switches on, filters by, or displays that value. If any consumer doesn't handle the new value, flag it. Common miss: adding a value to the frontend dropdown but the backend model/compute method doesn't persist it.
-- **Check allowlists/filter arrays.** Search for arrays or `%w[]` lists containing sibling values (e.g., if adding "revise" to tiers, find every `%w[quick lfg mega]` and verify "revise" is included where needed).
-- **Check `case`/`if-elsif` chains.** If existing code branches on the enum, does the new value fall through to a wrong default?
-To do this: use Grep to find all references to the sibling values (e.g., grep for "lfg" or "mega" to find all tier consumers). Read each match. This step requires reading code OUTSIDE the diff.
-
-### Pass 2 — INFORMATIONAL
-
-#### Async/Sync Mixing (Python-specific)
-- Synchronous `subprocess.run()`, `open()`, `requests.get()` inside `async def` endpoints — blocks the event loop. Use `asyncio.to_thread()`, `aiofiles`, or `httpx.AsyncClient` instead.
-- `time.sleep()` inside async functions — use `asyncio.sleep()`
-- Sync DB calls in async context without `run_in_executor()` wrapping
-
-#### Column/Field Name Safety
-- Verify column names in ORM queries (`.select()`, `.eq()`, `.gte()`, `.order()`) against actual DB schema — wrong column names silently return empty results or throw swallowed errors
-- Check `.get()` calls on query results use the column name that was actually selected
-- Cross-reference with schema documentation when available
-
-#### Dead Code & Consistency (version/changelog only — other items handled by maintainability specialist)
-- Version mismatch between PR title and VERSION/CHANGELOG files
-- CHANGELOG entries that describe changes inaccurately (e.g., "changed from X to Y" when X never existed)
-
-#### LLM Prompt Issues
-- 0-indexed lists in prompts (LLMs reliably return 1-indexed)
-- Prompt text listing available tools/capabilities that don't match what's actually wired up in the `tool_classes`/`tools` array
-- Word/token limits stated in multiple places that could drift
-
-#### Completeness Gaps
-- Shortcut implementations where the complete version would cost <30 minutes CC time (e.g., partial enum handling, incomplete error paths, missing edge cases that are straightforward to add)
-- Options presented with only human-team effort estimates — should show both human and CC+goldband time
-- Test coverage gaps where adding the missing tests is a "lake" not an "ocean" (e.g., missing negative-path tests, missing edge case tests that mirror happy-path structure)
-- Features implemented at 80-90% when 100% is achievable with modest additional code
-
-#### Time Window Safety
-- Date-key lookups that assume "today" covers 24h — report at 8am PT only sees midnight→8am under today's key
-- Mismatched time windows between related features — one uses hourly buckets, another uses daily keys for the same data
-
-#### Type Coercion at Boundaries
-- Values crossing Ruby→JSON→JS boundaries where type could change (numeric vs string) — hash/digest inputs must normalize types
-- Hash/digest inputs that don't call `.to_s` or equivalent before serialization — `{ cores: 8 }` vs `{ cores: "8" }` produce different hashes
-
-#### View/Frontend
-- Inline `<style>` blocks in partials (re-parsed every render)
-- O(n*m) lookups in views (`Array#find` in a loop instead of `index_by` hash)
-- Ruby-side `.select{}` filtering on DB results that could be a `WHERE` clause (unless intentionally avoiding leading-wildcard `LIKE`)
-
-#### Distribution & CI/CD Pipeline
-- CI/CD workflow changes (`.github/workflows/`): verify build tool versions match project requirements, artifact names/paths are correct, secrets use `${{ secrets.X }}` not hardcoded values
-- New artifact types (CLI binary, library, package): verify a publish/release workflow exists and targets correct platforms
-- Cross-platform builds: verify CI matrix covers all target OS/arch combinations, or documents which are untested
-- Version tag format consistency: `v1.2.3` vs `1.2.3` — must match across VERSION file, git tags, and publish scripts
-- Publish step idempotency: re-running the publish workflow should not fail (e.g., `gh release delete` before `gh release create`)
-
-#### Architecture & Design Health
-- New abstractions that only serve one call site without reducing real
-  complexity. Prefer direct code until duplication or ownership boundaries justify
-  the abstraction.
-- Logic placed in the wrong layer: UI enforcing server rules, hooks hiding core
-  runtime behavior, installers owning policy that belongs in skills/rules, or
-  tests depending on implementation details instead of behavior.
-- Fallbacks that mask broken contracts. If missing config, data, permissions, or
-  runtime assets should be explicit, flag best-effort behavior that silently
-  proceeds.
-- Duplicated source of truth: command names, workflow lists, schema fields,
-  status values, or release metadata declared in multiple places without a
-  generator, test, or readback.
-- State transitions without clear ownership, rollback, idempotency, or replay
+- Find-or-create without a unique index or duplicate handling.
+- Status transitions that do not atomically check the old state.
+- Shared mutable state without ownership, locking, idempotency, or replay
   behavior.
-- Changes that conflict with established local patterns, naming, module
-  boundaries, or existing helper APIs without a reason in the diff or plan.
 
-**DO NOT flag:**
-- Web services with existing auto-deploy pipelines (Docker build + K8s deploy)
-- Internal tools not distributed outside the team
-- Test-only CI changes (adding test steps, not publish steps)
+### Trust Boundaries
 
----
+- LLM-generated values written to DB or sent externally without validation.
+- Structured tool output accepted without type/shape checks.
+- LLM-generated URLs fetched without an allowlist or internal-network guard.
+- User-controlled HTML rendered unsafely.
+- Shell commands using interpolation or `shell=True` with untrusted input.
 
-## Severity Classification
+### Enum & Value Completeness
 
-```
-CRITICAL (highest severity):      INFORMATIONAL (main agent):      SPECIALIST (parallel subagents):
-├─ Problem-Fix Correctness        ├─ Async/Sync Mixing             ├─ Testing specialist
-├─ SQL & Data Safety              ├─ Column/Field Name Safety      ├─ Maintainability specialist
-├─ Race Conditions & Concurrency  ├─ Dead Code (version only)      ├─ Security specialist
-├─ LLM Output Trust Boundary      ├─ LLM Prompt Issues             ├─ Performance specialist
-├─ Shell Injection                ├─ Completeness Gaps             ├─ Data Migration specialist
-└─ Enum & Value Completeness      ├─ Time Window Safety            ├─ API Contract specialist
-                                   ├─ Type Coercion at Boundaries   └─ Red Team (conditional)
-                                   ├─ View/Frontend
-                                   ├─ Distribution & CI/CD Pipeline
-                                   └─ Architecture & Design Health
+When the diff introduces a new enum value, status string, tier name, or type
+constant, trace sibling values through every consumer. Read matches, do not stop
+at grep output.
 
-All findings are actioned via Fix-First Review. Severity determines
-presentation order and classification of AUTO-FIX vs ASK — critical
-findings lean toward ASK (they're riskier), informational findings
-lean toward AUTO-FIX (they're more mechanical).
-```
+### API, Host, Workflow, And Installer Parity
 
----
+- Prompt/tool capability text must match runtime behavior.
+- Claude and Codex paths must name capability gaps instead of pretending parity.
+- Installer, README, generated skills, and inventory docs must reflect shared
+  workflow contract changes before claiming parity.
+- Cross-review must not be routed to normal `/review`.
 
-## Fix-First Heuristic
+### Completeness And Verification
 
-This heuristic is referenced by both `/review` and `/ship`. It determines whether
-the agent auto-fixes a finding or asks the user.
+- Missing negative-path or regression tests that would catch the stated risk.
+- Claims of enforcement, readback, install, runtime, or parity evidence that are
+  not proven by current files or commands.
+- Partial implementations where finishing the explicit contract is modest.
 
-```
-AUTO-FIX (agent fixes without asking):     ASK (needs human judgment):
-├─ Dead code / unused variables            ├─ Security (auth, XSS, injection)
-├─ N+1 queries (missing eager loading)      ├─ Race conditions
-├─ Stale comments contradicting code       ├─ Design decisions
-├─ Magic numbers → named constants         ├─ Large fixes (>20 lines)
-├─ Missing LLM output validation           ├─ Enum completeness
-├─ Version/path mismatches                 ├─ Removing functionality
-├─ Variables assigned but never read       └─ Anything changing user-visible
-└─ Inline styles, O(n*m) view lookups        behavior
-```
+### Architecture And Maintainability
 
-**Rule of thumb:** If the fix is mechanical and a senior engineer would apply it
-without discussion, it's AUTO-FIX. If reasonable engineers could disagree about
-the fix, it's ASK.
+- New abstractions that serve one call site without reducing real complexity.
+- Logic in the wrong layer: UI enforcing server rules, hooks hiding core
+  runtime behavior, or installers owning policy that belongs in skills/rules.
+- Fallbacks that mask broken contracts.
+- Duplicated sources of truth without a generator, test, or readback.
 
-**Critical findings default toward ASK** (they're inherently riskier).
-**Informational findings default toward AUTO-FIX** (they're more mechanical).
+## Suppressions
 
----
+Do not flag:
 
-## Suppressions — DO NOT flag these
-
-- "X is redundant with Y" when the redundancy is harmless and aids readability (e.g., `present?` redundant with `length > 20`)
-- "Add a comment explaining why this threshold/constant was chosen" — thresholds change during tuning, comments rot
-- "This assertion could be tighter" when the assertion already covers the behavior
-- Suggesting consistency-only changes (wrapping a value in a conditional to match how another constant is guarded)
-- "Regex doesn't handle edge case X" when the input is constrained and X never occurs in practice
-- "Test exercises multiple guards simultaneously" — that's fine, tests don't need to isolate every guard
-- Eval threshold changes (max_actionable, min scores) — these are tuned empirically and change constantly
-- Harmless no-ops (e.g., `.reject` on an element that's never in the array)
-- ANYTHING already addressed in the diff you're reviewing — read the FULL diff before commenting
+- Harmless redundancy that improves readability.
+- Comments requested only to explain unstable thresholds.
+- Assertions that already cover the behavior.
+- Consistency-only changes that do not affect behavior or contracts.
+- Regex edge cases impossible under validated input constraints.
+- Tests that cover multiple guards when the combined behavior is meaningful.
+- Findings already fixed in the same diff.

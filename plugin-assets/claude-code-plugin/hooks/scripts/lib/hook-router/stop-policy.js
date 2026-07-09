@@ -4,6 +4,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { getGitModifiedFiles, isGitRepo } = require('../utils');
 const { evaluateCrossReviewGate } = require('./cross-review-gate');
+const { isModeActive, setModeActive } = require('./mode-state');
 
 const NOTIFICATION_TITLE = 'Claude Code';
 const NOTIFICATION_MESSAGES = {
@@ -12,6 +13,7 @@ const NOTIFICATION_MESSAGES = {
   elicitation_dialog: '有問題想問你',
 };
 const SKIP_NOTIFICATION_TYPES = ['auth_success', 'idle_prompt'];
+const REVIEW_READ_ONLY_MODE = 'review-read-only';
 
 const EXCLUDED_PATTERNS = [
   /\.test\.[jt]sx?$/,
@@ -193,6 +195,18 @@ function getStyleGateWarningsInGitDiff() {
   }
 }
 
+function clearReviewReadOnlyMode(input) {
+  const sessionId =
+    input.session_id || process.env.CLAUDE_SESSION_ID || 'default';
+  if (!isModeActive(sessionId, REVIEW_READ_ONLY_MODE)) return [];
+
+  setModeActive(sessionId, REVIEW_READ_ONLY_MODE, false, {
+    source: 'stop-policy',
+    reason: 'review workflow turn ended',
+  });
+  return ['[Hook] review-read-only cleared for this session'];
+}
+
 function evaluateStop(input) {
   const crossReviewResult = evaluateCrossReviewGate(input);
   if (crossReviewResult.decision === 'block') {
@@ -201,12 +215,13 @@ function evaluateStop(input) {
   }
 
   const warnings = getStyleGateWarningsInGitDiff();
+  const reviewReadOnlyLogs = clearReviewReadOnlyMode(input);
   notifyIfNeeded(input);
 
   return {
     decision: 'allow',
     blockedBy: null,
-    logs: warnings,
+    logs: [...reviewReadOnlyLogs, ...warnings],
   };
 }
 

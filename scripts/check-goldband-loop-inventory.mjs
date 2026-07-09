@@ -285,7 +285,10 @@ function assertInstalledStandardInventory(home, inventory) {
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
   const requiredFiles = [
     path.join('lib', 'knowledge.ts'),
+    path.join('review', 'shared-rubric.md'),
+    path.join('review', 'findings-schema.md'),
     path.join('review', 'checklist.md'),
+    path.join('review', 'ship-fix-first.md'),
     path.join('review', 'greptile-triage.md'),
   ];
   for (const runtimeRoot of runtimeRoots) {

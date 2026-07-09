@@ -10,8 +10,6 @@ description: |
 allowed-tools:
   - Bash
   - Read
-  - Edit
-  - Write
   - Grep
   - Glob
   - Agent
@@ -495,8 +493,9 @@ turns out to be unnecessary, mark it skipped with a one-line reason.
 non-trivial new features), briefly state your approach before executing. This lets
 the user course-correct cheaply instead of mid-flight.
 
-**Dedicated tools over Bash.** Prefer Read, Edit, Write, Glob, Grep over shell
-equivalents (cat, sed, find, grep). The dedicated tools are cheaper and clearer.
+**Dedicated tools over Bash.** Prefer Read, Glob, and Grep over shell
+inspection equivalents (cat, sed, find, grep). This skill is read-only; do not use
+Edit or Write.
 
 ## Voice
 
@@ -831,9 +830,13 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 ---
 
-# Pre-Landing PR Review
+# Read-Only Pre-Landing PR Review
 
 You are running the `/review` workflow. Analyze the current branch's diff against the base branch for structural issues that tests don't catch.
+
+This workflow is read-only. Do not edit source files, apply patches, commit,
+push, or run repair workflows. If a finding needs a patch, describe the patch in
+the recommendation text only.
 
 ## Strict Change Review Contract
 
@@ -867,6 +870,12 @@ tests, or comparable findings:
 ```bash
 bun run workflows/run.ts goldband-review --loop --mode mock --worktree
 ```
+
+Specialist dispatch is explicit:
+
+- `--specialists auto` (default): run scope-selected specialist passes.
+- `--specialists off`: run only the core review pass.
+- `--specialists all`: force every specialist pass.
 
 `--worktree` includes staged tracked changes, unstaged tracked changes, and
 safe untracked text files. Untracked files that are too large, binary,
@@ -1135,11 +1144,15 @@ Plan items: N DONE, M PARTIAL, K NOT DONE
 
 **No plan file found:** Use commit messages and TODOS.md as fallback sources (see above). If no intent sources at all, skip with: "No intent sources detected — skipping completion audit."
 
-## Step 2: Read the checklist
+## Step 2: Read the shared review standard
 
-Read `.claude/skills/review/checklist.md`.
+Read these files:
 
-**If the file cannot be read, STOP and report the error.** Do not proceed without the checklist.
+- `.claude/skills/review/shared-rubric.md`
+- `.claude/skills/review/findings-schema.md`
+- `.claude/skills/review/checklist.md`
+
+**If any file cannot be read, STOP and report the error.** Do not proceed without the shared review standard.
 
 ---
 
@@ -1149,7 +1162,8 @@ Read `.claude/skills/review/greptile-triage.md` and follow the fetch, filter, cl
 
 **If no PR exists, `gh` fails, API returns an error, or there are zero Greptile comments:** Skip this step silently. Greptile integration is additive — the review works without it.
 
-**If Greptile comments are found:** Store the classifications (VALID & ACTIONABLE, VALID BUT ALREADY FIXED, FALSE POSITIVE, SUPPRESSED) — you will need them in Step 5.
+**If Greptile comments are found:** Store the classifications (VALID & ACTIONABLE, VALID BUT ALREADY FIXED, FALSE POSITIVE, SUPPRESSED) for the final findings report. Do not reply to Greptile comments and do not edit files from this workflow.
+Do not save to per-project or global greptile-history from `/review`; history writes are reserved for ship/reply flows.
 
 ---
 
@@ -1350,7 +1364,7 @@ DIFF_INS=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ insertion' 
 DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
 DIFF_LINES=$((DIFF_INS + DIFF_DEL))
 echo "DIFF_LINES: $DIFF_LINES"
-# Detect test framework for specialist test stub generation
+# Detect test framework for testing specialist context
 TEST_FW=""
 { [ -f jest.config.ts ] || [ -f jest.config.js ]; } && TEST_FW="jest"
 [ -f vitest.config.ts ] && TEST_FW="vitest"
@@ -1374,7 +1388,7 @@ Based on the scope signals above, select which specialists to dispatch.
 1. **Testing** — read `~/.claude/skills/goldband/review/specialists/testing.md`
 2. **Maintainability** — read `~/.claude/skills/goldband/review/specialists/maintainability.md`
 
-**If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to Step 5.
+**If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to Step 5 read-only findings aggregation.
 
 **Conditional (dispatch if the matching scope signal is true):**
 3. **Security** — if SCOPE_AUTH=true, OR if SCOPE_BACKEND=true AND DIFF_LINES > 100. Read `~/.claude/skills/goldband/review/specialists/security.md`
@@ -1423,15 +1437,15 @@ If learnings are found, include them: "Past learnings for this domain: {learning
 "You are a specialist code reviewer. Read the checklist below, then run
 `DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"` to get the full diff. Apply the checklist against the diff.
 
+This is a read-only specialist review. Do not edit files, apply patches, commit,
+push, or run repair workflows.
+
 For each finding, output a JSON object on its own line:
-{\"severity\":\"CRITICAL|INFORMATIONAL\",\"confidence\":N,\"path\":\"file\",\"line\":N,\"category\":\"category\",\"summary\":\"description\",\"fix\":\"recommended fix\",\"fingerprint\":\"path:line:category\",\"specialist\":\"name\"}
+{\"severity\":\"critical|high|medium|low|info\",\"confidence\":N,\"file\":\"file\",\"line\":N,\"category\":\"category\",\"summary\":\"description\",\"failureScenario\":\"concrete failure\",\"evidence\":\"specific evidence\",\"recommendation\":\"text-only fix recommendation\",\"suggestedVerification\":\"test/readback/command\",\"blocking\":true,\"fingerprint\":\"file:line:category:failure\",\"specialist\":\"name\"}
 
-Required fields: severity, confidence, path, category, summary, specialist.
-Optional: line, fix, fingerprint, evidence, test_stub.
-
-If you can write a test that would catch this issue, include it in the `test_stub` field.
-Use the detected test framework ({TEST_FW}). Write a minimal skeleton — describe/it/test
-blocks with clear intent. Skip test_stub for architectural or design-only findings.
+Required fields: severity, confidence, file, category, summary,
+failureScenario, evidence, recommendation, suggestedVerification, blocking,
+specialist. Optional: line, fingerprint.
 
 If no findings: output `NO FINDINGS` and nothing else.
 Do not output anything else — no preamble, no summary, no commentary.
@@ -1478,25 +1492,28 @@ Group findings by fingerprint. For findings sharing the same fingerprint:
 
 **Compute PR Quality Score:**
 After merging, compute the quality score:
-`quality_score = max(0, 10 - (critical_count * 2 + informational_count * 0.5))`
+`quality_score = max(0, 10 - (blocking_count * 2 + advisory_count * 0.5))`
 Cap at 10. Log this in the review result at the end.
 
 **Output merged findings:**
 Present the merged findings in the same format as the current review:
 
 ```
-SPECIALIST REVIEW: N findings (X critical, Y informational) from Z specialists
+SPECIALIST REVIEW: N findings (X blocking, Y advisory) from Z specialists
 
-[For each finding, in order: CRITICAL first, then INFORMATIONAL, sorted by confidence descending]
-[SEVERITY] (confidence: N/10, specialist: name) path:line — summary
-  Fix: recommended fix
+[For each finding, in order: severity descending, then file, then line]
+[severity/blocking|advisory] (confidence: N/10, specialist: name) file:line — summary
+  Failure scenario: concrete failure
+  Evidence: specific evidence
+  Recommendation: text-only recommendation
+  Suggested verification: test/readback/command
   [If MULTI-SPECIALIST CONFIRMED: show confirmation note]
 
 PR Quality Score: X/10
 ```
 
-These findings flow into Step 5 Fix-First alongside the CRITICAL pass findings from Step 4.
-The Fix-First heuristic applies identically — specialist findings follow the same AUTO-FIX vs ASK classification.
+These findings flow into Step 5 read-only findings aggregation alongside the core pass findings from Step 4.
+For /review, do not auto-fix or ask to fix now.
 
 **Compile per-specialist stats:**
 After merging findings, compile a `specialists` object for the review-log entry in Step 5.8.
@@ -1530,16 +1547,17 @@ concerns, integration boundary issues, and failure modes that specialist checkli
 don't cover."
 
 If the Red Team finds additional issues, merge them into the findings list before
-Step 5 Fix-First. Red Team findings are tagged with `"specialist":"red-team"`.
+Step 5 read-only findings aggregation. Red Team findings are tagged with `"specialist":"red-team"`.
 
 If the Red Team returns NO FINDINGS, note: "Red Team review: no additional issues found."
 If the Red Team subagent fails or times out, skip silently and continue.
 
 ---
 
-## Step 5: Fix-First Review
+## Step 5: Read-Only Findings Aggregation
 
-**Every finding gets action — not just critical ones.**
+**Every finding gets evidence and a recommendation, but no finding is fixed by
+this workflow.**
 
 ### Step 5.0: Cross-review finding dedup
 
@@ -1575,55 +1593,28 @@ If no prior reviews exist or none have a `findings` array, skip this step silent
 
 Output a summary header: `Pre-Landing Review: N issues (X critical, Y informational)`
 
-### Step 5a: Classify each finding
+Aggregate findings from the core pass, Greptile classifications, design review,
+Review Army specialists, and adversarial pass into the shared finding shape from
+`findings-schema.md`.
 
-For each finding, classify as AUTO-FIX or ASK per the Fix-First Heuristic in
-checklist.md. Critical findings lean toward ASK; informational findings lean
-toward AUTO-FIX.
+For each finding include:
 
-**Test stub override:** Any finding that has a `test_stub` field (generated by a specialist)
-is reclassified as ASK regardless of its original classification. When presenting the ASK
-item, show the proposed test file path and the test code. The user approves or skips the
-test creation. If approved, write the fix + test file. Derive the test file path from
-the finding's `path` using project conventions (`spec/` for RSpec, `__tests__/` for
-Jest/Vitest, `test_` prefix for pytest, `_test.go` suffix for Go). If the test file
-already exists, append the new test. Output: `[FIXED + TEST] [file:line] Problem -> fix + test at [test_path]`
+- severity
+- file and line when available
+- category
+- failure scenario
+- evidence
+- recommendation
+- suggested verification
+- blocking/advisory
+- specialist or contributing specialists when applicable
 
-### Step 5b: Auto-fix all AUTO-FIX items
+Deduplicate by file, line, category, and failure scenario. If multiple
+specialists report the same issue, keep the most specific evidence and record
+all contributing specialists.
 
-Apply each fix directly. For each one, output a one-line summary:
-`[AUTO-FIXED] [file:line] Problem → what you did`
-
-### Step 5c: Batch-ask about ASK items
-
-If there are ASK items remaining, present them in ONE AskUserQuestion:
-
-- List each item with a number, the severity label, the problem, and a recommended fix
-- For each item, provide options: A) Fix as recommended, B) Skip
-- Include an overall RECOMMENDATION
-
-Example format:
-```
-I auto-fixed 5 issues. 2 need your input:
-
-1. [CRITICAL] app/models/post.rb:42 — Race condition in status transition
-   Fix: Add `WHERE status = 'draft'` to the UPDATE
-   → A) Fix  B) Skip
-
-2. [INFORMATIONAL] app/services/generator.rb:88 — LLM output not type-checked before DB write
-   Fix: Add JSON schema validation
-   → A) Fix  B) Skip
-
-RECOMMENDATION: Fix both — #1 is a real race condition, #2 prevents silent data corruption.
-```
-
-If 3 or fewer ASK items, you may use individual AskUserQuestion calls instead of batching.
-
-### Step 5d: Apply user-approved fixes
-
-Apply fixes for items where the user chose "Fix." Output what was fixed.
-
-If no ASK items exist (everything was AUTO-FIX), skip the question entirely.
+High or critical findings without concrete evidence must be downgraded to
+informational/unverified. Do not keep a blocking severity based on suspicion.
 
 ### Verification of claims
 
@@ -1641,25 +1632,9 @@ After outputting your own findings, if Greptile comments were classified in Step
 
 **Include a Greptile summary in your output header:** `+ N Greptile comments (X valid, Y fixed, Z FP)`
 
-Before replying to any comment, run the **Escalation Detection** algorithm from greptile-triage.md to determine whether to use Tier 1 (friendly) or Tier 2 (firm) reply templates.
-
-1. **VALID & ACTIONABLE comments:** These are included in your findings — they follow the Fix-First flow (auto-fixed if mechanical, batched into ASK if not) (A: Fix it now, B: Acknowledge, C: False positive). If the user chooses A (fix), reply using the **Fix reply template** from greptile-triage.md (include inline diff + explanation). If the user chooses C (false positive), reply using the **False Positive reply template** (include evidence + suggested re-rank), save to both per-project and global greptile-history.
-
-2. **FALSE POSITIVE comments:** Present each one via AskUserQuestion:
-   - Show the Greptile comment: file:line (or [top-level]) + body summary + permalink URL
-   - Explain concisely why it's a false positive
-   - Options:
-     - A) Reply to Greptile explaining why this is incorrect (recommended if clearly wrong)
-     - B) Fix it anyway (if low-effort and harmless)
-     - C) Ignore — don't reply, don't fix
-
-   If the user chooses A, reply using the **False Positive reply template** from greptile-triage.md (include evidence + suggested re-rank), save to both per-project and global greptile-history.
-
-3. **VALID BUT ALREADY FIXED comments:** Reply using the **Already Fixed reply template** from greptile-triage.md — no AskUserQuestion needed:
-   - Include what was done and the fixing commit SHA
-   - Save to both per-project and global greptile-history
-
-4. **SUPPRESSED comments:** Skip silently — these are known false positives from previous triage.
+Do not reply to Greptile comments from `/review`. Report valid comments as
+findings, report false positives with evidence, and leave any external comment
+reply or repair work to `/ship` or an explicit follow-up.
 
 ---
 
@@ -1720,7 +1695,7 @@ Dispatch via the Agent tool. The subagent has fresh context — no checklist bia
 Subagent prompt:
 "Read the diff for this branch with `DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"`. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production. Look for: edge cases, race conditions, security holes, resource leaks, failure modes, silent data corruption, logic errors that produce wrong results silently, error handling that swallows failures, and trust boundary violations. Be adversarial. Be thorough. No compliments — just the problems. For each finding, classify as FIXABLE (you know how to fix it) or INVESTIGATE (needs human judgment). After listing findings, end your output with ONE line in the canonical format `Recommendation: <action> because <one-line reason naming the most exploitable finding>` — examples: `Recommendation: Fix the unbounded retry at queue.ts:78 because it'll DoS the worker pool under sustained 429s` or `Recommendation: Ship as-is because the strongest finding is a theoretical race that requires conditions we can't trigger in production`. The reason must point to a specific finding (or no-fix rationale). Generic reasons like 'because it's safer' do not qualify."
 
-Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. **FIXABLE findings** flow into the same Fix-First pipeline as the structured review. **INVESTIGATE findings** are presented as informational.
+Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.
 
 If the subagent fails or times out: "Claude adversarial subagent unavailable. Continuing."
 
@@ -1761,22 +1736,12 @@ If `DIFF_TOTAL >= 200` AND Codex is available AND `OLD_CFG` is NOT `disabled`:
 ```bash
 TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
 _REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-cd "$_REPO_ROOT"
-codex review "IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\n\nReview the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes." -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
+codex exec "IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\n\nRead-only structured review. Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes. Return findings only. Do not edit files, apply patches, commit, push, ask to fix now, or run repair workflows. For each finding include severity, file/line, failure scenario, evidence, recommendation, suggested verification, and blocking/advisory status." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
 ```
 
-Set the Bash tool's `timeout` parameter to `300000` (5 minutes). Do NOT use the `timeout` shell command — it doesn't exist on macOS. Present output under `CODEX SAYS (code review):` header.
-Check for `[P1]` markers: found → `GATE: FAIL`, not found → `GATE: PASS`.
+Set the Bash tool's `timeout` parameter to `300000` (5 minutes). Do NOT use the `timeout` shell command — it doesn't exist on macOS. Present output under `CODEX SAYS (read-only structured review):` header.
 
-If GATE is FAIL, use AskUserQuestion:
-```
-Codex found N critical issues in the diff.
-
-A) Investigate and fix now (recommended)
-B) Continue — review will still complete
-```
-
-If A: address the findings. Re-run `codex review` to verify.
+Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.
 
 Read stderr for errors (same error handling as Codex adversarial above).
 
@@ -1828,13 +1793,13 @@ Run:
 
 Substitute:
 - `TIMESTAMP` = ISO 8601 datetime
-- `STATUS` = `"clean"` if there are no remaining unresolved findings after Fix-First handling and adversarial review, otherwise `"issues_found"`
-- `issues_found` = total remaining unresolved findings
-- `critical` = remaining unresolved critical findings
-- `informational` = remaining unresolved informational findings
+- `STATUS` = `"clean"` if there are no findings after read-only aggregation, otherwise `"issues_found"`
+- `issues_found` = total findings
+- `critical` = critical/high blocking findings
+- `informational` = advisory findings
 - `quality_score` = the PR Quality Score computed in Step 4.6 (e.g., 7.5). If specialists were skipped (small diff), use `10.0`
 - `specialists` = the per-specialist stats object compiled in Step 4.6. Each specialist that was considered gets an entry: `{"dispatched":true/false,"findings":N,"critical":N,"informational":N}` if dispatched, or `{"dispatched":false,"reason":"scope|gated"}` if skipped. Include Design specialist. Example: `{"testing":{"dispatched":true,"findings":2,"critical":0,"informational":2},"security":{"dispatched":false,"reason":"scope"}}`
-- `findings` = array of per-finding records from Step 5. For each finding (from critical pass and specialists), include: `{"fingerprint":"path:line:category","severity":"CRITICAL|INFORMATIONAL","action":"ACTION"}`. ACTION is `"auto-fixed"` (Step 5b), `"fixed"` (user approved in Step 5d), or `"skipped"` (user chose Skip in Step 5c). Suppressed findings from Step 5.0 are NOT included (they were already recorded in a prior review entry).
+- `findings` = array of per-finding records from Step 5. For each finding (from core pass and specialists), include: `{"fingerprint":"path:line:category","severity":"critical|high|medium|low|info","action":"reported"}`. Suppressed findings are NOT included.
 - `COMMIT` = output of `git rev-parse --short HEAD`
 
 ## Learning Log Reference
@@ -1879,7 +1844,8 @@ If the review exits early before a real review completes (for example, no diff a
 ## Important Rules
 
 - **Read the FULL diff before commenting.** Do not flag issues already addressed in the diff.
-- **Fix-first, not read-only.** AUTO-FIX items are applied directly. ASK items are only applied after user approval. Never commit, push, or create PRs — that's /ship's job.
+- **Read-only.** Do not edit files, auto-fix, ask to fix now, commit, push, or create PRs. That's /ship or an explicit repair workflow's job.
+- **Bash is inspection-only.** Use safe read-only commands. On Claude, the `review-read-only` hook mode blocks source mutations while allowing review runtime artifacts. On Codex, the programmatic path must use the read-only sandbox.
 - **Be terse.** One line problem, one line fix. No preamble.
 - **Only flag real problems.** Skip anything that's fine.
-- **Use Greptile reply templates from greptile-triage.md.** Every reply includes evidence. Never post vague replies.
+- **Use Greptile triage only for classification.** Do not post external replies from `/review`.

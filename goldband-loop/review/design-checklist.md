@@ -30,35 +30,29 @@ Each item is tagged with a detection confidence level:
 
 ## Classification
 
-**AUTO-FIX** (mechanical CSS fixes only — HIGH confidence, no design judgment needed):
-- `outline: none` without replacement → add `outline: revert` or `&:focus-visible { outline: 2px solid currentColor; }`
-- `!important` in new CSS → remove and fix specificity
-- `font-size` < 16px on body text → bump to 16px
+This checklist is findings-only when used by `/review`. Do not edit files.
 
-**ASK** (everything else — requires design judgment):
-- All AI slop findings, typography structure, spacing choices, interaction state gaps, DESIGN.md violations
+- **[HIGH]** definitive findings should include a concrete recommendation and
+  suggested visual or automated verification.
+- **[MEDIUM]** heuristic findings should include why the pattern is risky.
+- **[LOW]** visual-intent findings should be presented as possible issues.
 
-**LOW confidence items** → present as "Possible: [description]. Verify visually or run /design-review." Never AUTO-FIX.
+`/ship` may choose to apply mechanical CSS fixes through its ship-only
+Fix-First flow. Normal `/review` must only report findings.
 
 ---
 
 ## Output Format
 
 ```
-Design Review: N issues (X auto-fixable, Y need input, Z possible)
+Design Review: N findings (X high, Y medium, Z possible)
 
-**AUTO-FIXED:**
-- [file:line] Problem → fix applied
-
-**NEEDS INPUT:**
-- [file:line] Problem description
-  Recommended fix: suggested fix
-
-**POSSIBLE (verify visually):**
-- [file:line] Possible issue — verify with /design-review
+- [severity/advisory] file:line ux-design
+  Failure scenario: concrete user-visible failure
+  Evidence: source, diff, or DESIGN.md evidence
+  Recommendation: text-only suggested fix
+  Suggested verification: /design-review, browser check, or focused test
 ```
-
-Optional: `test_stub` — skeleton test code for this finding using the project's test framework.
 
 If no issues found: `Design Review: No issues found.`
 

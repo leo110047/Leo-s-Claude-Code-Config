@@ -104,6 +104,10 @@ function hasEvent(events, expected) {
   );
 }
 
+function assertHasEvent(events, expected) {
+  assert.equal(hasEvent(events, expected), true);
+}
+
 function assertV1TelemetryEvent(event, expectedRunId) {
   assert.equal(event.schema_version, SCHEMA_VERSION);
   assert.equal(event.run_id, expectedRunId);
@@ -434,6 +438,16 @@ function runTelemetryFixtures() {
     tool_name: 'Bash',
     tool_input: { command: 'rg goldband-review' },
   });
+  runNode(
+    claudeRouter,
+    {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'touch review-mutates.txt' },
+    },
+    {},
+    2,
+  );
   runNode(codexRouter, {
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
@@ -453,6 +467,7 @@ function runTelemetryFixtures() {
     claudeRouter,
     {
       hook_event_name: 'PreToolUse',
+      session_id: 'claude-doc-file-blocker-session',
       tool_name: 'Write',
       tool_input: { file_path: 'scratch.md', content: 'temporary notes' },
     },
@@ -479,24 +494,23 @@ function assertTelemetryEvents() {
   for (const event of events) {
     assertV1TelemetryEvent(event, event.sessionId || 'unknown');
   }
-  assert.equal(
-    hasEvent(events, {
-      category: 'workflow-entry',
-      name: 'goldband-review',
-      confidence: 'confirmed',
-      host: 'claude',
-    }),
-    true,
-  );
-  assert.equal(
-    hasEvent(events, {
-      category: 'workflow-entry',
-      name: 'goldband-investigate',
-      confidence: 'inferred',
-      host: 'claude',
-    }),
-    true,
-  );
+  assertWorkflowTelemetryEvents(events);
+  assertHookTelemetryEvents(events);
+}
+
+function assertWorkflowTelemetryEvents(events) {
+  assertHasEvent(events, {
+    category: 'workflow-entry',
+    name: 'goldband-review',
+    confidence: 'confirmed',
+    host: 'claude',
+  });
+  assertHasEvent(events, {
+    category: 'workflow-entry',
+    name: 'goldband-investigate',
+    confidence: 'inferred',
+    host: 'claude',
+  });
   assert.equal(
     events.filter(
       (event) =>
@@ -506,23 +520,30 @@ function assertTelemetryEvents() {
     ).length,
     1,
   );
-  assert.equal(
-    hasEvent(events, {
-      category: 'workflow-entry',
-      name: 'goldband-cso',
-      confidence: 'confirmed',
-      host: 'codex',
-    }),
-    true,
-  );
-  assert.equal(
-    hasEvent(events, {
-      category: 'hook-decision',
-      name: 'doc-file-blocker',
-      action: 'deny',
-    }),
-    true,
-  );
+  assertHasEvent(events, {
+    category: 'workflow-entry',
+    name: 'goldband-cso',
+    confidence: 'confirmed',
+    host: 'codex',
+  });
+}
+
+function assertHookTelemetryEvents(events) {
+  assertHasEvent(events, {
+    category: 'hook-decision',
+    name: 'review-read-only',
+    action: 'deny',
+  });
+  assertHasEvent(events, {
+    category: 'mode-enforcement',
+    name: 'review-read-only',
+    action: 'block',
+  });
+  assertHasEvent(events, {
+    category: 'hook-decision',
+    name: 'doc-file-blocker',
+    action: 'deny',
+  });
 }
 
 function testTelemetryCapture() {

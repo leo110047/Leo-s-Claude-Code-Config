@@ -33,6 +33,33 @@ run_skill_sync() {
   GOLDBAND_SELF_UPDATE_REPO_DIR="$repo_dir" "$sync_script" || true
 }
 
+run_installed_surface_refresh() {
+  local repo_dir="$1"
+  local old_head="$2"
+  local new_head="$3"
+  local install_script="$repo_dir/install.sh"
+  [ -x "$install_script" ] || return 0
+
+  local state_root log_file tmp_log refresh_status
+  state_root="${GOLDBAND_HOME:-$HOME/.goldband}"
+  mkdir -p "$state_root"
+  log_file="$state_root/last-auto-refresh.log"
+  tmp_log="$log_file.tmp.$$"
+
+  set +e
+  GOLDBAND_AUTO_REFRESH=1 \
+  GOLDBAND_AUTO_REFRESH_OLD_HEAD="$old_head" \
+  GOLDBAND_AUTO_REFRESH_NEW_HEAD="$new_head" \
+    "$install_script" auto-refresh >"$tmp_log" 2>&1
+  refresh_status=$?
+  set -e
+
+  mv "$tmp_log" "$log_file" 2>/dev/null || true
+  if [ "$refresh_status" -ne 0 ]; then
+    printf '[goldband] auto-refresh partially failed; see %s\n' "$log_file" >&2
+  fi
+}
+
 run_git_with_timeout() {
   local repo_dir="$1"
   shift
@@ -125,15 +152,12 @@ main() {
 
   git -C "$repo_dir" rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
-  local branch upstream dirty_status
+  local branch upstream
   branch="$(git -C "$repo_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   upstream="$(git -C "$repo_dir" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
 
   [ "$branch" = "main" ] || exit 0
   [ "$upstream" = "origin/main" ] || exit 0
-
-  dirty_status="$(git -C "$repo_dir" status --porcelain 2>/dev/null || true)"
-  [ -z "$dirty_status" ] || exit 0
 
   run_git_with_timeout "$repo_dir" git fetch --quiet origin main >/dev/null 2>&1 || exit 0
 
@@ -152,7 +176,8 @@ main() {
 
   if [ "$new_head" != "$old_head" ]; then
     run_skill_sync "$repo_dir"
-    printf '[goldband] updated %s -> %s; new sessions will use the latest config.\n' "$old_head" "$new_head" >&2
+    run_installed_surface_refresh "$repo_dir" "$old_head" "$new_head"
+    printf '[goldband] updated %s -> %s; installed settings refreshed when safe.\n' "$old_head" "$new_head" >&2
   fi
 }
 

@@ -117,6 +117,27 @@ function testApprovedWithBlockingFindingEscalates() {
   assert.equal(normalized.blockingCount, 1);
 }
 
+function testReviewerPromptIncludesSharedReviewStandard() {
+  const dir = makeRepo();
+  const stateDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-cross-review-state-'),
+  );
+  const env = envFor(stateDir);
+  createContract(dir, env, 'shared-review-standard');
+  const prompt = core.buildReviewerPrompt(
+    core.readContract('shared-review-standard', env),
+    dir,
+    env,
+  );
+
+  assert.match(prompt, /## Shared Review Standard/);
+  assert.match(prompt, /correctness-contract/);
+  assert.match(prompt, /## Shared Finding Shape/);
+  assert.match(prompt, /suggestedVerification/);
+  assert.match(prompt, /GOLDBAND-CROSS-REVIEW-VERDICT/);
+  assert.match(prompt, /reviewed-sha/);
+}
+
 function testNonZeroReviewerExitEscalates() {
   const dir = makeRepo();
   const stateDir = fs.mkdtempSync(
@@ -313,6 +334,7 @@ function testOnlySlashCommandTriggersCrossReview() {
 testChangesRequestedNeverRewritesToApproved();
 testMissingFindingsLineEscalates();
 testApprovedWithBlockingFindingEscalates();
+testReviewerPromptIncludesSharedReviewStandard();
 testNonZeroReviewerExitEscalates();
 testUntrackedPlanMarkerRoundTripAllows();
 testRoundTwoNewHighCanBlock();

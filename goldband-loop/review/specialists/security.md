@@ -1,9 +1,8 @@
 # Security Specialist Review Checklist
 
 Scope: When SCOPE_AUTH=true OR (SCOPE_BACKEND=true AND diff > 100 lines)
-Output: JSON objects, one finding per line. Schema:
-{"severity":"CRITICAL|INFORMATIONAL","confidence":N,"path":"file","line":N,"category":"security","summary":"...","fix":"...","fingerprint":"path:line:security","specialist":"security"}
-Optional: line, fix, fingerprint, evidence, test_stub.
+Output: JSON objects, one finding per line using `findings-schema.md`.
+Set `category` to `security` and `specialist` to `security`.
 If no findings: output `NO FINDINGS` and nothing else.
 
 ---

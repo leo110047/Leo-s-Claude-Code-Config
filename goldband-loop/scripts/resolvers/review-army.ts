@@ -5,7 +5,7 @@
  * 1. Detect stack and scope (via goldband-diff-scope)
  * 2. Select and dispatch specialist subagents in parallel
  * 3. Collect, parse, merge, and deduplicate JSON findings
- * 4. Feed merged findings into the existing Fix-First pipeline
+ * 4. Feed merged findings into the read-only findings aggregation step
  *
  * Shipped as Release 2 of the self-learning roadmap (SELF_LEARNING_V0.md).
  */
@@ -15,7 +15,7 @@ function generateSpecialistSelection(ctx: TemplateContext): string {
   const isShip = ctx.skillName === 'ship';
   const stepSel = isShip ? '9.1' : '4.5';
   const stepMerge = isShip ? '9.2' : '4.6';
-  const nextStep = isShip ? 'the Fix-First flow (item 4)' : 'Step 5';
+  const nextStep = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
   return `## Step ${stepSel}: Review Army — Specialist Dispatch
 
 ### Detect stack and scope
@@ -35,7 +35,7 @@ DIFF_INS=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ insertion' 
 DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
 DIFF_LINES=$((DIFF_INS + DIFF_DEL))
 echo "DIFF_LINES: $DIFF_LINES"
-# Detect test framework for specialist test stub generation
+# Detect test framework for testing specialist context
 TEST_FW=""
 { [ -f jest.config.ts ] || [ -f jest.config.js ]; } && TEST_FW="jest"
 [ -f vitest.config.ts ] && TEST_FW="vitest"
@@ -108,15 +108,15 @@ If learnings are found, include them: "Past learnings for this domain: {learning
 "You are a specialist code reviewer. Read the checklist below, then run
 \`DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"\` to get the full diff. Apply the checklist against the diff.
 
+This is a read-only specialist review. Do not edit files, apply patches, commit,
+push, or run repair workflows.
+
 For each finding, output a JSON object on its own line:
-{\\"severity\\":\\"CRITICAL|INFORMATIONAL\\",\\"confidence\\":N,\\"path\\":\\"file\\",\\"line\\":N,\\"category\\":\\"category\\",\\"summary\\":\\"description\\",\\"fix\\":\\"recommended fix\\",\\"fingerprint\\":\\"path:line:category\\",\\"specialist\\":\\"name\\"}
+{\\"severity\\":\\"critical|high|medium|low|info\\",\\"confidence\\":N,\\"file\\":\\"file\\",\\"line\\":N,\\"category\\":\\"category\\",\\"summary\\":\\"description\\",\\"failureScenario\\":\\"concrete failure\\",\\"evidence\\":\\"specific evidence\\",\\"recommendation\\":\\"text-only fix recommendation\\",\\"suggestedVerification\\":\\"test/readback/command\\",\\"blocking\\":true,\\"fingerprint\\":\\"file:line:category:failure\\",\\"specialist\\":\\"name\\"}
 
-Required fields: severity, confidence, path, category, summary, specialist.
-Optional: line, fix, fingerprint, evidence, test_stub.
-
-If you can write a test that would catch this issue, include it in the \`test_stub\` field.
-Use the detected test framework ({TEST_FW}). Write a minimal skeleton — describe/it/test
-blocks with clear intent. Skip test_stub for architectural or design-only findings.
+Required fields: severity, confidence, file, category, summary,
+failureScenario, evidence, recommendation, suggestedVerification, blocking,
+specialist. Optional: line, fingerprint.
 
 If no findings: output \`NO FINDINGS\` and nothing else.
 Do not output anything else — no preamble, no summary, no commentary.
@@ -137,9 +137,12 @@ function generateFindingsMerge(ctx: TemplateContext): string {
   const isShip = ctx.skillName === 'ship';
   const stepMerge = isShip ? '9.2' : '4.6';
   const stepSel = isShip ? '9.1' : '4.5';
-  const fixFirstRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 Fix-First';
-  const critPassRef = isShip ? 'the checklist pass (Step 9)' : 'the CRITICAL pass findings from Step 4';
+  const nextStepRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
+  const critPassRef = isShip ? 'the checklist pass (Step 9)' : 'the core pass findings from Step 4';
   const persistRef = isShip ? 'the review-log persist' : 'the review-log entry in Step 5.8';
+  const actionBoundary = isShip
+    ? ''
+    : '\nFor /review, do not auto-fix or ask to fix now.';
   return `### Step ${stepMerge}: Collect and merge findings
 
 After all specialist subagents complete, collect their outputs.
@@ -169,25 +172,27 @@ Group findings by fingerprint. For findings sharing the same fingerprint:
 
 **Compute PR Quality Score:**
 After merging, compute the quality score:
-\`quality_score = max(0, 10 - (critical_count * 2 + informational_count * 0.5))\`
+\`quality_score = max(0, 10 - (blocking_count * 2 + advisory_count * 0.5))\`
 Cap at 10. Log this in the review result at the end.
 
 **Output merged findings:**
 Present the merged findings in the same format as the current review:
 
 \`\`\`
-SPECIALIST REVIEW: N findings (X critical, Y informational) from Z specialists
+SPECIALIST REVIEW: N findings (X blocking, Y advisory) from Z specialists
 
-[For each finding, in order: CRITICAL first, then INFORMATIONAL, sorted by confidence descending]
-[SEVERITY] (confidence: N/10, specialist: name) path:line — summary
-  Fix: recommended fix
+[For each finding, in order: severity descending, then file, then line]
+[severity/blocking|advisory] (confidence: N/10, specialist: name) file:line — summary
+  Failure scenario: concrete failure
+  Evidence: specific evidence
+  Recommendation: text-only recommendation
+  Suggested verification: test/readback/command
   [If MULTI-SPECIALIST CONFIRMED: show confirmation note]
 
 PR Quality Score: X/10
 \`\`\`
 
-These findings flow into ${fixFirstRef} alongside ${critPassRef}.
-The Fix-First heuristic applies identically — specialist findings follow the same AUTO-FIX vs ASK classification.
+These findings flow into ${nextStepRef} alongside ${critPassRef}.${actionBoundary}
 
 **Compile per-specialist stats:**
 After merging findings, compile a \`specialists\` object for ${persistRef}.
@@ -204,7 +209,7 @@ Remember these stats — you will need them for the review-log entry in Step 5.8
 function generateRedTeam(ctx: TemplateContext): string {
   const isShip = ctx.skillName === 'ship';
   const stepMerge = isShip ? '9.2' : '4.6';
-  const fixFirstRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 Fix-First';
+  const nextStepRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
   return `### Red Team dispatch (conditional)
 
 **Activation:** Only if DIFF_LINES > 200 OR any specialist produced a CRITICAL finding.
@@ -224,7 +229,7 @@ concerns, integration boundary issues, and failure modes that specialist checkli
 don't cover."
 
 If the Red Team finds additional issues, merge them into the findings list before
-${fixFirstRef}. Red Team findings are tagged with \`"specialist":"red-team"\`.
+${nextStepRef}. Red Team findings are tagged with \`"specialist":"red-team"\`.
 
 If the Red Team returns NO FINDINGS, note: "Red Team review: no additional issues found."
 If the Red Team subagent fails or times out, skip silently and continue.`;

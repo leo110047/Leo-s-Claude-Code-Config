@@ -841,12 +841,29 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
     expect(shipSkill).toContain('ship-test-plan');
   });
 
-  test('review mode uses Fix-First + Review Army for specialist coverage', () => {
-    expect(reviewSkill).toContain('Fix-First');
-    expect(reviewSkill).toContain('INFORMATIONAL');
+  test('review mode uses read-only findings + Review Army for specialist coverage', () => {
+    expect(reviewSkill).toContain('Read-Only Findings Aggregation');
+    expect(reviewSkill).toContain('Read-Only Pre-Landing PR Review');
+    expect(reviewSkill).not.toContain('[AUTO-FIXED]');
+    expect(reviewSkill).not.toContain('Auto-fix all AUTO-FIX items');
+    expect(reviewSkill).not.toContain('A) Investigate and fix now (recommended)');
+    expect(reviewSkill).not.toContain('If A: address the findings');
+    expect(reviewSkill).toContain('CODEX SAYS (read-only structured review)');
     // Review Army handles test coverage via Testing specialist subagent
     expect(reviewSkill).toContain('Review Army');
     expect(reviewSkill).toContain('Testing');
+  });
+
+  test('review mode frontmatter does not grant Edit or Write tools', () => {
+    const frontmatter = reviewSkill.slice(0, reviewSkill.indexOf('\n---', 4));
+    expect(frontmatter).toContain('allowed-tools:');
+    expect(frontmatter).not.toMatch(/^\s+- Edit$/m);
+    expect(frontmatter).not.toMatch(/^\s+- Write$/m);
+    expect(frontmatter).toMatch(/^\s+- Bash$/m);
+    expect(frontmatter).toMatch(/^\s+- Read$/m);
+    expect(reviewSkill).not.toContain('Prefer Read, Edit, Write');
+    expect(reviewSkill).toContain('Prefer Read, Glob, and Grep');
+    expect(reviewSkill).toContain('This skill is read-only; do not use');
   });
 
   test('plan mode does NOT include ship-specific content', () => {
@@ -1043,9 +1060,9 @@ describe('PLAN_COMPLETION_AUDIT placeholders', () => {
 
   test('review checklist covers correctness, architecture, and risk', () => {
     const checklist = fs.readFileSync(path.join(ROOT, 'review', 'checklist.md'), 'utf-8');
-    expect(checklist).toContain('#### Problem-Fix Correctness');
-    expect(checklist).toContain('#### Architecture & Design Health');
-    expect(checklist).toContain('runtime path users actually invoke');
+    expect(checklist).toContain('### Problem-Fix Correctness');
+    expect(checklist).toContain('### Architecture And Maintainability');
+    expect(checklist).toContain('runtime path users invoke');
     expect(checklist).toContain('Fallbacks that mask broken contracts');
   });
 
@@ -2502,7 +2519,10 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('browse/bin');
     expect(fnBody).toContain('goldband-upgrade/SKILL.md');
     // Review runtime assets (individual files, not the whole dir)
+    expect(fnBody).toContain('shared-rubric.md');
+    expect(fnBody).toContain('findings-schema.md');
     expect(fnBody).toContain('checklist.md');
+    expect(fnBody).toContain('ship-fix-first.md');
     expect(fnBody).toContain('design-checklist.md');
     expect(fnBody).toContain('greptile-triage.md');
     expect(fnBody).toContain('TODOS-format.md');

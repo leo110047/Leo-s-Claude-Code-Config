@@ -362,7 +362,25 @@ describe('host-config-export.ts CLI', () => {
     const lines = stdout.split('\n');
     expect(lines).toContain('bin');
     expect(lines).toContain('ETHOS.md');
+    expect(lines).toContain('review/shared-rubric.md');
+    expect(lines).toContain('review/findings-schema.md');
     expect(lines).toContain('review/checklist.md');
+    expect(lines).toContain('review/ship-fix-first.md');
+    expect(lines).toContain('review/design-checklist.md');
+    expect(lines).toContain('review/greptile-triage.md');
+  });
+
+  test('claude symlinks include shared review runtime assets', () => {
+    const { stdout, exitCode } = run('symlinks', 'claude');
+    expect(exitCode).toBe(0);
+    const lines = stdout.split('\n');
+    expect(lines).toContain('review/shared-rubric.md');
+    expect(lines).toContain('review/findings-schema.md');
+    expect(lines).toContain('review/checklist.md');
+    expect(lines).toContain('review/ship-fix-first.md');
+    expect(lines).toContain('review/design-checklist.md');
+    expect(lines).toContain('review/greptile-triage.md');
+    expect(lines).toContain('review/TODOS-format.md');
   });
 
   test('opencode symlinks returns nested runtime assets', () => {

@@ -894,7 +894,7 @@ create_codex_runtime_root() {
     _materialize_codex_skill_file "$agents_dir/goldband-upgrade/SKILL.md" "$codex_goldband/goldband-upgrade/SKILL.md"
   fi
   # Review runtime assets (individual files, NOT the whole review/ dir which has SKILL.md)
-  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$codex_goldband/review/$f"
     fi
@@ -947,7 +947,7 @@ create_claude_runtime_root() {
   if [ -f "$goldband_dir/goldband-upgrade/SKILL.md" ]; then
     _link_or_copy "$goldband_dir/goldband-upgrade/SKILL.md" "$claude_goldband/goldband-upgrade/SKILL.md"
   fi
-  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
     fi
@@ -989,7 +989,7 @@ create_factory_runtime_root() {
   if [ -f "$factory_dir/goldband-upgrade/SKILL.md" ]; then
     _link_or_copy "$factory_dir/goldband-upgrade/SKILL.md" "$factory_goldband/goldband-upgrade/SKILL.md"
   fi
-  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$factory_goldband/review/$f"
     fi
@@ -1033,7 +1033,7 @@ create_opencode_runtime_root() {
   if [ -f "$opencode_dir/goldband-upgrade/SKILL.md" ]; then
     _link_or_copy "$opencode_dir/goldband-upgrade/SKILL.md" "$opencode_goldband/goldband-upgrade/SKILL.md"
   fi
-  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$opencode_goldband/review/$f"
     fi
@@ -1250,7 +1250,7 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
     _link_or_copy "$AGENTS_DIR/goldband-upgrade/SKILL.md" "$KIRO_GOLDBAND/goldband-upgrade/SKILL.md"
   fi
   # Review runtime assets (individual files, not whole dir)
-  for f in checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$SOURCE_GOLDBAND_DIR/review/$f" ]; then
       _link_or_copy "$SOURCE_GOLDBAND_DIR/review/$f" "$KIRO_GOLDBAND/review/$f"
     fi

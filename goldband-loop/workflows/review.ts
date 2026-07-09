@@ -4,6 +4,11 @@ import { basename, join, relative, resolve } from 'node:path';
 import { adapterFor, workflowLabelFromTemplate } from './host-adapter';
 import { evidencePath, stateRoot } from './evidence';
 import { workflowAssetPath } from './paths';
+import {
+  aggregateReviewFindings,
+  runParallelSpecialistReview,
+  unwrapFindings,
+} from './review-engine';
 import { findingsSchema, normalizeFindings, textSchema } from './schema';
 import type {
   EvaluationSignalSnapshot,
@@ -86,30 +91,56 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   const adapter = adapterFor(reviewHost(ctx));
   const prompt = buildReviewPrompt(ctx, input.diff);
   const result = await adapter.runJson(prompt, findingsEnvelopeJsonSchema);
-  return findingsSchema.validate(unwrapFindings(result.parsed));
+  const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
+  const specialistFindings = await runParallelSpecialistReview(
+    ctx,
+    adapter,
+    input.diff,
+    findingsEnvelopeJsonSchema,
+    ctx.options.specialists ?? 'auto',
+  );
+  return aggregateReviewFindings([...coreFindings, ...specialistFindings]);
 }
 
 function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
-  return normalizeFindings(findingsSchema.validate(ctx.input));
+  return aggregateReviewFindings(normalizeFindings(findingsSchema.validate(ctx.input)));
 }
 
 function verifyFindings(ctx: WorkflowContext): ReviewFinding[] {
-  return findingsSchema.validate(ctx.input).map((finding) => {
+  return aggregateReviewFindings(findingsSchema.validate(ctx.input).map((finding) => {
     if (finding.severity !== 'critical' && finding.severity !== 'high') return finding;
     if (finding.evidence) return finding;
     return downgradeUnverifiedFinding(finding);
-  });
+  }));
 }
 
 function renderReport(ctx: WorkflowContext): string {
   const findings = findingsSchema.validate(ctx.input);
-  const lines = ['# goldband-review runtime report', ''];
+  const lines = [
+    '# goldband-review runtime report',
+    '',
+    'Read-only review: no files were modified.',
+    '',
+  ];
   if (findings.length === 0) {
     lines.push('No findings.');
   } else {
     for (const finding of findings) {
       const loc = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-      lines.push(`- [${finding.severity}] ${loc} - ${finding.summary}`);
+      const mode = finding.blocking ? 'blocking' : 'advisory';
+      const category = finding.category ? ` ${finding.category}` : '';
+      const specialists = finding.contributingSpecialists?.length
+        ? ` specialists=${finding.contributingSpecialists.join(',')}`
+        : finding.specialist
+          ? ` specialist=${finding.specialist}`
+          : '';
+      lines.push(`- [${finding.severity}/${mode}${category}] ${loc} - ${finding.summary}${specialists}`);
+      if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
+      if (finding.failureScenario) lines.push(`  Failure scenario: ${finding.failureScenario}`);
+      if (finding.recommendation) lines.push(`  Recommendation: ${finding.recommendation}`);
+      if (finding.suggestedVerification) {
+        lines.push(`  Suggested verification: ${finding.suggestedVerification}`);
+      }
     }
   }
   const report = `${lines.join('\n')}\n`;
@@ -253,6 +284,7 @@ function downgradeUnverifiedFinding(finding: ReviewFinding): ReviewFinding {
     severity: 'info',
     summary: `[unverified ${finding.severity}] ${finding.summary}`,
     evidence: 'High-severity finding lacked concrete diff evidence during runtime verification.',
+    blocking: false,
   };
 }
 
@@ -268,12 +300,20 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
   return [
     `${label}`,
     reviewIterationPromptContext(ctx),
+    readReviewAsset('shared-rubric.md'),
+    readReviewAsset('findings-schema.md'),
     'Return only JSON matching the provided findings schema.',
+    'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
     'Review this diff for concrete, evidence-backed issues.',
+    'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
     'DIFF_START',
     diff,
     'DIFF_END',
   ].join('\n');
+}
+
+function readReviewAsset(name: string): string {
+  return readFileSync(workflowAssetPath(`review/${name}`), 'utf8');
 }
 
 function reviewIterationPromptContext(ctx: WorkflowContext): string {
@@ -289,13 +329,14 @@ function reviewIterationPromptContext(ctx: WorkflowContext): string {
 }
 
 function reviewFindingsSignal(findings: ReviewFinding[]): EvaluationSignalSnapshot {
+  const blockingFindings = findings.filter((finding) => finding.category !== 'specialist-skipped');
   const severityCounts = emptySeverityCounts();
-  for (const finding of findings) severityCounts[finding.severity] += 1;
+  for (const finding of blockingFindings) severityCounts[finding.severity] += 1;
   return {
     kind: 'review-findings',
-    findingCount: findings.length,
+    findingCount: blockingFindings.length,
     severityCounts,
-    blockerKey: findings.length > 0 ? findings.map(findingKey).sort().join('|') : undefined,
+    blockerKey: blockingFindings.length > 0 ? blockingFindings.map(findingKey).sort().join('|') : undefined,
   };
 }
 
@@ -373,8 +414,30 @@ const findingsJsonSchema = {
       summary: { type: 'string' },
       evidence: { type: ['string', 'null'] },
       recommendation: { type: ['string', 'null'] },
+      category: { type: ['string', 'null'] },
+      failureScenario: { type: ['string', 'null'] },
+      suggestedVerification: { type: ['string', 'null'] },
+      blocking: { type: ['boolean', 'null'] },
+      specialist: { type: ['string', 'null'] },
+      contributingSpecialists: {
+        type: ['array', 'null'],
+        items: { type: 'string' },
+      },
     },
-    required: ['file', 'line', 'severity', 'summary', 'evidence', 'recommendation'],
+    required: [
+      'file',
+      'line',
+      'severity',
+      'summary',
+      'evidence',
+      'recommendation',
+      'category',
+      'failureScenario',
+      'suggestedVerification',
+      'blocking',
+      'specialist',
+      'contributingSpecialists',
+    ],
     additionalProperties: false,
   },
 };
@@ -387,9 +450,3 @@ const findingsEnvelopeJsonSchema = {
   required: ['findings'],
   additionalProperties: false,
 };
-
-function unwrapFindings(value: unknown): unknown {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== 'object') return value;
-  return (value as { findings?: unknown }).findings;
-}

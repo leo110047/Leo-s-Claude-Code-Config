@@ -90,6 +90,9 @@ jobs:
       - name: Test eval budget cap checker
         run: npm run test:eval-budget-cap
 
+      - name: Test auto-update installer refresh
+        run: npm run test:auto-update
+
       - name: Test goldband MCP server
         run: |
           npm ci --prefix mcp/server
