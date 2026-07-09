@@ -302,20 +302,90 @@ if [ "$INSTALL_CODEX" -eq 1 ]; then
   migrate_direct_codex_install "$SOURCE_GOLDBAND_DIR" "$CODEX_GOLDBAND"
 fi
 
+PLAYWRIGHT_LAST_ERROR_LOG=""
+
 ensure_playwright_browser() {
+  local log_file
+  log_file="$(mktemp "${TMPDIR:-/tmp}/goldband-playwright-check.XXXXXX")"
+
   if [ "$IS_WINDOWS" -eq 1 ]; then
     # On Windows, Bun can't launch Chromium due to broken pipe handling
     # (oven-sh/bun#4253). Use Node.js to verify Chromium works instead.
-    (
+    if (
       cd "$SOURCE_GOLDBAND_DIR"
       node -e "const { chromium } = require('playwright'); (async () => { const executablePath = process.env.GOLDBAND_CHROMIUM_PATH || undefined; const b = await chromium.launch(executablePath ? { executablePath } : {}); await b.close(); })()" 2>/dev/null
-    )
+    ) >"$log_file" 2>&1; then
+      rm -f "$log_file"
+      PLAYWRIGHT_LAST_ERROR_LOG=""
+      return 0
+    fi
   else
-    (
+    if (
       cd "$SOURCE_GOLDBAND_DIR"
       bun --eval 'import { chromium } from "playwright"; const executablePath = process.env.GOLDBAND_CHROMIUM_PATH || undefined; const browser = await chromium.launch(executablePath ? { executablePath } : {}); await browser.close();'
-    ) >/dev/null 2>&1
+    ) >"$log_file" 2>&1; then
+      rm -f "$log_file"
+      PLAYWRIGHT_LAST_ERROR_LOG=""
+      return 0
+    fi
   fi
+
+  PLAYWRIGHT_LAST_ERROR_LOG="$log_file"
+  return 1
+}
+
+playwright_error_matches() {
+  local pattern="$1"
+  [ -n "$PLAYWRIGHT_LAST_ERROR_LOG" ] || return 1
+  [ -f "$PLAYWRIGHT_LAST_ERROR_LOG" ] || return 1
+  grep -Eiq "$pattern" "$PLAYWRIGHT_LAST_ERROR_LOG"
+}
+
+playwright_failure_indicates_environment_block() {
+  playwright_error_matches 'Permission denied|Operation not permitted|MachPortRendezvousServer|bootstrap_check_in|EPERM|EACCES'
+}
+
+playwright_browser_cache_dir() {
+  if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+    printf '%s\n' "$PLAYWRIGHT_BROWSERS_PATH"
+    return 0
+  fi
+
+  case "$(uname -s)" in
+    Darwin) printf '%s\n' "$HOME/Library/Caches/ms-playwright" ;;
+    *) printf '%s\n' "${XDG_CACHE_HOME:-$HOME/.cache}/ms-playwright" ;;
+  esac
+}
+
+playwright_browser_cache_writable() {
+  local cache_dir
+  local probe
+  cache_dir="$(playwright_browser_cache_dir)"
+  probe="$cache_dir/.goldband-write-test.$$"
+
+  mkdir -p "$cache_dir" 2>/dev/null || return 1
+  if : >"$probe" 2>/dev/null; then
+    rm -f "$probe" 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+
+handle_playwright_unavailable_without_install() {
+  local reason="$1"
+
+  PLAYWRIGHT_READY=0
+  if playwright_required; then
+    echo "goldband setup failed: $reason" >&2
+    echo "  Playwright Chromium install was not attempted because this environment cannot run or update the browser runtime safely." >&2
+    echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
+    echo "  To make browser workflows optional in this environment: GOLDBAND_REQUIRE_PLAYWRIGHT=0 ./setup --host $HOST --prefix" >&2
+    return 1
+  fi
+
+  echo "warning: $reason" >&2
+  echo "warning: continuing without browser runtime because GOLDBAND_REQUIRE_PLAYWRIGHT=0" >&2
+  return 0
 }
 
 prepare_bun_for_windows_compile() {
@@ -492,23 +562,29 @@ if [ "${GOLDBAND_SKIP_PLAYWRIGHT:-0}" = "1" ]; then
   PLAYWRIGHT_READY=0
   log "Skipping Playwright Chromium install (GOLDBAND_SKIP_PLAYWRIGHT=1). Browser workflows will be unavailable until Chromium is installed."
 elif ! ensure_playwright_browser; then
-  echo "Installing Playwright Chromium..."
-  PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS="${GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS:-300}"
-  (
-    cd "$SOURCE_GOLDBAND_DIR"
-    run_with_timeout "$PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS" bunx playwright install chromium
-  ) || {
-    if playwright_required; then
-      echo "goldband setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
+  if playwright_failure_indicates_environment_block; then
+    handle_playwright_unavailable_without_install "Playwright Chromium launch was blocked by the current environment or sandbox" || exit 1
+  elif ! playwright_browser_cache_writable; then
+    handle_playwright_unavailable_without_install "Playwright browser cache is not writable: $(playwright_browser_cache_dir)" || exit 1
+  else
+    echo "Installing Playwright Chromium..."
+    PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS="${GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS:-300}"
+    (
+      cd "$SOURCE_GOLDBAND_DIR"
+      run_with_timeout "$PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS" bunx playwright install chromium
+    ) || {
+      if playwright_required; then
+        echo "goldband setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
+        echo "  Re-run manually for details: cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium" >&2
+        echo "  Or increase the timeout: GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
+        echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
+        exit 1
+      fi
+      PLAYWRIGHT_READY=0
+      echo "warning: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s; continuing without browser runtime" >&2
       echo "  Re-run manually for details: cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium" >&2
-      echo "  Or increase the timeout: GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
-      echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
-      exit 1
-    fi
-    PLAYWRIGHT_READY=0
-    echo "warning: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s; continuing without browser runtime" >&2
-    echo "  Re-run manually for details: cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium" >&2
-  }
+    }
+  fi
 
   if [ "$PLAYWRIGHT_READY" -eq 1 ] && [ "$IS_WINDOWS" -eq 1 ]; then
     # On Windows, Node.js launches Chromium (not Bun — see oven-sh/bun#4253).

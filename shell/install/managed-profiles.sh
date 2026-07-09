@@ -171,7 +171,7 @@ install_selected_profile_skills() {
             echo -e "  ${YELLOW}[跳過] ${missing_label} 不存在: $skill${NC}" >&2
             continue
         fi
-        link_skill_entry "$src" "$dest"
+        link_skill_entry "$src" "$dest" || return 1
         installed=$((installed + 1))
     done
     SELECTED_PROFILE_SKILLS_INSTALLED="$installed"
@@ -184,7 +184,7 @@ install_profile_extra_links() {
     for link_spec in "$@"; do
         local extra_src="${link_spec%%:*}"
         local extra_dest_name="${link_spec##*:}"
-        link_skill_entry "$extra_src" "$target_dir/$extra_dest_name"
+        link_skill_entry "$extra_src" "$target_dir/$extra_dest_name" || return 1
     done
 }
 

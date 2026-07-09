@@ -184,7 +184,7 @@ link_codex_rule_file() {
         return
     fi
 
-    create_repo_link "$src" "$dest"
+    create_repo_link "$src" "$dest" || return 1
     if [ "$CREATE_REPO_LINK_MODE" = "copy" ]; then
         echo -e "  ${YELLOW}[安裝 (copy fallback)] $label — 此環境無法建立檔案 symlink${NC}"
     else

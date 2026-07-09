@@ -27,7 +27,7 @@ link_component() {
     fi
 
     mkdir -p "$(dirname "$dest")"
-    create_repo_link "$src" "$dest"
+    create_repo_link "$src" "$dest" || return 1
     if [ "$CREATE_REPO_LINK_MODE" = "copy" ]; then
         echo -e "  ${YELLOW}[安裝 (copy fallback)] $name — 此環境無法建立檔案 symlink${NC}"
     else
@@ -40,6 +40,10 @@ create_repo_link() {
     local dest="$2"
     CREATE_REPO_LINK_MODE=""
 
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        rm -rf "$dest" || return 1
+    fi
+
     ln -s "$src" "$dest" 2>/dev/null || true
     if repo_link_points_to "$dest" "$src"; then
         CREATE_REPO_LINK_MODE="link"
@@ -47,7 +51,7 @@ create_repo_link() {
     fi
 
     if [ -e "$dest" ] || [ -L "$dest" ]; then
-        rm -rf "$dest"
+        rm -rf "$dest" || return 1
     fi
 
     if [ -d "$src" ] && create_windows_directory_junction "$src" "$dest"; then
@@ -55,13 +59,13 @@ create_repo_link() {
             CREATE_REPO_LINK_MODE="link"
             return 0
         fi
-        rm -rf "$dest"
+        rm -rf "$dest" || return 1
     fi
 
     if [ -d "$src" ]; then
-        cp -R "$src" "$dest"
+        cp -R "$src" "$dest" || return 1
     else
-        cp "$src" "$dest"
+        cp "$src" "$dest" || return 1
     fi
     CREATE_REPO_LINK_MODE="copy"
 }
@@ -377,12 +381,12 @@ link_skill_entry() {
     local dest="$2"
 
     if [ -L "$dest" ]; then
-        rm "$dest"
+        rm "$dest" || return 1
     elif [ -e "$dest" ]; then
-        backup_existing_path "$dest"
+        backup_existing_path "$dest" || return 1
     fi
 
-    create_repo_link "$source" "$dest"
+    create_repo_link "$source" "$dest" || return 1
 }
 
 write_skill_profile_file() {

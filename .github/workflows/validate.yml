@@ -158,8 +158,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
       - name: Show Bash version
         run: bash --version
+
+      - name: Install Goldband Loop dependencies
+        run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Test Goldband Loop Playwright setup behavior on macOS
+        run: bash scripts/test-goldband-loop-playwright-setup.sh
 
       - name: Test workflow installer integration on macOS Bash
         run: bash scripts/test-workflow-integration.sh

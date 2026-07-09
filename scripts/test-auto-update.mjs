@@ -35,6 +35,50 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+function testSkillLinkStopsAfterSymlinkRemoveFailure() {
+  const work = makeTempDir('goldband-skill-link-denied');
+  const source = path.join(
+    work,
+    'repo',
+    'skills',
+    'global',
+    'evidence-based-coding',
+  );
+  const targetDir = path.join(work, 'home', '.claude', 'skills');
+  const dest = path.join(targetDir, 'evidence-based-coding');
+  const polluted = path.join(source, 'evidence-based-coding');
+
+  fs.mkdirSync(source, { recursive: true });
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(source, 'SKILL.md'),
+    'name: evidence-based-coding\n',
+  );
+  fs.symlinkSync(source, dest);
+
+  const script = `
+set -euo pipefail
+source ${JSON.stringify(path.join(root, 'shell', 'install', 'common.sh'))}
+rm() {
+  if [ "$#" -eq 1 ] && [ "$1" = ${JSON.stringify(dest)} ]; then
+    echo "rm denied for $1" >&2
+    return 1
+  fi
+  command rm "$@"
+}
+if link_skill_entry ${JSON.stringify(source)} ${JSON.stringify(dest)}; then
+  echo "link_skill_entry unexpectedly succeeded" >&2
+  exit 1
+fi
+if [ -e ${JSON.stringify(polluted)} ] || [ -L ${JSON.stringify(polluted)} ]; then
+  echo "source skill directory was polluted by a nested symlink" >&2
+  exit 1
+fi
+`;
+
+  run('bash', ['-lc', script]);
+}
+
 function testInstallStateAndAutoRefresh() {
   const home = makeTempDir('goldband-auto-update-home');
   const env = {
@@ -223,6 +267,7 @@ function testSelfUpdateDirtyTrackedConflictSkipsRefresh() {
   );
 }
 
+testSkillLinkStopsAfterSymlinkRemoveFailure();
 testInstallStateAndAutoRefresh();
 testSelfUpdateDirtyFastForward();
 testSelfUpdateDirtyTrackedConflictSkipsRefresh();
