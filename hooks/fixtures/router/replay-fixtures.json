@@ -56,6 +56,35 @@
     }
   },
   {
+    "id": "lifecycle-session-start-context-restore",
+    "coverage": {
+      "category": "lifecycle-policy",
+      "policy": "session-start-context-restore",
+      "expectedDecision": "allow",
+      "variant": "positive",
+      "regressionSource": "session-start-output-json"
+    },
+    "env": {
+      "GOLDBAND_DATA_DIR": "__RUN_TMP__/lifecycle-data"
+    },
+    "input": {
+      "hook_event_name": "SessionStart",
+      "session_id": "lifecycle-session-start-context-restore-__ITERATION__"
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow",
+      "stdoutIncludes": [
+        "hookSpecificOutput",
+        "SessionStart",
+        "context-restore"
+      ],
+      "stderrIncludes": [
+        "SessionStart"
+      ]
+    }
+  },
+  {
     "id": "pretool-allow-normal-edit",
     "coverage": {
       "category": "router-smoke",
