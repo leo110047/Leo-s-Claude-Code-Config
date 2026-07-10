@@ -5,14 +5,15 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   '..',
 );
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  const result = spawnSync(resolveCommand(command), args, {
     cwd: options.cwd || root,
     env: { ...process.env, ...(options.env || {}) },
     encoding: 'utf8',
@@ -25,6 +26,18 @@ function run(command, args, options = {}) {
     [command, ...args, result.stdout, result.stderr].join('\n'),
   );
   return result;
+}
+
+function resolveCommand(command) {
+  if (process.platform !== 'win32' || command !== 'bash') {
+    return command;
+  }
+  const candidates = [
+    process.env.GOLDBAND_TEST_BASH,
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || command;
 }
 
 function makeTempDir(name) {
@@ -54,7 +67,7 @@ function testSkillLinkStopsAfterSymlinkRemoveFailure() {
     path.join(source, 'SKILL.md'),
     'name: evidence-based-coding\n',
   );
-  fs.symlinkSync(source, dest);
+  fs.symlinkSync(source, dest, process.platform === 'win32' ? 'junction' : 'dir');
 
   const script = `
 set -euo pipefail
@@ -134,6 +147,86 @@ function testInstallStateAndAutoRefresh() {
     /auto-update tracked targets: codex-prompts, hooks, rules, codex-hooks, codex-rules, codex-requirements/,
   );
   assert.match(status.stdout, /last auto-refresh: success/);
+}
+
+function testWindowsRequirementsDefaultPath() {
+  const home = makeTempDir('goldband-windows-requirements-home');
+  const programData = path.join(home, 'ProgramData');
+  const env = {
+    HOME: home,
+    ProgramData: programData,
+    GOLDBAND_TEST_WINDOWS_HOST: '1',
+  };
+
+  run('bash', ['./install.sh', 'codex-requirements'], { env });
+
+  const requirements = path.join(
+    programData,
+    'OpenAI',
+    'Codex',
+    'requirements.toml',
+  );
+  assert.equal(fs.existsSync(requirements), true);
+  assert.equal(
+    fs.readFileSync(requirements, 'utf8'),
+    fs.readFileSync(path.join(root, 'codex', 'requirements.toml'), 'utf8'),
+  );
+
+  const status = run('bash', ['./install.sh', 'status'], { env });
+  assert.match(status.stdout, /codex requirements -> .*ProgramData.*requirements\.toml/);
+}
+
+function testRetiredWindowsLauncherCleanup() {
+  const home = makeTempDir('goldband-windows-launchers-home');
+  const env = {
+    HOME: home,
+    GOLDBAND_TEST_WINDOWS_HOST: '1',
+  };
+  const claude = path.join(home, '.claude');
+  const staleUpdate = path.join(claude, 'bin', 'goldband-self-update.ps1');
+  const staleLaunchers = path.join(claude, 'shell', 'goldband-launchers.ps1');
+  const staleState = path.join(claude, '.goldband-windows-state.json');
+  const psProfile = path.join(
+    home,
+    'Documents',
+    'PowerShell',
+    'Microsoft.PowerShell_profile.ps1',
+  );
+  const windowsPsProfile = path.join(
+    home,
+    'Documents',
+    'WindowsPowerShell',
+    'Microsoft.PowerShell_profile.ps1',
+  );
+  const profileBlock = [
+    '# >>> goldband powershell launchers >>>',
+    'if (Test-Path "$HOME/.claude/shell/goldband-launchers.ps1") {',
+    '    . "$HOME/.claude/shell/goldband-launchers.ps1"',
+    '}',
+    '# <<< goldband powershell launchers <<<',
+    '',
+  ].join('\n');
+
+  fs.mkdirSync(path.dirname(staleUpdate), { recursive: true });
+  fs.mkdirSync(path.dirname(staleLaunchers), { recursive: true });
+  fs.mkdirSync(path.dirname(psProfile), { recursive: true });
+  fs.mkdirSync(path.dirname(windowsPsProfile), { recursive: true });
+  fs.writeFileSync(staleUpdate, 'old update\n');
+  fs.writeFileSync(staleLaunchers, 'old launchers\n');
+  fs.writeFileSync(staleState, '{}\n');
+  fs.writeFileSync(psProfile, `${profileBlock}Write-Output keep\n`);
+  fs.writeFileSync(windowsPsProfile, `${profileBlock}Write-Output keep\n`);
+
+  run('bash', ['./install.sh', 'launchers'], { env });
+
+  assert.equal(fs.existsSync(staleUpdate), false);
+  assert.equal(fs.existsSync(staleLaunchers), false);
+  assert.equal(fs.existsSync(staleState), false);
+  assert.equal(fs.readdirSync(path.dirname(staleUpdate)).some((name) => name.startsWith('goldband-self-update.ps1.bak.')), true);
+  assert.equal(fs.readdirSync(path.dirname(staleLaunchers)).some((name) => name.startsWith('goldband-launchers.ps1.bak.')), true);
+  assert.equal(fs.readdirSync(claude).some((name) => name.startsWith('.goldband-windows-state.json.bak.')), true);
+  assert.equal(fs.readFileSync(psProfile, 'utf8').includes('goldband-launchers.ps1'), false);
+  assert.equal(fs.readFileSync(windowsPsProfile, 'utf8').includes('goldband-launchers.ps1'), false);
 }
 
 function writeAutoRefreshTargets(stateFile, state) {
@@ -269,6 +362,8 @@ function testSelfUpdateDirtyTrackedConflictSkipsRefresh() {
 
 testSkillLinkStopsAfterSymlinkRemoveFailure();
 testInstallStateAndAutoRefresh();
+testWindowsRequirementsDefaultPath();
+testRetiredWindowsLauncherCleanup();
 testSelfUpdateDirtyFastForward();
 testSelfUpdateDirtyTrackedConflictSkipsRefresh();
 console.log('[OK] auto-update installer refresh tests passed');

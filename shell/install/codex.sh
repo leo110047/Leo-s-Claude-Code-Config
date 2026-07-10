@@ -127,6 +127,10 @@ install_codex_requirements_file() {
         fi
         cp "$src" "$dest"
         chmod 0644 "$dest"
+    elif is_windows_host; then
+        echo -e "  ${RED}[錯誤] Codex requirements 需要可寫入的 Windows managed path:${NC} $dest" >&2
+        echo -e "  ${CYAN}  請用系統管理員權限建立此目錄並複製 codex/requirements.toml，或用 CODEX_REQUIREMENTS_FILE 指到可寫入的測試路徑。${NC}" >&2
+        return 1
     else
         sudo mkdir -p "$dest_dir"
         if sudo test -e "$dest" && ! sudo cmp -s "$src" "$dest"; then

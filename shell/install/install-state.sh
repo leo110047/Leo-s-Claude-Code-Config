@@ -9,6 +9,16 @@ install_state_dir() {
     dirname "$(install_state_file)"
 }
 
+install_state_python_available() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 -c 'import json' >/dev/null 2>&1
+}
+
+install_state_node_available() {
+    command -v node >/dev/null 2>&1 || return 1
+    node -e 'JSON.parse("{}")' >/dev/null 2>&1
+}
+
 normalize_install_target() {
     case "$1" in
         help|-h|--help|status|auto-refresh)
@@ -65,7 +75,7 @@ install_state_targets() {
     state_file="$(install_state_file)"
     [ -f "$state_file" ] || return 0
 
-    if command -v python3 >/dev/null 2>&1; then
+    if install_state_python_available; then
         python3 - "$state_file" <<'PY'
 import json
 import sys
@@ -80,6 +90,18 @@ for target in data.get("targets", []):
     if isinstance(target, str) and target:
         print(target)
 PY
+        return 0
+    fi
+
+    if install_state_node_available; then
+        node -e '
+const fs = require("fs");
+let data = {};
+try { data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch {}
+for (const target of data.targets || []) {
+  if (typeof target === "string" && target) console.log(target);
+}
+' "$state_file"
         return 0
     fi
 
@@ -101,12 +123,12 @@ install_state_write() {
     state_dir="$(dirname "$state_file")"
     mkdir -p "$state_dir"
 
-    if command -v python3 >/dev/null 2>&1; then
+    if install_state_python_available; then
         install_state_write_python "$state_file" "$refresh_status" "$refresh_old" "$refresh_new" "$refresh_message" "${targets[@]}"
         return 0
     fi
 
-    install_state_write_fallback "$state_file" "${targets[@]}"
+    install_state_write_fallback "$state_file" "$refresh_status" "$refresh_old" "$refresh_new" "$refresh_message" "${targets[@]}"
 }
 
 install_state_write_python() {
@@ -158,12 +180,18 @@ PY
 
 install_state_write_fallback() {
     local state_file="$1"
+    local refresh_status="$2"
+    local refresh_old="$3"
+    local refresh_new="$4"
+    local refresh_message="$5"
     local tmp_file="${state_file}.tmp.$$"
-    shift
+    shift 5
+    local updated_at
+    updated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     {
         printf '{\n'
         printf '  "version": 1,\n'
-        printf '  "updatedAt": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf '  "updatedAt": "%s",\n' "$updated_at"
         printf '  "repo": "%s",\n' "$(printf '%s' "$REPO_DIR" | sed 's/\\/\\\\/g; s/"/\\"/g')"
         printf '  "targets": ['
         local first=true target
@@ -176,10 +204,46 @@ install_state_write_fallback() {
             fi
             printf '"%s"' "$target"
         done
-        printf ']\n'
+        printf ']'
+        if [ -n "$refresh_status" ]; then
+            printf ',\n'
+            printf '  "lastAutoRefresh": {\n'
+            printf '    "status": "%s",\n' "$(json_escape_string "$refresh_status")"
+            printf '    "updatedAt": "%s",\n' "$updated_at"
+            printf '    "oldHead": %s,\n' "$(json_nullable_string "$refresh_old")"
+            printf '    "newHead": %s,\n' "$(json_nullable_string "$refresh_new")"
+            printf '    "message": %s,\n' "$(json_nullable_string "$refresh_message")"
+            printf '    "targets": ['
+            first=true
+            for target in "$@"; do
+                [ -n "$target" ] || continue
+                if $first; then
+                    first=false
+                else
+                    printf ', '
+                fi
+                printf '"%s"' "$(json_escape_string "$target")"
+            done
+            printf ']\n'
+            printf '  }\n'
+        else
+            printf '\n'
+        fi
         printf '}\n'
     } > "$tmp_file"
     mv "$tmp_file" "$state_file"
+}
+
+json_escape_string() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+json_nullable_string() {
+    if [ -z "$1" ]; then
+        printf 'null'
+    else
+        printf '"%s"' "$(json_escape_string "$1")"
+    fi
 }
 
 record_installed_target() {
@@ -344,7 +408,7 @@ show_auto_update_status() {
         return 0
     fi
 
-    if command -v python3 >/dev/null 2>&1; then
+    if install_state_python_available; then
         python3 - "$state_file" <<'PY'
 import json
 import sys
@@ -367,6 +431,25 @@ if isinstance(last, dict):
     if message:
         print(f"    {message}")
 PY
+        return 0
+    fi
+
+    if install_state_node_available; then
+        node -e '
+const fs = require("fs");
+let data = {};
+try { data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (error) {
+  console.log(`  [警告] auto-update install-state 無法讀取: ${error.message}`);
+  process.exit(0);
+}
+const targets = (data.targets || []).join(", ") || "none";
+console.log(`  [OK] auto-update tracked targets: ${targets}`);
+const last = data.lastAutoRefresh;
+if (last && typeof last === "object") {
+  console.log(`  [OK] last auto-refresh: ${last.status || "unknown"} at ${last.updatedAt || "unknown time"}`);
+  if (last.message) console.log(`    ${last.message}`);
+}
+' "$state_file"
         return 0
     fi
 

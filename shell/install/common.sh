@@ -140,6 +140,14 @@ join_by_comma() {
     echo "$*"
 }
 
+is_windows_host() {
+    [ "${GOLDBAND_TEST_WINDOWS_HOST:-0}" = "1" ] && return 0
+    case "$(uname -s 2>/dev/null || true)" in
+        MINGW*|MSYS*|CYGWIN*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 dedupe_skill_list() {
     local seen=" "
     local output=()
@@ -354,6 +362,12 @@ backup_existing_path() {
     local backup_path="${path}.bak.$(timestamp_suffix)"
     mv "$path" "$backup_path"
     echo -e "  ${YELLOW}[備份] $(basename "$path") -> $backup_path${NC}"
+}
+
+backup_or_remove_existing_path() {
+    local path="$1"
+    [ -e "$path" ] || [ -L "$path" ] || return 0
+    backup_existing_path "$path"
 }
 
 prepare_skills_directory() {
