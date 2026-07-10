@@ -7,10 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-);
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function run(command, args, options = {}) {
   const result = spawnSync(resolveCommand(command), args, {
@@ -67,7 +64,11 @@ function testSkillLinkStopsAfterSymlinkRemoveFailure() {
     path.join(source, 'SKILL.md'),
     'name: evidence-based-coding\n',
   );
-  fs.symlinkSync(source, dest, process.platform === 'win32' ? 'junction' : 'dir');
+  fs.symlinkSync(
+    source,
+    dest,
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
 
   const script = `
 set -euo pipefail
@@ -173,7 +174,10 @@ function testWindowsRequirementsDefaultPath() {
   );
 
   const status = run('bash', ['./install.sh', 'status'], { env });
-  assert.match(status.stdout, /codex requirements -> .*ProgramData.*requirements\.toml/);
+  assert.match(
+    status.stdout,
+    /codex requirements -> .*ProgramData.*requirements\.toml/,
+  );
 }
 
 function testRetiredWindowsLauncherCleanup() {
@@ -219,14 +223,56 @@ function testRetiredWindowsLauncherCleanup() {
 
   run('bash', ['./install.sh', 'launchers'], { env });
 
+  assertRetiredWindowsLaunchersRemoved({
+    claude,
+    psProfile,
+    staleLaunchers,
+    staleState,
+    staleUpdate,
+    windowsPsProfile,
+  });
+}
+
+function assertRetiredWindowsLaunchersRemoved(paths) {
+  const {
+    claude,
+    psProfile,
+    staleLaunchers,
+    staleState,
+    staleUpdate,
+    windowsPsProfile,
+  } = paths;
   assert.equal(fs.existsSync(staleUpdate), false);
   assert.equal(fs.existsSync(staleLaunchers), false);
   assert.equal(fs.existsSync(staleState), false);
-  assert.equal(fs.readdirSync(path.dirname(staleUpdate)).some((name) => name.startsWith('goldband-self-update.ps1.bak.')), true);
-  assert.equal(fs.readdirSync(path.dirname(staleLaunchers)).some((name) => name.startsWith('goldband-launchers.ps1.bak.')), true);
-  assert.equal(fs.readdirSync(claude).some((name) => name.startsWith('.goldband-windows-state.json.bak.')), true);
-  assert.equal(fs.readFileSync(psProfile, 'utf8').includes('goldband-launchers.ps1'), false);
-  assert.equal(fs.readFileSync(windowsPsProfile, 'utf8').includes('goldband-launchers.ps1'), false);
+  assert.equal(
+    fs
+      .readdirSync(path.dirname(staleUpdate))
+      .some((name) => name.startsWith('goldband-self-update.ps1.bak.')),
+    true,
+  );
+  assert.equal(
+    fs
+      .readdirSync(path.dirname(staleLaunchers))
+      .some((name) => name.startsWith('goldband-launchers.ps1.bak.')),
+    true,
+  );
+  assert.equal(
+    fs
+      .readdirSync(claude)
+      .some((name) => name.startsWith('.goldband-windows-state.json.bak.')),
+    true,
+  );
+  assert.equal(
+    fs.readFileSync(psProfile, 'utf8').includes('goldband-launchers.ps1'),
+    false,
+  );
+  assert.equal(
+    fs
+      .readFileSync(windowsPsProfile, 'utf8')
+      .includes('goldband-launchers.ps1'),
+    false,
+  );
 }
 
 function writeAutoRefreshTargets(stateFile, state) {

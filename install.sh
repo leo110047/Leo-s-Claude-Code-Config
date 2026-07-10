@@ -34,6 +34,8 @@ if [ -z "${CODEX_REQUIREMENTS_FILE+x}" ]; then
             _goldband_program_data="${ProgramData:-${PROGRAMDATA:-C:\\ProgramData}}"
             if command -v cygpath >/dev/null 2>&1; then
                 CODEX_REQUIREMENTS_FILE="$(cygpath -u "$_goldband_program_data")/OpenAI/Codex/requirements.toml"
+            elif [ "${_goldband_program_data#/}" != "$_goldband_program_data" ]; then
+                CODEX_REQUIREMENTS_FILE="${_goldband_program_data%/}/OpenAI/Codex/requirements.toml"
             else
                 CODEX_REQUIREMENTS_FILE="/c/ProgramData/OpenAI/Codex/requirements.toml"
             fi
