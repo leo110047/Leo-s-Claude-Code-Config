@@ -165,12 +165,13 @@ On Windows, use Git Bash or WSL. Native PowerShell install, status, uninstall,
 and self-update wrappers are retired. If an older install left
 `~/.claude/bin/goldband-self-update.ps1`,
 `~/.claude/shell/goldband-launchers.ps1`, or
-`~/.claude/.goldband-windows-state.json`, remove those stale files manually.
+`~/.claude/.goldband-windows-state.json`, rerun `./install.sh launchers` from
+Git Bash to back up the stale files and remove the old PowerShell profile block.
 
-`./install.sh codex-requirements` manages the POSIX system path
-`/etc/codex/requirements.toml`. Native Windows managed requirements must be
-installed by an administrator or managed policy at
-`%ProgramData%\OpenAI\Codex\requirements.toml`; goldband does not stage
+`./install.sh codex-requirements` manages `/etc/codex/requirements.toml` on
+POSIX hosts and `%ProgramData%\OpenAI\Codex\requirements.toml` when run from
+Git Bash on Windows. Native Windows managed requirements may still require an
+administrator or managed policy. goldband does not stage
 `~/.codex/requirements.toml` as a Windows enforcement path.
 
 ## Goldband Telemetry

@@ -96,12 +96,20 @@ function writeLogs(lines) {
   }
 }
 
-function writeOutput(rawInput, outputJson) {
-  if (outputJson && typeof outputJson === 'object') {
-    process.stdout.write(JSON.stringify(outputJson));
+function writeOutput(outputJson) {
+  if (outputJson === null) {
     return;
   }
-  process.stdout.write(rawInput);
+
+  if (
+    !outputJson ||
+    typeof outputJson !== 'object' ||
+    Array.isArray(outputJson)
+  ) {
+    throw new TypeError('Hook router outputJson must be a JSON object or null');
+  }
+
+  process.stdout.write(JSON.stringify(outputJson));
 }
 
 function buildMetric(input, outcome, durationMs) {
@@ -157,7 +165,7 @@ async function main() {
     console.error(`[HookRouterMetrics] ${JSON.stringify(metric)}`);
   }
 
-  writeOutput(rawInput, outcome.outputJson);
+  writeOutput(outcome.outputJson);
 
   if (outcome.decision === 'block') {
     process.exit(2);
@@ -167,11 +175,17 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((error) => {
-  const message =
-    error && error.stack
-      ? error.stack
-      : String(error || 'Unknown hook router error');
-  console.error(`[HookRouterError] ${message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    const message =
+      error && error.stack
+        ? error.stack
+        : String(error || 'Unknown hook router error');
+    console.error(`[HookRouterError] ${message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  writeOutput,
+};

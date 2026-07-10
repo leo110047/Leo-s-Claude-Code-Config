@@ -779,6 +779,22 @@ symlink_target_under_dir() {
   esac
 }
 
+skill_file_matches_under_dir() {
+  local target="$1"
+  local root="$2"
+  local source_skill
+
+  [ -f "$target/SKILL.md" ] || return 1
+  [ -d "$root" ] || return 1
+
+  for source_skill in "$root"/*/SKILL.md; do
+    [ -f "$source_skill" ] || continue
+    cmp -s "$target/SKILL.md" "$source_skill" && return 0
+  done
+
+  return 1
+}
+
 goldband_managed_skill_entry() {
   local target="$1"
   local source_root="$2"
@@ -796,6 +812,8 @@ goldband_managed_skill_entry() {
 
   if [ -d "$target" ]; then
     goldband_managed_skill_marker_matches "$target" "$source_root" "$generated_root" && return 0
+    skill_file_matches_under_dir "$target" "$source_root" && return 0
+    [ -n "$generated_root" ] && skill_file_matches_under_dir "$target" "$generated_root" && return 0
   fi
 
   return 1

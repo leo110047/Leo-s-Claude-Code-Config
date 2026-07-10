@@ -24,7 +24,29 @@ SHELL_LAUNCHERS_FILE="$CLAUDE_SHELL_DIR/goldband-launchers.sh"
 ZSHRC_FILE="${ZDOTDIR:-$HOME}/.zshrc"
 CODEX_DIR="$HOME/.codex"
 CODEX_CONFIG_FILE="$CODEX_DIR/config.toml"
-CODEX_REQUIREMENTS_FILE="${CODEX_REQUIREMENTS_FILE:-/etc/codex/requirements.toml}"
+if [ -z "${CODEX_REQUIREMENTS_FILE+x}" ]; then
+    _goldband_uname="$(uname -s 2>/dev/null || true)"
+    if [ "${GOLDBAND_TEST_WINDOWS_HOST:-0}" = "1" ]; then
+        _goldband_uname="MINGW64_NT-test"
+    fi
+    case "$_goldband_uname" in
+        MINGW*|MSYS*|CYGWIN*)
+            _goldband_program_data="${ProgramData:-${PROGRAMDATA:-C:\\ProgramData}}"
+            if command -v cygpath >/dev/null 2>&1; then
+                CODEX_REQUIREMENTS_FILE="$(cygpath -u "$_goldband_program_data")/OpenAI/Codex/requirements.toml"
+            elif [ "${_goldband_program_data#/}" != "$_goldband_program_data" ]; then
+                CODEX_REQUIREMENTS_FILE="${_goldband_program_data%/}/OpenAI/Codex/requirements.toml"
+            else
+                CODEX_REQUIREMENTS_FILE="/c/ProgramData/OpenAI/Codex/requirements.toml"
+            fi
+            unset _goldband_program_data
+            ;;
+        *)
+            CODEX_REQUIREMENTS_FILE="/etc/codex/requirements.toml"
+            ;;
+    esac
+    unset _goldband_uname
+fi
 CODEX_AGENTS_FILE="$CODEX_DIR/AGENTS.md"
 CODEX_CUSTOM_AGENTS_DIR="$CODEX_DIR/agents"
 CODEX_PROMPTS_DIR="$CODEX_DIR/prompts"
@@ -126,6 +148,7 @@ load_install_modules() {
         "$REPO_DIR/shell/install/profiles.sh" \
         "$REPO_DIR/shell/install/app-support-status.sh" \
         "$REPO_DIR/shell/install/knowledge-status.sh" \
+        "$REPO_DIR/shell/install/workflow-status.sh" \
         "$REPO_DIR/shell/install/status.sh" \
         "$REPO_DIR/shell/install/uninstall.sh"
     do

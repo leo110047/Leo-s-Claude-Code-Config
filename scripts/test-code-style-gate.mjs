@@ -139,6 +139,10 @@ function testPreCommitProjectHookSkippedOnGoldbandFailure() {
 }
 
 function testPreCommitWarnsWhenProjectHookNotExecutable() {
+  if (process.platform === 'win32') {
+    return;
+  }
+
   const dir = createRepo();
   const log = path.join(dir, 'hook-order.log');
   const gate = path.join(dir, 'goldband-gate.mjs');
@@ -245,16 +249,24 @@ function testPreCommitMissingChecker() {
 function testPreCommitMissingNode() {
   const dir = createRepo();
   const binDir = path.join(dir, 'bin');
-  fs.mkdirSync(binDir);
-  fs.symlinkSync(resolveCommand('git'), path.join(binDir, 'git'));
-  fs.symlinkSync(resolveCommand('dirname'), path.join(binDir, 'dirname'));
+  let pathWithoutNode = binDir;
+  if (process.platform === 'win32') {
+    pathWithoutNode = [
+      path.dirname(resolveCommand('git')),
+      path.dirname(resolveCommand('dirname')),
+    ].join(path.delimiter);
+  } else {
+    fs.mkdirSync(binDir);
+    fs.symlinkSync(resolveCommand('git'), path.join(binDir, 'git'));
+    fs.symlinkSync(resolveCommand('dirname'), path.join(binDir, 'dirname'));
+  }
 
   const result = run('/bin/bash', [preCommitHook], {
     cwd: dir,
     env: {
       ...process.env,
       GOLDBAND_STYLE_GATE_SCRIPT: checker,
-      PATH: binDir,
+      PATH: pathWithoutNode,
     },
   });
 
@@ -294,11 +306,26 @@ function hookEnv(overrides = {}) {
 }
 
 function run(command, args, options = {}) {
-  return spawnSync(command, args, {
+  return spawnSync(resolveSpawnCommand(command), args, {
     cwd: options.cwd ?? repoRoot,
     encoding: 'utf8',
     env: options.env ?? process.env,
   });
+}
+
+function resolveSpawnCommand(command) {
+  if (process.platform !== 'win32') {
+    return command;
+  }
+  if (command !== 'bash' && command !== '/bin/bash' && command !== '/bin/sh') {
+    return command;
+  }
+  const candidates = [
+    process.env.GOLDBAND_TEST_BASH,
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || command;
 }
 
 function resolveCommand(command) {

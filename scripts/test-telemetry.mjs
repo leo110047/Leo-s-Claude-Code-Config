@@ -385,9 +385,12 @@ function testClaudeSessionStartContextIsDedupedBySession() {
   });
 
   const firstOutput = JSON.parse(first.stdout);
-  const secondOutput = JSON.parse(second.stdout);
   assert.equal(firstOutput.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(secondOutput.hookSpecificOutput, undefined);
+  assert.equal(
+    second.stdout,
+    '',
+    'A deduplicated SessionStart must emit no hook output',
+  );
 
   const sessionStartEvents = readJsonl(usageFile).filter(
     (event) =>

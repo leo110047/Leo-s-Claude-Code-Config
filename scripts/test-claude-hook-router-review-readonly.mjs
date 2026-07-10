@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,8 @@ const routerPath = path.join(
   'hooks',
   'hook-router.js',
 );
+const require = createRequire(import.meta.url);
+const { writeOutput } = require(routerPath);
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-review-hook-'));
 
 process.on('exit', () => {
@@ -130,6 +133,55 @@ function assertStopClearsReviewReadOnly(sessionId) {
   assert.equal(editAfterStop.status, 0, editAfterStop.stderr);
 }
 
+function assertAllowedWriteHasNoHookOutput() {
+  const allowedWrite = runHook('allow-output-regression', {
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    tool_input: {
+      file_path: 'src/allow-output-regression.ts',
+      content: 'export {};\n',
+    },
+  });
+
+  assert.equal(allowedWrite.status, 0, allowedWrite.stderr);
+  assert.equal(
+    allowedWrite.stdout,
+    '',
+    'An allow hook must not echo its input as Claude hook output',
+  );
+}
+
+function assertRepeatedSessionStartHasNoHookOutput() {
+  const sessionId = 'session-start-output-regression';
+  const firstSessionStart = runHook(sessionId, {
+    hook_event_name: 'SessionStart',
+  });
+  assert.equal(firstSessionStart.status, 0, firstSessionStart.stderr);
+  assert.equal(
+    JSON.parse(firstSessionStart.stdout).hookSpecificOutput.hookEventName,
+    'SessionStart',
+  );
+
+  const repeatedSessionStart = runHook(sessionId, {
+    hook_event_name: 'SessionStart',
+  });
+  assert.equal(repeatedSessionStart.status, 0, repeatedSessionStart.stderr);
+  assert.equal(
+    repeatedSessionStart.stdout,
+    '',
+    'A deduplicated SessionStart with outputJson: null must emit no hook output',
+  );
+}
+
+function assertInvalidHookOutputFailsLoudly() {
+  for (const invalidOutput of [undefined, false, '', 1, []]) {
+    assert.throws(
+      () => writeOutput(invalidOutput),
+      /outputJson must be a JSON object or null/,
+    );
+  }
+}
+
 assertReviewReadOnlyActivation('goldband-name', { name: 'goldband-review' });
 assertReviewReadOnlyActivation('short-name', { name: 'review' });
 assertReviewReadOnlyActivation('skill-name-field', { skill_name: '/review' });
@@ -152,5 +204,9 @@ const editAfterShip = runHook(nonReviewSession, {
   },
 });
 assert.equal(editAfterShip.status, 0, editAfterShip.stderr);
+
+assertAllowedWriteHasNoHookOutput();
+assertRepeatedSessionStartHasNoHookOutput();
+assertInvalidHookOutputFailsLoudly();
 
 console.log('[OK] Claude /review hook read-only enforcement verified');
