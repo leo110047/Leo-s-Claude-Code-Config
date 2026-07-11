@@ -3,9 +3,9 @@
 ## Baseline Policy
 
 A session's durable output is not only the diff. Decisions, direction
-reversals, and hard-won constraints must land where the next session — likely
-a different or weaker model with zero context — will actually find them.
-Anything that lives only in the conversation is lost when the session ends.
+reversals, and hard-won constraints must land where the next session can find
+them without relying on the current conversation. Conversation history is not
+reliable cross-session storage.
 
 ## Where Durable Facts Go
 

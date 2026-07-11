@@ -1,42 +1,35 @@
 # Git Workflow
 
-## Commit Message Format
+## Baseline Policy
 
-```
-<type>: <description>
+Git history should describe logical changes and their verification without
+turning one task into unrelated cleanup. Committing, pushing, opening a pull
+request, merging, and releasing are separate actions; perform only the actions
+the user authorized.
 
-<optional body>
-```
+## Required Behavior
 
-Types: feat, fix, refactor, docs, test, chore, perf, ci
+- Before reviewing or summarizing a pull request, inspect the full change range
+  against the verified base branch and read relevant commit history. Do not
+  infer the base branch or describe only the latest commit.
+- Test in proportion to the changed behavior and risk. Prefer a regression test
+  when it can reproduce the failure. TDD is useful when the expected behavior
+  is clear, but it is not mandatory for every change.
+- Treat coverage as diagnostic evidence, not a universal percentage target.
+  Project-owned thresholds may still block when they encode an explicit risk or
+  product requirement.
+- Keep commits focused on one logical change. Use the repository's commit
+  convention; when none exists, use `<type>: <description>` with `feat`, `fix`,
+  `refactor`, `docs`, `test`, `chore`, `perf`, or `ci`.
+- Commit messages and pull request summaries must state what changed and how it
+  was verified. Include remaining risk or skipped verification when relevant.
+- Never stage unrelated user changes. Do not commit, push, create a pull
+  request, merge, or release without authorization for that action.
 
-## Pull Request Workflow
+## Failure Signals
 
-When creating PRs:
-1. Analyze full commit history (not just latest commit)
-2. Use `git diff [base-branch]...HEAD` to see all changes
-3. Draft comprehensive PR summary
-4. Include test plan with TODOs
-5. Push with `-u` flag if new branch
-
-## Feature Implementation Workflow
-
-1. **Plan First**
-   - Use `/plan` command to create implementation plan
-   - Identify dependencies and risks
-   - Break down into phases
-
-2. **TDD Approach**
-   - Write tests first (RED)
-   - Implement to pass tests (GREEN)
-   - Refactor (IMPROVE)
-   - Verify 80%+ coverage
-
-3. **Code Review**
-   - Use the Goldband review workflow after writing code
-   - Address CRITICAL and HIGH issues
-   - Fix MEDIUM issues when possible
-
-4. **Commit & Push**
-   - Detailed commit messages
-   - Follow conventional commits format
+- A pull request summary describes a subset of the actual diff.
+- Tests pass only because a check, assertion, or threshold was weakened.
+- Coverage rises while the changed failure mode remains untested.
+- A commit mixes the requested change with formatting or unrelated refactors.
+- Git state is mutated beyond what the user authorized.

@@ -105,6 +105,7 @@
       "hooks/scripts/hooks/skill-activation-suggestions.js"
     ],
     "rules": [
+      "rules/architecture-boundaries.md",
       "rules/change-scope.md",
       "rules/claim-verification.md",
       "rules/coding-style.md",

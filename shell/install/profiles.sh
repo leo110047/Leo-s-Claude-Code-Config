@@ -157,7 +157,9 @@ install_commands() {
 }
 
 install_rules() {
-    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (5 個)"
+    local rule_count
+    rule_count=$(find "$REPO_DIR/rules" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (${rule_count} 個)"
 }
 
 merge_hooks_config() {

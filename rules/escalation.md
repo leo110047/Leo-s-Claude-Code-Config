@@ -32,7 +32,7 @@ Stop editing, report findings, and ask when any of these fire:
 - You are about to weaken, skip, or delete a test, assertion, type, or lint
   rule so that a check passes.
 - You discover mid-task that the plan or request rests on a false premise.
-- A fix works but you cannot state in one sentence why it works.
+- A fix appears to work but you cannot clearly explain the causal mechanism.
 - The diff keeps growing into files unrelated to the stated task.
 
 ## Calibration
