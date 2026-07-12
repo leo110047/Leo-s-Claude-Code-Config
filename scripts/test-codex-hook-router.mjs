@@ -38,7 +38,25 @@ function runHook(input, extraEnv = {}) {
 
   const stdout = result.stdout.trim();
   assert.notEqual(stdout, '', 'hook must emit valid JSON on stdout');
-  return JSON.parse(stdout);
+  const output = JSON.parse(stdout);
+  assertCodexPreToolUseSchema(input, output);
+  return output;
+}
+
+function assertCodexPreToolUseSchema(input, output) {
+  if (input.hook_event_name !== 'PreToolUse' || !output.hookSpecificOutput) {
+    return;
+  }
+  const allowed = new Set([
+    'hookEventName',
+    'permissionDecision',
+    'permissionDecisionReason',
+    'additionalContext',
+    'updatedInput',
+  ]);
+  for (const key of Object.keys(output.hookSpecificOutput)) {
+    assert.ok(allowed.has(key), `Codex PreToolUse schema rejects ${key}`);
+  }
 }
 
 function assertNoopOutput(output) {
@@ -79,7 +97,7 @@ function testHighRiskBashDenied() {
     ['git clean -f', /git clean/, 'destructive-git-clean'],
   ];
 
-  for (const [command, reasonPattern, telemetryName] of commands) {
+  for (const [command, reasonPattern] of commands) {
     const output = runHook({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
@@ -97,7 +115,8 @@ function testHighRiskBashDenied() {
       reasonPattern,
       command,
     );
-    assert.equal(output.hookSpecificOutput.telemetryName, telemetryName);
+    assert.equal(output.hookSpecificOutput.telemetryName, undefined);
+    assert.equal(output.internalTelemetry, undefined);
   }
 }
 
@@ -151,10 +170,7 @@ function testPermissionRequestOnlyDeniesHighRisk() {
     'PermissionRequest',
   );
   assert.equal(riskyOutput.hookSpecificOutput.decision.behavior, 'deny');
-  assert.equal(
-    riskyOutput.hookSpecificOutput.telemetryName,
-    'destructive-git-history',
-  );
+  assert.equal(riskyOutput.hookSpecificOutput.telemetryName, undefined);
 }
 
 function testPatchSecretDenied() {
@@ -457,32 +473,28 @@ function testWorkflowTelemetry() {
   );
 }
 
-function testSubagentCompletionNeedsEvidence() {
-  const unsupportedClaims = [
+function testCompletionClaimsDoNotUseRegex() {
+  const conversationalClaims = [
     'Done, everything is complete.',
     'Done, verified.',
     'Fixed. I checked the file.',
+    'Audit 已完成，接下來說明設計取捨。',
   ];
 
-  for (const lastAssistantMessage of unsupportedClaims) {
-    const output = runHook({
-      hook_event_name: 'SubagentStop',
-      last_assistant_message: lastAssistantMessage,
-    });
-
-    assert.match(
-      output.systemMessage,
-      /without concrete evidence/,
-      lastAssistantMessage,
+  for (const lastAssistantMessage of conversationalClaims) {
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'Stop',
+        last_assistant_message: lastAssistantMessage,
+      }),
+    );
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'SubagentStop',
+        last_assistant_message: lastAssistantMessage,
+      }),
     );
   }
-
-  const supportedOutput = runHook({
-    hook_event_name: 'SubagentStop',
-    last_assistant_message:
-      'Fixed. Verified with node scripts/test-codex-hook-router.mjs and README.md:101.',
-  });
-  assertNoopOutput(supportedOutput);
 }
 
 function testStopDoesNotSuggestKnowledgeCapture() {
@@ -523,7 +535,7 @@ testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testWorkflowTelemetry();
-testSubagentCompletionNeedsEvidence();
+testCompletionClaimsDoNotUseRegex();
 testStopDoesNotSuggestKnowledgeCapture();
 
 console.log('[OK] Codex hook router behavior verified');

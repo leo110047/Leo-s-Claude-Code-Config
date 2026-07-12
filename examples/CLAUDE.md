@@ -7,7 +7,7 @@
 ## Tech Stack
 
 - Language: [TypeScript / Python / Go / C#]
-- Framework: [Next.js / Django / Gin / Unity]
+- Framework: [Next.js / Django / Gin]
 - Database: [PostgreSQL / MongoDB / SQLite]
 - Deployment: [Vercel / Railway / Docker]
 

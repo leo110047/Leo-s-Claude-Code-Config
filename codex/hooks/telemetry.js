@@ -1,10 +1,22 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const {
-  normalizeUsageEvent,
-  resolveRunId,
-} = require('../../scripts/lib/telemetry-schema.cjs');
+const { requireFirst } = require('./module-loader');
+function loadTelemetrySchema() {
+  return requireFirst([
+    path.resolve(
+      __dirname,
+      '..',
+      '..',
+      'scripts',
+      'lib',
+      'telemetry-schema.cjs',
+    ),
+    path.resolve(__dirname, 'telemetry-schema.cjs'),
+  ]);
+}
+
+const { normalizeUsageEvent, resolveRunId } = loadTelemetrySchema();
 
 const DEFAULT_MAX_BYTES = 1024 * 1024;
 const DEFAULT_RETENTION_DAYS = 30;
@@ -311,13 +323,16 @@ function workflowUsageEvents(input) {
 function isDenyResult(result) {
   const output = result?.hookSpecificOutput || {};
   return (
-    output.permissionDecision === 'deny' || output.decision?.behavior === 'deny'
+    result?.decision === 'block' ||
+    output.permissionDecision === 'deny' ||
+    output.decision?.behavior === 'deny'
   );
 }
 
 function denyReason(result) {
   const output = result?.hookSpecificOutput || {};
   return (
+    result?.reason ||
     output.permissionDecisionReason ||
     output.decision?.message ||
     result?.systemMessage ||
@@ -326,7 +341,7 @@ function denyReason(result) {
 }
 
 function structuredTelemetryName(result) {
-  const name = result?.hookSpecificOutput?.telemetryName;
+  const name = result?.internalTelemetry?.name;
   return typeof name === 'string' && name.trim() ? name.trim() : null;
 }
 

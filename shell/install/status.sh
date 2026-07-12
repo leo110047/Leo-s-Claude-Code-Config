@@ -272,6 +272,7 @@ show_codex_install_status() {
     show_codex_prompts_status
     show_repo_path_status "codex hooks.json" "$CODEX_HOOKS_FILE" "$REPO_DIR/codex/hooks.json" "codex-hooks"
     show_repo_path_status "codex hook scripts" "$CODEX_HOOKS_DIR" "$REPO_DIR/codex/hooks" "codex-hooks"
+    show_repo_path_status "codex review Rules runtime" "$CODEX_REVIEW_RUNTIME_FILE" "$REPO_DIR/hooks/scripts/lib/rules-resolver.js" "codex-hooks"
     show_codex_rules_status
     show_codex_skills_status
     show_mcp_token_status

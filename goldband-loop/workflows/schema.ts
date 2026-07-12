@@ -85,6 +85,8 @@ function validateFinding(value: unknown): ReviewFinding {
     evidence: optionalString(item.evidence),
     recommendation: optionalString(item.recommendation),
     category: optionalString(item.category ?? item.rule),
+    ruleId: optionalString(item.ruleId),
+    policySource: optionalString(item.policySource),
     failureScenario: optionalString(item.failureScenario),
     suggestedVerification: optionalString(item.suggestedVerification),
     blocking: optionalBoolean(item.blocking),

@@ -38,6 +38,7 @@ function main() {
   try {
     runInstall(copyHome, 'workflow', { GOLDBAND_FORCE_COPY: '1' });
     assertInstalledKnowledgeCliRuns(copyHome);
+    assertInstalledCrossReviewCliRuns(copyHome);
     console.log('[OK] Goldband Loop copy fallback runtime CLI works');
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });
@@ -290,6 +291,8 @@ function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
     path.join('review', 'checklist.md'),
     path.join('review', 'ship-fix-first.md'),
     path.join('review', 'greptile-triage.md'),
+    path.join('cross-review', 'core.cjs'),
+    path.join('cross-review', 'cli.cjs'),
   ];
   for (const runtimeRoot of runtimeRoots) {
     for (const relPath of requiredFiles) {
@@ -299,6 +302,23 @@ function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
       );
     }
   }
+}
+
+function assertInstalledCrossReviewCliRuns(home) {
+  const result = spawnSync(
+    path.join(
+      home,
+      '.claude',
+      'skills',
+      'goldband',
+      'bin',
+      'goldband-cross-review',
+    ),
+    ['help'],
+    { encoding: 'utf8', env: { ...process.env, HOME: home } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /goldband-cross-review start --plan/);
 }
 
 function assertInstalledKnowledgeCliRuns(home) {

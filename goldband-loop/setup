@@ -926,7 +926,7 @@ create_agents_sidecar() {
   mkdir -p "$agents_goldband"
 
   # Sidecar directories that skills reference at runtime
-  for asset in bin lib browse review qa; do
+  for asset in bin lib browse review qa cross-review; do
     local src="$SOURCE_GOLDBAND_DIR/$asset"
     local dst="$agents_goldband/$asset"
     if [ -d "$src" ] || [ -f "$src" ]; then
@@ -977,6 +977,9 @@ create_codex_runtime_root() {
   fi
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$codex_goldband/lib"
+  fi
+  if [ -d "$goldband_dir/cross-review" ]; then
+    _link_or_copy "$goldband_dir/cross-review" "$codex_goldband/cross-review"
   fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$codex_goldband/browse/dist"
@@ -1032,6 +1035,9 @@ create_claude_runtime_root() {
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$claude_goldband/lib"
   fi
+  if [ -d "$goldband_dir/cross-review" ]; then
+    _link_or_copy "$goldband_dir/cross-review" "$claude_goldband/cross-review"
+  fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$claude_goldband/browse/dist"
   fi
@@ -1074,6 +1080,9 @@ create_factory_runtime_root() {
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$factory_goldband/lib"
   fi
+  if [ -d "$goldband_dir/cross-review" ]; then
+    _link_or_copy "$goldband_dir/cross-review" "$factory_goldband/cross-review"
+  fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$factory_goldband/browse/dist"
   fi
@@ -1114,6 +1123,9 @@ create_opencode_runtime_root() {
   fi
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$opencode_goldband/lib"
+  fi
+  if [ -d "$goldband_dir/cross-review" ]; then
+    _link_or_copy "$goldband_dir/cross-review" "$opencode_goldband/cross-review"
   fi
   if [ -d "$goldband_dir/browse/dist" ]; then
     _link_or_copy "$goldband_dir/browse/dist" "$opencode_goldband/browse/dist"

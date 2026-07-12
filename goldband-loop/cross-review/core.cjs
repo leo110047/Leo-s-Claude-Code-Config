@@ -3,9 +3,32 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const {
-  normalizeUsageEvent,
-} = require('../../scripts/lib/telemetry-schema.cjs');
+let normalizeUsageEvent = null;
+
+function loadTelemetryNormalizer() {
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'scripts', 'lib', 'telemetry-schema.cjs'),
+    path.join(os.homedir(), '.codex', 'hooks', 'telemetry-schema.cjs'),
+    path.join(
+      os.homedir(),
+      '.claude',
+      'hooks',
+      'scripts',
+      'lib',
+      'telemetry-schema.cjs',
+    ),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return require(candidate).normalizeUsageEvent;
+      }
+    } catch {
+      // Usage telemetry is optional and must not disable cross-review.
+    }
+  }
+  return null;
+}
 
 const CONTRACT_SCHEMA_VERSION = 1;
 const DEFAULT_MAX_ROUNDS = 3;
@@ -144,6 +167,8 @@ function usageFile(env = process.env) {
 
 function appendCrossReviewUsageEvent(entry, env = process.env) {
   if (!usageTelemetryEnabled(env) || !entry || typeof entry !== 'object') return;
+  normalizeUsageEvent ||= loadTelemetryNormalizer();
+  if (!normalizeUsageEvent) return;
   const payload = normalizeUsageEvent({
     category: 'hook-decision',
     action: 'record',

@@ -1911,14 +1911,12 @@ describe('Codex generation (--host codex)', () => {
 
   // ─── Path rewriting regression tests ─────────────────────────
 
-  test('sidecar paths point to .agents/skills/goldband/review/ (not goldband-review/)', () => {
-    // Regression: gen-skill-docs rewrote .claude/skills/review → .agents/skills/goldband-review
-    // but setup puts sidecars under .agents/skills/goldband/review/. Must match setup layout.
+  test('review standards resolve through the active Codex runtime root', () => {
     const content = fs.readFileSync(path.join(AGENTS_DIR, 'goldband-review', 'SKILL.md'), 'utf-8');
-    // Correct: references to sidecar files use goldband/review/ path
-    expect(content).toContain('.agents/skills/goldband/review/checklist.md');
-    // design-checklist.md is now referenced via Review Army specialist (Claude only, stripped for Codex)
-    // Wrong: must NOT reference goldband-review/checklist.md (file doesn't exist there)
+    expect(content).toContain('$GOLDBAND_ROOT/review/shared-rubric.md');
+    expect(content).toContain('$GOLDBAND_ROOT/review/findings-schema.md');
+    expect(content).toContain('$GOLDBAND_ROOT/review/checklist.md');
+    expect(content).not.toContain('.agents/skills/goldband/review/checklist.md');
     expect(content).not.toContain('.agents/skills/goldband-review/checklist.md');
   });
 
@@ -1934,7 +1932,8 @@ describe('Codex generation (--host codex)', () => {
   test('greptile-triage sidecar path is correct', () => {
     const content = fs.readFileSync(path.join(AGENTS_DIR, 'goldband-review', 'SKILL.md'), 'utf-8');
     if (content.includes('greptile-triage')) {
-      expect(content).toContain('.agents/skills/goldband/review/greptile-triage.md');
+      expect(content).toContain('$GOLDBAND_ROOT/review/greptile-triage.md');
+      expect(content).not.toContain('.agents/skills/goldband/review/greptile-triage.md');
       expect(content).not.toContain('.agents/skills/goldband-review/greptile-triage');
     }
   });
@@ -1976,12 +1975,13 @@ describe('Codex generation (--host codex)', () => {
 
   // ─── Claude output regression guard ─────────────────────────
 
-  test('Claude output unchanged: review skill still uses .claude/skills/ paths', () => {
-    // Codex changes must NOT affect Claude output
+  test('Claude review standards resolve through the same active runtime root', () => {
     const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    expect(content).toContain('.claude/skills/review/checklist.md');
+    expect(content).toContain('$GOLDBAND_ROOT/review/shared-rubric.md');
+    expect(content).toContain('$GOLDBAND_ROOT/review/findings-schema.md');
+    expect(content).toContain('$GOLDBAND_ROOT/review/checklist.md');
+    expect(content).not.toContain('.claude/skills/review/checklist.md');
     expect(content).toContain('~/.claude/skills/goldband');
-    // Must NOT contain Codex paths
     expect(content).not.toContain('.agents/skills');
     expect(content).not.toContain('~/.codex/');
   });
@@ -2517,6 +2517,7 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('goldband_dir/lib');
     expect(fnBody).toContain('browse/dist');
     expect(fnBody).toContain('browse/bin');
+    expect(fnBody).toContain('goldband_dir/cross-review');
     expect(fnBody).toContain('goldband-upgrade/SKILL.md');
     // Review runtime assets (individual files, not the whole dir)
     expect(fnBody).toContain('shared-rubric.md');

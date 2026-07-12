@@ -108,6 +108,8 @@ export type ReviewFinding = {
   evidence?: string;
   recommendation?: string;
   category?: string;
+  ruleId?: string;
+  policySource?: string;
   failureScenario?: string;
   suggestedVerification?: string;
   blocking?: boolean;

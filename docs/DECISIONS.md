@@ -1,5 +1,50 @@
 # Goldband Decisions
 
+## 2026-07-12: Remove the Unity-Specific Skill Pack
+
+Decision: remove `skills/projects/unity/` and its installer surfaces completely.
+Goldband keeps portable engineering workflows, but no longer owns or distributes
+a Unity-specific project skill pack.
+
+Implementation contract:
+
+- `pack-unity` and `unity` are removed rather than retained as compatibility
+  aliases; invoking either now follows the normal unknown-option failure path.
+- Installer state, validation, examples, architecture inventory, and generated
+  assets must not reference the removed pack.
+- General C#, game, mobile, performance, testing, and architecture work may use
+  portable skills. Reintroducing a Unity-specific capability requires a new
+  product decision and complete installer and validation wiring.
+
+## 2026-07-11: Rules Are Enforced by Independent Review
+
+Decision: `rules/*.md` remains the policy-content source of truth. A
+metadata-only `rules/manifest.json` selects applicable Rules for programmatic
+code review. Each review reads the current Rule text once into an immutable
+snapshot shared by its core prompt, specialist prompts, and prompt telemetry.
+The next review creates a fresh snapshot.
+
+Implementation contract:
+
+- `hooks/scripts/lib/rules-resolver.js` is a pure read-only resolver. It
+  validates complete manifest coverage, applies manifest-owned group selectors,
+  reads the current source text, and returns content hashes.
+- Claude and Codex review use the same resolver contract. Generated plugin
+  copies and installed adapters are projections, not independent policy owners.
+- Review fails closed when the manifest is incomplete, a Rule is missing, or
+  the Rules payload exceeds its explicit byte budget.
+- Deterministic gates verify manifest coverage, review prompt injection,
+  generated asset drift, and installed runtime dependencies.
+- Codex materializes the review resolver at
+  `~/.codex/review-runtime/rules-resolver.js`; this path is independent of
+  whether `~/.codex/hooks` is a symlink or copied directory.
+- Semantic properties such as single authoritative truth, dead code, islands,
+  and architecture boundaries belong to independent code review. They are not
+  approximated by regex style gates or writer self-attestation.
+- PreToolUse and Stop do not load, classify, or audit Rules. Goldband does not
+  infer workspace ownership from arbitrary shell commands and does not maintain
+  writer leases or semantic completion receipts.
+
 ## 2026-07-06: App Surface Support Uses Shared Config or Separate Adapters
 
 Decision: support app surfaces without rewriting the existing CLI setup paths.

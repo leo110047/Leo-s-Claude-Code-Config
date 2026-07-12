@@ -8,6 +8,8 @@ Normal `/review` and specialist runtime output use this shape:
   "line": 42,
   "severity": "critical|high|medium|low|info",
   "category": "correctness-contract|testing|security|performance|migration-data|api-host-parity|maintainability|ux-design|specialist-runtime|specialist-skipped|host-capability",
+  "ruleId": "architecture-boundaries",
+  "policySource": "rules/architecture-boundaries.md",
   "summary": "One-sentence problem.",
   "failureScenario": "Concrete way this fails for a user, maintainer, workflow, or gate.",
   "evidence": "Specific diff/code/test/config evidence.",
@@ -25,5 +27,6 @@ Rules:
   the key.
 - Do not output patches or apply fixes.
 - Do not output cross-review verdict markers from normal `/review`.
-- Cross-review adapters may map `category` to `ruleId`, but the shared finding
-  evidence and failure scenario must remain intact.
+- When a finding enforces a Goldband Rule, preserve its `ruleId` and
+  `policySource` through normalization and aggregation. Use `null` only when no
+  Rule applies.

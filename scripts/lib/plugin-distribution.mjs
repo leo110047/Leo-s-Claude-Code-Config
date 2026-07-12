@@ -55,6 +55,9 @@ const MANAGED_COMMANDS = [
   'hooks/plugin-hooks.json',
   'docs/reports/plugin-expected-assets.json',
   'plugin-assets/claude-code-plugin/**',
+  'codex/hooks/cross-review-gate.js',
+  'codex/hooks/module-loader.js',
+  'codex/hooks/telemetry-schema.cjs',
 ];
 
 export function buildPluginArtifacts() {
@@ -95,12 +98,26 @@ export function buildPluginArtifacts() {
     'hooks/scripts',
     path.join(PLUGIN_ROOT_PATH, 'hooks', 'scripts'),
   );
+  addDirectoryArtifacts(
+    artifacts,
+    'rules',
+    path.join(PLUGIN_ROOT_PATH, 'rules'),
+  );
   addFileArtifact(
     artifacts,
     'scripts/lib/telemetry-schema.cjs',
     path.join(PLUGIN_ROOT_PATH, 'scripts', 'lib', 'telemetry-schema.cjs'),
   );
+  addSharedAdapterArtifacts(artifacts);
   return artifacts;
+}
+
+function addSharedAdapterArtifacts(artifacts) {
+  addFileArtifact(
+    artifacts,
+    'scripts/lib/telemetry-schema.cjs',
+    path.join(ROOT_DIR, 'codex', 'hooks', 'telemetry-schema.cjs'),
+  );
 }
 
 function buildManifest() {
@@ -151,6 +168,12 @@ function buildMarketplace(manifest) {
   };
 }
 
+const REVIEW_RULE_RUNTIME_FILES = ['rules-resolver.js'];
+
+function runtimeDependencyPaths(prefix) {
+  return REVIEW_RULE_RUNTIME_FILES.map((file) => `${prefix}/${file}`);
+}
+
 function buildExpectedAssets({ commands, hookConfig, rules, sourceSkills }) {
   return {
     schemaVersion: 1,
@@ -167,17 +190,29 @@ function buildExpectedAssets({ commands, hookConfig, rules, sourceSkills }) {
       commands,
       skills: [...sourceSkills, 'goldband-rules'],
       hooks: summarizeHooks(hookConfig.hooks),
-      runtimeDependencies: ['scripts/lib/telemetry-schema.cjs'],
+      runtimeDependencies: [
+        'scripts/lib/telemetry-schema.cjs',
+        ...runtimeDependencyPaths('hooks/scripts/lib'),
+      ],
       hookScripts: [
         'hooks/scripts/hooks/hook-router.js',
         'hooks/scripts/hooks/post-edit-worker.js',
         'hooks/scripts/hooks/skill-activation-suggestions.js',
       ],
       rules,
+      rulesManifest: 'rules/manifest.json',
       generatedRuleSkill: relativePath(GENERATED_RULE_SKILL_PATH),
     },
     codex: {
       distribution: 'installer',
+      reviewRuntimeDependencies: runtimeDependencyPaths('hooks/scripts/lib'),
+      hookRuntimeDependencies: [
+        'codex/hooks/cross-review-gate.js',
+        'codex/hooks/high-risk-policy.js',
+        'codex/hooks/module-loader.js',
+        'codex/hooks/telemetry.js',
+        'codex/hooks/telemetry-schema.cjs',
+      ],
       reason:
         'Codex plugins exist but package Codex skills/apps/MCP, not Claude Code settings. Root Codex install remains install.sh.',
     },

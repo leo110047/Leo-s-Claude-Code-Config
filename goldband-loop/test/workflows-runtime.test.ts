@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defineWorkflow } from '../workflows/definition';
@@ -14,7 +21,11 @@ import {
 import { findingsSchema, objectSchema } from '../workflows/schema';
 import { runWorkflow } from '../workflows/runtime';
 import type { EvaluationSignalSnapshot } from '../workflows/types';
-import { reviewSignalFromOutput, reviewSteps } from '../workflows/review';
+import {
+  buildReviewPrompt,
+  reviewSignalFromOutput,
+  reviewSteps,
+} from '../workflows/review';
 import { qaChecksSchema } from '../workflows/schema';
 import {
   MockHostAdapter,
@@ -25,11 +36,21 @@ import {
 import {
   REVIEW_SPECIALISTS,
   aggregateReviewFindings,
+  buildSpecialistPrompt,
   runParallelSpecialistReview,
   selectReviewSpecialists,
 } from '../workflows/review-engine';
+import {
+  MAX_REVIEW_AGGREGATE_RULES_BYTES,
+  MAX_REVIEW_RULES_BYTES,
+  assertRulesPayloadBudget,
+  buildReviewPromptTelemetry,
+  coreReviewRules,
+  specialistReviewRules,
+} from '../workflows/review-rules';
 
 const ROOT = resolve(import.meta.dir, '..');
+const PROJECT_ROOT = resolve(ROOT, '..');
 let tmpHome: string;
 
 beforeEach(() => {
@@ -251,6 +272,23 @@ describe('workflow runtime', () => {
     expect(events.map((event) => event.step)).toContain('collect-diff');
     expect(events.map((event) => event.step)).toContain('render-report');
     expect(events.every((event) => event.runId === result.runId)).toBe(true);
+    const telemetry = JSON.parse(
+      readFileSync(
+        join(
+          tmpHome,
+          'workflow-runs',
+          'telemetry',
+          `${result.runId}-review-prompt.json`,
+        ),
+        'utf8',
+      ),
+    );
+    expect(telemetry.host).toBe('mock');
+    expect(telemetry.rulesCount).toBeGreaterThan(0);
+    expect(telemetry.rulesBytes).toBeGreaterThan(0);
+    expect(telemetry.promptBytes).toBeGreaterThan(telemetry.rulesBytes);
+    expect(Array.isArray(telemetry.selectedSpecialists)).toBe(true);
+    expect(JSON.stringify(telemetry)).not.toContain('Architecture and Integration Boundaries');
   });
 
   test('goldband-review loop converges after previous findings reach zero', async () => {
@@ -495,6 +533,84 @@ describe('workflow runtime', () => {
     }]);
   });
 
+  test('core and specialist review prompts inject checklist, schema, rubric, and selected Rules', () => {
+    const ctx = {
+      runId: 'rules-prompt-test',
+      workflow: getWorkflow('goldband-review'),
+      cwd: PROJECT_ROOT,
+      artifacts: [],
+      options: { host: 'codex' as const },
+    };
+    const diff = [
+      'diff --git a/scripts/install-auth.ts b/scripts/install-auth.ts',
+      '+provider permission installer change',
+    ].join('\n');
+    const core = buildReviewPrompt(ctx, diff);
+    expect(core).toContain('# Shared Review Rubric');
+    expect(core).toContain('# Shared Finding Shape');
+    expect(core).toContain('# Read-Only Review Checklist');
+    expect(core).toContain('# Security Boundaries');
+    expect(core).toContain('# Git Workflow');
+    expect(core).toContain('# Semantic Review Criteria');
+
+    const security = buildSpecialistPrompt(ctx, diff, 'security');
+    expect(security).toContain('# Security Boundaries');
+    expect(security).toContain('# Semantic Review Criteria');
+    expect(security).not.toContain('# Git Workflow');
+    expect(security).toContain('inspect the repository outside the diff');
+
+    const hostParity = buildSpecialistPrompt(ctx, diff, 'api-host-parity');
+    expect(hostParity).toContain('# Git Workflow');
+    expect(hostParity).toContain('# Security Boundaries');
+  });
+
+  test('review Rules payload budgets use measured headroom and fail closed on aggregate fan-out', () => {
+    const core = coreReviewRules(PROJECT_ROOT, 'provider installer change');
+    const security = specialistReviewRules(PROJECT_ROOT, 'security');
+    const coreBytes = Buffer.byteLength(core.text);
+    const securityBytes = Buffer.byteLength(security.text);
+    expect(coreBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
+    expect(securityBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
+    expect(MAX_REVIEW_RULES_BYTES).toBeGreaterThanOrEqual(32 * 1024);
+    expect(MAX_REVIEW_AGGREGATE_RULES_BYTES).toBeGreaterThan(124_353);
+
+    expect(() =>
+      assertRulesPayloadBudget(
+        {
+          repoRoot: PROJECT_ROOT,
+          rules: [
+            {
+              id: 'oversized-fixture',
+              sourceFile: 'rules/fixture.md',
+              content: 'x'.repeat(MAX_REVIEW_RULES_BYTES + 1),
+              contentHash: 'fixture',
+            },
+          ],
+          ruleIds: ['oversized-fixture'],
+          contentHash: 'fixture',
+        },
+        'oversized-fixture',
+      ),
+    ).toThrow('Rules payload exceeds budget');
+
+    const specialistPrompts = Array.from({ length: 12 }, () => ({
+      prompt: security.text,
+      bundle: security.bundle,
+    }));
+    expect(() =>
+      buildReviewPromptTelemetry({
+        host: 'codex',
+        corePrompt: core.text,
+        coreBundle: core.bundle,
+        specialistPrompts,
+        selectedSpecialists: Array.from(
+          { length: 12 },
+          () => 'security' as const,
+        ),
+      }),
+    ).toThrow('aggregate Rules payload exceeds budget');
+  });
+
   test('review specialist selection includes host parity for workflow and prompt diffs', () => {
     const selection = selectReviewSpecialists([
       'diff --git a/goldband-loop/workflows/host-adapter.ts b/goldband-loop/workflows/host-adapter.ts',
@@ -542,6 +658,8 @@ describe('workflow runtime', () => {
         suggestedVerification: 'Run bun test b.test.ts',
         blocking: false,
         specialist: 'correctness-contract',
+        ruleId: 'claim-verification',
+        policySource: 'rules/claim-verification.md',
       },
       {
         file: 'a.ts',
@@ -563,6 +681,8 @@ describe('workflow runtime', () => {
     ]);
     expect(result[0].contributingSpecialists).toEqual(['correctness-contract', 'testing']);
     expect(result[0].evidence).toBe('longer and more specific diff evidence from second specialist');
+    expect(result[0].ruleId).toBe('claim-verification');
+    expect(result[0].policySource).toBe('rules/claim-verification.md');
     expect(result[1].blocking).toBe(false);
     expect(result[1].summary).toContain('[unverified critical]');
   });
@@ -608,6 +728,66 @@ describe('workflow runtime', () => {
     expect(maxActive).toBeGreaterThan(1);
     expect(maxActive).toBeLessThanOrEqual(4);
     expect(findings.every((finding) => finding.category !== 'host-capability')).toBe(true);
+  });
+
+  test('specialist repository inspection can find an unwired cross-file capability outside the diff', async () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'goldband-review-unwired-'));
+    try {
+      writeFileSync(
+        join(fixture, 'feature.ts'),
+        'export function newCapability() { return true; }\n',
+      );
+      writeFileSync(
+        join(fixture, 'registry.ts'),
+        'export const registeredCapabilities = ["existing"];\n',
+      );
+      const adapter = {
+        name: 'mock' as const,
+        capabilities: { readOnlyEnforced: true, parallelDispatch: true },
+        async runJson(prompt: string, _schema: unknown, cwd: string) {
+          expect(cwd).toBe(fixture);
+          expect(prompt).toContain('inspect the repository outside the diff');
+          const registry = readFileSync(join(cwd, 'registry.ts'), 'utf8');
+          const findings = registry.includes('newCapability')
+            ? []
+            : [
+                {
+                  file: 'registry.ts',
+                  line: 1,
+                  severity: 'high',
+                  category: 'correctness-contract',
+                  ruleId: 'architecture-boundaries',
+                  policySource: 'rules/architecture-boundaries.md',
+                  summary: 'The new capability is not registered.',
+                  failureScenario: 'The exported feature exists but no runtime consumer can reach it.',
+                  evidence: 'registry.ts contains only existing capability registration.',
+                  recommendation: 'Register newCapability in the authoritative registry.',
+                  suggestedVerification: 'Run the registry reachability test.',
+                  blocking: true,
+                  specialist: 'correctness-contract',
+                  contributingSpecialists: ['correctness-contract'],
+                },
+              ];
+          return { text: JSON.stringify({ findings }), parsed: { findings } };
+        },
+      };
+      const findings = await runParallelSpecialistReview(
+        {
+          runId: 'unwired-fixture',
+          workflow: getWorkflow('goldband-review'),
+          cwd: fixture,
+          artifacts: [],
+          options: {},
+        },
+        adapter,
+        'diff --git a/feature.ts b/feature.ts\n+export function newCapability()',
+        {},
+      );
+      expect(findings.some((finding) => finding.ruleId === 'architecture-boundaries')).toBe(true);
+      expect(findings.some((finding) => finding.summary.includes('not registered'))).toBe(true);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   test('parallel specialist review honors explicit off mode without dispatch', async () => {
@@ -718,6 +898,22 @@ describe('workflow runtime', () => {
       '--max-budget-usd',
       '0.50',
     ]);
+    expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual([
+      '--tools',
+      'Read,Glob,Grep',
+    ]);
+  });
+
+  test('runProcess executes the host in the target cwd', async () => {
+    const result = await runProcess(
+      process.execPath,
+      ['-e', 'process.stdout.write(process.cwd())'],
+      1000,
+      100,
+      tmpHome,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(realpathSync(tmpHome));
   });
 
   test('runProcess resolves after killing a process that ignores SIGTERM', async () => {
@@ -732,6 +928,34 @@ describe('workflow runtime', () => {
     expect(result.status).toBeNull();
     expect(result.stderr).toContain('timed out after 20ms');
     expect(result.stderr).toContain('killed after failing to exit on SIGTERM');
+  });
+
+  test('runProcess does not leave a descendant that ignores SIGTERM', async () => {
+    if (process.platform === 'win32') return;
+    const pidFile = join(tmpHome, 'run-process-grandchild.pid');
+    const grandchild = [
+      'process.on("SIGTERM", () => {});',
+      'setInterval(() => {}, 1000);',
+    ].join(' ');
+    const parent = [
+      'const { spawn } = require("node:child_process");',
+      'const { writeFileSync } = require("node:fs");',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: 'ignore' });`,
+      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));`,
+      'process.on("SIGTERM", () => {});',
+      'setInterval(() => {}, 1000);',
+    ].join('\n');
+
+    await runProcess(process.execPath, ['-e', parent], 50, 50);
+    const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
+    let alive = true;
+    try {
+      process.kill(pid, 0);
+    } catch {
+      alive = false;
+    }
+    if (alive) process.kill(pid, 'SIGKILL');
+    expect(alive).toBe(false);
   });
 
   test('review findings schema rejects invalid optional field types', () => {

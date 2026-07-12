@@ -6,9 +6,17 @@ import { evidencePath, stateRoot } from './evidence';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
+  prepareSpecialistReview,
   runParallelSpecialistReview,
   unwrapFindings,
+  type PreparedSpecialistReview,
 } from './review-engine';
+import {
+  buildReviewPromptTelemetry,
+  createReviewRulesSnapshot,
+  coreReviewRules,
+  type RulesBundle,
+} from './review-rules';
 import { findingsSchema, normalizeFindings, textSchema } from './schema';
 import type {
   EvaluationSignalSnapshot,
@@ -89,15 +97,36 @@ function collectDiff(ctx: WorkflowContext): DiffOutput {
 async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   const input = diffSchema.validate(ctx.input);
   const adapter = adapterFor(reviewHost(ctx));
-  const prompt = buildReviewPrompt(ctx, input.diff);
-  const result = await adapter.runJson(prompt, findingsEnvelopeJsonSchema);
+  const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
+  const coreRules = coreReviewRules(ctx.cwd, input.diff, rulesSnapshot);
+  const prompt = buildReviewPrompt(ctx, input.diff, coreRules);
+  const specialistMode = ctx.options.specialists ?? 'auto';
+  const specialistReview = prepareSpecialistReview(
+    ctx,
+    input.diff,
+    specialistMode,
+    rulesSnapshot,
+  );
+  recordReviewPromptTelemetry(
+    ctx,
+    adapter.name,
+    prompt,
+    coreRules.bundle,
+    specialistReview,
+  );
+  const result = await adapter.runJson(
+    prompt,
+    findingsEnvelopeJsonSchema,
+    ctx.cwd,
+  );
   const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
   const specialistFindings = await runParallelSpecialistReview(
     ctx,
     adapter,
     input.diff,
     findingsEnvelopeJsonSchema,
-    ctx.options.specialists ?? 'auto',
+    specialistMode,
+    specialistReview,
   );
   return aggregateReviewFindings([...coreFindings, ...specialistFindings]);
 }
@@ -134,7 +163,10 @@ function renderReport(ctx: WorkflowContext): string {
         : finding.specialist
           ? ` specialist=${finding.specialist}`
           : '';
-      lines.push(`- [${finding.severity}/${mode}${category}] ${loc} - ${finding.summary}${specialists}`);
+      const policy = finding.ruleId
+        ? ` rule=${finding.ruleId}${finding.policySource ? ` source=${finding.policySource}` : ''}`
+        : '';
+      lines.push(`- [${finding.severity}/${mode}${category}] ${loc} - ${finding.summary}${specialists}${policy}`);
       if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
       if (finding.failureScenario) lines.push(`  Failure scenario: ${finding.failureScenario}`);
       if (finding.recommendation) lines.push(`  Recommendation: ${finding.recommendation}`);
@@ -294,7 +326,11 @@ function reviewHost(ctx: WorkflowContext): 'mock' | 'claude' | 'codex' {
   throw new Error('--mode real requires --host claude or --host codex');
 }
 
-function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
+export function buildReviewPrompt(
+  ctx: WorkflowContext,
+  diff: string,
+  rules = coreReviewRules(ctx.cwd, diff),
+): string {
   const template = readFileSync(workflowAssetPath(ctx.workflow.sourceTemplate), 'utf8');
   const label = workflowLabelFromTemplate(template);
   return [
@@ -302,14 +338,40 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
     reviewIterationPromptContext(ctx),
     readReviewAsset('shared-rubric.md'),
     readReviewAsset('findings-schema.md'),
+    readReviewAsset('checklist.md'),
+    'APPLICABLE_GOLDBAND_RULES_START',
+    rules.text,
+    'APPLICABLE_GOLDBAND_RULES_END',
     'Return only JSON matching the provided findings schema.',
     'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
-    'Review this diff for concrete, evidence-backed issues.',
+    'Use the diff to define scope. Inspect the read-only repository outside the diff when needed to verify wiring, authoritative ownership, consumers, registrations, and dead code.',
     'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
     'DIFF_START',
     diff,
     'DIFF_END',
   ].join('\n');
+}
+
+function recordReviewPromptTelemetry(
+  ctx: WorkflowContext,
+  host: string,
+  corePrompt: string,
+  coreBundle: RulesBundle,
+  specialistReview: PreparedSpecialistReview,
+): void {
+  const telemetry = buildReviewPromptTelemetry({
+    host,
+    corePrompt,
+    coreBundle,
+    specialistPrompts: specialistReview.items,
+    selectedSpecialists: specialistReview.selection.selected,
+  });
+  const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
+  mkdirSync(dir, { recursive: true });
+  const iteration = ctx.iterationContext?.iteration;
+  const suffix = iteration ? `-iteration-${iteration}` : '';
+  const file = join(dir, `${ctx.runId}-review-prompt${suffix}.json`);
+  writeFileSync(file, `${JSON.stringify(telemetry, null, 2)}\n`);
 }
 
 function readReviewAsset(name: string): string {
@@ -415,6 +477,8 @@ const findingsJsonSchema = {
       evidence: { type: ['string', 'null'] },
       recommendation: { type: ['string', 'null'] },
       category: { type: ['string', 'null'] },
+      ruleId: { type: ['string', 'null'] },
+      policySource: { type: ['string', 'null'] },
       failureScenario: { type: ['string', 'null'] },
       suggestedVerification: { type: ['string', 'null'] },
       blocking: { type: ['boolean', 'null'] },
@@ -432,6 +496,8 @@ const findingsJsonSchema = {
       'evidence',
       'recommendation',
       'category',
+      'ruleId',
+      'policySource',
       'failureScenario',
       'suggestedVerification',
       'blocking',

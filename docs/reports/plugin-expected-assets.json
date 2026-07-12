@@ -97,7 +97,8 @@
       }
     },
     "runtimeDependencies": [
-      "scripts/lib/telemetry-schema.cjs"
+      "scripts/lib/telemetry-schema.cjs",
+      "hooks/scripts/lib/rules-resolver.js"
     ],
     "hookScripts": [
       "hooks/scripts/hooks/hook-router.js",
@@ -113,12 +114,24 @@
       "rules/git-workflow.md",
       "rules/loop-engineering.md",
       "rules/security.md",
+      "rules/semantic-review-criteria.md",
       "rules/session-handoff.md"
     ],
+    "rulesManifest": "rules/manifest.json",
     "generatedRuleSkill": "plugin-assets/claude-code-plugin/skills/goldband-rules/SKILL.md"
   },
   "codex": {
     "distribution": "installer",
+    "reviewRuntimeDependencies": [
+      "hooks/scripts/lib/rules-resolver.js"
+    ],
+    "hookRuntimeDependencies": [
+      "codex/hooks/cross-review-gate.js",
+      "codex/hooks/high-risk-policy.js",
+      "codex/hooks/module-loader.js",
+      "codex/hooks/telemetry.js",
+      "codex/hooks/telemetry-schema.cjs"
+    ],
     "reason": "Codex plugins exist but package Codex skills/apps/MCP, not Claude Code settings. Root Codex install remains install.sh."
   },
   "outOfScope": [

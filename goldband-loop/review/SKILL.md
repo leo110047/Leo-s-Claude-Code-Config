@@ -1146,19 +1146,21 @@ Plan items: N DONE, M PARTIAL, K NOT DONE
 
 ## Step 2: Read the shared review standard
 
-Read these files:
+Resolve the active runtime root from `GOLDBAND_ROOT` in the preamble, then read:
 
-- `.claude/skills/review/shared-rubric.md`
-- `.claude/skills/review/findings-schema.md`
-- `.claude/skills/review/checklist.md`
+- `$GOLDBAND_ROOT/review/shared-rubric.md`
+- `$GOLDBAND_ROOT/review/findings-schema.md`
+- `$GOLDBAND_ROOT/review/checklist.md`
 
-**If any file cannot be read, STOP and report the error.** Do not proceed without the shared review standard.
+Do not substitute files from the repository source tree or another host runtime.
+**If any file cannot be read, STOP and report the active runtime path that is
+missing.** Do not proceed without the shared review standard.
 
 ---
 
 ## Step 2.5: Check for Greptile review comments
 
-Read `.claude/skills/review/greptile-triage.md` and follow the fetch, filter, classify, and **escalation detection** steps.
+Read `$GOLDBAND_ROOT/review/greptile-triage.md` and follow the fetch, filter, classify, and **escalation detection** steps.
 
 **If no PR exists, `gh` fails, API returns an error, or there are zero Greptile comments:** Skip this step silently. Greptile integration is additive — the review works without it.
 

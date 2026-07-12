@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import type { HostAdapter } from './host-adapter';
 import { workflowAssetPath } from './paths';
+import {
+  specialistReviewRules,
+  type RulesBundle,
+  type RulesSnapshot,
+} from './review-rules';
 import type { ReviewFinding, WorkflowContext } from './types';
 
 export const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
@@ -29,6 +34,15 @@ export type SpecialistSelection = {
 };
 
 export type SpecialistMode = 'off' | 'auto' | 'all';
+
+export type PreparedSpecialistReview = {
+  selection: SpecialistSelection;
+  items: Array<{
+    specialist: ReviewSpecialist;
+    prompt: string;
+    bundle: RulesBundle;
+  }>;
+};
 
 export const SPECIALIST_CONCURRENCY = 4;
 
@@ -108,8 +122,9 @@ export async function runParallelSpecialistReview(
   diff: string,
   schema: unknown,
   mode: SpecialistMode = 'auto',
+  prepared?: PreparedSpecialistReview,
 ): Promise<ReviewFinding[]> {
-  const selection = selectReviewSpecialists(diff, mode);
+  const selection = prepared?.selection ?? selectReviewSpecialists(diff, mode);
   if (mode === 'off') {
     return aggregateReviewFindings(selection.skipped.map(skippedSpecialistFinding));
   }
@@ -125,8 +140,13 @@ export async function runParallelSpecialistReview(
     ];
   }
 
-  const jobs = selection.selected.map((specialist) => async () => {
-    const result = await adapter.runJson(buildSpecialistPrompt(ctx, diff, specialist), schema);
+  const items = prepared?.items ?? prepareSpecialistReview(ctx, diff, mode).items;
+  const jobs = items.map(({ specialist, prompt }) => async () => {
+    const result = await adapter.runJson(
+      prompt,
+      schema,
+      ctx.cwd,
+    );
     return normalizeSpecialistFindings(unwrapFindings(result.parsed), specialist);
   });
 
@@ -139,6 +159,24 @@ export async function runParallelSpecialistReview(
   }
   findings.push(...selection.skipped.map(skippedSpecialistFinding));
   return aggregateReviewFindings(findings);
+}
+
+export function prepareSpecialistReview(
+  ctx: WorkflowContext,
+  diff: string,
+  mode: SpecialistMode = 'auto',
+  snapshot?: RulesSnapshot,
+): PreparedSpecialistReview {
+  const selection = selectReviewSpecialists(diff, mode);
+  const items = selection.selected.map((specialist) => {
+    const rules = specialistReviewRules(ctx.cwd, specialist, snapshot);
+    return {
+      specialist,
+      prompt: buildSpecialistPrompt(ctx, diff, specialist, rules),
+      bundle: rules.bundle,
+    };
+  });
+  return { selection, items };
 }
 
 export function aggregateReviewFindings(findings: ReviewFinding[]): ReviewFinding[] {
@@ -176,17 +214,24 @@ export function buildSpecialistPrompt(
   ctx: WorkflowContext,
   diff: string,
   specialist: ReviewSpecialist,
+  rules = specialistReviewRules(ctx.cwd, specialist),
 ): string {
   const sharedRubric = readSharedReviewAsset('shared-rubric.md');
   const schemaAsset = readSharedReviewAsset('findings-schema.md');
+  const checklist = readSharedReviewAsset('checklist.md');
   return [
     `GOLDBAND_REVIEW_SPECIALIST=${specialist}`,
     'Read-only specialist review. Do not edit files. Do not run repair workflows.',
-    'Use only the bounded diff and supplied shared review standard.',
+    'Use the diff to define scope, then inspect the repository outside the diff when needed to trace authoritative owners, producers, consumers, routes, registrations, facades, and sibling implementations.',
+    'Repository inspection is read-only. Never mutate files or repository state.',
     `Responsibility: ${SPECIALIST_GUIDANCE[specialist]}`,
     reviewIterationContext(ctx),
     sharedRubric,
     schemaAsset,
+    checklist,
+    'APPLICABLE_GOLDBAND_RULES_START',
+    rules.text,
+    'APPLICABLE_GOLDBAND_RULES_END',
     'Return only JSON matching the supplied output schema: {"findings":[...]}',
     'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
     'DIFF_START',
@@ -287,6 +332,8 @@ function mergeFindings(a: ReviewFinding, b: ReviewFinding): ReviewFinding {
     evidence: mostSpecific(a.evidence, b.evidence),
     recommendation: mostSpecific(a.recommendation, b.recommendation),
     suggestedVerification: mostSpecific(a.suggestedVerification, b.suggestedVerification),
+    ruleId: mostSpecific(a.ruleId, b.ruleId),
+    policySource: mostSpecific(a.policySource, b.policySource),
     blocking: Boolean(a.blocking || b.blocking),
     contributingSpecialists: normalizeSpecialistList([
       ...(a.contributingSpecialists ?? []),
