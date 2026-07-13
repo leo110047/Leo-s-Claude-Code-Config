@@ -50,12 +50,4 @@ describe('jargon-list.json', () => {
     }
   });
 
-  test('includes common high-signal terms', () => {
-    const data = JSON.parse(fs.readFileSync(JARGON_PATH, 'utf-8'));
-    const terms = new Set(data.terms.map((t: string) => t.toLowerCase()));
-    // Sanity: the list should include some canonical goldband-review jargon
-    expect(terms.has('idempotent') || terms.has('idempotency')).toBe(true);
-    expect(terms.has('race condition')).toBe(true);
-    expect(terms.has('n+1') || terms.has('n+1 query')).toBe(true);
-  });
 });

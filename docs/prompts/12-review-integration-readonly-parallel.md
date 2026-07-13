@@ -308,7 +308,7 @@ rubric。
 - `goldband-loop/test/gen-skill-docs.test.ts`
 - `goldband-loop/test/skill-validation.test.ts`
 - `goldband-loop/test/workflows-runtime.test.ts`
-- `goldband-loop/test/skill-e2e-review-army.test.ts`
+- `goldband-loop/test/review-specialist-dispatch.test.ts`
 - any workflow runtime tests that cover `reviewSteps`, host adapters, or
   cross-review parsing。
 
@@ -454,7 +454,7 @@ rg -n "Do not route `\\$goldband cross-review` to `/review`|GOLDBAND-CROSS-REVIE
 bun test goldband-loop/test/gen-skill-docs.test.ts
 bun test goldband-loop/test/skill-validation.test.ts
 bun test goldband-loop/test/workflows-runtime.test.ts
-bun test goldband-loop/test/skill-e2e-review-army.test.ts
+bun test goldband-loop/test/review-specialist-dispatch.test.ts
 ```
 
 若 repo 有標準 inventory/golden check，final 前要跑：

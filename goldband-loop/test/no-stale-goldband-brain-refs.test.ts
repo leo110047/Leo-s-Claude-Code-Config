@@ -64,10 +64,6 @@ const ALLOWLIST = [
   'bin/goldband-artifacts-init',
   // The replacement test mirrors the pattern of the old test (lineage note).
   'test/goldband-artifacts-init.test.ts',
-  // The post-rename-doc-regen test references the patterns it greps for.
-  'test/post-rename-doc-regen.test.ts',
-  // The Path 4 structural lint references some legacy names in comments.
-  'test/setup-gbrain-path4-structure.test.ts',
   // Generated docs that include the preamble bash (which has the fallback).
   // We grep template sources, not generated output, by limiting scan paths.
 ];

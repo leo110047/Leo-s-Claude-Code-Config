@@ -9,7 +9,6 @@ const hermes: HostConfig = {
   globalRoot: '.hermes/skills/goldband',
   localSkillRoot: '.hermes/skills/goldband',
   hostSubdir: '.hermes',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -24,8 +23,6 @@ const hermes: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.hermes/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.hermes/skills/goldband' },
     { from: '.claude/skills', to: '.hermes/skills' },
     { from: 'CLAUDE.md', to: 'AGENTS.md' },
   ],

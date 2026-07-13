@@ -9,7 +9,6 @@ const openclaw: HostConfig = {
   globalRoot: '.openclaw/skills/goldband',
   localSkillRoot: '.openclaw/skills/goldband',
   hostSubdir: '.openclaw',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -27,8 +26,6 @@ const openclaw: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.openclaw/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.openclaw/skills/goldband' },
     { from: '.claude/skills', to: '.openclaw/skills' },
     { from: 'CLAUDE.md', to: 'AGENTS.md' },
   ],

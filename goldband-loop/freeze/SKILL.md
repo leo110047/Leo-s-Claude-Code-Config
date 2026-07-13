@@ -33,6 +33,21 @@ hooks:
 
 # /freeze — Restrict Edits to a Directory
 
+```bash
+# Goldband runtime contract (block-local; generated)
+_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
+GOLDBAND_LOCAL_REL=".claude/skills/goldband"
+GOLDBAND_LOCAL_ROOT=""
+[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
+GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
+[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
+GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
+GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
+GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+```
+
 Lock file edits to a specific directory. Any Edit or Write operation targeting
 a file outside the allowed path will be **blocked** (not just warned).
 
@@ -58,8 +73,17 @@ echo "$FREEZE_DIR"
 
 2. Ensure trailing slash and save to the freeze state file:
 ```bash
+# Goldband runtime contract (block-local; generated)
+_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
+GOLDBAND_LOCAL_REL=".claude/skills/goldband"
+GOLDBAND_LOCAL_ROOT=""
+[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
+GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
+[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
+GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
 FREEZE_DIR="${FREEZE_DIR%/}/"
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 STATE_DIR="$GOLDBAND_STATE_ROOT"
 mkdir -p "$STATE_DIR"
 echo "$FREEZE_DIR" > "$STATE_DIR/freeze-dir.txt"

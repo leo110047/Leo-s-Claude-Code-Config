@@ -248,7 +248,7 @@ Tell the user: "Before I merge any PR, I run a series of readiness checks — co
 Preview the readiness checks that will run at Step 3.5 (without re-running tests):
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-read 2>/dev/null
+$GOLDBAND_BIN/goldband-review-read 2>/dev/null
 ```
 
 Show a summary of review status: which reviews have been run, how stale they are.
@@ -384,7 +384,7 @@ Collect evidence for each check below. Track warnings (yellow) and blockers (red
 ### 3.5a: Review staleness check
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-read 2>/dev/null
+$GOLDBAND_BIN/goldband-review-read 2>/dev/null
 ```
 
 Parse the output. For each review skill (plan-eng-review, plan-ceo-review,
@@ -430,7 +430,7 @@ Use AskUserQuestion:
 
 Read the review checklist:
 ```bash
-cat ~/.claude/skills/goldband/review/checklist.md 2>/dev/null || echo "Checklist not found"
+cat $GOLDBAND_ROOT/review/checklist.md 2>/dev/null || echo "Checklist not found"
 ```
 Apply each checklist item to the current diff. This is the same quick review that `/ship`
 runs in its Step 3.5. Auto-fix trivial issues (whitespace, imports). For critical findings
@@ -711,7 +711,7 @@ First, run the deploy configuration bootstrap to detect or read persisted deploy
 Then run `goldband-diff-scope` to classify the changes:
 
 ```bash
-eval $(~/.claude/skills/goldband/bin/goldband-diff-scope $(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo main) 2>/dev/null)
+eval $($GOLDBAND_BIN/goldband-diff-scope $(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo main) 2>/dev/null)
 echo "FRONTEND=$SCOPE_FRONTEND BACKEND=$SCOPE_BACKEND DOCS=$SCOPE_DOCS CONFIG=$SCOPE_CONFIG"
 ```
 

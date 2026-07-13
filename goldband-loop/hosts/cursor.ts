@@ -9,7 +9,6 @@ const cursor: HostConfig = {
   globalRoot: '.cursor/skills/goldband',
   localSkillRoot: '.cursor/skills/goldband',
   hostSubdir: '.cursor',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -23,8 +22,6 @@ const cursor: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.cursor/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.cursor/skills/goldband' },
     { from: '.claude/skills', to: '.cursor/skills' },
   ],
 

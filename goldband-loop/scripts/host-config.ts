@@ -31,9 +31,6 @@ export interface HostConfig {
   localSkillRoot: string;
   /** Gitignored directory under repo root for generated docs (e.g., '.opencode'). */
   hostSubdir: string;
-  /** Whether preamble generates $GOLDBAND_ROOT env vars (true for non-Claude hosts). */
-  usesEnvVars: boolean;
-
   // --- Frontmatter Transformation ---
   frontmatter: {
     /** 'allowlist': ONLY keepFields survive. 'denylist': strip listed fields. */

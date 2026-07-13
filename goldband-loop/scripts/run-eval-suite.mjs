@@ -52,14 +52,26 @@ function suiteConfig(name) {
     includeCodex: true,
     includeGemini: true,
   };
-  const llmAndE2e = { includeLlm: true, ...e2eSurfaces };
+  const llmAndE2e = {
+    includeLlm: true,
+    ...e2eSurfaces,
+  };
   const suites = {
-    evals: llmAndE2e,
-    'evals-all': { ...llmAndE2e, all: true },
+    evals: { ...llmAndE2e, includeRecommendationJudge: true },
+    'evals-all': {
+      ...llmAndE2e,
+      includeRecommendationJudge: true,
+      all: true,
+    },
     e2e: e2eSurfaces,
     'e2e-all': { ...e2eSurfaces, all: true },
     gate: { ...llmAndE2e, tier: 'gate' },
-    periodic: { ...e2eSurfaces, tier: 'periodic', all: true },
+    periodic: {
+      ...e2eSurfaces,
+      includeRecommendationJudge: true,
+      tier: 'periodic',
+      all: true,
+    },
     codex: { includeCodex: true },
     'codex-all': { includeCodex: true, all: true },
     gemini: { includeGemini: true },
@@ -78,6 +90,9 @@ function suiteConfig(name) {
 function testFiles(config) {
   const files = [];
   if (config.includeLlm) files.push('test/skill-llm-eval.test.ts');
+  if (config.includeRecommendationJudge) {
+    files.push('test/llm-judge-recommendation.test.ts');
+  }
   if (config.includeE2e) {
     files.push(
       ...readdirSync(TEST_DIR)

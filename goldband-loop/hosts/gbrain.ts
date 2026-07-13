@@ -14,7 +14,6 @@ const gbrain: HostConfig = {
   globalRoot: '.gbrain/skills/goldband',
   localSkillRoot: '.gbrain/skills/goldband',
   hostSubdir: '.gbrain',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -29,8 +28,6 @@ const gbrain: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.gbrain/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.gbrain/skills/goldband' },
     { from: '.claude/skills', to: '.gbrain/skills' },
     { from: 'CLAUDE.md', to: 'AGENTS.md' },
   ],

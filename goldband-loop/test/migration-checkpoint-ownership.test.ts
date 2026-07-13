@@ -144,4 +144,25 @@ describe('migration v1.1.3.0 — checkpoint ownership guard', () => {
     expect(fs.existsSync(path.join(topLevel, 'SKILL.md'))).toBe(true);
     expect(result.stdout).toContain('Leaving');
   });
+
+  test('HOME unset is a safe no-op', () => {
+    const result = spawnSync('bash', [MIGRATION], {
+      env: { PATH: process.env.PATH || '/usr/bin:/bin' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr.toString()).toContain('HOME is unset');
+  });
+
+  test('empty HOME is a safe no-op', () => {
+    const result = spawnSync('bash', [MIGRATION], {
+      env: { HOME: '', PATH: process.env.PATH || '/usr/bin:/bin' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr.toString()).toContain('HOME is unset or empty');
+    expect(result.stdout.toString()).toBe('');
+  });
 });

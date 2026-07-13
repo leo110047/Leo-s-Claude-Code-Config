@@ -9,7 +9,6 @@ const codex: HostConfig = {
   globalRoot: '.codex/skills/goldband',
   localSkillRoot: '.agents/skills/goldband',
   hostSubdir: '.agents',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -25,8 +24,6 @@ const codex: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '$GOLDBAND_ROOT' },
-    { from: '.claude/skills/goldband', to: '.agents/skills/goldband' },
     { from: '.claude/skills/review', to: '.agents/skills/goldband/review' },
     { from: '.claude/skills', to: '.agents/skills' },
   ],

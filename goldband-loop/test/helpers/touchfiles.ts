@@ -60,23 +60,14 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'review-design-lite':       ['review/**', 'test/fixtures/review-eval-design-slop.*'],
 
   // Review Army (specialist dispatch)
-  'review-army-migration-safety': ['review/**', 'scripts/resolvers/review-army.ts', 'bin/goldband-diff-scope'],
-  'review-army-perf-n-plus-one':  ['review/**', 'scripts/resolvers/review-army.ts', 'bin/goldband-diff-scope'],
-  'review-army-delivery-audit':   ['review/**', 'scripts/resolvers/review.ts', 'scripts/resolvers/review-army.ts'],
-  'review-army-quality-score':    ['review/**', 'scripts/resolvers/review-army.ts'],
-  'review-army-json-findings':    ['review/**', 'scripts/resolvers/review-army.ts'],
-  'review-army-red-team':         ['review/**', 'scripts/resolvers/review-army.ts'],
-  'review-army-consensus':        ['review/**', 'scripts/resolvers/review-army.ts'],
 
   // Office Hours
-  'office-hours-spec-review':     ['office-hours/**', 'scripts/gen-skill-docs.ts'],
   'office-hours-forcing-energy':  ['office-hours/**', 'scripts/resolvers/preamble.ts', 'test/fixtures/mode-posture/**', 'test/helpers/llm-judge.ts'],
   'office-hours-builder-wildness': ['office-hours/**', 'scripts/resolvers/preamble.ts', 'test/fixtures/mode-posture/**', 'test/helpers/llm-judge.ts'],
 
   // Plan reviews
   'plan-ceo-review':                  ['plan-ceo-review/**'],
   'plan-ceo-review-selective':        ['plan-ceo-review/**'],
-  'plan-ceo-review-benefits':         ['plan-ceo-review/**', 'scripts/gen-skill-docs.ts'],
   'plan-ceo-review-expansion-energy': ['plan-ceo-review/**', 'scripts/resolvers/preamble.ts', 'test/fixtures/mode-posture/**', 'test/helpers/llm-judge.ts'],
   'plan-eng-review':           ['plan-eng-review/**'],
   'plan-eng-review-artifact':  ['plan-eng-review/**'],
@@ -119,10 +110,8 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'ask-user-question-format-pty':              ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble/generate-completeness-section.ts', 'scripts/resolvers/preamble.ts', 'test/helpers/claude-pty-runner.ts'],
   'plan-ceo-mode-routing':       ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'test/helpers/claude-pty-runner.ts'],
   'plan-design-with-ui-scope':   ['plan-design-review/**', 'test/fixtures/plans/ui-heavy-feature.md', 'test/helpers/claude-pty-runner.ts'],
-  'budget-regression-pty':       ['test/helpers/eval-store.ts', 'test/skill-budget-regression.test.ts'],
   'ship-idempotency-pty':        ['ship/**', 'bin/goldband-next-version', 'lib/worktree.ts', 'test/helpers/claude-pty-runner.ts'],
   'autoplan-chain-pty':          ['autoplan/**', 'plan-ceo-review/**', 'plan-design-review/**', 'plan-eng-review/**', 'plan-devex-review/**', 'test/fixtures/plans/ui-heavy-feature.md', 'test/helpers/claude-pty-runner.ts'],
-  'e2e-harness-audit':            ['plan-ceo-review/**', 'plan-eng-review/**', 'plan-design-review/**', 'plan-devex-review/**', 'scripts/resolvers/preamble/generate-completion-status.ts', 'test/helpers/agent-sdk-runner.ts', 'test/helpers/claude-pty-runner.ts'],
 
   // Per-finding AskUserQuestion count + review-report-at-bottom assertion.
   // Each test drives its skill end-to-end; touchfiles include preamble +
@@ -253,14 +242,11 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
 
   // Coverage audit (shared fixture) + triage + gates
   'ship-coverage-audit': ['ship/**', 'test/fixtures/coverage-audit-fixture.ts', 'bin/goldband-repo-mode'],
-  'review-coverage-audit': ['review/**', 'test/fixtures/coverage-audit-fixture.ts'],
-  'plan-eng-coverage-audit': ['plan-eng-review/**', 'test/fixtures/coverage-audit-fixture.ts'],
   'ship-triage': ['ship/**', 'bin/goldband-repo-mode'],
 
   // Plan completion audit + verification
   'ship-plan-completion': ['ship/**', 'scripts/gen-skill-docs.ts'],
   'ship-plan-verification': ['ship/**', 'qa-only/**', 'scripts/gen-skill-docs.ts'],
-  'ship-idempotency':       ['ship/**', 'scripts/resolvers/utility.ts'],
   'review-plan-completion': ['review/**', 'scripts/gen-skill-docs.ts'],
 
   // Design
@@ -405,21 +391,12 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'review-enum-completeness': 'gate',
   'review-base-branch': 'gate',
   'review-design-lite': 'periodic',   // 4/7 threshold is subjective
-  'review-coverage-audit': 'gate',
   'review-plan-completion': 'gate',
   'review-dashboard-via': 'gate',
 
   // Review Army — gate for core functionality, periodic for multi-specialist
-  'review-army-migration-safety': 'gate',   // Specialist activation guardrail
-  'review-army-perf-n-plus-one': 'gate',    // Specialist activation guardrail
-  'review-army-delivery-audit': 'gate',     // Delivery integrity guardrail
-  'review-army-quality-score': 'gate',      // Score computation
-  'review-army-json-findings': 'gate',      // JSON schema compliance
-  'review-army-red-team': 'periodic',       // Multi-agent coordination
-  'review-army-consensus': 'periodic',      // Multi-specialist agreement
 
   // Office Hours
-  'office-hours-spec-review': 'gate',
   'office-hours-forcing-energy': 'gate',       // V1.1 mode-posture regression gate (Sonnet generator)
   // 'office-hours-builder-wildness' retiered to periodic in v1.32 contributor
   // wave: this is an LLM-judge creativity score (axis_a ≥4 on a "wildness"
@@ -434,11 +411,9 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   // Plan reviews — gate for cheap functional, periodic for Opus quality
   'plan-ceo-review': 'periodic',
   'plan-ceo-review-selective': 'periodic',
-  'plan-ceo-review-benefits': 'gate',
   'plan-ceo-review-expansion-energy': 'gate',  // V1.1 mode-posture regression gate (Opus generator, Sonnet judge)
   'plan-eng-review': 'periodic',
   'plan-eng-review-artifact': 'periodic',
-  'plan-eng-coverage-audit': 'gate',
   'plan-review-report': 'gate',
 
   // Plan-mode handshake — deterministic safety regression, gate-tier
@@ -450,7 +425,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   // v1.21+ auto-mode regression tests
   'office-hours-auto-mode': 'gate',
   'auto-decide-preserved': 'periodic',
-  'e2e-harness-audit': 'gate',
 
   // Real-PTY E2E batch — tier classification:
   //   gate: cheap, deterministic, run on every PR
@@ -458,7 +432,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'ask-user-question-format-pty':            'gate',       // ~$0.50/run, single skill probe
   'plan-ceo-mode-routing':     'periodic',   // ~$3/run, deep navigation through 8-12 prior AskUserQuestions
   'plan-design-with-ui-scope': 'gate',       // ~$0.80/run
-  'budget-regression-pty':     'gate',       // free, library-only assertion
   'ship-idempotency-pty':      'periodic',   // ~$3/run, real /ship in plan mode
   'autoplan-chain-pty':        'periodic',   // ~$8/run, all 3 phases sequential
 
@@ -483,10 +456,8 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   // /setup-gbrain Path 4 (Remote MCP) — periodic-tier. The stub HTTP
   // server is deterministic but the model's interpretation of "follow
   // Path 4 only" is not — assertions on which steps the model ran are
-  // flaky. The deterministic gate-tier coverage for Path 4 lives in
-  // test/setup-gbrain-path4-structure.test.ts (free, <200ms). These
-  // E2E tests stay available for on-demand verification of the live
-  // model's behavior against a stub MCP server.
+  // flaky. Binary-level free tests cover the deterministic verifier and
+  // artifact initialization; these E2E tests measure live model behavior.
   'setup-gbrain-remote': 'periodic',
   'setup-gbrain-bad-token': 'periodic',
   'setup-gbrain-path4-local-pglite': 'periodic',
@@ -551,7 +522,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'ship-triage': 'gate',
   'ship-plan-completion': 'gate',
   'ship-plan-verification': 'gate',
-  'ship-idempotency': 'periodic',
 
   // Retro — gate for cheap branch detection, periodic for full Opus retro
   'retro': 'periodic',

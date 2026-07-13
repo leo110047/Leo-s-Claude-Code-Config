@@ -21,10 +21,7 @@ triggers:
 ## Runtime root
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-GOLDBAND_ROOT="$HOME/.claude/skills/goldband"
-[ -n "$_ROOT" ] && [ -d "$_ROOT/.claude/skills/goldband" ] && GOLDBAND_ROOT="$_ROOT/.claude/skills/goldband"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+{{RUNTIME_ROOT}}
 GOLDBAND_RULES_DIR="${GOLDBAND_RULES_DIR:-}"
 for _RULES_DIR in "${_ROOT:-}/rules" "$HOME/.claude/rules" "$HOME/.codex/rules"; do
   if [ -z "$GOLDBAND_RULES_DIR" ] && [ -f "$_RULES_DIR/semantic-review-criteria.md" ]; then

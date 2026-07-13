@@ -23,6 +23,10 @@ import { generatePlanCompletionAuditShip, generatePlanCompletionAuditReview, gen
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
 import type { HostConfig } from './host-config';
 import { TOKEN_CEILING_BYTES } from './skill-budget';
+import {
+  generateRuntimeRoot,
+  type RuntimeContractVariable,
+} from './resolvers/utility';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -333,6 +337,28 @@ function extractHookSafetyProse(tmplContent: string): string | null {
 // ─── Template Processing ────────────────────────────────────
 
 const GENERATED_HEADER = `<!-- AUTO-GENERATED from {{SOURCE}} — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n`;
+const RUNTIME_CONTRACT_REFERENCE = /\$GOLDBAND_(GLOBAL_ROOT|LOCAL_REL|LOCAL_ROOT|ROOT|BIN|BROWSE|DESIGN|MAKE_PDF)\b/g;
+const RUNTIME_CONTRACT_MARKER = '# Goldband runtime contract (block-local; generated)';
+
+/**
+ * Bash tool calls are sibling processes, so variables initialized in the
+ * preamble cannot be consumed by a later fenced block. Keep the host-aware
+ * contract single-sourced in generateRuntimeRoot(), then materialize it into
+ * every executable block that references the contract.
+ */
+export function injectBlockLocalRuntimeContracts(content: string, ctx: TemplateContext): string {
+  return content.replace(/```bash\n([\s\S]*?)```/g, (fence, block: string) => {
+    const requested = new Set(
+      [...block.matchAll(RUNTIME_CONTRACT_REFERENCE)]
+        .map((match) => match[1] as RuntimeContractVariable),
+    );
+    if (requested.size === 0 || block.includes(RUNTIME_CONTRACT_MARKER)) {
+      return fence;
+    }
+    const contract = generateRuntimeRoot(ctx, requested);
+    return `\`\`\`bash\n${contract}\n${block}\`\`\``;
+  });
+}
 
 /**
  * Process external host output: routing, frontmatter, path rewrites, metadata.
@@ -475,6 +501,8 @@ function processTemplate(tmplPath: string, host: Host = 'claude'): { outputPath:
     outputPath = result.outputPath;
     symlinkLoop = result.symlinkLoop;
   }
+
+  content = injectBlockLocalRuntimeContracts(content, ctx);
 
   // Prepend generated header (after frontmatter)
   const header = GENERATED_HEADER.replace('{{SOURCE}}', path.basename(tmplPath));

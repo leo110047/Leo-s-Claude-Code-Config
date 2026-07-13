@@ -9,7 +9,6 @@ export type Host = (typeof ALL_HOST_CONFIGS)[number]['name'];
 
 export interface HostPaths {
   skillRoot: string;
-  localSkillRoot: string;
   binDir: string;
   browseDir: string;
   designDir: string;
@@ -18,32 +17,18 @@ export interface HostPaths {
 
 /**
  * HOST_PATHS — derived from host configs.
- * Each config's globalRoot/localSkillRoot determines the path structure.
- * Non-Claude hosts use $GOLDBAND_ROOT env vars (set by preamble).
+ * Every host uses the runtime variables initialized by the generated preamble.
  */
 function buildHostPaths(): Record<string, HostPaths> {
   const paths: Record<string, HostPaths> = {};
   for (const config of ALL_HOST_CONFIGS) {
-    if (config.usesEnvVars) {
-      paths[config.name] = {
-        skillRoot: '$GOLDBAND_ROOT',
-        localSkillRoot: config.localSkillRoot,
-        binDir: '$GOLDBAND_BIN',
-        browseDir: '$GOLDBAND_BROWSE',
-        designDir: '$GOLDBAND_DESIGN',
-        makePdfDir: '$GOLDBAND_MAKE_PDF',
-      };
-    } else {
-      const root = `~/${config.globalRoot}`;
-      paths[config.name] = {
-        skillRoot: root,
-        localSkillRoot: config.localSkillRoot,
-        binDir: `${root}/bin`,
-        browseDir: `${root}/browse/dist`,
-        designDir: `${root}/design/dist`,
-        makePdfDir: `${root}/make-pdf/dist`,
-      };
-    }
+    paths[config.name] = {
+      skillRoot: '$GOLDBAND_ROOT',
+      binDir: '$GOLDBAND_BIN',
+      browseDir: '$GOLDBAND_BROWSE',
+      designDir: '$GOLDBAND_DESIGN',
+      makePdfDir: '$GOLDBAND_MAKE_PDF',
+    };
   }
   return paths;
 }

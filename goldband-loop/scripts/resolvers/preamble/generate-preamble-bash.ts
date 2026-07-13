@@ -1,22 +1,14 @@
 import type { TemplateContext } from '../types';
-import { getHostConfig } from '../../../hosts/index';
+import { generateRuntimeRoot } from '../utility';
 
 export function generatePreambleBash(ctx: TemplateContext): string {
-  const hostConfig = getHostConfig(ctx.host);
-  const runtimeRoot = hostConfig.usesEnvVars
-    ? `_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-GOLDBAND_ROOT="$HOME/${hostConfig.globalRoot}"
-[ -n "$_ROOT" ] && [ -d "$_ROOT/${ctx.paths.localSkillRoot}" ] && GOLDBAND_ROOT="$_ROOT/${ctx.paths.localSkillRoot}"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
-GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
-`
-    : '';
+  const runtimeRoot = `${generateRuntimeRoot(ctx)}
+`;
 
   return `## Preamble (run first)
 
 \`\`\`bash
-${runtimeRoot}_UPD=$(${ctx.paths.binDir}/goldband-update-check 2>/dev/null || ${ctx.paths.localSkillRoot}/bin/goldband-update-check 2>/dev/null || true)
+${runtimeRoot}_UPD=$(${ctx.paths.binDir}/goldband-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.goldband/sessions
 touch ~/.goldband/sessions/"$PPID"
@@ -79,8 +71,8 @@ _ROUTING_DECLINED=$(${ctx.paths.binDir}/goldband-config get routing_declined 2>/
 echo "HAS_ROUTING: $_HAS_ROUTING"
 echo "ROUTING_DECLINED: $_ROUTING_DECLINED"
 _VENDORED="no"
-if [ -d ".claude/skills/goldband" ] && [ ! -L ".claude/skills/goldband" ]; then
-  if [ -f ".claude/skills/goldband/VERSION" ] || [ -d ".claude/skills/goldband/.git" ]; then
+if [ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && [ ! -L "$GOLDBAND_LOCAL_ROOT" ]; then
+  if [ -f "$GOLDBAND_LOCAL_ROOT/VERSION" ] || [ -d "$GOLDBAND_LOCAL_ROOT/.git" ]; then
     _VENDORED="yes"
   fi
 fi

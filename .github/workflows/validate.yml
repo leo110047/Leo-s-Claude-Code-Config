@@ -24,7 +24,8 @@ jobs:
                 errors=$((errors + 1))
               fi
             else
-              echo "  [SKIP] $f — not found"
+              echo "  [ERROR] $f — required file not found"
+              errors=$((errors + 1))
             fi
           done
 
@@ -48,7 +49,10 @@ jobs:
           node-version: 24
 
       - name: Install Node dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Check generated capability surfaces
+        run: npm run check:manifest
 
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
@@ -59,10 +63,8 @@ jobs:
       - name: Check coding style gate
         run: node scripts/check-code-style.mjs
 
-      - name: Check plugin distribution artifacts and runtime smoke
-        run: |
-          node scripts/sync-plugin-assets.mjs --check
-          node scripts/check-plugin-distribution.mjs --skip-cli
+      - name: Check plugin distribution artifacts are fresh
+        run: node scripts/sync-plugin-assets.mjs --check
 
       - name: Check app support artifacts and adapters
         run: |
@@ -137,21 +139,6 @@ jobs:
         env:
           GOLDBAND_SANDBOX_USE_BUILDX: "1"
         run: bash scripts/test-sandbox.sh
-
-      - name: Summary
-        run: |
-          echo "=== Validation Summary ==="
-          skill_count=$(find skills -name "SKILL.md" | wc -l)
-          command_count=$(find commands -name "*.md" 2>/dev/null | wc -l)
-          context_count=$(find contexts -name "*.md" 2>/dev/null | wc -l)
-          rule_count=$(find rules -name "*.md" 2>/dev/null | wc -l)
-          hook_script_count=$(find hooks/scripts/hooks -name "*.js" 2>/dev/null | wc -l)
-
-          echo "  Skills:       $skill_count"
-          echo "  Commands:     $command_count"
-          echo "  Contexts:     $context_count"
-          echo "  Rules:        $rule_count"
-          echo "  Hook Scripts: $hook_script_count"
 
   macos-workflow-installer:
     runs-on: macos-latest

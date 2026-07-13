@@ -65,8 +65,8 @@ Read the user's message. Route based on plain-English intent, not keywords:
 5. **"Update my profile" / "I'm more high-scope than that" / "I've changed
    my mind"** → run `Edit declared profile` (confirm before writing).
 6. **"Show the gap" / "how far off is my profile"** → run `Show gap`.
-7. **"Turn it off" / "disable"** → `~/.claude/skills/goldband/bin/goldband-config set question_tuning false`
-8. **"Turn it on" / "enable"** → `~/.claude/skills/goldband/bin/goldband-config set question_tuning true`
+7. **"Turn it off" / "disable"** → `$GOLDBAND_BIN/goldband-config set question_tuning false`
+8. **"Turn it on" / "enable"** → `$GOLDBAND_BIN/goldband-config set question_tuning true`
 9. **Clear ambiguity** — if you can't tell what the user wants, ask plainly:
    "Do you want to (a) see your profile, (b) review recent questions, (c) set
    a preference, (d) update your declared profile, or (e) turn it off?"
@@ -85,7 +85,7 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
 1. Read the current state:
    ```bash
-   _QT=$(~/.claude/skills/goldband/bin/goldband-config get question_tuning 2>/dev/null || echo "false")
+   _QT=$($GOLDBAND_BIN/goldband-config get question_tuning 2>/dev/null || echo "false")
    echo "QUESTION_TUNING: $_QT"
    ```
 
@@ -105,7 +105,7 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
 3. If A or B: enable:
    ```bash
-   ~/.claude/skills/goldband/bin/goldband-config set question_tuning true
+   $GOLDBAND_BIN/goldband-config set question_tuning true
    ```
 
 4. If A (full setup), ask FIVE one-per-dimension declaration questions via
@@ -142,9 +142,9 @@ Power-user shortcuts (one-word invocations) — handle these too:
 
    ```bash
    # Ensure profile exists
-   ~/.claude/skills/goldband/bin/goldband-developer-profile --read >/dev/null
+   $GOLDBAND_BIN/goldband-developer-profile --read >/dev/null
    # Update declared dimensions atomically
-   eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+   eval "$($GOLDBAND_BIN/goldband-paths)"
    _PROFILE="$GOLDBAND_STATE_ROOT/developer-profile.json"
    bun -e "
      const fs = require('fs');
@@ -172,7 +172,7 @@ Power-user shortcuts (one-word invocations) — handle these too:
 ## Inspect profile
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-developer-profile --profile
+$GOLDBAND_BIN/goldband-developer-profile --profile
 ```
 
 Parse the JSON. Present in **plain English**, not raw floats:
@@ -205,8 +205,8 @@ Parse the JSON. Present in **plain English**, not raw floats:
 ## Review question log
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 _LOG="$GOLDBAND_STATE_ROOT/projects/$SLUG/question-log.jsonl"
 if [ ! -f "$_LOG" ]; then
   echo "NO_LOG"
@@ -265,7 +265,7 @@ scope expansion comes up", etc).
 
 4. Write:
    ```bash
-   ~/.claude/skills/goldband/bin/goldband-question-preference --write '{"question_id":"<id>","preference":"<never-ask|always-ask|ask-only-for-one-way>","source":"plan-tune","free_text":"<original phrase>"}'
+   $GOLDBAND_BIN/goldband-question-preference --write '{"question_id":"<id>","preference":"<never-ask|always-ask|ask-only-for-one-way>","source":"plan-tune","free_text":"<original phrase>"}'
    ```
 
 5. Confirm: "Set `<id>` → `<preference>`. Active immediately. One-way doors
@@ -300,7 +300,7 @@ is a trust boundary (Codex #15 in the design doc).
 
 3. After Y, write:
    ```bash
-   eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+   eval "$($GOLDBAND_BIN/goldband-paths)"
    _PROFILE="$GOLDBAND_STATE_ROOT/developer-profile.json"
    bun -e "
      const fs = require('fs');
@@ -321,7 +321,7 @@ is a trust boundary (Codex #15 in the design doc).
 ## Show gap
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-developer-profile --gap
+$GOLDBAND_BIN/goldband-developer-profile --gap
 ```
 
 Parse the JSON. For each dimension where both declared and inferred exist:
@@ -340,12 +340,12 @@ the user decides whether declared is wrong or behavior is wrong.
 ## Stats
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-question-preference --stats
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+$GOLDBAND_BIN/goldband-question-preference --stats
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 _LOG="$GOLDBAND_STATE_ROOT/projects/$SLUG/question-log.jsonl"
 [ -f "$_LOG" ] && echo "TOTAL_LOGGED: $(wc -l < "$_LOG" | tr -d ' ')" || echo "TOTAL_LOGGED: 0"
-~/.claude/skills/goldband/bin/goldband-developer-profile --profile | bun -e "
+$GOLDBAND_BIN/goldband-developer-profile --profile | bun -e "
   const p = JSON.parse(await Bun.stdin.text());
   const d = p.inferred?.diversity || {};
   console.log('SKILLS_COVERED: ' + (d.skills_covered ?? 0));

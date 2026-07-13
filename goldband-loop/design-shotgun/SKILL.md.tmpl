@@ -59,7 +59,7 @@ visual brainstorming, not a review process.
 Check for prior design exploration sessions for this project:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 setopt +o nomatch 2>/dev/null || true
 _PREV=$(find ~/.goldband/projects/$SLUG/designs/ -name "approved.json" -maxdepth 2 2>/dev/null | sort -r | head -5)
 [ -n "$_PREV" ] && echo "PREVIOUS_SESSIONS_FOUND" || echo "NO_PREVIOUS_SESSIONS"
@@ -173,7 +173,7 @@ The CLI handles schema migration from approved.json, decay, and conflict flaggin
 Set up the output directory:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _DESIGN_DIR="$HOME/.goldband/projects/$SLUG/designs/<screen-name>-$(date +%Y%m%d)"
 mkdir -p "$_DESIGN_DIR"
 echo "DESIGN_DIR: $_DESIGN_DIR"

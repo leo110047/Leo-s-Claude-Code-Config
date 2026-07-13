@@ -63,7 +63,7 @@ Pass-through args go straight to the orchestrator at
 Before doing anything, check that /setup-gbrain has been run on this Mac.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-gbrain-detect 2>/dev/null
+$GOLDBAND_BIN/goldband-gbrain-detect 2>/dev/null
 ```
 
 **Split-engine model (v1.34.0.0+).** Code stage runs locally against the
@@ -136,7 +136,7 @@ Pass user args to the orchestrator. Do not paraphrase them — pass through
 as-is.
 
 ```bash
-bun run ~/.claude/skills/goldband/bin/goldband-gbrain-sync.ts <user-args>
+bun run $GOLDBAND_BIN/goldband-gbrain-sync.ts <user-args>
 ```
 
 The orchestrator runs three stages: code → memory → brain-sync (per the

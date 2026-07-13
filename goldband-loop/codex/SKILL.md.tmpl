@@ -51,8 +51,8 @@ If `NOT_FOUND`: stop and tell the user:
 
 If `NOT_FOUND`, also log the event:
 ```bash
-_TEL=$(~/.claude/skills/goldband/bin/goldband-config get telemetry 2>/dev/null || echo off)
-source ~/.claude/skills/goldband/bin/goldband-codex-probe 2>/dev/null && _goldband_codex_log_event "codex_cli_missing" 2>/dev/null || true
+_TEL=$($GOLDBAND_BIN/goldband-config get telemetry 2>/dev/null || echo off)
+source $GOLDBAND_BIN/goldband-codex-probe 2>/dev/null && _goldband_codex_log_event "codex_cli_missing" 2>/dev/null || true
 ```
 
 ---
@@ -64,8 +64,8 @@ CLI version isn't in the known-bad list. Sourcing `goldband-codex-probe` loads t
 shared helpers that both `/codex` and `/autoplan` use.
 
 ```bash
-_TEL=$(~/.claude/skills/goldband/bin/goldband-config get telemetry 2>/dev/null || echo off)
-source ~/.claude/skills/goldband/bin/goldband-codex-probe
+_TEL=$($GOLDBAND_BIN/goldband-config get telemetry 2>/dev/null || echo off)
+source $GOLDBAND_BIN/goldband-codex-probe
 
 if ! _goldband_codex_auth_probe >/dev/null; then
   _goldband_codex_log_event "codex_auth_failed"
@@ -95,11 +95,11 @@ deadlock fixed in #972.
 Before any mode runs, resolve `$PLAN_ROOT` (where plan files live) and `$TMP_ROOT`
 (where ephemeral codex stderr / response captures land) via `bin/goldband-paths`.
 This keeps the skill working whether installed as a Claude Code plugin
-(`CLAUDE_PLANS_DIR` set), a global `~/.claude/skills/goldband/` install, or a CI
+(`CLAUDE_PLANS_DIR` set), a global `$GOLDBAND_ROOT/` install, or a CI
 container where `HOME` may be unset and `/tmp` may be read-only.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 ```
 
 After this, every subsequent bash block in this skill uses `"$PLAN_ROOT"` and
@@ -285,7 +285,7 @@ CROSS-MODEL ANALYSIS:
 
 7. Persist the review result:
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"codex-review","timestamp":"TIMESTAMP","status":"STATUS","gate":"GATE","findings":N,"findings_fixed":N,"commit":"'"$(git rev-parse --short HEAD)"'"}'
+$GOLDBAND_BIN/goldband-review-log '{"skill":"codex-review","timestamp":"TIMESTAMP","status":"STATUS","gate":"GATE","findings":N,"findings_fixed":N,"commit":"'"$(git rev-parse --short HEAD)"'"}'
 ```
 
 Substitute: TIMESTAMP (ISO 8601), STATUS ("clean" if PASS, "issues_found" if FAIL),

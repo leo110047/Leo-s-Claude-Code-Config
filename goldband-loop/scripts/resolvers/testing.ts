@@ -179,7 +179,7 @@ Only commit if there are changes. Stage all bootstrap files (config, test direct
 
 type CoverageAuditMode = 'plan' | 'review';
 
-function generateTestCoverageAuditInner(mode: CoverageAuditMode): string {
+function generateTestCoverageAuditInner(ctx: TemplateContext, mode: CoverageAuditMode): string {
   const sections: string[] = [];
 
   // ── Intro (mode-specific) ──
@@ -364,7 +364,7 @@ The plan should be complete enough that when implementation begins, every test i
 After producing the coverage diagram, write a test plan artifact to the project directory so \`/qa\` and \`/qa-only\` can consume it as primary test input:
 
 \`\`\`bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+eval "$(${ctx.paths.binDir}/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 \`\`\`
@@ -428,11 +428,11 @@ If coverage percentage cannot be determined, skip the warning silently.`);
   return sections.join('\n');
 }
 
-export function generateTestCoverageAuditPlan(_ctx: TemplateContext): string {
-  return generateTestCoverageAuditInner('plan');
+export function generateTestCoverageAuditPlan(ctx: TemplateContext): string {
+  return generateTestCoverageAuditInner(ctx, 'plan');
 }
 
-export function generateTestCoverageAuditShip(_ctx: TemplateContext): string {
+export function generateTestCoverageAuditShip(ctx: TemplateContext): string {
   return `100% coverage is the goal — every untested path is a path where bugs hide and vibe coding becomes yolo coding. Evaluate what was ACTUALLY coded from \`git diff origin/<base>...HEAD\`, not what was planned.
 
 ### Test Framework Detection
@@ -552,7 +552,7 @@ Maximum 2 generation passes total. If B/C continues, record the accepted risk or
 Write a QA-consumable artifact:
 
 \`\`\`bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+eval "$(${ctx.paths.binDir}/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 \`\`\`
@@ -562,6 +562,6 @@ Path: \`~/.goldband/projects/{slug}/{user}-{branch}-ship-test-plan-{datetime}.md
 Include: affected pages/routes, key interactions, edge cases, and critical paths.`;
 }
 
-export function generateTestCoverageAuditReview(_ctx: TemplateContext): string {
-  return generateTestCoverageAuditInner('review');
+export function generateTestCoverageAuditReview(ctx: TemplateContext): string {
+  return generateTestCoverageAuditInner(ctx, 'review');
 }

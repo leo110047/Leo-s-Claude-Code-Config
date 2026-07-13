@@ -137,19 +137,6 @@ describeIfDevice('ios device path', () => {
     expect(overlay).toContain('#endif');
   });
 
-  // Documented next step. Becomes a real test once we have:
-  //   - test/fixtures/ios-qa/FixtureApp/FixtureApp.xcodeproj (or generated)
-  //   - A signing certificate + provisioning profile on the test machine
-  //   - GOLDBAND_IOS_DEVICE_DEPLOY=1 environment opt-in
-  //
-  // The flow would be:
-  //   xcodebuild -scheme FixtureApp -destination 'platform=iOS,id=<UDID>' \
-  //     -allowProvisioningUpdates build install
-  //   xcrun devicectl device process launch -d <UDID> --console <bundle-id>
-  //   # Scrape boot token from os_log
-  //   curl http://[<corodevice-ipv6>]:9999/healthz
-  //   # ... full smoke loop ...
-  test.skip('TODO(deploy): build + deploy fixture to device + smoke test full StateServer loop', () => {});
 });
 
 // Always-on instructions if not paired. Surfaces actionable steps even when

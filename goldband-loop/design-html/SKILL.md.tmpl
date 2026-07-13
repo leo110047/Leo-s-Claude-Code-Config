@@ -50,7 +50,7 @@ around obstacles.
 ## Step 0: Input Detection
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 ```
 
 Detect what design context exists for this project. Run all four checks:
@@ -225,9 +225,7 @@ If no framework detected: default to vanilla HTML, no question needed.
 For **vanilla HTML output**, check for the vendored Pretext bundle:
 ```bash
 _PRETEXT_VENDOR=""
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-[ -n "$_ROOT" ] && [ -f "$_ROOT/.claude/skills/goldband/design-html/vendor/pretext.js" ] && _PRETEXT_VENDOR="$_ROOT/.claude/skills/goldband/design-html/vendor/pretext.js"
-[ -z "$_PRETEXT_VENDOR" ] && [ -f ~/.claude/skills/goldband/design-html/vendor/pretext.js ] && _PRETEXT_VENDOR=~/.claude/skills/goldband/design-html/vendor/pretext.js
+[ -z "$_PRETEXT_VENDOR" ] && [ -f $GOLDBAND_ROOT/design-html/vendor/pretext.js ] && _PRETEXT_VENDOR=$GOLDBAND_ROOT/design-html/vendor/pretext.js
 [ -n "$_PRETEXT_VENDOR" ] && echo "VENDOR: $_PRETEXT_VENDOR" || echo "VENDOR_MISSING"
 ```
 

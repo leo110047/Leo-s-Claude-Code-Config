@@ -35,9 +35,13 @@ const TEST_FILE_REGEX = /\.test\.(?:[cm]?[jt]s|tsx|jsx)$/;
 // Tests that require API spend, external services, or e2e harnesses.
 // These are filtered out before any sharding or curation.
 const PAID_EVAL_TESTS = [
+  /^browse\/test\/security-bench\.test\.ts$/,
+  /^browse\/test\/security-bunnative\.test\.ts$/,
+  /^browse\/test\/security-bench-ensemble-live\.test\.ts$/,
   /^browse\/test\/security-review-fullstack\.test\.ts$/,
   /^test\/skill-e2e-.*\.test\.ts$/,
   /^test\/skill-llm-eval\.test\.ts$/,
+  /^test\/llm-judge-recommendation\.test\.ts$/,
   /^test\/skill-routing-e2e\.test\.ts$/,
   /^test\/codex-e2e\.test\.ts$/,
   /^test\/gemini-e2e\.test\.ts$/,

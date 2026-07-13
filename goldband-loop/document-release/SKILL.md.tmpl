@@ -430,7 +430,7 @@ If `CURRENT_TITLE` is empty (no open PR/MR), skip with message "No PR/MR found â
 3. Compute the corrected title using the shared helper (single source of truth â€” same one `/ship` uses):
 
 ```bash
-NEW_TITLE=$(~/.claude/skills/goldband/bin/goldband-pr-title-rewrite.sh "$V" "$CURRENT_TITLE")
+NEW_TITLE=$($GOLDBAND_BIN/goldband-pr-title-rewrite.sh "$V" "$CURRENT_TITLE")
 ```
 
 The helper handles three cases: title already correct (no-op), title has a different `v<X.Y.Z.W>` prefix (replace it), or title has no version prefix (prepend one).

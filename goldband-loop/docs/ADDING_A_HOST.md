@@ -53,7 +53,6 @@ const myhost: HostConfig = {
   globalRoot: '.myhost/skills/goldband',
   localSkillRoot: '.myhost/skills/goldband',
   hostSubdir: '.myhost',
-  usesEnvVars: true,           // false only for Claude (uses literal ~ paths)
 
   frontmatter: {
     mode: 'allowlist',         // 'allowlist' keeps only listed fields
@@ -67,8 +66,6 @@ const myhost: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.myhost/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.myhost/skills/goldband' },
     { from: '.claude/skills', to: '.myhost/skills' },
   ],
 
@@ -87,6 +84,11 @@ const myhost: HostConfig = {
 
 export default myhost;
 ```
+
+Do not add Goldband runtime-root rewrites. The generator derives
+`GOLDBAND_GLOBAL_ROOT`, `GOLDBAND_LOCAL_ROOT`, `GOLDBAND_ROOT`, and
+`GOLDBAND_BIN` directly from `globalRoot` and `localSkillRoot`. `pathRewrites`
+is only for other host-owned prose or configuration paths.
 
 ### 2. Register in the index
 
