@@ -66,6 +66,13 @@ function workflowTriggerMatches(prompt, trigger) {
   );
 }
 
+function hasExplicitWorkflowInvocation(prompt) {
+  return (
+    /\$goldband\s+[a-z][a-z0-9-]*\s+[a-z][a-z0-9-]*/i.test(prompt) ||
+    /(?:^|\s)\/plan\b/i.test(prompt)
+  );
+}
+
 function readStdinRaw() {
   return new Promise((resolve) => {
     let data = '';
@@ -374,7 +381,7 @@ function evaluateUserPromptSubmitResult(input) {
   const crossReviewContract = armCrossReviewIfRequested(input);
   const messages = [];
 
-  if (/\$goldband\s+[a-z][a-z0-9-]*\s+[a-z][a-z0-9-]*/i.test(prompt)) {
+  if (hasExplicitWorkflowInvocation(prompt)) {
     if (crossReviewContract) {
       messages.push(formatCrossReviewArmMessage(crossReviewContract));
     }

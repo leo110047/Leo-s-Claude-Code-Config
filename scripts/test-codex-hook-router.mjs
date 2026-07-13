@@ -449,6 +449,20 @@ function testPromptWorkflowHintRequiresTriggerBoundaries() {
   assertNoopOutput(output);
 }
 
+function testDirectWorkflowInvocationSuppressesHints() {
+  for (const prompt of [
+    '$goldband plan create 重構認證邏輯',
+    '/plan 重構認證邏輯',
+  ]) {
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'UserPromptSubmit',
+        prompt,
+      }),
+    );
+  }
+}
+
 function testWorkflowHintsLoadOnlyForPromptRouting() {
   const routingPath = path.join(
     repoDir,
@@ -574,6 +588,7 @@ testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testPromptWorkflowHintRequiresTriggerBoundaries();
+testDirectWorkflowInvocationSuppressesHints();
 testWorkflowHintsLoadOnlyForPromptRouting();
 testWorkflowTelemetry();
 testCompletionClaimsDoNotUseRegex();

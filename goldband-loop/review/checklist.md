@@ -29,7 +29,9 @@ test gap is not a finding.
 When <input/state>, execution reaches <path> and produces <actual> instead of
 <expected>, causing <impact>.
 
+Evidence: <specific diff/code/test/config evidence>
 Fix: <one-sentence healthy fix>
+Verify: <command, test, readback, or manual check>
 ```
 
 If no issues survive the validity gate, output `No findings.` and briefly name

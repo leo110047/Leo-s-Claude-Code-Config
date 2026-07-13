@@ -154,8 +154,12 @@ function renderReport(ctx: WorkflowContext): string {
     for (const finding of findings) {
       const loc = finding.line ? `${finding.file}:${finding.line}` : finding.file;
       lines.push(`- [${finding.severity}] ${finding.summary} — ${loc}`);
+      if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
       if (finding.failureScenario) lines.push(`  Trigger: ${finding.failureScenario}`);
       if (finding.recommendation) lines.push(`  Fix: ${finding.recommendation}`);
+      if (finding.suggestedVerification) {
+        lines.push(`  Verify: ${finding.suggestedVerification}`);
+      }
     }
   }
   const report = `${lines.join('\n')}\n`;

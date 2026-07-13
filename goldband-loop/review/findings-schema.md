@@ -30,6 +30,9 @@ Validity rules:
   reachable path, incorrect result, expected result, and practical impact.
 - `recommendation`, `suggestedVerification`, policy, and specialist fields are
   metadata. They cannot substitute for the validity requirements above.
+- Human-readable reports must preserve `evidence` and
+  `suggestedVerification` when those fields are present in the validated
+  finding.
 - Suppress speculative findings instead of returning a confidence score.
 - Do not output patches or apply fixes.
 - Do not output cross-review verdict markers from normal `/review`.

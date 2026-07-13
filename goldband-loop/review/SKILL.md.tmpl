@@ -61,7 +61,8 @@ Specialists are optional:
   or host-contract risk signal.
 - `--specialists off` runs only the core reviewer.
 - `--specialists all` is an explicit expensive mode. Never choose it unless the
-  user asks for exhaustive specialist coverage.
+  user asks for exhaustive specialist coverage. The runtime fails explicitly if
+  any selected specialist cannot complete.
 
 Do not add `--loop` to a normal read-only review. A loop is useful only after
 the reviewed code changes and the user explicitly requests another pass.
@@ -134,7 +135,9 @@ Put blocking findings first. Keep each finding compact:
 When <input/state>, execution reaches <path> and produces <actual> instead of
 <expected>, causing <impact>.
 
+Evidence: <specific diff/code/test/config evidence>
 Fix: <one-sentence healthy fix>
+Verify: <command, test, readback, or manual check>
 ```
 
 Do not print confidence scores. Confidence is an internal suppression decision:

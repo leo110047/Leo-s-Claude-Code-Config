@@ -125,11 +125,19 @@ export async function runParallelSpecialistReview(
   if (selection.selected.length === 0) return [];
 
   if (!adapter.capabilities.readOnlyEnforced) {
-    return [capabilityFinding(adapter.name, 'read-only enforcement unavailable')];
+    const failures = [
+      capabilityFinding(adapter.name, 'read-only enforcement unavailable'),
+    ];
+    assertSpecialistCoverageComplete(mode, failures);
+    return failures;
   }
 
   if (!adapter.capabilities.parallelDispatch) {
-    return [capabilityFinding(adapter.name, 'parallel specialist dispatch unavailable')];
+    const failures = [
+      capabilityFinding(adapter.name, 'parallel specialist dispatch unavailable'),
+    ];
+    assertSpecialistCoverageComplete(mode, failures);
+    return failures;
   }
 
   const items = prepared?.items ?? prepareSpecialistReview(ctx, diff, mode).items;
@@ -144,11 +152,17 @@ export async function runParallelSpecialistReview(
 
   const settled = await runBounded(jobs, SPECIALIST_CONCURRENCY);
   const findings: ReviewFinding[] = [];
+  const failures: ReviewFinding[] = [];
   for (let index = 0; index < settled.length; index += 1) {
     const result = settled[index];
     if (result.status === 'fulfilled') findings.push(...result.value);
-    else findings.push(specialistFailureFinding(selection.selected[index], result.reason));
+    else {
+      const failure = specialistFailureFinding(selection.selected[index], result.reason);
+      findings.push(failure);
+      failures.push(failure);
+    }
   }
+  assertSpecialistCoverageComplete(mode, failures);
   return aggregateReviewFindings(findings);
 }
 
@@ -298,6 +312,20 @@ function specialistFailureFinding(specialist: ReviewSpecialist, reason: unknown)
     failureScenario: 'A specialist pass failed, so the aggregate review can miss scoped risks.',
     blocking: false,
   };
+}
+
+function assertSpecialistCoverageComplete(
+  mode: SpecialistMode,
+  failures: ReviewFinding[],
+): void {
+  if (mode !== 'all' || failures.length === 0) return;
+  const details = failures
+    .map(
+      (failure) =>
+        `${failure.specialist ?? 'host'}: ${failure.evidence ?? failure.summary}`,
+    )
+    .join('; ');
+  throw new Error(`Exhaustive specialist coverage incomplete: ${details}`);
 }
 
 function mergeFindings(a: ReviewFinding, b: ReviewFinding): ReviewFinding {

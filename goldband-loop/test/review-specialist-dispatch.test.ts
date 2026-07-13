@@ -141,6 +141,28 @@ describe('review specialist dispatch', () => {
     expect(failures.every((finding) => finding.severity === 'info' && !finding.blocking)).toBe(true);
     expect(failures[0].evidence).toContain('adapter crashed');
   });
+
+  test('fails explicit all mode when exhaustive specialist coverage is incomplete', async () => {
+    await expect(runParallelSpecialistReview(
+      workflowContext(),
+      rejectingAdapter(true, true),
+      '+workflow host-adapter codex prompt',
+      {},
+      'all',
+    )).rejects.toThrow(
+      'Exhaustive specialist coverage incomplete: correctness-contract: adapter crashed',
+    );
+  });
+
+  test('fails explicit all mode when the host cannot provide specialist capabilities', async () => {
+    await expect(runParallelSpecialistReview(
+      workflowContext(),
+      rejectingAdapter(true, false),
+      '+workflow host-adapter codex prompt',
+      {},
+      'all',
+    )).rejects.toThrow('parallel specialist dispatch unavailable');
+  });
 });
 
 function workflowContext(cwd = ROOT) {

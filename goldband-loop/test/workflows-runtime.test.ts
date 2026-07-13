@@ -267,6 +267,13 @@ describe('workflow runtime', () => {
       diffFile: 'test/fixtures/workflows/review.diff',
     });
     expect(String(result.output)).toContain('Mock review finding');
+    expect(String(result.output)).toContain('Evidence: + riskyChange();');
+    expect(String(result.output)).toContain('Verify: Run the focused mock review regression test.');
+    const reportArtifact = result.artifacts.find((file) => file.endsWith('-code.md'));
+    expect(reportArtifact).toBeDefined();
+    const savedReport = readFileSync(reportArtifact as string, 'utf8');
+    expect(savedReport).toContain('Evidence: + riskyChange();');
+    expect(savedReport).toContain('Verify: Run the focused mock review regression test.');
     const events = readJsonl('review/code');
     expect(events.map((event) => event.step)).toContain('collect-diff');
     expect(events.map((event) => event.step)).toContain('render-report');

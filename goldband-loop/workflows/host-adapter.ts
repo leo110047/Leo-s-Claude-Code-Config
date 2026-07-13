@@ -49,13 +49,14 @@ function loopIteration(prompt: string): number | undefined {
 
 function mockFinding(index: number): ReviewFinding {
   return {
-      file: 'src/example.ts',
-      line: index + 1,
-      severity: 'medium',
-      summary: `Mock review finding ${index} with concrete diff evidence.`,
-      evidence: '+ riskyChange();',
-      failureScenario: 'A valid request reaches riskyChange() and returns the wrong result.',
-      recommendation: 'Add a guard and a focused regression test.',
+    file: 'src/example.ts',
+    line: index + 1,
+    severity: 'medium',
+    summary: `Mock review finding ${index} with concrete diff evidence.`,
+    evidence: '+ riskyChange();',
+    failureScenario: 'A valid request reaches riskyChange() and returns the wrong result.',
+    recommendation: 'Add a guard and a focused regression test.',
+    suggestedVerification: 'Run the focused mock review regression test.',
   };
 }
 
