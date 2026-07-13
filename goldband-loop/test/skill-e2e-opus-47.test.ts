@@ -39,7 +39,8 @@ const runId = new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').sl
  *  for Claude Code's auto-discovery to treat them as invokable via Skill tool.
  *  Matches the pattern in skill-routing-e2e.test.ts. */
 const INSTALLED_SKILLS = [
-  'qa', 'qa-only', 'ship', 'review', 'plan-ceo-review', 'plan-eng-review',
+  '', // root goldband router
+  'qa', 'qa-only', 'review', 'plan-ceo-review', 'plan-eng-review',
   'plan-design-review', 'design-review', 'design-consultation', 'retro',
   'document-release', 'investigate', 'office-hours', 'browse',
 ];
@@ -76,8 +77,11 @@ function mkEvalRoot(suffix: string, includeOverlay: boolean): string {
   const skillsDir = path.join(tmp, '.claude', 'skills');
   for (const skill of INSTALLED_SKILLS) {
     const src = path.join(ROOT, skill, 'SKILL.md');
-    if (!fs.existsSync(src)) continue;
-    const destDir = path.join(skillsDir, skill);
+    const skillName = skill || 'goldband';
+    if (!fs.existsSync(src)) {
+      throw new Error(`Required routing fixture skill "${skillName}" is missing at ${src}`);
+    }
+    const destDir = path.join(skillsDir, skillName);
     fs.mkdirSync(destDir, { recursive: true });
     fs.copyFileSync(src, path.join(destDir, 'SKILL.md'));
   }
@@ -99,7 +103,7 @@ as your FIRST action. The skill has multi-step workflows, checklists, and qualit
 gates that produce better results than an ad-hoc answer. When in doubt, invoke.
 
 - Bugs, errors, "why is this broken", "wtf" → invoke investigate
-- Ship, deploy, "send it", create a PR → invoke ship
+- Release, deploy, "send it", create a PR → invoke goldband for \`$goldband release land\`
 - QA, test the site, "does this work" → invoke qa
 - Code review, check my diff → invoke review
 - Product ideas, brainstorming, "is this worth building" → invoke office-hours
@@ -138,6 +142,7 @@ interface RoutingCase {
   prompt: string;
   shouldRoute: boolean;
   expectedSkill?: string;
+  expectedArgs?: string;
 }
 
 /** Small, intentionally chosen routing cases. Positive cases are ambiguous
@@ -147,13 +152,31 @@ interface RoutingCase {
 const ROUTING_CASES: RoutingCase[] = [
   // Positive — should route
   { name: 'pos-wtf-bug',    prompt: "wtf is this error coming from auth.ts:47 when the cookie expires?",           shouldRoute: true, expectedSkill: 'investigate' },
-  { name: 'pos-send-it',    prompt: "ok this is good enough, let's send it.",                                       shouldRoute: true, expectedSkill: 'ship' },
+  { name: 'pos-send-it',    prompt: "ok this is good enough, let's send it.",                                       shouldRoute: true, expectedSkill: 'goldband', expectedArgs: 'release land' },
   { name: 'pos-does-it-work', prompt: "I just pushed the login flow changes. Test the deployed site and find any bugs.",                shouldRoute: true, expectedSkill: 'qa' },
   // Negative — should NOT route
   { name: 'neg-syntax-q',   prompt: "wtf does this Python list comprehension syntax even mean, [x for x in y if z]?", shouldRoute: false },
   { name: 'neg-algo-q',     prompt: "does this bubble sort algorithm actually work in O(n log n)?",                   shouldRoute: false },
   { name: 'neg-slack-send', prompt: "can you help me write the slack message? I want to send it to the team.",       shouldRoute: false },
 ];
+
+describe('Opus 4.7 routing fixture contract', () => {
+  test('declared skills exist and release intent targets the root goldband router', () => {
+    for (const skill of INSTALLED_SKILLS) {
+      const skillName = skill || 'goldband';
+      expect(
+        fs.existsSync(path.join(ROOT, skill, 'SKILL.md')),
+        `Required routing fixture skill ${skillName} must exist`,
+      ).toBe(true);
+    }
+
+    expect(INSTALLED_SKILLS).toContain('');
+    expect(INSTALLED_SKILLS).not.toContain('ship');
+    const releaseCase = ROUTING_CASES.find((routingCase) => routingCase.name === 'pos-send-it');
+    expect(releaseCase?.expectedSkill).toBe('goldband');
+    expect(releaseCase?.expectedArgs).toBe('release land');
+  });
+});
 
 // --- Tests ---
 
@@ -289,20 +312,25 @@ describeE2E('Opus 4.7 overlay behavior evals', () => {
           const skillCalls = r.toolCalls.filter((tc) => tc.tool === 'Skill');
           const routed = skillCalls.length > 0;
           const actualSkill = routed ? skillCalls[0]?.input?.skill : undefined;
+          const actualArgs = typeof skillCalls[0]?.input?.args === 'string'
+            ? skillCalls[0].input.args.trim()
+            : undefined;
 
           const correct = c.shouldRoute
-            ? routed && (!c.expectedSkill || actualSkill === c.expectedSkill)
+            ? routed
+              && (!c.expectedSkill || actualSkill === c.expectedSkill)
+              && (!c.expectedArgs || actualArgs === c.expectedArgs)
             : !routed;
 
-          if (c.shouldRoute && routed) tp++;
-          else if (c.shouldRoute && !routed) fn++;
+          if (c.shouldRoute && correct) tp++;
+          else if (c.shouldRoute) fn++;
           else if (!c.shouldRoute && routed) fp++;
           else tn++;
 
           totalCost += r.costEstimate.estimatedCost;
           rows.push(
-            `  ${c.name.padEnd(18)} routed=${String(routed).padEnd(5)} skill=${String(actualSkill).padEnd(16)} ` +
-              `expected=${c.shouldRoute ? (c.expectedSkill ?? 'any') : '(none)'} ${correct ? 'OK' : 'MISS'}`,
+            `  ${c.name.padEnd(18)} routed=${String(routed).padEnd(5)} skill=${String(actualSkill).padEnd(16)} args=${String(actualArgs).padEnd(14)} ` +
+              `expected=${c.shouldRoute ? [c.expectedSkill ?? 'any', c.expectedArgs].filter(Boolean).join(' ') : '(none)'} ${correct ? 'OK' : 'MISS'}`,
           );
 
           evalCollector?.addTest({
@@ -313,7 +341,7 @@ describeE2E('Opus 4.7 overlay behavior evals', () => {
             duration_ms: r.duration,
             cost_usd: r.costEstimate.estimatedCost,
             transcript: r.transcript,
-            output: `routed=${routed} actual=${actualSkill ?? '(none)'} expected=${c.shouldRoute ? c.expectedSkill ?? 'any' : '(none)'}`,
+            output: `routed=${routed} actual=${actualSkill ?? '(none)'} args=${actualArgs ?? '(none)'} expected=${c.shouldRoute ? [c.expectedSkill ?? 'any', c.expectedArgs].filter(Boolean).join(' ') : '(none)'}`,
             turns_used: r.costEstimate.turnsUsed,
             exit_reason: r.exitReason,
           });

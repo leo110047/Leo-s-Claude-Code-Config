@@ -66,19 +66,21 @@ if (evalsEnabled && process.env.EVALS_TIER) {
 function installSkills(tmpDir: string) {
   const skillDirs = [
     '', // root goldband SKILL.md
-    'qa', 'qa-only', 'ship', 'review', 'plan-ceo-review', 'plan-eng-review',
+    'qa', 'qa-only', 'review', 'plan-ceo-review', 'plan-eng-review',
     'plan-design-review', 'design-review', 'design-consultation', 'retro',
     'document-release', 'investigate', 'office-hours', 'browse', 'setup-browser-cookies',
-    'goldband-upgrade', 'humanizer',
+    'goldband-upgrade',
   ];
 
   const targetBase = path.join(tmpDir, '.claude', 'skills');
 
   for (const skill of skillDirs) {
     const srcPath = path.join(ROOT, skill, 'SKILL.md');
-    if (!fs.existsSync(srcPath)) continue;
-
     const skillName = skill || 'goldband';
+    if (!fs.existsSync(srcPath)) {
+      throw new Error(`Required routing fixture skill "${skillName}" is missing at ${srcPath}`);
+    }
+
     const destDir = path.join(targetBase, skillName);
     fs.mkdirSync(destDir, { recursive: true });
     fs.copyFileSync(srcPath, path.join(destDir, 'SKILL.md'));
@@ -99,7 +101,7 @@ The skill has specialized workflows that produce better results than ad-hoc answ
 Key routing rules:
 - Product ideas, "is this worth building", brainstorming → invoke office-hours
 - Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
+- Release, deploy, push, create PR → invoke goldband for \`$goldband release land\`
 - QA, test the site, find bugs → invoke qa
 - Code review, check my diff → invoke review
 - Update docs after shipping → invoke document-release
@@ -109,6 +111,24 @@ Key routing rules:
 - Architecture review → invoke plan-eng-review
 `);
 }
+
+describe('Skill routing fixture contract', () => {
+  test('release intent installs the root goldband router without a legacy ship skill', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'routing-contract-'));
+    try {
+      installSkills(tmpDir);
+
+      expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'goldband', 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'ship', 'SKILL.md'))).toBe(false);
+
+      const claudeMd = fs.readFileSync(path.join(tmpDir, 'CLAUDE.md'), 'utf-8');
+      expect(claudeMd).toContain('invoke goldband for `$goldband release land`');
+      expect(claudeMd).not.toContain('invoke ship');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
 
 /** Init a git repo with config */
 function initGitRepo(dir: string) {
@@ -150,16 +170,23 @@ function logCost(label: string, result: { costEstimate: { turnsUsed: number; est
   console.log(`${label}: $${estimatedCost.toFixed(2)} (${turnsUsed} turns, ${(estimatedTokens / 1000).toFixed(1)}k tokens, ${durationSec}s)`);
 }
 
-function recordRouting(name: string, result: SkillTestResult, expectedSkill: string, actualSkill: string | undefined) {
+function recordRouting(
+  name: string,
+  result: SkillTestResult,
+  expectedSkill: string,
+  actualSkill: string | undefined,
+  expectedArgs?: string,
+  actualArgs?: string,
+) {
   evalCollector?.addTest({
     name,
     suite: 'Skill Routing E2E',
     tier: 'e2e',
-    passed: actualSkill === expectedSkill,
+    passed: actualSkill === expectedSkill && (!expectedArgs || actualArgs === expectedArgs),
     duration_ms: result.duration,
     cost_usd: result.costEstimate.estimatedCost,
     transcript: result.transcript,
-    output: result.output?.slice(0, 2000),
+    output: `skill=${actualSkill ?? '(none)'} args=${actualArgs ?? '(none)'} expected=${expectedSkill}${expectedArgs ? ` ${expectedArgs}` : ''}\n${result.output?.slice(0, 1800) ?? ''}`,
     turns_used: result.costEstimate.turnsUsed,
     exit_reason: result.exitReason,
   });
@@ -414,7 +441,8 @@ export default app;
       run('git', ['commit', '-m', 'feat: waitlist']);
 
       const testName = 'journey-ship';
-      const expectedSkill = 'ship';
+      const expectedSkill = 'goldband';
+      const expectedArgs = 'release land';
       const result = await runSkillTest({
         prompt: "This looks good. Let's get it deployed — push the code up and create a PR.",
         workingDirectory: tmpDir,
@@ -427,12 +455,16 @@ export default app;
 
       const skillCalls = result.toolCalls.filter(tc => tc.tool === 'Skill');
       const actualSkill = skillCalls.length > 0 ? skillCalls[0]?.input?.skill : undefined;
+      const actualArgs = typeof skillCalls[0]?.input?.args === 'string'
+        ? skillCalls[0].input.args.trim()
+        : undefined;
 
       logCost(`journey: ${testName}`, result);
-      recordRouting(testName, result, expectedSkill, actualSkill);
+      recordRouting(testName, result, expectedSkill, actualSkill, expectedArgs, actualArgs);
 
       expect(skillCalls.length, `Expected Skill tool to be called but got 0 calls. Claude may have answered directly without invoking a skill. Tool calls: ${result.toolCalls.map(tc => tc.tool).join(', ')}`).toBeGreaterThan(0);
       expect([expectedSkill], `Expected skill ${expectedSkill} but got ${actualSkill}`).toContain(actualSkill);
+      expect(actualArgs, `Expected ${expectedSkill} args "${expectedArgs}" but got "${actualArgs ?? '(none)'}"`).toBe(expectedArgs);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
