@@ -1,20 +1,22 @@
 /**
  * BrowseSafe-Bench ensemble LIVE bench (v1.5.2.0+).
  *
- * Runs the 200-case smoke through the full ensemble with real Haiku calls.
+ * Runs the 500-case benchmark through the full ensemble with real Haiku calls.
  * Measures detection + FP rates at the ENSEMBLE level (not just L4 like
  * security-bench.test.ts).
  *
  * Opt-in: only runs when `GOLDBAND_BENCH_ENSEMBLE=1` is set. Otherwise the
  * whole suite is skipped (too slow + costs money for regular `bun test`).
  *
- * Cost: ~200 Haiku calls ≈ $0.10, ~5 min wallclock.
+ * Cost: ~500 Haiku calls ≈ $0.25, ~30-40 min wallclock at concurrency 8.
  *
  * On success this writes:
  *   - browse/test/fixtures/security-bench-haiku-responses.json (fixture
- *     consumed by the CI-gate test security-bench-ensemble.test.ts)
+ *     consumed by the CI-gate test; contains replay signals, not raw content)
  *   - ~/.goldband-dev/evals/security-bench-ensemble-{timestamp}.json (per-run
  *     audit record with TP/FN/FP/TN + Wilson 95% CIs + knob state)
+ *   - ~/.goldband-dev/evals/security-bench-ensemble-raw-{timestamp}.json
+ *     (local-only raw content artifact for this explicit opt-in run)
  *
  * Stop-loss iterations: when detection or FP fails the gate, set
  * `GOLDBAND_BENCH_STOP_LOSS_ITER=N` where N in {1,2,3}. The bench writes to
@@ -31,16 +33,21 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { combineVerdict, THRESHOLDS, type LayerSignal } from '../src/security';
 import { HAIKU_MODEL } from '../src/security-classifier';
+import {
+  BROWSESAFE_BENCH_CASES,
+  BROWSESAFE_BENCH_DATASET_VERSION,
+  buildBenchmarkCaseArtifacts,
+} from './security-bench-contract';
 
 const RUN = process.env.GOLDBAND_BENCH_ENSEMBLE === '1';
 const STOP_LOSS_ITER = process.env.GOLDBAND_BENCH_STOP_LOSS_ITER
   ? Number(process.env.GOLDBAND_BENCH_STOP_LOSS_ITER)
   : 0;
 // Opt-in subsampling for fast iteration. The real per-case latency is ~36s
-// (claude -p spawns a full Claude Code session; not a raw API call), so 200
-// cases is ~2 hours. Subsample of 50 gets directional data in ~30min.
+// (claude -p spawns a full Claude Code session; not a raw API call), so 500
+// cases is ~5 hours sequential. Subsample of 50 gets directional data in ~30min.
 // Subsampling uses a DETERMINISTIC stride so the same subset is picked each
-// run (bench comparability). Omit the env var to run the full 200.
+// run (bench comparability). Omit the env var to run the full 500.
 const CASES_LIMIT = process.env.GOLDBAND_BENCH_ENSEMBLE_CASES
   ? Math.max(10, Number(process.env.GOLDBAND_BENCH_ENSEMBLE_CASES))
   : 0;
@@ -102,10 +109,11 @@ function currentSchemaHash(): { hash: string; components: Record<string, string>
   h.update(prompt_sha);
   h.update(combiner_rev);
   h.update(thresholds_key);
-  h.update('browsesafe-bench-smoke-200');
+  h.update('fixture-schema-v2');
+  h.update(BROWSESAFE_BENCH_DATASET_VERSION);
   return {
     hash: h.digest('hex'),
-    components: { prompt_sha, exemplars_sha, combiner_rev, thresholds: thresholds_key, dataset: 'browsesafe-bench-smoke-200' },
+    components: { prompt_sha, exemplars_sha, combiner_rev, thresholds: thresholds_key, dataset: BROWSESAFE_BENCH_DATASET_VERSION },
   };
 }
 
@@ -119,17 +127,21 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
   beforeAll(async () => {
     if (!RUN || !ML_AVAILABLE) return;
     const allRows = await loadRows();
-    if (CASES_LIMIT && CASES_LIMIT < allRows.length) {
+    if (allRows.length < BROWSESAFE_BENCH_CASES) {
+      throw new Error(`Smoke dataset cache has ${allRows.length} cases; expected at least ${BROWSESAFE_BENCH_CASES}. Re-run browse/test/security-bench.test.ts to refresh the cache.`);
+    }
+    const benchmarkRows = allRows.slice(0, BROWSESAFE_BENCH_CASES);
+    if (CASES_LIMIT && CASES_LIMIT < benchmarkRows.length) {
       // Deterministic stride subsample: take every Nth row so the picked
       // subset stays balanced across labels and run-to-run comparable.
-      const stride = Math.floor(allRows.length / CASES_LIMIT);
+      const stride = Math.floor(benchmarkRows.length / CASES_LIMIT);
       rows = [];
-      for (let i = 0; i < allRows.length && rows.length < CASES_LIMIT; i += stride) {
-        rows.push(allRows[i]);
+      for (let i = 0; i < benchmarkRows.length && rows.length < CASES_LIMIT; i += stride) {
+        rows.push(benchmarkRows[i]);
       }
-      console.log(`[bench-ensemble-live] Subsample: ${rows.length} cases (stride ${stride} over ${allRows.length})`);
+      console.log(`[bench-ensemble-live] Subsample: ${rows.length} cases (stride ${stride} over ${benchmarkRows.length})`);
     } else {
-      rows = allRows;
+      rows = benchmarkRows;
     }
     const mod = await import('../src/security-classifier');
     scanPageContent = mod.scanPageContent;
@@ -142,7 +154,7 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
   test.skipIf(!RUN || !ML_AVAILABLE)('runs full ensemble on smoke, writes fixture, records evals', async () => {
     const startTime = Date.now();
     // claude -p per-call latency ~30-40s (Claude Code session startup, not a
-    // raw API call). Concurrency 8 cuts 200 cases from ~2hr to ~15-20min
+    // raw API call). Concurrency 8 cuts 500 cases from ~5hr to ~30-40min
     // while staying under Haiku RPM caps. Tune via
     // GOLDBAND_BENCH_ENSEMBLE_CONCURRENCY if rate limits hit.
     const CONCURRENCY = Number(process.env.GOLDBAND_BENCH_ENSEMBLE_CONCURRENCY ?? 8);
@@ -215,7 +227,7 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
 
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
-    const cases = slots.map(s => ({ content: s.content, label: s.label, signals: s.signals }));
+    const { replayCases: cases, rawCases } = buildBenchmarkCaseArtifacts(slots);
 
     const detection = (tp + fn) > 0 ? tp / (tp + fn) : 0;
     const fpRate = (fp + tn) > 0 ? fp / (fp + tn) : 0;
@@ -232,10 +244,11 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
 
     // Schema hash + metadata for fixture.
     const { hash: schemaHash, components } = currentSchemaHash();
+    const capturedAt = new Date().toISOString();
     const fixture = {
-      schema_version: 1,
+      schema_version: 2,
       model: HAIKU_MODEL,
-      captured_at: new Date().toISOString(),
+      captured_at: capturedAt,
       schema_hash: schemaHash,
       components: {
         prompt_sha: components.prompt_sha,
@@ -246,6 +259,20 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
       },
       cases,
     };
+
+    const rawArtifact = {
+      artifact_schema_version: 1,
+      captured_at: capturedAt,
+      model: HAIKU_MODEL,
+      schema_hash: schemaHash,
+      components: fixture.components,
+      cases: rawCases,
+    };
+
+    const ts = capturedAt.replace(/[:.]/g, '-');
+    const rawArtifactName = STOP_LOSS_ITER
+      ? `stop-loss-iter-${STOP_LOSS_ITER}-raw-${ts}.json`
+      : `security-bench-ensemble-raw-${ts}.json`;
 
     const evalRecord = {
       timestamp: new Date().toISOString(),
@@ -260,26 +287,30 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
       thresholds: { BLOCK: THRESHOLDS.BLOCK, WARN: THRESHOLDS.WARN, LOG_ONLY: THRESHOLDS.LOG_ONLY },
       stop_loss_iter: STOP_LOSS_ITER || null,
       elapsed_sec: elapsedSec,
+      raw_cases_artifact: rawArtifactName,
     };
 
     // Write eval record. Always writes, even on gate fail (that's the point —
     // we want to see the failed-iteration numbers).
     fs.mkdirSync(EVALS_DIR, { recursive: true });
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const rawArtifactPath = path.join(EVALS_DIR, rawArtifactName);
+    fs.writeFileSync(rawArtifactPath, JSON.stringify(rawArtifact, null, 2), { mode: 0o600 });
+    console.log(`[bench-ensemble-live] Raw content artifact: ${rawArtifactPath}`);
     const evalName = STOP_LOSS_ITER
       ? `stop-loss-iter-${STOP_LOSS_ITER}-${ts}.json`
       : `security-bench-ensemble-${ts}.json`;
     fs.writeFileSync(path.join(EVALS_DIR, evalName), JSON.stringify(evalRecord, null, 2));
     console.log(`[bench-ensemble-live] Eval record: ${path.join(EVALS_DIR, evalName)}`);
 
-    // Fixture: only overwrite the canonical path when NOT in stop-loss mode.
-    // Stop-loss iterations write to evals/ only (per plan).
-    if (!STOP_LOSS_ITER) {
+    // Fixture: only a complete 500-case final run may overwrite the canonical
+    // replay data. Stop-loss and subsampled runs stay in local eval artifacts.
+    if (!STOP_LOSS_ITER && !CASES_LIMIT && rows.length === BROWSESAFE_BENCH_CASES) {
       fs.mkdirSync(path.dirname(FIXTURE_PATH), { recursive: true });
       fs.writeFileSync(FIXTURE_PATH, JSON.stringify(fixture, null, 2));
       console.log(`[bench-ensemble-live] Canonical fixture written: ${FIXTURE_PATH}`);
     } else {
-      console.log(`[bench-ensemble-live] Stop-loss iteration ${STOP_LOSS_ITER} — fixture NOT overwritten. Accept this iteration manually if it's the final one.`);
+      const reason = STOP_LOSS_ITER ? `stop-loss iteration ${STOP_LOSS_ITER}` : `${rows.length}-case subsample`;
+      console.log(`[bench-ensemble-live] ${reason} — canonical fixture NOT overwritten.`);
     }
 
     // The live bench itself is not a gate — it's a measurement. The CI gate
@@ -288,5 +319,5 @@ describe('BrowseSafe-Bench ensemble LIVE (opt-in, real Haiku)', () => {
     expect(tp + fn).toBeGreaterThan(0); // some positive cases
     expect(tn + fp).toBeGreaterThan(0); // some negative cases
     expect(tp + tn).toBeGreaterThan(rows.length * 0.30); // not worse than random
-  }, 7200000); // up to 2hr fallback for worst-case low-concurrency runs
+  }, 21600000); // up to 6hr fallback for worst-case low-concurrency runs
 });

@@ -30,7 +30,7 @@ import { writeSecureFile, appendSecureFile, mkdirSecure } from './file-permissio
 
 /**
  * Confidence thresholds for classifier output. Calibrated against BrowseSafe-Bench
- * smoke (200 cases) + benign corpus (50 pages). BLOCK is intentionally conservative.
+ * smoke (500 cases) + benign corpus (50 pages). BLOCK is intentionally conservative.
  * See plan §"Threshold Spec" for calibration methodology.
  */
 export const THRESHOLDS = {
