@@ -1,20 +1,16 @@
 ---
 name: goldband-review
-preamble-tier: 4
+preamble-tier: 0
 version: 1.0.0
 description: |
-  Pre-landing PR review. Analyzes diff against the base branch for SQL safety, LLM trust
-  boundary violations, conditional side effects, and other structural issues. Use when
-  asked to "review this PR", "code review", "pre-landing review", or "check my diff".
-  Proactively suggest when the user is about to merge or land code changes. (goldband)
+  Read-only pre-landing code review. Finds concrete, reachable defects in the
+  current diff and suppresses speculative findings. Use for PR review, code
+  review, pre-landing review, or checking a diff. (goldband)
 allowed-tools:
   - Bash
   - Read
   - Grep
   - Glob
-  - Agent
-  - AskUserQuestion
-  - WebSearch
 triggers:
   - review this pr
   - code review
@@ -22,309 +18,139 @@ triggers:
   - pre-landing review
 ---
 
-{{PREAMBLE}}
+## Runtime root
+
+```bash
+_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+GOLDBAND_ROOT="$HOME/.claude/skills/goldband"
+[ -n "$_ROOT" ] && [ -d "$_ROOT/.claude/skills/goldband" ] && GOLDBAND_ROOT="$_ROOT/.claude/skills/goldband"
+GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+GOLDBAND_RULES_DIR="${GOLDBAND_RULES_DIR:-}"
+for _RULES_DIR in "${_ROOT:-}/rules" "$HOME/.claude/rules" "$HOME/.codex/rules"; do
+  if [ -z "$GOLDBAND_RULES_DIR" ] && [ -f "$_RULES_DIR/semantic-review-criteria.md" ]; then
+    GOLDBAND_RULES_DIR="$_RULES_DIR"
+  fi
+done
+```
 
 {{BASE_BRANCH_DETECT}}
 
-# Read-Only Pre-Landing PR Review
+# Read-Only Pre-Landing Code Review
 
-You are running the `/review` workflow. Analyze the current branch's diff against the base branch for structural issues that tests don't catch.
+Review the current branch against the detected base branch. Find real defects
+that tests may miss. Do not edit files, apply patches, commit, push, or invoke
+repair workflows.
 
-This workflow is read-only. Do not edit source files, apply patches, commit,
-push, or run repair workflows. If a finding needs a patch, describe the patch in
-the recommendation text only.
+## Preferred runtime
 
-## Strict Change Review Contract
-
-Every review must answer these four questions before declaring the change clean:
-
-1. **Original problem:** What problem, bug, requirement, or intent was this
-   branch supposed to address? Use plan file, PR body, TODOs, commit messages,
-   branch name, and changed tests as evidence. If intent is unclear, say so.
-2. **Correctness of the fix:** Did the diff actually address that problem at
-   the layer where the root cause lives? Trace the changed code path far enough
-   to verify the new behavior is reachable. Flag cosmetic fixes, partial fixes,
-   dead code, and fixes that only hide the symptom.
-3. **Architecture and design health:** Is the change shaped correctly for the
-   existing system? Check ownership boundaries, contracts, data flow, naming,
-   coupling, duplicated logic, fallback behavior, state transitions, and whether
-   the solution matches established local patterns.
-4. **Risk and error scan:** What can break because of this diff? Check
-   regressions, edge cases, failure paths, migrations, config/runtime drift,
-   concurrency, security, observability, and test gaps.
-
-Include a concise `Strict Review Frame` in the output with those four headings.
-Do not output "No issues found" unless each heading has evidence or an explicit
-"unknown / not applicable" note.
-
-## Programmatic runtime entrypoint
-
-The runtime contract for this workflow lives in `goldband-loop/workflows/`.
-Prefer the programmatic path when you need structured evidence, mock smoke
-tests, or comparable findings:
+Use the programmatic runtime when structured evidence or repeatable execution is
+needed:
 
 ```bash
-bun run workflows/run.ts goldband-review --loop --mode mock --worktree
+bun run workflows/run.ts review code --mode mock --worktree
 ```
 
-Specialist dispatch is explicit:
-
-- `--specialists auto` (default): run scope-selected specialist passes.
-- `--specialists off`: run only the core review pass.
-- `--specialists all`: force every specialist pass.
-
-`--worktree` includes staged tracked changes, unstaged tracked changes, and
-safe untracked text files. Untracked files that are too large, binary,
-non-UTF-8, or secret-like are represented by no-content skipped markers instead
-of being sent to the host.
-For real LLM execution, `--mode real` must be paired with `--host codex` or
-`--host claude`; otherwise the runtime fails closed instead of falling back to
-mock mode.
-Omit `--loop` when you explicitly need the legacy single-pass runtime; keep
-`--loop` for convergence runs that should re-check previous validated findings.
-
-Use `--mode real --host codex` or `--mode real --host claude` only for an
-explicitly authorized LLM run. Step evidence is written to:
+Real LLM execution requires explicit authorization and an explicit host:
 
 ```bash
-${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-review.jsonl
+bun run workflows/run.ts review code --mode real --host claude --worktree
+bun run workflows/run.ts review code --mode real --host codex --worktree
 ```
 
-The markdown review flow below is the legacy fallback and human-readable review
-guide. Do not treat it as the only source of truth for runtime execution.
+Specialists are optional:
 
----
+- `--specialists auto` is the default. It dispatches at most two specialists,
+  and only when the diff contains a matching security, migration, performance,
+  or host-contract risk signal.
+- `--specialists off` runs only the core reviewer.
+- `--specialists all` is an explicit expensive mode. Never choose it unless the
+  user asks for exhaustive specialist coverage.
 
-## Step 1: Check branch
+Do not add `--loop` to a normal read-only review. A loop is useful only after
+the reviewed code changes and the user explicitly requests another pass.
 
-1. Run `git branch --show-current` to get the current branch.
-2. If on the base branch, output: **"Nothing to review — you're on the base branch or have no changes against it."** and stop.
-3. Run `git fetch origin <base> --quiet && DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE" --stat` to check if there's a diff. If no diff, output the same message and stop.
+Runtime evidence is written to:
 
----
+```text
+${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/review-code.jsonl
+```
 
-{{SCOPE_DRIFT}}
+## Inline review fallback
 
-{{PLAN_COMPLETION_AUDIT_REVIEW}}
+Use this path when reviewing directly in the current agent instead of launching
+the programmatic runtime.
 
-## Step 2: Read the shared review standard
+### 1. Establish scope and intent
 
-Resolve the active runtime root from `GOLDBAND_ROOT` in the preamble, then read:
+1. Read the full diff from its merge base with the detected base branch.
+2. Read the PR body when available; otherwise use changed tests and commit
+   messages to identify the intended behavior.
+3. If intent remains unclear, say so. Do not invent requirements.
+
+### 2. Load the review contract
+
+Resolve the active runtime root from `GOLDBAND_ROOT`, then read:
 
 - `$GOLDBAND_ROOT/review/shared-rubric.md`
 - `$GOLDBAND_ROOT/review/findings-schema.md`
 - `$GOLDBAND_ROOT/review/checklist.md`
+- `$GOLDBAND_RULES_DIR/semantic-review-criteria.md` (**mandatory**)
 
-Do not substitute files from the repository source tree or another host runtime.
-**If any file cannot be read, STOP and report the active runtime path that is
-missing.** Do not proceed without the shared review standard.
+Read `semantic-review-criteria.md` completely before inspecting findings. Its
+criteria are non-negotiable and must not be weakened, skipped, or replaced by a
+summary. If `GOLDBAND_RULES_DIR` is empty or any contract file is unavailable,
+STOP and report the missing path. Do not continue with a reduced review contract
+or use a similarly named file from another installation.
 
----
+### 3. Trace changed behavior
 
-## Step 2.5: Check for Greptile review comments
+For each risky change:
 
-Read `$GOLDBAND_ROOT/review/greptile-triage.md` and follow the fetch, filter, classify, and **escalation detection** steps.
+1. Identify the valid input or runtime state that reaches it.
+2. Follow the actual caller, branch, state transition, and downstream consumer.
+3. Compare the resulting behavior with the intended contract.
+4. Inspect code outside the diff only when needed to verify reachability,
+   ownership, registration, consumers, or existing protection.
 
-**If no PR exists, `gh` fails, API returns an error, or there are zero Greptile comments:** Skip this step silently. Greptile integration is additive — the review works without it.
+Prioritize correctness, authorization, data loss, broken contracts, concurrency,
+migration safety, and normal user workflows. Do not report style preferences,
+generic best practices, or risks that are only hypothetical.
 
-**If Greptile comments are found:** Store the classifications (VALID & ACTIONABLE, VALID BUT ALREADY FIXED, FALSE POSITIVE, SUPPRESSED) for the final findings report. Do not reply to Greptile comments and do not edit files from this workflow.
-Do not save to per-project or global greptile-history from `/review`; history writes are reserved for ship/reply flows.
+### 4. Finding validity gate
 
----
+A finding is valid only when it has all three:
 
-## Step 3: Get the diff
+- an exact `file:line`;
+- a concrete input or runtime state and a reachable execution path;
+- the incorrect result, expected result, and practical impact.
 
-Fetch the latest base branch to avoid false positives from stale local state:
+If any part is missing, keep investigating or omit the finding. A suspicious
+pattern alone is not a finding. Use the lowest severity supported by evidence.
 
-```bash
-git fetch origin <base> --quiet
+### 5. Output
+
+Put blocking findings first. Keep each finding compact:
+
+```text
+[P1] Short problem title — path/to/file.ts:42
+
+When <input/state>, execution reaches <path> and produces <actual> instead of
+<expected>, causing <impact>.
+
+Fix: <one-sentence healthy fix>
 ```
 
-Compute the merge base, then diff the working tree against that point:
+Do not print confidence scores. Confidence is an internal suppression decision:
+if the finding is not well supported, do not output it. Mention a test gap only
+when the missing test materially explains why the regression can ship.
 
-```bash
-DIFF_BASE=$(git merge-base origin/<base> HEAD)
-git diff "$DIFF_BASE"
-```
+If no findings survive the gate, output `No findings.` and briefly name the
+high-risk paths that were actually traced.
 
-This includes both committed and uncommitted changes while excluding commits that landed on the base branch after this branch was created.
+## Completion boundary
 
-## Step 3.4: Workspace-aware queue status (advisory)
-
-Check whether this PR's claimed VERSION still points at a free slot in the queue. Advisory only — never blocks review; just informs the reviewer about landing-order risk.
-
-```bash
-BRANCH_VERSION=$(git show HEAD:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "")
-BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo main)
-BASE_VERSION=$(git show origin/$BASE_BRANCH:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "")
-QUEUE_JSON=$(bun run bin/goldband-next-version \
-  --base "$BASE_BRANCH" \
-  --bump patch \
-  --current-version "$BASE_VERSION" 2>/dev/null || echo '{"offline":true}')
-NEXT_SLOT=$(echo "$QUEUE_JSON" | jq -r '.version // empty')
-CLAIMED_COUNT=$(echo "$QUEUE_JSON" | jq -r '.claimed | length // 0')
-OFFLINE=$(echo "$QUEUE_JSON" | jq -r '.offline // false')
-```
-
-- If `OFFLINE=true`: skip this section (no signal to report).
-- Otherwise, include ONE line in the review output: `Version claimed: v<BRANCH_VERSION>. Queue: <CLAIMED_COUNT> PR(s) ahead. <VERDICT>` where VERDICT is either `Slot free` (if `BRANCH_VERSION >= NEXT_SLOT`) or `⚠ queue moved — rerun /ship to reconcile v<BRANCH_VERSION> → v<NEXT_SLOT>`.
-
----
-
-## Step 3.5: Slop scan (advisory)
-
-Run a slop scan on changed files to catch AI code quality issues (empty catches,
-redundant `return await`, overcomplicated abstractions):
-
-```bash
-bun run slop:diff origin/<base> 2>/dev/null || true
-```
-
-If findings are reported, include them in the review output as an informational
-diagnostic. Slop findings are advisory, never blocking. If slop:diff is not
-available (e.g., slop-scan not installed), skip this step silently.
-
----
-
-{{PRIOR_KNOWLEDGE:domain=review:query=review diff sql race llm shell enum}}
-
-## Step 4: Critical pass (core review)
-
-Apply the CRITICAL categories from the checklist against the diff:
-SQL & Data Safety, Race Conditions & Concurrency, LLM Output Trust Boundary, Shell Injection, Enum & Value Completeness.
-
-Also apply the remaining INFORMATIONAL categories that are still in the checklist (Async/Sync Mixing, Column/Field Name Safety, LLM Prompt Issues, Type Coercion, View/Frontend, Time Window Safety, Completeness Gaps, Distribution & CI/CD).
-
-**Enum & Value Completeness requires reading code OUTSIDE the diff.** When the diff introduces a new enum value, status, tier, or type constant, use Grep to find all files that reference sibling values, then Read those files to check if the new value is handled. This is the one category where within-diff review is insufficient.
-
-**Search-before-recommending:** When recommending a fix pattern (especially for concurrency, caching, auth, or framework-specific behavior):
-- Verify the pattern is current best practice for the framework version in use
-- Check if a built-in solution exists in newer versions before recommending a workaround
-- Verify API signatures against current docs (APIs change between versions)
-
-Takes seconds, prevents recommending outdated patterns. If WebSearch is unavailable, note it and proceed with in-distribution knowledge.
-
-Follow the output format specified in the checklist. Respect the suppressions — do NOT flag items listed in the "DO NOT flag" section.
-
-{{CONFIDENCE_CALIBRATION}}
-
----
-
-{{REVIEW_ARMY}}
-
----
-
-## Step 5: Read-Only Findings Aggregation
-
-**Every finding gets evidence and a recommendation, but no finding is fixed by
-this workflow.**
-
-{{CROSS_REVIEW_DEDUP}}
-
-Aggregate findings from the core pass, Greptile classifications, design review,
-Review Army specialists, and adversarial pass into the shared finding shape from
-`findings-schema.md`.
-
-For each finding include:
-
-- severity
-- file and line when available
-- category
-- failure scenario
-- evidence
-- recommendation
-- suggested verification
-- blocking/advisory
-- specialist or contributing specialists when applicable
-
-Deduplicate by file, line, category, and failure scenario. If multiple
-specialists report the same issue, keep the most specific evidence and record
-all contributing specialists.
-
-High or critical findings without concrete evidence must be downgraded to
-informational/unverified. Do not keep a blocking severity based on suspicion.
-
-### Verification of claims
-
-Before producing the final review output:
-- If you claim "this pattern is safe" → cite the specific line proving safety
-- If you claim "this is handled elsewhere" → read and cite the handling code
-- If you claim "tests cover this" → name the test file and method
-- Never say "likely handled" or "probably tested" — verify or flag as unknown
-
-**Rationalization prevention:** "This looks fine" is not a finding. Either cite evidence it IS fine, or flag it as unverified.
-
-### Greptile comment resolution
-
-After outputting your own findings, if Greptile comments were classified in Step 2.5:
-
-**Include a Greptile summary in your output header:** `+ N Greptile comments (X valid, Y fixed, Z FP)`
-
-Do not reply to Greptile comments from `/review`. Report valid comments as
-findings, report false positives with evidence, and leave any external comment
-reply or repair work to `/ship` or an explicit follow-up.
-
----
-
-## Step 5.5: TODOS cross-reference
-
-Read `TODOS.md` in the repository root (if it exists). Cross-reference the PR against open TODOs:
-
-- **Does this PR close any open TODOs?** If yes, note which items in your output: "This PR addresses TODO: <title>"
-- **Does this PR create work that should become a TODO?** If yes, flag it as an informational finding.
-- **Are there related TODOs that provide context for this review?** If yes, reference them when discussing related findings.
-
-If TODOS.md doesn't exist, skip this step silently.
-
----
-
-## Step 5.6: Documentation staleness check
-
-Cross-reference the diff against documentation files. For each `.md` file in the repo root (README.md, ARCHITECTURE.md, CONTRIBUTING.md, CLAUDE.md, etc.):
-
-1. Check if code changes in the diff affect features, components, or workflows described in that doc file.
-2. If the doc file was NOT updated in this branch but the code it describes WAS changed, flag it as an INFORMATIONAL finding:
-   "Documentation may be stale: [file] describes [feature/component] but code changed in this branch. Consider running `/document-release`."
-
-This is informational only — never critical. The fix action is `/document-release`.
-
-If no documentation files exist, skip this step silently.
-
----
-
-{{ADVERSARIAL_STEP}}
-
-## Step 5.8: Persist Eng Review result
-
-After all review passes complete, persist the final `/review` outcome so `/ship` can
-recognize that Eng Review was run on this branch.
-
-Run:
-
-```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"specialists":SPECIALISTS_JSON,"findings":FINDINGS_JSON,"commit":"COMMIT"}'
-```
-
-Substitute:
-- `TIMESTAMP` = ISO 8601 datetime
-- `STATUS` = `"clean"` if there are no findings after read-only aggregation, otherwise `"issues_found"`
-- `issues_found` = total findings
-- `critical` = critical/high blocking findings
-- `informational` = advisory findings
-- `quality_score` = the PR Quality Score computed in Step 4.6 (e.g., 7.5). If specialists were skipped (small diff), use `10.0`
-- `specialists` = the per-specialist stats object compiled in Step 4.6. Each specialist that was considered gets an entry: `{"dispatched":true/false,"findings":N,"critical":N,"informational":N}` if dispatched, or `{"dispatched":false,"reason":"scope|gated"}` if skipped. Include Design specialist. Example: `{"testing":{"dispatched":true,"findings":2,"critical":0,"informational":2},"security":{"dispatched":false,"reason":"scope"}}`
-- `findings` = array of per-finding records from Step 5. For each finding (from core pass and specialists), include: `{"fingerprint":"path:line:category","severity":"critical|high|medium|low|info","action":"reported"}`. Suppressed findings are NOT included.
-- `COMMIT` = output of `git rev-parse --short HEAD`
-
-{{LEARNINGS_LOG}}
-
-If the review exits early before a real review completes (for example, no diff against the base branch), do **not** write this entry.
-
-## Important Rules
-
-- **Read the FULL diff before commenting.** Do not flag issues already addressed in the diff.
-- **Read-only.** Do not edit files, auto-fix, ask to fix now, commit, push, or create PRs. That's /ship or an explicit repair workflow's job.
-- **Bash is inspection-only.** Use safe read-only commands. On Claude, the `review-read-only` hook mode blocks source mutations while allowing review runtime artifacts. On Codex, the programmatic path must use the read-only sandbox.
-- **Be terse.** One line problem, one line fix. No preamble.
-- **Only flag real problems.** Skip anything that's fine.
-- **Use Greptile triage only for classification.** Do not post external replies from `/review`.
+- Read the full diff before concluding.
+- Never claim a path is safe, handled elsewhere, or covered by tests without
+  reading the exact supporting code or test.
+- `/review` reports findings only. Fixing, committing, pushing, and external
+  comment replies belong to a separate explicitly authorized workflow.

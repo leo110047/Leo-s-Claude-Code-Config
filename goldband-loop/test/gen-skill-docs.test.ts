@@ -90,34 +90,24 @@ const CLAUDE_SKIPPED_SKILL_DIRS = new Set(['claude']);
 const CLAUDE_GENERATED_SKILLS = ALL_SKILLS.filter(skill => !CLAUDE_SKIPPED_SKILL_DIRS.has(skill.dir));
 
 describe('gen-skill-docs', () => {
-  test('generated SKILL.md contains all command categories', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
+  test('browser manual contains all command categories and commands', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'browse', 'SKILL.md'), 'utf-8');
     const categories = new Set(Object.values(COMMAND_DESCRIPTIONS).map(d => d.category));
     for (const cat of categories) {
-      expect(content).toContain(`### ${cat}`);
+      expect(content).toContain(cat);
     }
-  });
-
-  test('generated SKILL.md contains all commands', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
     for (const [cmd, meta] of Object.entries(COMMAND_DESCRIPTIONS)) {
       const display = meta.usage || cmd;
       expect(content).toContain(display);
     }
   });
 
-  test('command table is sorted alphabetically within categories', () => {
+  test('root SKILL.md is a thin router without browser command tables', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    // Extract command names from the Navigation section as a test
-    const navSection = content.match(/### Navigation\n\|.*\n\|.*\n([\s\S]*?)(?=\n###|\n## )/);
-    expect(navSection).not.toBeNull();
-    const rows = navSection![1].trim().split('\n');
-    const commands = rows.map(r => {
-      const match = r.match(/\| `(\w+)/);
-      return match ? match[1] : '';
-    }).filter(Boolean);
-    const sorted = [...commands].sort();
-    expect(commands).toEqual(sorted);
+    expect(content.split('\n').length).toBeLessThan(80);
+    expect(content).toContain('workflows/<capability>/<action>.workflow.md');
+    expect(content).toContain('manuals/browser.md');
+    expect(content).not.toContain('goto <url>');
   });
 
   test('generated header is present in SKILL.md', () => {
@@ -131,8 +121,8 @@ describe('gen-skill-docs', () => {
     expect(content).toContain('AUTO-GENERATED from SKILL.md.tmpl');
   });
 
-  test('snapshot flags section contains all flags', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
+  test('browser manual contains all snapshot flags', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'browse', 'SKILL.md'), 'utf-8');
     for (const flag of SNAPSHOT_FLAGS) {
       expect(content).toContain(flag.short);
       expect(content).toContain(flag.description);
@@ -246,9 +236,9 @@ describe('gen-skill-docs', () => {
 
   test('templates contain placeholders', () => {
     const rootTmpl = fs.readFileSync(path.join(ROOT, 'SKILL.md.tmpl'), 'utf-8');
-    expect(rootTmpl).toContain('{{COMMAND_REFERENCE}}');
-    expect(rootTmpl).toContain('{{SNAPSHOT_FLAGS}}');
-    expect(rootTmpl).toContain('{{PREAMBLE}}');
+    expect(rootTmpl).toContain('{{CAPABILITY_ROUTER}}');
+    expect(rootTmpl).not.toContain('{{COMMAND_REFERENCE}}');
+    expect(rootTmpl).not.toContain('{{PREAMBLE}}');
 
     const browseTmpl = fs.readFileSync(path.join(ROOT, 'browse', 'SKILL.md.tmpl'), 'utf-8');
     expect(browseTmpl).toContain('{{COMMAND_REFERENCE}}');
@@ -259,25 +249,27 @@ describe('gen-skill-docs', () => {
   test('root router shows a menu for empty goldband invocation', () => {
     for (const file of ['SKILL.md.tmpl', 'SKILL.md']) {
       const content = fs.readFileSync(path.join(ROOT, file), 'utf-8');
-      expect(content).toContain('## Empty Invocation Menu');
-      expect(content).toContain('If the user\'s prompt is only `$goldband`');
-      expect(content).toContain('$goldband review');
-      expect(content).toContain('$goldband cross-review <plan-file>');
-      expect(content).toContain('$goldband investigate');
-      expect(content).toContain('$goldband context-restore');
-      expect(content).toContain('is a separate workflow entrypoint from `$goldband review`');
-      expect(content).toContain('Do not route `$goldband cross-review` to `/review`');
+      expect(content).toContain('For an empty invocation');
+      if (file.endsWith('.tmpl')) {
+        expect(content).toContain('{{CAPABILITY_ROUTER}}');
+      } else {
+        expect(content).toContain('$goldband review code');
+        expect(content).toContain('$goldband investigate code');
+        expect(content).toContain('$goldband context restore');
+      }
+      expect(content).not.toContain('$goldband cross-review');
+      expect(content).not.toContain('$goldband context-restore');
     }
   });
 
-  test('generated SKILL.md contains operational self-improvement (replaced contributor mode)', () => {
+  test('root router excludes workflow preamble and self-improvement boilerplate', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
     expect(content).not.toContain('Contributor Mode');
     expect(content).not.toContain('goldband_contributor');
     expect(content).not.toContain('contributor-logs');
-    expect(content).toContain('Operational Self-Improvement');
-    expect(content).toContain('goldband-learnings-log');
-    expect(content).toContain('goldband-learnings-search --limit 3');
+    expect(content).not.toContain('Operational Self-Improvement');
+    expect(content).not.toContain('goldband-learnings-log');
+    expect(content).not.toContain('_TEL_START');
   });
 
   test('all workflow completion footers require a knowledge candidate field', () => {
@@ -297,40 +289,29 @@ describe('gen-skill-docs', () => {
     }
   });
 
-  test('qa and review use consolidated prior knowledge recall', () => {
-    for (const skill of ['qa', 'review']) {
-      const tmpl = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md.tmpl'), 'utf-8');
-      const generated = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
-      expect(tmpl).toContain('{{PRIOR_KNOWLEDGE:');
-      expect(tmpl).not.toContain('{{LEARNINGS_SEARCH');
-      expect(tmpl).not.toContain('{{GBRAIN_CONTEXT_LOAD');
-      expect(generated).toContain('## Prior Knowledge');
-      expect(generated).toContain('goldband-knowledge search');
-      expect(generated).toContain('cross_project_learnings');
-      expect(generated).toContain('--cross-project');
-      expect(generated).toContain('goldband-learnings-search --limit 10');
-      expect(generated).not.toContain('{{PRIOR_KNOWLEDGE');
-      expect(generated).not.toContain('{{LEARNINGS_SEARCH');
-      expect(generated).not.toContain('{{GBRAIN_CONTEXT_LOAD');
-    }
+  test('qa uses prior knowledge recall while review stays focused on current evidence', () => {
+    const qaTmpl = fs.readFileSync(path.join(ROOT, 'qa', 'SKILL.md.tmpl'), 'utf-8');
+    const qaGenerated = fs.readFileSync(path.join(ROOT, 'qa', 'SKILL.md'), 'utf-8');
+    expect(qaTmpl).toContain('{{PRIOR_KNOWLEDGE:');
+    expect(qaGenerated).toContain('## Prior Knowledge');
+    expect(qaGenerated).toContain('goldband-knowledge search');
+
+    const reviewTmpl = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md.tmpl'), 'utf-8');
+    const reviewGenerated = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    expect(reviewTmpl).not.toContain('{{PRIOR_KNOWLEDGE:');
+    expect(reviewGenerated).not.toContain('## Prior Knowledge');
   });
 
   test('generated SKILL.md with LEARNINGS_LOG contains operational type', () => {
-    // Check a skill that has LEARNINGS_LOG (e.g., review)
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'investigate', 'SKILL.md'), 'utf-8');
     expect(content).toContain('operational');
   });
 
-  test('generated SKILL.md contains session awareness', () => {
+  test('root router leaves session and branch mechanics to selected contracts', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('_SESSIONS');
-    expect(content).toContain('RECOMMENDATION');
-  });
-
-  test('generated SKILL.md contains branch detection', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('_BRANCH');
-    expect(content).toContain('git branch --show-current');
+    expect(content).not.toContain('_SESSIONS');
+    expect(content).not.toContain('_BRANCH');
+    expect(content).not.toContain('git branch --show-current');
   });
 
   test('tier 2+ skills contain ELI10 simplification rules (AskUserQuestion format)', () => {
@@ -349,10 +330,10 @@ describe('gen-skill-docs', () => {
     expect(content).not.toContain('## Completeness Principle');
   });
 
-  test('generated SKILL.md contains telemetry line', () => {
+  test('root router leaves telemetry to runtime and selected contracts', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('skill-usage.jsonl');
-    expect(content).toContain('~/.goldband/analytics');
+    expect(content).not.toContain('skill-usage.jsonl');
+    expect(content).not.toContain('~/.goldband/analytics');
   });
 
   test('plan-review generated preambles stay under the Option A budget', () => {
@@ -456,9 +437,7 @@ describe('gen-skill-docs', () => {
 
   test('preamble-using skills have correct skill name in telemetry', () => {
     const PREAMBLE_SKILLS = [
-      { dir: '.', name: 'goldband' },
       { dir: 'ship', name: 'ship' },
-      { dir: 'review', name: 'review' },
       { dir: 'qa', name: 'qa' },
       { dir: 'retro', name: 'retro' },
     ];
@@ -595,7 +574,7 @@ describe('GitLab support in generated skills', () => {
 describe('description quality evals', () => {
   // Regression: snapshot flags lost value hints (-d <N>, -s <sel>, -o <path>)
   test('snapshot flags with values include value hints in output', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'browse', 'SKILL.md'), 'utf-8');
     for (const flag of SNAPSHOT_FLAGS) {
       if (flag.takesValue) {
         expect(flag.valueHint).toBeDefined();
@@ -661,12 +640,10 @@ describe('description quality evals', () => {
   });
 
   // Guard: generated output uses → not ->
-  test('generated SKILL.md uses unicode arrows', () => {
+  test('root router uses concise capability/action notation', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    // Check the Tips section specifically (where we regressed -> from →)
-    const tipsSection = content.slice(content.indexOf('## Tips'));
-    expect(tipsSection).toContain('→');
-    expect(tipsSection).not.toContain('->');
+    expect(content).toContain('$goldband <capability> <action>');
+    expect(content).not.toContain('## Tips');
   });
 });
 
@@ -797,10 +774,11 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
     expect(shipSkill).toContain('Trace every codepath changed');
   });
 
-  test('review mode uses Review Army for specialist dispatch', () => {
-    expect(reviewSkill).toContain('Review Army');
-    expect(reviewSkill).toContain('Specialist Dispatch');
-    expect(reviewSkill).toContain('testing.md');
+  test('review mode uses bounded risk-routed specialists', () => {
+    expect(reviewSkill).not.toContain('Review Army');
+    expect(reviewSkill).toContain('at most two specialists');
+    expect(reviewSkill).toContain('--specialists all');
+    expect(reviewSkill).toContain('explicit expensive mode');
   });
 
   test('plan and ship modes include E2E decision matrix', () => {
@@ -841,17 +819,16 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
     expect(shipSkill).toContain('ship-test-plan');
   });
 
-  test('review mode uses read-only findings + Review Army for specialist coverage', () => {
-    expect(reviewSkill).toContain('Read-Only Findings Aggregation');
-    expect(reviewSkill).toContain('Read-Only Pre-Landing PR Review');
+  test('review mode uses a compact read-only finding validity gate', () => {
+    expect(reviewSkill).toContain('Finding validity gate');
+    expect(reviewSkill).toContain('Read-Only Pre-Landing Code Review');
     expect(reviewSkill).not.toContain('[AUTO-FIXED]');
     expect(reviewSkill).not.toContain('Auto-fix all AUTO-FIX items');
     expect(reviewSkill).not.toContain('A) Investigate and fix now (recommended)');
     expect(reviewSkill).not.toContain('If A: address the findings');
-    expect(reviewSkill).toContain('CODEX SAYS (read-only structured review)');
-    // Review Army handles test coverage via Testing specialist subagent
-    expect(reviewSkill).toContain('Review Army');
-    expect(reviewSkill).toContain('Testing');
+    expect(reviewSkill).not.toContain('CODEX SAYS (read-only structured review)');
+    expect(reviewSkill).not.toContain('Review Army');
+    expect(reviewSkill).toContain('pattern alone is not a finding');
   });
 
   test('review mode frontmatter does not grant Edit or Write tools', () => {
@@ -861,9 +838,8 @@ describe('TEST_COVERAGE_AUDIT placeholders', () => {
     expect(frontmatter).not.toMatch(/^\s+- Write$/m);
     expect(frontmatter).toMatch(/^\s+- Bash$/m);
     expect(frontmatter).toMatch(/^\s+- Read$/m);
-    expect(reviewSkill).not.toContain('Prefer Read, Edit, Write');
-    expect(reviewSkill).toContain('Prefer Read, Glob, and Grep');
-    expect(reviewSkill).toContain('This skill is read-only; do not use');
+    expect(frontmatter).not.toMatch(/^\s+- Agent$/m);
+    expect(reviewSkill).toContain('Do not edit files, apply patches, commit, push');
   });
 
   test('plan mode does NOT include ship-specific content', () => {
@@ -1019,21 +995,17 @@ describe('PLAN_COMPLETION_AUDIT placeholders', () => {
     expect(shipSkill).toContain('Step 8');
   });
 
-  test('review SKILL.md contains plan completion in scope drift', () => {
-    expect(reviewSkill).toContain('Plan File Discovery');
-    expect(reviewSkill).toContain('Actionable Item Extraction');
-    expect(reviewSkill).toContain('Integration with Scope Drift Detection');
+  test('review SKILL.md keeps delivery auditing out of code review', () => {
+    expect(reviewSkill).not.toContain('Plan File Discovery');
+    expect(reviewSkill).not.toContain('Actionable Item Extraction');
+    expect(reviewSkill).not.toContain('Integration with Scope Drift Detection');
   });
 
-  test('both modes share plan file discovery methodology', () => {
+  test('plan completion discovery remains owned by ship', () => {
     expect(shipSkill).toContain('Plan File Discovery');
-    expect(reviewSkill).toContain('Plan File Discovery');
-    // Both should have conversation context first
     expect(shipSkill).toContain('Conversation context (primary)');
-    expect(reviewSkill).toContain('Conversation context (primary)');
-    // Both should have grep fallback
     expect(shipSkill).toContain('Content-based search (fallback)');
-    expect(reviewSkill).toContain('Content-based search (fallback)');
+    expect(reviewSkill).not.toContain('Plan File Discovery');
   });
 
   test('ship mode has gate logic for NOT DONE items', () => {
@@ -1043,19 +1015,25 @@ describe('PLAN_COMPLETION_AUDIT placeholders', () => {
     expect(shipSkill).toContain('intentionally dropped');
   });
 
-  test('review mode is INFORMATIONAL only', () => {
-    expect(reviewSkill).toContain('INFORMATIONAL');
-    expect(reviewSkill).toContain('MISSING REQUIREMENTS');
-    expect(reviewSkill).toContain('SCOPE CREEP');
+  test('review mode focuses on reachable defects instead of scope audit labels', () => {
+    expect(reviewSkill).not.toContain('MISSING REQUIREMENTS');
+    expect(reviewSkill).not.toContain('SCOPE CREEP');
+    expect(reviewSkill).toContain('reachable execution path');
   });
 
-  test('review workflow requires strict change review framing', () => {
-    expect(reviewSkill).toContain('## Strict Change Review Contract');
-    expect(reviewSkill).toContain('Original problem');
-    expect(reviewSkill).toContain('Correctness of the fix');
-    expect(reviewSkill).toContain('Architecture and design health');
-    expect(reviewSkill).toContain('Risk and error scan');
-    expect(reviewSkill).toContain('Strict Review Frame');
+  test('review workflow requires compact evidence-backed findings', () => {
+    expect(reviewSkill).toContain('exact `file:line`');
+    expect(reviewSkill).toContain('concrete input or runtime state');
+    expect(reviewSkill).toContain('incorrect result, expected result, and practical impact');
+    expect(reviewSkill).not.toContain('Strict Review Frame');
+  });
+
+  test('review workflow requires the semantic review criteria contract', () => {
+    expect(reviewSkill).toContain('$GOLDBAND_RULES_DIR/semantic-review-criteria.md');
+    expect(reviewSkill).toContain('(**mandatory**)');
+    expect(reviewSkill).toContain('criteria are non-negotiable');
+    expect(reviewSkill).toContain('STOP and report the missing path');
+    expect(reviewSkill).toContain('Do not continue with a reduced review contract');
   });
 
   test('review checklist covers correctness, architecture, and risk', () => {
@@ -1127,10 +1105,9 @@ describe('Coverage gate in ship', () => {
     expect(shipSkill).toContain('could not determine percentage — skipping');
   });
 
-  test('review SKILL.md delegates coverage to Testing specialist', () => {
-    // Coverage audit moved to Testing specialist subagent in Review Army
-    expect(reviewSkill).toContain('testing.md');
-    expect(reviewSkill).toContain('INFORMATIONAL');
+  test('review SKILL.md does not dispatch a testing specialist by default', () => {
+    expect(reviewSkill).not.toContain('testing.md');
+    expect(reviewSkill).toContain('test gap only');
   });
 });
 
@@ -1150,25 +1127,21 @@ describe('Ship metrics logging', () => {
 
 // --- Plan file discovery shared helper ---
 
-describe('Plan file discovery shared helper', () => {
-  // The shared helper should appear in ship (via PLAN_COMPLETION_AUDIT_SHIP)
-  // and in review (via PLAN_COMPLETION_AUDIT_REVIEW)
+describe('Plan file discovery ownership', () => {
   const shipSkill = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
   const reviewSkill = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
 
-  test('plan file discovery appears in both ship and review', () => {
+  test('plan file discovery appears in ship, not review', () => {
     expect(shipSkill).toContain('Plan File Discovery');
-    expect(reviewSkill).toContain('Plan File Discovery');
+    expect(reviewSkill).not.toContain('Plan File Discovery');
   });
 
-  test('both include conversation context first', () => {
+  test('ship includes conversation context first', () => {
     expect(shipSkill).toContain('Conversation context (primary)');
-    expect(reviewSkill).toContain('Conversation context (primary)');
   });
 
-  test('both include content-based fallback', () => {
+  test('ship includes content-based fallback', () => {
     expect(shipSkill).toContain('Content-based search (fallback)');
-    expect(reviewSkill).toContain('Content-based search (fallback)');
   });
 });
 
@@ -1355,7 +1328,6 @@ describe('Codex filesystem boundary', () => {
   const CODEX_CALLING_SKILLS = [
     'codex',         // /codex skill — 3 modes
     'autoplan',      // /autoplan — CEO/design/eng voices
-    'review',        // /review — adversarial step resolver
     'ship',          // /ship — adversarial step resolver
     'plan-eng-review',  // outside voice resolver
     'plan-ceo-review',  // outside voice resolver
@@ -1384,15 +1356,10 @@ describe('Codex filesystem boundary', () => {
     expect(content).toContain('Consider retrying');
   });
 
-  test('review.ts CODEX_BOUNDARY constant is interpolated into resolver output', () => {
-    // The adversarial step resolver should include boundary text in codex exec prompts
+  test('review does not launch a nested Codex adversarial pass', () => {
     const reviewContent = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    // Boundary should appear near codex exec invocations
-    const boundaryIdx = reviewContent.indexOf(BOUNDARY_MARKER);
-    const codexExecIdx = reviewContent.indexOf('codex exec');
-    // Both must exist and boundary must come before a codex exec call
-    expect(boundaryIdx).toBeGreaterThan(-1);
-    expect(codexExecIdx).toBeGreaterThan(-1);
+    expect(reviewContent).not.toContain(BOUNDARY_MARKER);
+    expect(reviewContent).not.toContain('codex exec');
   });
 
   test('autoplan boundary text avoids host-specific paths for cross-host compatibility', () => {
@@ -1899,13 +1866,11 @@ describe('Codex generation (--host codex)', () => {
     }
   });
 
-  test('Codex preamble resolves runtime assets from repo-local or global goldband roots', () => {
-    // Check a skill that has a preamble (review is a good candidate)
+  test('Codex review resolves runtime assets from repo-local or global goldband roots', () => {
     const content = fs.readFileSync(path.join(AGENTS_DIR, 'goldband-review', 'SKILL.md'), 'utf-8');
     expect(content).toContain('GOLDBAND_ROOT');
     expect(content).toContain('$_ROOT/.agents/skills/goldband');
-    expect(content).toContain('$GOLDBAND_BIN/goldband-config');
-    expect(content).toContain('$GOLDBAND_ROOT/goldband-upgrade/SKILL.md');
+    expect(content).toContain('GOLDBAND_BIN');
     expect(content).not.toContain('~/.codex/skills/goldband/bin/goldband-config get telemetry');
   });
 
@@ -1981,7 +1946,7 @@ describe('Codex generation (--host codex)', () => {
     expect(content).toContain('$GOLDBAND_ROOT/review/findings-schema.md');
     expect(content).toContain('$GOLDBAND_ROOT/review/checklist.md');
     expect(content).not.toContain('.claude/skills/review/checklist.md');
-    expect(content).toContain('~/.claude/skills/goldband');
+    expect(content).toContain('$HOME/.claude/skills/goldband');
     expect(content).not.toContain('.agents/skills');
     expect(content).not.toContain('~/.codex/');
   });
@@ -2153,11 +2118,11 @@ describe('Factory generation (--host factory)', () => {
     expect(output).not.toContain('STALE');
   });
 
-  test('Factory preamble uses .factory paths', () => {
+  test('Factory review runtime root uses .factory paths', () => {
     const content = fs.readFileSync(path.join(FACTORY_DIR, 'goldband-review', 'SKILL.md'), 'utf-8');
     expect(content).toContain('GOLDBAND_ROOT');
     expect(content).toContain('$_ROOT/.factory/skills/goldband');
-    expect(content).toContain('$GOLDBAND_BIN/goldband-config');
+    expect(content).toContain('GOLDBAND_BIN');
   });
 });
 
@@ -2277,7 +2242,7 @@ describe('setup script validation', () => {
       setupContent.indexOf('# 5. Install for Codex')
     );
     expect(claudeSection).toContain('create_claude_runtime_root');
-    expect(claudeSection).toContain('link_claude_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "goldband-upgrade"');
+    expect(claudeSection).not.toContain('link_claude_selected_skill_dirs');
     expect(claudeSection).toContain('cleanup_claude_root_skill_alias "$INSTALL_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR"');
     expect(claudeSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
     expect(setupContent).not.toContain('link_claude_skill_dirs');
@@ -2290,7 +2255,7 @@ describe('setup script validation', () => {
       setupContent.indexOf('# 6. Create')
     );
     expect(codexSection).toContain('create_codex_runtime_root');
-    expect(codexSection).toContain('link_codex_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS" "goldband-upgrade"');
+    expect(codexSection).not.toContain('link_codex_selected_skill_dirs');
     expect(codexSection).toContain('cleanup_legacy_full_workflow_entries_for_standard');
     expect(setupContent).not.toContain('link_codex_skill_dirs');
     expect(codexSection).not.toContain('link_claude_skill_dirs');
@@ -2310,7 +2275,7 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('SOURCE_GOLDBAND_DIR=');
     expect(setupContent).toContain('INSTALL_SKILLS_DIR=');
     expect(setupContent).toContain('CODEX_GOLDBAND="$INSTALL_GOLDBAND_DIR"');
-    expect(setupContent).toContain('link_codex_selected_skill_dirs "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS"');
+    expect(setupContent).toContain('create_internal_workflow_docs');
   });
 
   test('Codex installs always create sidecar runtime assets for the real skill target', () => {
@@ -2318,50 +2283,15 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('create_agents_sidecar "$SOURCE_GOLDBAND_DIR"');
   });
 
-  test('link_codex_selected_skill_dirs reads selected skills from .agents/skills/', () => {
-    // The Codex link function must reference .agents/skills for generated Codex skills
-    const fnStart = setupContent.indexOf('link_codex_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('.agents/skills');
-    expect(fnBody).toContain('for skill_name in "$@"');
-  });
-
-  test('link_codex_selected_skill_dirs refreshes stale installed skill directories', () => {
-    const fnStart = setupContent.indexOf('link_codex_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    const helperStart = setupContent.indexOf('_materialize_codex_skill_dir()');
-    const helperEnd = setupContent.indexOf('\n}', helperStart);
-    const helperBody = setupContent.slice(helperStart, helperEnd);
-    expect(fnBody).toContain('_materialize_codex_skill_dir "$skill_dir" "$target"');
-    expect(helperBody).toContain('rm -rf "$dst"');
-    expect(helperBody).toContain('mv "$tmp" "$dst"');
-  });
-
-  test('link_claude_selected_skill_dirs creates real directories with absolute SKILL.md symlinks', () => {
-    // Claude links should be real directories with absolute SKILL.md symlinks
-    // to ensure Claude Code discovers them as top-level skills (not nested under goldband/)
-    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('mkdir -p "$target"');
-    // v1.36.0.0: routes through _link_or_copy helper for Windows fallback (cp on MSYS2/Git Bash).
-    expect(fnBody).toContain('_link_or_copy "$skill_dir/SKILL.md" "$target/SKILL.md"');
-  });
-
-  test('link_claude_selected_skill_dirs removes old directory symlinks before creating real dirs', () => {
-    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    // Must check for and remove old symlinks before mkdir
-    expect(fnBody).toContain('if [ -L "$target" ]');
-    expect(fnBody).toContain('rm -f "$target"');
+  test('setup has no obsolete selected-skill installers', () => {
+    expect(setupContent).not.toContain('link_codex_selected_skill_dirs');
+    expect(setupContent).not.toContain('link_claude_selected_skill_dirs');
+    expect(setupContent).not.toContain('_materialize_codex_skill_dir');
   });
 
   test('setup removes the legacy root goldband skill wrapper alias', () => {
     const fnStart = setupContent.indexOf('cleanup_claude_root_skill_alias()');
-    const fnEnd = setupContent.indexOf('link_claude_selected_skill_dirs()', fnStart);
+    const fnEnd = setupContent.indexOf('path_under_dir()', fnStart);
     const fnBody = setupContent.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_goldband-command');
     expect(fnBody).toContain('rm -rf "$target"');
@@ -2386,15 +2316,15 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('full|slim)');
     expect(setupContent).toContain('is deprecated; using standard');
     expect(setupContent).not.toContain('expected slim or full');
-    expect(setupContent).toContain('link_codex_selected_skill_dirs');
-    expect(setupContent).toContain('link_claude_selected_skill_dirs');
+    expect(setupContent).not.toContain('link_codex_selected_skill_dirs');
+    expect(setupContent).not.toContain('link_claude_selected_skill_dirs');
   });
 
   test('standard profile installs internal workflow docs without nested SKILL.md discovery', () => {
     expect(setupContent).toContain('create_internal_workflow_docs');
-    expect(setupContent).toContain('$workflow_root/$skill_name.workflow.md');
-    expect(setupContent).toContain('goldband-$skill_name.workflow.md');
-    expect(setupContent).not.toContain('$workflow_root/$skill_name/SKILL.md');
+    expect(setupContent).toContain('$workflow_root/$capability/$action.workflow.md');
+    expect(setupContent).not.toContain('$workflow_root/$skill_name.workflow.md');
+    expect(setupContent).not.toContain('goldband-$skill_name.workflow.md');
   });
 
   test('standard cleanup uses source provenance rather than goldband name prefix only', () => {
@@ -2427,21 +2357,17 @@ describe('setup script validation', () => {
 
   test('root skill documents standard internal workflow routing', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Workflow Routing In Standard Installs');
-    expect(content).toContain('*.workflow.md');
-    expect(content).toContain('follow it as executable workflow instructions');
-    expect(content).toContain('active Goldband runtime root');
+    expect(content).toContain('Goldband capability router');
+    expect(content).toContain('workflows/<capability>/<action>.workflow.md');
+    expect(content).toContain('Old workflow names are');
     expect(content).not.toContain('~/.claude/skills/goldband/workflows/<name>.workflow.md');
   });
 
   test('generated Codex root skill routes standard workflows through GOLDBAND_ROOT', () => {
     const content = fs.readFileSync(path.join(ROOT, '.agents', 'skills', 'goldband', 'SKILL.md'), 'utf-8');
-    const sectionStart = content.indexOf('## Workflow Routing In Standard Installs');
-    const sectionEnd = content.indexOf('**Routing rules', sectionStart);
-    const section = content.slice(sectionStart, sectionEnd);
-    expect(section).toContain('$GOLDBAND_ROOT');
-    expect(section).toContain('workflows/<name>.workflow.md');
-    expect(section).not.toContain('~/.claude/skills/goldband/workflows');
+    expect(content).toContain('GOLDBAND_ROOT');
+    expect(content).toContain('workflows/<capability>/<action>.workflow.md');
+    expect(content).not.toContain('~/.claude/skills/goldband/workflows');
   });
 
   test('auto mode detects claude, codex, kiro, and opencode binaries', () => {
@@ -2518,7 +2444,7 @@ describe('setup script validation', () => {
     expect(fnBody).toContain('browse/dist');
     expect(fnBody).toContain('browse/bin');
     expect(fnBody).toContain('goldband_dir/cross-review');
-    expect(fnBody).toContain('goldband-upgrade/SKILL.md');
+    expect(fnBody).not.toContain('goldband-upgrade/SKILL.md');
     // Review runtime assets (individual files, not the whole dir)
     expect(fnBody).toContain('shared-rubric.md');
     expect(fnBody).toContain('findings-schema.md');
@@ -2534,24 +2460,6 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('migrate_direct_codex_install');
     expect(setupContent).toContain('$HOME/.goldband/repos/goldband');
     expect(setupContent).toContain('avoid duplicate skill discovery');
-  });
-
-  // --- Symlink prefix tests (PR #503) ---
-
-  test('link_claude_selected_skill_dirs applies goldband- prefix by default', () => {
-    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    expect(fnBody).toContain('SKILL_PREFIX');
-    expect(fnBody).toContain('link_name="goldband-$skill_name"');
-  });
-
-  test('link_claude_selected_skill_dirs preserves already-prefixed dirs', () => {
-    const fnStart = setupContent.indexOf('link_claude_selected_skill_dirs()');
-    const fnEnd = setupContent.indexOf('}', setupContent.indexOf('linked[@]}', fnStart));
-    const fnBody = setupContent.slice(fnStart, fnEnd);
-    // goldband-* dirs should keep their name (e.g., goldband-upgrade stays goldband-upgrade)
-    expect(fnBody).toContain('goldband-*) link_name="$skill_name"');
   });
 
   test('setup supports --no-prefix flag', () => {
@@ -2586,10 +2494,10 @@ describe('setup script validation', () => {
     expect(setupContent).toContain('-t 0');
   });
 
-  test('welcome message references SKILL_PREFIX', () => {
+  test('welcome message uses the capability interface', () => {
     // goldband-upgrade is always called goldband-upgrade (it's the actual dir name)
     // but the welcome section should exist near the prefix logic
-    expect(setupContent).toContain('Run /goldband-upgrade anytime');
+    expect(setupContent).toContain('Run /goldband system upgrade anytime');
   });
 });
 
@@ -2617,43 +2525,16 @@ describe('discover-skills hidden directory filtering', () => {
 });
 
 describe('telemetry', () => {
-  test('generated SKILL.md contains telemetry start block', () => {
+  test('root router does not inline telemetry bootstrap or epilogue', () => {
     const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('_TEL_START');
-    expect(content).toContain('_SESSION_ID');
-    expect(content).toContain('TELEMETRY:');
-    expect(content).toContain('TEL_PROMPTED:');
-    expect(content).toContain('goldband-config get telemetry');
-  });
-
-  test('generated SKILL.md contains telemetry opt-in prompt', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('.telemetry-prompted');
-    expect(content).toContain('Help goldband get better');
-    expect(content).toContain('goldband-config set telemetry community');
-    expect(content).toContain('goldband-config set telemetry anonymous');
-    expect(content).toContain('goldband-config set telemetry off');
-  });
-
-  test('generated SKILL.md contains telemetry epilogue', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Telemetry (run last)');
-    expect(content).toContain('goldband-telemetry-log');
-    expect(content).toContain('_TEL_END');
-    expect(content).toContain('_TEL_DUR');
-    expect(content).toContain('SKILL_NAME');
-    expect(content).toContain('OUTCOME');
-    expect(content).toContain('PLAN MODE EXCEPTION');
-  });
-
-  test('generated SKILL.md contains pending marker handling', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'SKILL.md'), 'utf-8');
-    expect(content).toContain('.pending');
-    expect(content).toContain('_pending_finalize');
+    expect(content).not.toContain('_TEL_START');
+    expect(content).not.toContain('Telemetry (run last)');
+    expect(content).not.toContain('.telemetry-prompted');
+    expect(content).not.toContain('_pending_finalize');
   });
 
   test('telemetry blocks appear in all skill files that use PREAMBLE', () => {
-    const skills = ['qa', 'ship', 'review', 'plan-ceo-review', 'plan-eng-review', 'retro'];
+    const skills = ['qa', 'ship', 'plan-ceo-review', 'plan-eng-review', 'retro'];
     for (const skill of skills) {
       const skillPath = path.join(ROOT, skill, 'SKILL.md');
       if (fs.existsSync(skillPath)) {
@@ -2851,7 +2732,6 @@ describe('codex commands must not use inline $(git rev-parse --show-toplevel) fo
       'codex/SKILL.md.tmpl',
       'codex/SKILL.md',
       'scripts/resolvers/review.ts',
-      'review/SKILL.md',
       'ship/SKILL.md',
     ];
 
@@ -2876,15 +2756,14 @@ describe('LEARNINGS_SEARCH resolver', () => {
     });
   }
 
-  test('review generated SKILL.md uses prior knowledge recall with learnings search', () => {
+  test('review generated SKILL.md excludes prior-knowledge prompt expansion', () => {
     const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Prior Knowledge');
-    expect(content).toContain('goldband-learnings-search');
-    expect(content).toContain('goldband-knowledge search');
+    expect(content).not.toContain('Prior Knowledge');
+    expect(content).not.toContain('goldband-learnings-search');
   });
 
   test('learnings search includes cross-project config check', () => {
-    for (const skill of ['ship', 'review', 'qa']) {
+    for (const skill of ['ship', 'qa']) {
       const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
       expect(content).toContain('cross_project_learnings');
       expect(content).toContain('--cross-project');
@@ -2892,21 +2771,21 @@ describe('LEARNINGS_SEARCH resolver', () => {
   });
 
   test('learnings search includes AskUserQuestion for first-time cross-project opt-in', () => {
-    for (const skill of ['ship', 'review', 'qa']) {
+    for (const skill of ['ship', 'qa']) {
       const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
       expect(content).toContain('Enable cross-project learnings');
       expect(content).toContain('project-scoped only');
     }
   });
 
-  test('learnings search mentions prior learning applied display format', () => {
+  test('review omits prior learning display boilerplate', () => {
     const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    expect(content).toContain('Prior learning applied');
+    expect(content).not.toContain('Prior learning applied');
   });
 });
 
 describe('LEARNINGS_LOG resolver', () => {
-  const LOG_SKILLS = ['review', 'retro', 'investigate'];
+  const LOG_SKILLS = ['retro', 'investigate'];
 
   for (const skill of LOG_SKILLS) {
     test(`${skill} generated SKILL.md contains knowledge capture check`, () => {
@@ -2922,28 +2801,28 @@ describe('LEARNINGS_LOG resolver', () => {
   }
 
   test('learnings log documents all type values', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'investigate', 'SKILL.md'), 'utf-8');
     for (const type of ['pattern', 'pitfall', 'preference', 'architecture', 'tool']) {
       expect(content).toContain(type);
     }
   });
 
   test('learnings log documents all source values', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'investigate', 'SKILL.md'), 'utf-8');
     for (const source of ['observed', 'user-stated', 'inferred', 'cross-model']) {
       expect(content).toContain(source);
     }
   });
 
   test('learnings log includes files field for staleness detection', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'investigate', 'SKILL.md'), 'utf-8');
     expect(content).toContain('"files"');
     expect(content).toContain('staleness detection');
   });
 });
 
 describe('CONFIDENCE_CALIBRATION resolver', () => {
-  const CONFIDENCE_SKILLS = ['review', 'ship', 'plan-eng-review', 'cso'];
+  const CONFIDENCE_SKILLS = ['ship', 'plan-eng-review', 'cso'];
 
   for (const skill of CONFIDENCE_SKILLS) {
     test(`${skill} generated SKILL.md contains confidence calibration`, () => {
@@ -2954,7 +2833,7 @@ describe('CONFIDENCE_CALIBRATION resolver', () => {
   }
 
   test('confidence calibration includes scoring rubric with all tiers', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
     expect(content).toContain('9-10');
     expect(content).toContain('7-8');
     expect(content).toContain('5-6');
@@ -2963,26 +2842,26 @@ describe('CONFIDENCE_CALIBRATION resolver', () => {
   });
 
   test('confidence calibration includes display rules', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
     expect(content).toContain('Show normally');
     expect(content).toContain('Suppress from main report');
   });
 
   test('confidence calibration includes finding format example', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
     expect(content).toContain('[P1] (confidence:');
     expect(content).toContain('SQL injection');
   });
 
   test('confidence calibration includes calibration learning feedback loop', () => {
-    const content = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
     expect(content).toContain('calibration event');
     expect(content).toContain('Log the corrected pattern');
   });
 
   test('skills without confidence calibration do NOT contain it', () => {
     // office-hours and retro do NOT use confidence calibration
-    for (const skill of ['office-hours', 'retro']) {
+    for (const skill of ['office-hours', 'retro', 'review']) {
       const content = fs.readFileSync(path.join(ROOT, skill, 'SKILL.md'), 'utf-8');
       expect(content).not.toContain('## Confidence Calibration');
     }

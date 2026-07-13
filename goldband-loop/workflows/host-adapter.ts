@@ -54,6 +54,7 @@ function mockFinding(index: number): ReviewFinding {
       severity: 'medium',
       summary: `Mock review finding ${index} with concrete diff evidence.`,
       evidence: '+ riskyChange();',
+      failureScenario: 'A valid request reaches riskyChange() and returns the wrong result.',
       recommendation: 'Add a guard and a focused regression test.',
   };
 }

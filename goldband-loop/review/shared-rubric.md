@@ -47,20 +47,18 @@ High or critical findings without concrete evidence must be downgraded to
 insufficient should be reported as `info` in normal `/review` and as `ESCALATE`
 in `cross-review`.
 
-## Finding Requirements
+## Finding validity
 
-Every finding must include:
+Every code finding must prove:
 
-- `severity`
-- `file` and optional `line`
-- `category`
-- `summary`
-- `failureScenario`
-- `evidence`
-- `recommendation`
-- `suggestedVerification`
-- `blocking`
-- `specialist` or `contributingSpecialists` when produced by specialist passes
+- exact `file` and `line`;
+- a concrete input or runtime state with a reachable execution path;
+- the incorrect result, expected result, and practical impact.
+
+The machine-readable record may also carry category, policy, recommendation,
+verification, and specialist metadata. Those fields do not make an unsupported
+finding valid. Suppress speculative findings instead of displaying confidence
+scores.
 
 `blocking` means "must be fixed before landing" in normal `/review`. It does
 not sign or block the session by itself. `cross-review` maps blocking findings

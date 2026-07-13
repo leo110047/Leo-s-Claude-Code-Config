@@ -10,27 +10,30 @@ Use `shared-rubric.md` as the canonical taxonomy, severity standard, finding
 shape, and merge rule source. This checklist gives the core review pass; the
 specialist passes cover the same taxonomy from narrower responsibilities.
 
+## Finding validity gate
+
+Only report a finding when all three are present:
+
+- an exact `file:line`;
+- a concrete input or runtime state and a reachable execution path;
+- the incorrect result, expected result, and practical impact.
+
+A suspicious pattern, style preference, generic best practice, or unsupported
+test gap is not a finding.
+
 ## Output Format
 
 ```
-Strict Review Frame:
-- Original problem: <intent source and one-line intent, or unknown>
-- Correctness of fix: <verified / partial / not verified, with evidence>
-- Architecture/design health: <healthy / concern / not applicable, with reason>
-- Risk/error scan: <main remaining risks, or none found after checks>
+[P1] Short problem title — path/to/file.ts:42
 
-Read-Only Findings Review: N findings (X blocking, Y advisory)
+When <input/state>, execution reaches <path> and produces <actual> instead of
+<expected>, causing <impact>.
 
-- [severity/blocking|advisory] file:line category
-  Failure scenario: concrete way this fails
-  Evidence: current file, diff, command, or test evidence
-  Recommendation: text-only fix recommendation
-  Suggested verification: command, test, readback, or manual check
+Fix: <one-sentence healthy fix>
 ```
 
-If no issues are found, include the `Strict Review Frame`, then output:
-
-`Read-Only Findings Review: No issues found.`
+If no issues survive the validity gate, output `No findings.` and briefly name
+the high-risk paths that were actually traced.
 
 Always include:
 
@@ -89,7 +92,8 @@ at grep output.
 
 ### Completeness And Verification
 
-- Missing negative-path or regression tests that would catch the stated risk.
+- Missing negative-path or regression tests only when a concrete behavioral
+  defect has already been demonstrated.
 - Claims of enforcement, readback, install, runtime, or parity evidence that are
   not proven by current files or commands.
 - Partial implementations where finishing the explicit contract is modest.

@@ -59,7 +59,7 @@ visible in the registry but cannot run yet.
 Compatibility workflows currently support mock mode only: they read their
 legacy prompt source, emit a digest-backed evidence event, and fail closed in
 real mode until their typed migration is complete. Real LLM execution is only
-enabled for typed runtime steps such as `goldband-review`.
+enabled for typed runtime steps such as `review/code`.
 
 By default, `workflows/run.ts` uses the single-pass `runWorkflow` entrypoint.
 Pass `--loop` to use `runWorkflowLoop` for typed convergence workflows. The
@@ -69,7 +69,7 @@ or the effective iteration cap is reached. `--max-iterations <n>` may lower the
 registry cap for a run, including real mode budget control, but it cannot raise
 the cap above the registry value.
 
-For `goldband-review`, diff selection is:
+For `review/code`, diff selection is:
 
 - `--diff-file <file>` reads an existing fixture or saved diff.
 - `--staged` runs `git diff --staged`.
@@ -100,7 +100,7 @@ the report but downgraded to `info` with an `unverified` prefix. This is an
 explicit trust policy: the runtime does not present high severity claims unless
 the host supplied diff-backed evidence.
 
-For `goldband-review --loop`, one iteration is the typed review pipeline:
+For `review/code --loop`, one iteration is the typed review pipeline:
 collect diff, run review, parse findings, verify findings, and render the
 report. Later iterations receive the previous validated findings in their
 iteration context so the review can focus on whether those findings resolved
@@ -108,7 +108,7 @@ and whether new issues appeared. The review target predicate is exposed as the
 registry stop condition `findings-converged`, which matches when the validated
 finding count reaches zero.
 
-For `goldband-qa --loop`, the current typed adapter is intentionally narrow:
+For `qa/app --loop`, the current typed adapter is intentionally narrow:
 mock mode selects a fixed check list, records schema-validated pass/fail
 results, and retries only failed checks on the next iteration. Real browser QA
 still uses the markdown `/qa` skill until its browser actions and screenshot
@@ -121,7 +121,7 @@ Each step writes one JSONL event:
 ```json
 {
   "runId": "...",
-  "workflow": "goldband-review",
+  "workflow": "review/code",
   "step": "collect-diff",
   "startedAt": "2026-07-04T00:00:00.000Z",
   "durationMs": 12,
@@ -214,11 +214,11 @@ The current core set was chosen from repository fallback guidance because local
 to rank workflows. Fallback sources were root `CLAUDE.md`, `rules/git-workflow.md`,
 and `goldband-loop/CLAUDE.md`.
 
-- `goldband-review`: typed runtime with convergence loop support.
-- `goldband-investigate`: compatibility runtime.
-- `goldband-qa`: typed mock convergence adapter; real browser QA remains markdown-driven.
+- `review/code`: typed runtime with convergence loop support.
+- `investigate/code`: compatibility runtime.
+- `qa/app`: typed mock convergence adapter; real browser QA remains markdown-driven.
 - `plan`: compatibility runtime.
-- `goldband-cso`: compatibility runtime.
-- `goldband-ship`: compatibility runtime.
+- `review/security`: compatibility runtime.
+- `release/ship`: compatibility runtime.
 
 See `COVERAGE.md` for the full integrated and pending list.

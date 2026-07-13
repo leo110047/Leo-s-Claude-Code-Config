@@ -136,17 +136,14 @@ function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
 }
 
 function verifyFindings(ctx: WorkflowContext): ReviewFinding[] {
-  return aggregateReviewFindings(findingsSchema.validate(ctx.input).map((finding) => {
-    if (finding.severity !== 'critical' && finding.severity !== 'high') return finding;
-    if (finding.evidence) return finding;
-    return downgradeUnverifiedFinding(finding);
-  }));
+  return aggregateReviewFindings(findingsSchema.validate(ctx.input))
+    .filter((finding) => isRuntimeDiagnostic(finding) || hasConcreteFailurePath(finding));
 }
 
 function renderReport(ctx: WorkflowContext): string {
   const findings = findingsSchema.validate(ctx.input);
   const lines = [
-    '# goldband-review runtime report',
+    '# review/code runtime report',
     '',
     'Read-only review: no files were modified.',
     '',
@@ -156,23 +153,9 @@ function renderReport(ctx: WorkflowContext): string {
   } else {
     for (const finding of findings) {
       const loc = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-      const mode = finding.blocking ? 'blocking' : 'advisory';
-      const category = finding.category ? ` ${finding.category}` : '';
-      const specialists = finding.contributingSpecialists?.length
-        ? ` specialists=${finding.contributingSpecialists.join(',')}`
-        : finding.specialist
-          ? ` specialist=${finding.specialist}`
-          : '';
-      const policy = finding.ruleId
-        ? ` rule=${finding.ruleId}${finding.policySource ? ` source=${finding.policySource}` : ''}`
-        : '';
-      lines.push(`- [${finding.severity}/${mode}${category}] ${loc} - ${finding.summary}${specialists}${policy}`);
-      if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
-      if (finding.failureScenario) lines.push(`  Failure scenario: ${finding.failureScenario}`);
-      if (finding.recommendation) lines.push(`  Recommendation: ${finding.recommendation}`);
-      if (finding.suggestedVerification) {
-        lines.push(`  Suggested verification: ${finding.suggestedVerification}`);
-      }
+      lines.push(`- [${finding.severity}] ${finding.summary} — ${loc}`);
+      if (finding.failureScenario) lines.push(`  Trigger: ${finding.failureScenario}`);
+      if (finding.recommendation) lines.push(`  Fix: ${finding.recommendation}`);
     }
   }
   const report = `${lines.join('\n')}\n`;
@@ -276,7 +259,7 @@ function skippedUntrackedFileDiff(rel: string, reason: string): string {
     '--- /dev/null',
     `+++ b/${rel}`,
     '@@ -0,0 +1,1 @@',
-    `+[[goldband-review skipped untracked file: ${reason}]]`,
+    `+[[review/code skipped untracked file: ${reason}]]`,
   ].join('\n');
 }
 
@@ -310,14 +293,12 @@ function detectSecretLikeContent(text: string): string | null {
   return null;
 }
 
-function downgradeUnverifiedFinding(finding: ReviewFinding): ReviewFinding {
-  return {
-    ...finding,
-    severity: 'info',
-    summary: `[unverified ${finding.severity}] ${finding.summary}`,
-    evidence: 'High-severity finding lacked concrete diff evidence during runtime verification.',
-    blocking: false,
-  };
+function hasConcreteFailurePath(finding: ReviewFinding): boolean {
+  return Boolean(finding.line && finding.evidence && finding.failureScenario);
+}
+
+function isRuntimeDiagnostic(finding: ReviewFinding): boolean {
+  return finding.category === 'host-capability' || finding.category === 'specialist-runtime';
 }
 
 function reviewHost(ctx: WorkflowContext): 'mock' | 'claude' | 'codex' {
@@ -345,7 +326,8 @@ export function buildReviewPrompt(
     'Return only JSON matching the provided findings schema.',
     'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
     'Use the diff to define scope. Inspect the read-only repository outside the diff when needed to verify wiring, authoritative ownership, consumers, registrations, and dead code.',
-    'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
+    'Only report a finding when you can name an exact file and line, a concrete input or runtime state with a reachable execution path, and the incorrect result plus practical impact.',
+    'Do not report style preferences, generic best practices, speculative risks, or test gaps without a demonstrated behavioral defect.',
     'DIFF_START',
     diff,
     'DIFF_END',
