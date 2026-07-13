@@ -1,7 +1,10 @@
 {
   "schemaVersion": 1,
   "groupSelectors": [
-    { "group": "baseline", "always": true },
+    {
+      "group": "baseline",
+      "always": true
+    },
     {
       "group": "security",
       "scopePattern": "auth|permission|secret|credential|token|http|websocket|provider|adapter|process|boundary|security"
@@ -22,68 +25,114 @@
       "group": "handoff",
       "scopePattern": "session|handoff|checkpoint|context-(save|restore)"
     },
-    { "group": "semantic", "always": true, "phases": ["review"] }
+    {
+      "group": "semantic",
+      "always": true,
+      "phases": [
+        "review"
+      ]
+    }
   ],
   "rules": [
     {
       "id": "architecture-boundaries",
       "file": "architecture-boundaries.md",
-      "phases": ["review"],
-      "groups": ["baseline"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "baseline"
+      ]
     },
     {
       "id": "change-scope",
       "file": "change-scope.md",
-      "phases": ["review"],
-      "groups": ["baseline"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "baseline"
+      ]
     },
     {
       "id": "claim-verification",
       "file": "claim-verification.md",
-      "phases": ["review"],
-      "groups": ["baseline"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "baseline"
+      ]
     },
     {
       "id": "coding-style",
       "file": "coding-style.md",
-      "phases": ["review"],
-      "groups": ["baseline"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "baseline"
+      ]
     },
     {
       "id": "security",
       "file": "security.md",
-      "phases": ["review"],
-      "groups": ["security"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "security"
+      ]
     },
     {
       "id": "loop-engineering",
       "file": "loop-engineering.md",
-      "phases": ["review"],
-      "groups": ["loop"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "loop"
+      ]
     },
     {
       "id": "git-workflow",
       "file": "git-workflow.md",
-      "phases": ["review"],
-      "groups": ["delivery"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "delivery"
+      ]
     },
     {
       "id": "escalation",
       "file": "escalation.md",
-      "phases": ["review"],
-      "groups": ["escalation"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "escalation"
+      ]
     },
     {
       "id": "session-handoff",
       "file": "session-handoff.md",
-      "phases": ["review"],
-      "groups": ["handoff"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "handoff"
+      ]
     },
     {
       "id": "semantic-review-criteria",
       "file": "semantic-review-criteria.md",
-      "phases": ["review"],
-      "groups": ["semantic"]
+      "phases": [
+        "review"
+      ],
+      "groups": [
+        "semantic"
+      ]
     }
   ]
 }

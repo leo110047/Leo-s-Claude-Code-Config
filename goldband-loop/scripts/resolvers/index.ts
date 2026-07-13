@@ -4,6 +4,7 @@
  */
 
 import type { TemplateContext, ResolverFn } from './types';
+import { readFileSync } from 'node:fs';
 
 // Domain modules
 import { generatePreamble } from './preamble';
@@ -26,6 +27,7 @@ import { generateMakePdfSetup } from './make-pdf';
 import { generateTasksSectionEmit, generateTasksSectionAggregate } from './tasks-section';
 
 export const RESOLVERS: Record<string, ResolverFn> = {
+  CAPABILITY_ROUTER: () => readFileSync(new URL('../../generated/capability-router.md', import.meta.url), 'utf8').trim(),
   SLUG_EVAL: generateSlugEval,
   SLUG_SETUP: generateSlugSetup,
   COMMAND_REFERENCE: generateCommandReference,

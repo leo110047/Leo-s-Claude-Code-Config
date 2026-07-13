@@ -1,0 +1,186 @@
+[
+  {
+    "name": "review",
+    "triggers": [
+      "review",
+      "code review",
+      "security audit",
+      "architecture review",
+      "design review",
+      "審查",
+      "檢查"
+    ],
+    "message": "Goldband capability available: $goldband review code. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "investigate",
+    "triggers": [
+      "debug",
+      "bug",
+      "error",
+      "failure",
+      "root cause",
+      "regression",
+      "除錯",
+      "錯誤",
+      "根因"
+    ],
+    "message": "Goldband capability available: $goldband investigate code. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "qa",
+    "triggers": [
+      "qa",
+      "test site",
+      "staging",
+      "e2e",
+      "user flow",
+      "驗證網站",
+      "測試流程"
+    ],
+    "message": "Goldband capability available: $goldband qa app. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "release",
+    "triggers": [
+      "release",
+      "deploy",
+      "pull request",
+      "land",
+      "canary",
+      "發布",
+      "部署",
+      "合併"
+    ],
+    "message": "Goldband capability available: $goldband release land. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "plan",
+    "triggers": [
+      "plan",
+      "planning",
+      "roadmap",
+      "scope",
+      "strategy",
+      "規劃",
+      "計畫",
+      "範圍"
+    ],
+    "message": "Goldband capability available: $goldband plan create. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "browser",
+    "triggers": [
+      "browser",
+      "open browser",
+      "scrape",
+      "cookies",
+      "playwright",
+      "瀏覽器",
+      "爬取",
+      "cookie"
+    ],
+    "message": "Goldband capability available: $goldband browser session. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "design",
+    "triggers": [
+      "design system",
+      "visual direction",
+      "mockup",
+      "prototype",
+      "設計系統",
+      "視覺",
+      "原型"
+    ],
+    "message": "Goldband capability available: $goldband design consult. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "safety",
+    "triggers": [
+      "careful",
+      "guard",
+      "freeze",
+      "restrict edits",
+      "read only",
+      "小心",
+      "限制修改",
+      "唯讀"
+    ],
+    "message": "Goldband capability available: $goldband safety guard. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "context",
+    "triggers": [
+      "save context",
+      "restore context",
+      "resume",
+      "retro",
+      "checkpoint",
+      "保存進度",
+      "恢復進度",
+      "回顧"
+    ],
+    "message": "Goldband capability available: $goldband context restore. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "knowledge",
+    "triggers": [
+      "learn",
+      "knowledge",
+      "gbrain",
+      "sync knowledge",
+      "學習",
+      "知識",
+      "同步記憶"
+    ],
+    "message": "Goldband capability available: $goldband knowledge recall. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "benchmark",
+    "triggers": [
+      "benchmark",
+      "performance regression",
+      "model comparison",
+      "效能",
+      "基準",
+      "模型比較"
+    ],
+    "message": "Goldband capability available: $goldband benchmark workflow. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "document",
+    "triggers": [
+      "write docs",
+      "documentation",
+      "pdf",
+      "document",
+      "文件",
+      "說明文件"
+    ],
+    "message": "Goldband capability available: $goldband document generate. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "system",
+    "triggers": [
+      "goldband health",
+      "upgrade goldband",
+      "create skill",
+      "system status",
+      "更新 goldband",
+      "健康檢查"
+    ],
+    "message": "Goldband capability available: $goldband system health. Use it only when it materially matches the requested outcome."
+  },
+  {
+    "name": "ios",
+    "triggers": [
+      "ios",
+      "iphone",
+      "ipad",
+      "xcode",
+      "swiftui"
+    ],
+    "message": "Goldband capability available: $goldband ios qa. Use it only when it materially matches the requested outcome."
+  }
+]

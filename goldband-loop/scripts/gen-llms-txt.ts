@@ -4,8 +4,7 @@
  * capability for AI agents.
  *
  * Inputs:
- *   - Skill SKILL.md.tmpl frontmatter (name, description) at root and one
- *     level deep, via scripts/discover-skills.ts
+ *   - generated/capability-actions.json, normalized from goldband.manifest.json
  *   - browse/src/commands.ts COMMAND_DESCRIPTIONS
  *   - design/src/commands.ts COMMAND_DESCRIPTIONS (if present)
  *
@@ -19,7 +18,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { discoverTemplates } from './discover-skills';
 import { COMMAND_DESCRIPTIONS as BROWSE_COMMANDS } from '../browse/src/commands';
 
 const ROOT = path.resolve(import.meta.dir, '..');
@@ -28,63 +26,6 @@ const OUTPUT = path.join(ROOT, 'goldband', 'llms.txt');
 interface SkillEntry {
   name: string;
   description: string;
-}
-
-/**
- * Parse YAML frontmatter at the top of a SKILL.md.tmpl file. We only need
- * `name` and `description`. description: | followed by indented lines is
- * the goldband convention; we collapse those into a single paragraph.
- */
-function parseSkillFrontmatter(filePath: string): SkillEntry | null {
-  const content = fs.readFileSync(filePath, 'utf-8');
-  if (!content.startsWith('---')) return null;
-  const end = content.indexOf('\n---', 3);
-  if (end < 0) return null;
-  const frontmatter = content.slice(3, end).split('\n');
-
-  let name = '';
-  let description = '';
-  let inDescription = false;
-  let descriptionLines: string[] = [];
-
-  for (const rawLine of frontmatter) {
-    const line = rawLine.replace(/\r$/, '');
-    if (inDescription) {
-      // Block-scalar continues until a non-indented (or differently-keyed) line.
-      if (line.startsWith('  ') || line === '') {
-        descriptionLines.push(line.replace(/^  /, ''));
-        continue;
-      }
-      inDescription = false;
-      // Fall through to normal key parsing for this line.
-    }
-    const m = line.match(/^([a-zA-Z_-]+):\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1];
-    const value = m[2];
-    if (key === 'name') {
-      name = value.trim();
-    } else if (key === 'description') {
-      if (value === '|' || value === '|-' || value === '>' || value === '>-') {
-        inDescription = true;
-        descriptionLines = [];
-      } else {
-        description = value.trim();
-      }
-    }
-  }
-
-  if (!description && descriptionLines.length) {
-    description = descriptionLines
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-  }
-
-  if (!name) return null;
-  if (!description) return null;
-  return { name, description };
 }
 
 /**
@@ -132,20 +73,26 @@ export async function generateLlmsTxt(opts: GenerateOptions = {}): Promise<Gener
   const root = opts.root ?? ROOT;
   const warnings: string[] = [];
 
-  const templates = discoverTemplates(root);
-  const skills: SkillEntry[] = [];
-  for (const t of templates) {
-    const filePath = path.join(root, t.tmpl);
-    const entry = parseSkillFrontmatter(filePath);
-    if (!entry) {
-      warnings.push(`skill ${t.tmpl}: missing name or description in frontmatter`);
-      if (opts.strict) {
-        throw new Error(`gen-llms-txt: ${t.tmpl} is missing name or description in frontmatter`);
-      }
-      continue;
-    }
-    skills.push(entry);
+  const contractPath = path.join(root, 'generated', 'capability-actions.json');
+  if (!fs.existsSync(contractPath)) {
+    throw new Error(
+      `gen-llms-txt: missing generated capability contract: ${contractPath}; run generate-goldband-surfaces.mjs first`,
+    );
   }
+  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8')) as {
+    actions?: Array<{ name?: string; description?: string }>;
+  };
+  if (!Array.isArray(contract.actions)) {
+    throw new Error('gen-llms-txt: generated capability contract has no actions');
+  }
+  const skills: SkillEntry[] = contract.actions.map((action, index) => {
+    if (!action.name || !action.description) {
+      throw new Error(
+        `gen-llms-txt: capability action ${index} is missing name or description`,
+      );
+    }
+    return { name: action.name, description: action.description };
+  });
   skills.sort((a, b) => a.name.localeCompare(b.name));
 
   const browseCommands = Object.keys(BROWSE_COMMANDS).sort();
@@ -157,17 +104,17 @@ export async function generateLlmsTxt(opts: GenerateOptions = {}): Promise<Gener
   lines.push("> goldband is Goldband Loop: AI coding skills + a fast headless browser binary + a design CLI. This file indexes every capability so agents can discover and invoke them without crawling individual SKILL.md files.");
   lines.push('');
   lines.push('Conventions:');
-  lines.push('- Skills are invoked by name (e.g. `/ship`, `/plan-ceo-review`).');
+  lines.push('- Capabilities use `$goldband <capability> <action>`; historical workflow names are not aliases.');
   lines.push('- Browse commands run as `browse <command> [args]` (or `$B` shorthand).');
   lines.push('- Design commands run as `design <command> [args]` (or `$D`).');
   lines.push('- Project-specific config lives in `CLAUDE.md`. Always read it first.');
   lines.push('');
 
-  lines.push('## Skills');
+  lines.push('## Capability actions');
   lines.push('');
   for (const skill of skills) {
     const summary = oneLine(skill.description);
-    lines.push(`- [/${skill.name}](${skill.name}/SKILL.md): ${summary}`);
+    lines.push(`- \`$goldband ${skill.name.replace('/', ' ')}\`: ${summary}`);
   }
   lines.push('');
 

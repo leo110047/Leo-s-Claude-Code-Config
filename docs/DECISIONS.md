@@ -250,3 +250,48 @@ Failure signals:
 - `install.sh status` claims host parity when a host only has advisory or CLI
   exposure.
 - Sanitizer tests stop covering secret-shaped and instruction-like content.
+
+## 2026-07-13: Capability Manifest and Model-Native Prompt Boundary
+
+Decision: expose one capability-based interface, `$goldband <capability>
+<action>`, with no aliases for historical workflow names. Keep capability and
+policy metadata in `goldband.manifest.json`; generate registry, routing hints,
+inventory, policy projection, router menu, and capability docs from it.
+
+Prompt contract:
+
+- Shared prompts contain only the goal, relevant context, hard boundaries, and
+  verification that can change the result.
+- The model owns semantic reasoning, decomposition, tool selection, and
+  adaptation.
+- Runtime owns routing, authorization, outward-facing and irreversible action
+  gates, typed evidence, stop conditions, state, and observability.
+- Browser instructions and workflow contracts are read on demand. They are not
+  embedded in the root skill or repeated in every prompt.
+
+Why:
+
+- OpenAI's prompting guidance recommends starting from the desired result,
+  adding only useful context and a few boundaries, and leaving room for the
+  model to choose tools and adjust its approach.
+- The old catalog duplicated names and policy across generated skills, hooks,
+  registry code, inventory, and docs. Those copies drifted and consumed model
+  context without adding deterministic enforcement.
+- Keeping old aliases would preserve the duplicate public contract and prevent
+  missing migrations from failing visibly.
+
+Migration contract:
+
+- Standard installs expose only `goldband`.
+- Installer cleanup removes Goldband-managed historical skill entrypoints.
+- Internal documents use `workflows/<capability>/<action>.workflow.md`.
+- Unknown historical names fail; they never redirect silently.
+- `node scripts/generate-goldband-surfaces.mjs --check` is the freshness gate.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Preserve every old name as an alias | Keeps the catalog and migration burden alive indefinitely. |
+| Keep routing tables handwritten per host | Recreates drift between Claude, Codex, hooks, runtime, and docs. |
+| Put every workflow and browser instruction in root `SKILL.md` | Pays the context cost before the instructions are relevant and over-constrains model-native reasoning. |

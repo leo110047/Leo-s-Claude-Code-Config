@@ -43,7 +43,7 @@ export function captureQaIterationState(
 
 function selectChecks(ctx: WorkflowContext): QaCheck[] {
   if (ctx.options.mode === 'real') {
-    throw new Error('goldband-qa typed adapter only supports mock mode; use /qa for real browser QA');
+    throw new Error('qa/app typed adapter only supports mock mode; use the browser-backed qa/app contract for real QA');
   }
   const previousFailed = ctx.iterationContext?.previousFailedChecks;
   if (previousFailed?.length) return previousFailed.map(({ id, label }) => ({ id, label }));

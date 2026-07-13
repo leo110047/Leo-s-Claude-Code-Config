@@ -12,16 +12,36 @@ const repoDir = path.resolve(
 
 const claudeCommandPath = path.join(repoDir, 'commands', 'goldband.md');
 const codexPromptPath = path.join(repoDir, 'codex', 'prompts', 'goldband.md');
+const packagedClaudeCommandPath = path.join(
+  repoDir,
+  'plugin-assets',
+  'claude-code-plugin',
+  'commands',
+  'goldband.md',
+);
 const staleDocs = ['CLAUDE.md', 'README.md', 'README.en.md', 'AGENTS.md'];
 
 const claudeCommand = fs.readFileSync(claudeCommandPath, 'utf8');
 const codexPrompt = fs.readFileSync(codexPromptPath, 'utf8');
+const manifest = JSON.parse(
+  fs.readFileSync(path.join(repoDir, 'goldband.manifest.json'), 'utf8'),
+);
 
-assert.match(claudeCommand, /Prefer `~\/\.claude\/skills\/goldband`/);
-assert.match(codexPrompt, /Prefer `~\/\.codex\/skills\/goldband`/);
-assert.match(claudeCommand, /\/goldband review/);
-assert.match(codexPrompt, /\$goldband review/);
-assert.match(codexPrompt, /legacy fallback/i);
+assert.equal(manifest.capabilityInterface, '$goldband <capability> <action>');
+assert.equal(
+  frontmatterField(claudeCommand, 'argument-hint'),
+  '<capability> <action>',
+);
+assert.equal(
+  frontmatterField(codexPrompt, 'argument-hint'),
+  '<capability> <action>',
+);
+
+assert.equal(
+  fs.readFileSync(packagedClaudeCommandPath, 'utf8'),
+  claudeCommand,
+  'packaged Claude command drifted from the root command',
+);
 
 for (const relativePath of staleDocs) {
   const content = fs.readFileSync(path.join(repoDir, relativePath), 'utf8');
@@ -32,19 +52,14 @@ for (const relativePath of staleDocs) {
   );
 }
 
-function sharedSelectorContract(markdown) {
-  const start = markdown.indexOf('2. Read available workflows from:');
-  assert.notEqual(start, -1, 'selector must include shared workflow discovery');
-  return markdown
-    .slice(start)
-    .replace(/\bcommand\b/g, 'selector')
-    .replace(/\bprompt\b/g, 'selector');
+function frontmatterField(markdown, key) {
+  const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---/);
+  assert.ok(frontmatter, 'adapter must have YAML frontmatter');
+  const field = frontmatter[1]
+    .split('\n')
+    .find((line) => line.startsWith(`${key}:`));
+  assert.ok(field, `adapter frontmatter is missing ${key}`);
+  return field.slice(key.length + 1).trim();
 }
-
-assert.equal(
-  sharedSelectorContract(claudeCommand),
-  sharedSelectorContract(codexPrompt),
-  'Claude /goldband and Codex $goldband selector contracts drifted',
-);
 
 console.log('[OK] Goldband selector parity verified');

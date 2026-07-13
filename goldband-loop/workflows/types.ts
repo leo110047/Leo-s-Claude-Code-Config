@@ -46,6 +46,8 @@ export type WorkflowStep<T = unknown> = {
 };
 
 export type WorkflowDefinition = {
+  capability: string;
+  action: string;
   name: string;
   target: string;
   evaluationSignal: string;

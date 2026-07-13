@@ -10,7 +10,7 @@ The runtime contract for this command lives in `goldband-loop/workflows/`.
 Use the programmatic path for mock smoke tests and structured evidence:
 
 ```bash
-cd goldband-loop && bun run workflows/run.ts plan --mode mock
+cd goldband-loop && bun run workflows/run.ts plan create --mode mock
 ```
 
 The compatibility runtime reads this legacy command source and writes step

@@ -142,7 +142,7 @@ git pull --ff-only
   portable skills。
 - Codex installer assets：`AGENTS.md`、config、requirements、prompts、rules、
   hooks、profiles、permission profiles、custom agents、portable skills。
-- Goldband Loop runtime：Claude 用 `/goldband`，Codex 用 `$goldband <workflow>`
+- Goldband Loop runtime：Claude 用 `/goldband <capability> <action>`，Codex 用 `$goldband <capability> <action>`
   列出並執行已安裝 workflow。
 - Rules review：程式化 code review 每次從目前的 `rules/*.md` 重新選擇並注入
   適用規則，不依賴 writer 自我聲明或 session receipt。Rules manifest、prompt

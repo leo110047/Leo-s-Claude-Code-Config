@@ -6,6 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  discoverLegacyEntrypoints,
+  discoverRuntimeBinaries,
+} from './lib/goldband-source-inventory.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
@@ -17,7 +21,7 @@ const GENERATED_RUNTIME_BINARY_SOURCES = new Map([
 
 function main() {
   const inventory = readJson(INVENTORY_PATH);
-  assert.equal(inventory.schema, 1);
+  assert.equal(inventory.schema, 2);
   assertSourceSymlinksResolve(LOOP_DIR);
   assertLegacyConfigMigration();
   assertSourceInventory(inventory);
@@ -77,17 +81,14 @@ function runInstall(home, target, extraEnv = {}) {
 }
 
 function assertSourceInventory(inventory) {
-  const sourceSkills = fs
-    .readdirSync(LOOP_DIR, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(LOOP_DIR, entry.name, 'SKILL.md'))
-    .filter((skillPath) => fs.existsSync(skillPath))
-    .map(readSkillName)
-    .sort();
-  assertDeepSetEqual('source skills', sourceSkills, inventory.skills);
+  assertDeepSetEqual(
+    'legacy source contracts tracked for cleanup',
+    discoverLegacyEntrypoints(LOOP_DIR),
+    inventory.forbiddenLegacyEntrypoints,
+  );
 
   assertGeneratedRuntimeSources(inventory);
-  const sourceBins = executableFiles(path.join(LOOP_DIR, 'bin')).filter(
+  const sourceBins = discoverRuntimeBinaries(LOOP_DIR).filter(
     (entry) => !GENERATED_RUNTIME_BINARY_SOURCES.has(entry),
   );
   const expectedSourceBins = inventory.binaries.filter(
@@ -242,22 +243,22 @@ function assertInstalledStandardInventory(home, inventory) {
   assertDeepSetEqual(
     'Claude standard visible skills',
     skillDirectories(claudeSkillsDir),
-    ['goldband', 'goldband-upgrade'],
+    ['goldband'],
   );
   assertDeepSetEqual(
     'Codex standard visible skills',
     skillDirectories(codexSkillsDir),
-    ['goldband', 'goldband-upgrade'],
+    ['goldband'],
   );
   assert.ok(
     fs.existsSync(
-      path.join(claudeRuntime, 'workflows', 'goldband-review.workflow.md'),
+      path.join(claudeRuntime, 'workflows', 'review', 'code.workflow.md'),
     ),
     'Claude standard workflow document missing',
   );
   assert.ok(
     fs.existsSync(
-      path.join(codexRuntime, 'workflows', 'goldband-review.workflow.md'),
+      path.join(codexRuntime, 'workflows', 'review', 'code.workflow.md'),
     ),
     'Codex standard workflow document missing',
   );
@@ -356,35 +357,6 @@ function skillDirectories(parent) {
     .filter((entry) => fs.existsSync(path.join(parent, entry.name, 'SKILL.md')))
     .map((entry) => entry.name)
     .sort();
-}
-
-function executableFiles(parent) {
-  if (!fs.existsSync(parent)) {
-    return [];
-  }
-  return fs
-    .readdirSync(parent, { withFileTypes: true })
-    .filter((entry) => entry.isFile() || entry.isSymbolicLink())
-    .filter((entry) => isExecutable(path.join(parent, entry.name)))
-    .map((entry) => entry.name)
-    .sort();
-}
-
-function isExecutable(filePath) {
-  try {
-    return (fs.statSync(filePath).mode & 0o111) !== 0;
-  } catch {
-    return false;
-  }
-}
-
-function readSkillName(skillPath) {
-  const raw = fs.readFileSync(skillPath, 'utf8');
-  const match = raw.match(/^name:\s*(\S+)/m);
-  if (!match) {
-    throw new Error(`missing skill name: ${skillPath}`);
-  }
-  return match[1];
 }
 
 function assertNoLegacyCommands(home, inventory) {

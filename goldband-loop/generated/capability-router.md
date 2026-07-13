@@ -1,0 +1,15 @@
+<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->
+- `$goldband review code` — Independent review with a selected engineering lens.
+- `$goldband investigate code` — Find and verify the root cause of a failure.
+- `$goldband qa app` — Verify product behavior with explicit evidence.
+- `$goldband release land` — Prepare, land, deploy, and verify a release.
+- `$goldband plan create` — Create, expand, or tune an implementation plan.
+- `$goldband browser session` — Operate the persistent browser and browser-backed tools.
+- `$goldband design consult` — Define, explore, and prototype product design.
+- `$goldband safety guard` — Apply or remove workflow safety boundaries.
+- `$goldband context restore` — Save, restore, and summarize working context.
+- `$goldband knowledge recall` — Recall, configure, and synchronize Goldband knowledge.
+- `$goldband benchmark workflow` — Measure workflow or model performance.
+- `$goldband document generate` — Create product documentation and publication artifacts.
+- `$goldband system health` — Inspect or maintain the Goldband installation.
+- `$goldband ios qa` — Maintain and validate iOS-specific product behavior.

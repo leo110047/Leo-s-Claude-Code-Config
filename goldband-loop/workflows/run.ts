@@ -5,19 +5,21 @@ import { runWorkflow } from './runtime';
 import type { WorkflowRunOptions } from './types';
 
 async function main() {
-  const { workflowName, options, loop } = parseArgs(process.argv.slice(2));
-  const workflow = getWorkflow(workflowName);
+  const { capability, action, options, loop } = parseArgs(process.argv.slice(2));
+  const workflow = getWorkflow(`${capability}/${action}`);
   warnIgnoredOptions(options, loop);
   const result = loop ? await runWorkflowLoop(workflow, options) : await runWorkflow(workflow, options);
   console.log(JSON.stringify(result, null, 2));
 }
 
-function parseArgs(args: string[]): { workflowName: string; options: WorkflowRunOptions; loop: boolean } {
-  const workflowName = args.shift();
-  if (!workflowName || workflowName === '-h' || workflowName === '--help') {
+function parseArgs(args: string[]): { capability: string; action: string; options: WorkflowRunOptions; loop: boolean } {
+  const capability = args.shift();
+  if (!capability || capability === '-h' || capability === '--help') {
     usage();
-    process.exit(workflowName ? 0 : 2);
+    process.exit(capability ? 0 : 2);
   }
+  const action = args.shift();
+  if (!action || action.startsWith('-')) usageError('both <capability> and <action> are required; legacy workflow names are not supported');
 
   const options: WorkflowRunOptions = {};
   let loop = false;
@@ -38,7 +40,7 @@ function parseArgs(args: string[]): { workflowName: string; options: WorkflowRun
   }
   validateOptions(options);
 
-  return { workflowName, options, loop };
+  return { capability, action, options, loop };
 }
 
 function validateOptions(options: WorkflowRunOptions): void {
@@ -84,7 +86,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <workflow-name> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

@@ -817,7 +817,7 @@ The runtime contract for this workflow lives in `goldband-loop/workflows/`.
 Use the programmatic path for mock smoke tests and structured evidence:
 
 ```bash
-bun run workflows/run.ts goldband-investigate --mode mock
+bun run workflows/run.ts investigate code --mode mock
 ```
 
 The compatibility runtime reads this legacy prompt source and writes step

@@ -126,6 +126,7 @@
       "hooks/scripts/lib/rules-resolver.js"
     ],
     "hookRuntimeDependencies": [
+      "codex/hooks/capability-routing.generated.json",
       "codex/hooks/cross-review-gate.js",
       "codex/hooks/high-risk-policy.js",
       "codex/hooks/module-loader.js",

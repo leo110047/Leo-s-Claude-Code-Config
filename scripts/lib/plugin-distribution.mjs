@@ -207,6 +207,7 @@ function buildExpectedAssets({ commands, hookConfig, rules, sourceSkills }) {
       distribution: 'installer',
       reviewRuntimeDependencies: runtimeDependencyPaths('hooks/scripts/lib'),
       hookRuntimeDependencies: [
+        'codex/hooks/capability-routing.generated.json',
         'codex/hooks/cross-review-gate.js',
         'codex/hooks/high-risk-policy.js',
         'codex/hooks/module-loader.js',

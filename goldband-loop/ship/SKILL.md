@@ -834,24 +834,9 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 
 
-## Programmatic runtime entrypoint
-
-The runtime contract for this workflow lives in `goldband-loop/workflows/`.
-Use the programmatic path for mock smoke tests and structured evidence:
-
-```bash
-bun run workflows/run.ts goldband-ship --mode mock
-```
-
-The compatibility runtime reads this legacy prompt source and writes step
-evidence to:
-
-```bash
-${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-ship.jsonl
-```
-
-Live ship/release execution still uses the markdown flow below until typed
-migration is complete.
+> This project-specific contract is retained only as migration source material.
+> It is not part of the public Goldband capability interface. Shipping policy
+> belongs in a repository-owned release gate.
 
 # Ship: Fully Automated Ship Workflow
 
