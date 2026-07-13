@@ -46,6 +46,26 @@ function loadWorkflowHints() {
   return workflowHints;
 }
 
+function workflowTriggerMatches(prompt, trigger) {
+  const normalizedPrompt = String(prompt || '').toLowerCase();
+  const normalizedTrigger = String(trigger || '')
+    .trim()
+    .toLowerCase();
+  if (!normalizedTrigger) return false;
+
+  if (!/^[a-z0-9]+(?:[\s-]+[a-z0-9]+)*$/.test(normalizedTrigger)) {
+    return normalizedPrompt.includes(normalizedTrigger);
+  }
+
+  const escaped = normalizedTrigger
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('\\s+');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`).test(
+    normalizedPrompt,
+  );
+}
+
 function readStdinRaw() {
   return new Promise((resolve) => {
     let data = '';
@@ -340,7 +360,7 @@ function evaluateLifecycleResult(input) {
     if (!markOnce(input, 'session-start-context-restore-hint')) return null;
     return resultAdditionalContext(
       'SessionStart',
-      'For resumed or context-sensitive work, run the Goldband context-restore workflow via $goldband context-restore when installed before editing.',
+      'For resumed or context-sensitive work, run the Goldband context restore workflow via $goldband context restore when installed before editing.',
     );
   }
   if (eventName === 'Stop') {
@@ -367,7 +387,7 @@ function evaluateUserPromptSubmitResult(input) {
     ...loadWorkflowHints()
       .filter((hint) =>
         hint.triggers.some((trigger) =>
-          prompt.toLowerCase().includes(trigger.toLowerCase()),
+          workflowTriggerMatches(prompt, trigger),
         ),
       )
       .map((hint) => hint.message),

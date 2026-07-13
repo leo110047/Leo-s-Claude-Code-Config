@@ -1,11 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export const GENERATED_RUNTIME_BINARY_SOURCES = new Map([
+  ['goldband-global-discover', 'bin/goldband-global-discover.ts'],
+]);
+
 export function discoverRuntimeBinaries(loopDir) {
   const binDir = path.join(loopDir, 'bin');
   if (!fs.existsSync(binDir)) return [];
 
-  return fs
+  const binaries = fs
     .readdirSync(binDir, { withFileTypes: true })
     .filter((entry) => !entry.name.endsWith('.ts'))
     .filter((entry) => {
@@ -16,8 +20,13 @@ export function discoverRuntimeBinaries(loopDir) {
         return false;
       }
     })
-    .map((entry) => entry.name)
-    .sort();
+    .map((entry) => entry.name);
+
+  for (const [binary, sourcePath] of GENERATED_RUNTIME_BINARY_SOURCES) {
+    if (fs.existsSync(path.join(loopDir, sourcePath))) binaries.push(binary);
+  }
+
+  return [...new Set(binaries)].sort();
 }
 
 export function discoverLegacyEntrypoints(loopDir) {

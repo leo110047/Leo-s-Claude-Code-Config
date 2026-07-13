@@ -339,8 +339,13 @@ EOF_BROWSE
   write_skill "$loop_dir/goldband-upgrade" "goldband-upgrade"
   write_skill "$loop_dir/.agents/skills/goldband" "goldband"
   write_skill "$loop_dir/.agents/skills/goldband-review" "goldband-review"
+  printf '%s\n' 'runtime: $HOME/.codex/skills/goldband' >> "$loop_dir/.agents/skills/goldband-review/SKILL.md"
   write_skill "$loop_dir/.agents/skills/goldband-qa" "goldband-qa"
   write_skill "$loop_dir/.agents/skills/goldband-upgrade" "goldband-upgrade"
+  write_skill "$loop_dir/.factory/skills/goldband" "goldband"
+  write_skill "$loop_dir/.factory/skills/goldband-review" "goldband-review"
+  write_skill "$loop_dir/.opencode/skills/goldband" "goldband"
+  write_skill "$loop_dir/.opencode/skills/goldband-review" "goldband-review"
   cat > "$loop_dir/generated/capability-actions.json" <<'EOF_CAPABILITIES'
 {
   "schemaVersion": 1,
@@ -354,6 +359,11 @@ EOF_BROWSE
   ]
 }
 EOF_CAPABILITIES
+  write_minimal_review_assets "$loop_dir"
+}
+
+write_minimal_review_assets() {
+  local loop_dir="$1"
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
 # test checklist
 EOF_CHECKLIST
@@ -390,6 +400,32 @@ run_minimal_real_setup() {
     GOLDBAND_SKIP_COREUTILS=1 \
     GOLDBAND_FORCE_COPY="${GOLDBAND_FORCE_COPY:-0}" \
     "$setup_path" "$@"
+}
+
+seed_host_legacy_entry() {
+  local host="$1" home_dir="$2" source_dir="$3" skills_dir generated_skill
+  case "$host" in
+    factory)
+      skills_dir="$home_dir/.factory/skills"
+      generated_skill="$source_dir/.factory/skills/goldband-review"
+      ;;
+    opencode)
+      skills_dir="$home_dir/.config/opencode/skills"
+      generated_skill="$source_dir/.opencode/skills/goldband-review"
+      ;;
+    kiro)
+      skills_dir="$home_dir/.kiro/skills"
+      generated_skill="$source_dir/.agents/skills/goldband-review"
+      ;;
+  esac
+  mkdir -p "$skills_dir"
+  if [ "$host" = "kiro" ]; then
+    mkdir -p "$skills_dir/goldband-review"
+    sed 's|$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
+      "$generated_skill/SKILL.md" > "$skills_dir/goldband-review/SKILL.md"
+  else
+    ln -s "$generated_skill" "$skills_dir/goldband-review"
+  fi
 }
 
 echo "[1/4] prepare fixture"
@@ -488,6 +524,25 @@ run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host 
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
+
+for HOST_CASE in factory opencode kiro; do
+  HOST_HOME="$TMP_ROOT/$HOST_CASE-home"
+  HOST_SOURCE="$TMP_ROOT/$HOST_CASE-source/goldband-loop"
+  create_minimal_real_setup_fixture "$HOST_SOURCE"
+  seed_host_legacy_entry "$HOST_CASE" "$HOST_HOME" "$HOST_SOURCE"
+  run_minimal_real_setup "$HOST_HOME" "$HOST_SOURCE/setup" --host "$HOST_CASE" --profile standard --quiet >"/tmp/goldband-loop-$HOST_CASE-standard.log"
+  case "$HOST_CASE" in
+    factory) HOST_SKILLS="$HOST_HOME/.factory/skills" ;;
+    opencode) HOST_SKILLS="$HOST_HOME/.config/opencode/skills" ;;
+    kiro) HOST_SKILLS="$HOST_HOME/.kiro/skills" ;;
+  esac
+  assert_exists "$HOST_SKILLS/goldband/workflows/review/code.workflow.md"
+  assert_absent "$HOST_SKILLS/goldband-review"
+  if [ "$HOST_CASE" = "kiro" ]; then
+    assert_contains "$(cat "$HOST_SKILLS/goldband/workflows/review/code.workflow.md")" '$HOME/.kiro/skills/goldband'
+    assert_not_contains "$(cat "$HOST_SKILLS/goldband/workflows/review/code.workflow.md")" '$HOME/.codex/skills/goldband'
+  fi
+done
 
 PROMPT_LEGACY_HOME="$TMP_ROOT/prompt-legacy-home"
 mkdir -p "$PROMPT_LEGACY_HOME/.codex"

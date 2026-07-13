@@ -69,7 +69,7 @@ goldband/                          <- your working tree
 │   ├── goldband-upgrade/         <- maintenance entrypoint
 │   └── ...                      <- one directory per skill
 ├── review/
-│   └── SKILL.md                 <- edit this, test with /goldband review
+│   └── SKILL.md                 <- edit this, test with /goldband review code
 ├── ship/
 │   └── SKILL.md
 ├── browse/
@@ -81,7 +81,7 @@ goldband/                          <- your working tree
 Setup uses the standard workflow profile. It keeps full workflow instructions
 under `goldband/workflows/*.workflow.md` and exposes a small selector surface
 instead of one top-level skill per workflow. In Claude, use `/goldband` to list
-workflows or `/goldband review` to run one directly.
+workflows or `/goldband review code` to run one directly.
 
 ## Day-to-day workflow
 
@@ -369,8 +369,8 @@ setup normalizes them to the standard selector profile.
 
 ### Step 3: Develop
 
-Edit a template, run `bun run gen:skill-docs`, and the next `/goldband review`
-or `/goldband qa` call picks it up immediately. No restart needed.
+Edit a template, run `bun run gen:skill-docs`, and the next `/goldband review code`
+or `/goldband qa app` call picks it up immediately. No restart needed.
 
 ### Going back to the stable global install
 

@@ -83,14 +83,14 @@ Use the programmatic runtime when structured evidence or repeatable execution is
 needed:
 
 ```bash
-bun run workflows/run.ts review code --mode mock --worktree
+bun run workflows/run.ts review code --mode mock --base "origin/<detected-base-branch>" --worktree
 ```
 
 Real LLM execution requires explicit authorization and an explicit host:
 
 ```bash
-bun run workflows/run.ts review code --mode real --host claude --worktree
-bun run workflows/run.ts review code --mode real --host codex --worktree
+bun run workflows/run.ts review code --mode real --host claude --base "origin/<detected-base-branch>" --worktree
+bun run workflows/run.ts review code --mode real --host codex --base "origin/<detected-base-branch>" --worktree
 ```
 
 Specialists are optional:

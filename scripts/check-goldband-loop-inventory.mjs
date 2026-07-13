@@ -9,19 +9,17 @@ import { fileURLToPath } from 'node:url';
 import {
   discoverLegacyEntrypoints,
   discoverRuntimeBinaries,
+  GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
 const LOOP_DIR = path.join(ROOT_DIR, 'goldband-loop');
 const INVENTORY_PATH = path.join(LOOP_DIR, 'inventory.json');
-const GENERATED_RUNTIME_BINARY_SOURCES = new Map([
-  ['goldband-global-discover', 'bin/goldband-global-discover.ts'],
-]);
-
 function main() {
   const inventory = readJson(INVENTORY_PATH);
   assert.equal(inventory.schema, 2);
+  assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput();
   assertSourceSymlinksResolve(LOOP_DIR);
   assertLegacyConfigMigration();
   assertSourceInventory(inventory);
@@ -46,6 +44,27 @@ function main() {
     console.log('[OK] Goldband Loop copy fallback runtime CLI works');
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });
+  }
+}
+
+function assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput() {
+  const sourceOnlyLoop = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-source-inventory.'),
+  );
+  try {
+    fs.mkdirSync(path.join(sourceOnlyLoop, 'bin'));
+    fs.writeFileSync(
+      path.join(sourceOnlyLoop, 'bin', 'goldband-global-discover.ts'),
+      'export {};\n',
+    );
+    assert.ok(
+      discoverRuntimeBinaries(sourceOnlyLoop).includes(
+        'goldband-global-discover',
+      ),
+      'generated runtime binary discovery must be reproducible from tracked source',
+    );
+  } finally {
+    fs.rmSync(sourceOnlyLoop, { recursive: true, force: true });
   }
 }
 
@@ -88,13 +107,11 @@ function assertSourceInventory(inventory) {
   );
 
   assertGeneratedRuntimeSources(inventory);
-  const sourceBins = discoverRuntimeBinaries(LOOP_DIR).filter(
-    (entry) => !GENERATED_RUNTIME_BINARY_SOURCES.has(entry),
+  assertDeepSetEqual(
+    'source runtime binaries',
+    discoverRuntimeBinaries(LOOP_DIR),
+    inventory.binaries,
   );
-  const expectedSourceBins = inventory.binaries.filter(
-    (entry) => !GENERATED_RUNTIME_BINARY_SOURCES.has(entry),
-  );
-  assertDeepSetEqual('source runtime binaries', sourceBins, expectedSourceBins);
 }
 
 function assertGeneratedRuntimeSources(inventory) {

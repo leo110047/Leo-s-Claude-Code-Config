@@ -159,7 +159,7 @@ const RULES = [
   {
     skill: 'skill-developer',
     priority: 'low',
-    hint: 'Use for small skill trigger or structure edits; run the Goldband skillify workflow through /goldband skillify for full scaffold or extraction.',
+    hint: 'Use for small skill trigger or structure edits; run the Goldband skill-authoring workflow through /goldband system skill-authoring for full scaffold or extraction.',
     keywords: [
       'new skill',
       'create skill',

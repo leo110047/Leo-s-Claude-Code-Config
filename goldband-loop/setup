@@ -723,6 +723,29 @@ skill_file_matches_under_dir() {
   return 1
 }
 
+kiro_skill_file_matches_under_dir() {
+  local target="$1"
+  local root="$2"
+  local source_skill
+
+  [ -f "$target/SKILL.md" ] || return 1
+  [ -d "$root" ] || return 1
+
+  for source_skill in "$root"/goldband*/SKILL.md; do
+    [ -f "$source_skill" ] || continue
+    if cmp -s "$target/SKILL.md" <(
+      sed -e 's|\$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
+          -e 's|~/.codex/skills/goldband|~/.kiro/skills/goldband|g' \
+          -e 's|~/.claude/skills/goldband|~/.kiro/skills/goldband|g' \
+          "$source_skill"
+    ); then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 goldband_managed_skill_entry() {
   local target="$1"
   local source_root="$2"
@@ -804,7 +827,8 @@ cleanup_legacy_full_workflow_entries_for_standard() {
       case "$skill_name" in goldband) continue ;; esac
       target="$skills_dir/$skill_name"
       [ -e "$target" ] || [ -L "$target" ] || continue
-      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root"; then
+      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
+          { [ "$host" = "kiro" ] && kiro_skill_file_matches_under_dir "$target" "$generated_root"; }; then
         rm -rf "$target"
         removed+=("$skill_name")
       fi
@@ -819,6 +843,7 @@ cleanup_legacy_full_workflow_entries_for_standard() {
 create_internal_workflow_docs() {
   local generated_root="$1"
   local runtime_root="$2"
+  local host="${3:-}"
   local workflow_root="$runtime_root/workflows"
   local capability_contract="$SOURCE_GOLDBAND_DIR/generated/capability-actions.json"
   local linked=()
@@ -842,7 +867,14 @@ create_internal_workflow_docs() {
     [ -f "$skill_dir" ] || { echo "goldband setup failed: missing capability source for $capability/$action: $skill_dir" >&2; exit 1; }
     mkdir -p "$workflow_root/$capability"
     target="$workflow_root/$capability/$action.workflow.md"
-    _link_or_copy "$skill_dir" "$target"
+    if [ "$host" = "kiro" ]; then
+      sed -e 's|\$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
+          -e 's|~/.codex/skills/goldband|~/.kiro/skills/goldband|g' \
+          -e 's|~/.claude/skills/goldband|~/.kiro/skills/goldband|g' \
+          "$skill_dir" > "$target"
+    else
+      _link_or_copy "$skill_dir" "$target"
+    fi
     linked+=("$capability/$action")
   done < <(node -e 'const c=require(process.argv[1]); for (const a of c.actions) console.log([a.capability,a.action,a.sourceTemplate].join("\t"))' "$capability_contract")
 
@@ -1030,6 +1062,7 @@ create_factory_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$factory_goldband/ETHOS.md"
   fi
+  create_internal_workflow_docs "$factory_dir" "$factory_goldband"
 }
 
 create_opencode_runtime_root() {
@@ -1086,6 +1119,7 @@ create_opencode_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$opencode_goldband/ETHOS.md"
   fi
+  create_internal_workflow_docs "$opencode_dir" "$opencode_goldband"
 }
 
 write_workflow_profile_marker() {
@@ -1093,70 +1127,6 @@ write_workflow_profile_marker() {
   local profile="$2"
   mkdir -p "$HOME/.goldband/state"
   printf '%s\n' "$profile" > "$HOME/.goldband/state/workflow-profile-$host"
-}
-
-link_factory_skill_dirs() {
-  local goldband_dir="$1"
-  local skills_dir="$2"
-  local factory_dir="$goldband_dir/.factory/skills"
-  local linked=()
-
-  if [ ! -d "$factory_dir" ]; then
-    echo "  Generating .factory/ skill docs..."
-    ( cd "$goldband_dir" && bun run gen:skill-docs --host factory )
-  fi
-
-  if [ ! -d "$factory_dir" ]; then
-    echo "  warning: .factory/skills/ generation failed — run 'bun run gen:skill-docs --host factory' manually" >&2
-    return 1
-  fi
-
-  for skill_dir in "$factory_dir"/goldband*/; do
-    if [ -f "$skill_dir/SKILL.md" ]; then
-      skill_name="$(basename "$skill_dir")"
-      [ "$skill_name" = "goldband" ] && continue
-      target="$skills_dir/$skill_name"
-      if [ -L "$target" ] || [ ! -e "$target" ]; then
-        _link_or_copy "$skill_dir" "$target"
-        linked+=("$skill_name")
-      fi
-    fi
-  done
-  if [ ${#linked[@]} -gt 0 ]; then
-    echo "  linked skills: ${linked[*]}"
-  fi
-}
-
-link_opencode_skill_dirs() {
-  local goldband_dir="$1"
-  local skills_dir="$2"
-  local opencode_dir="$goldband_dir/.opencode/skills"
-  local linked=()
-
-  if [ ! -d "$opencode_dir" ]; then
-    echo "  Generating .opencode/ skill docs..."
-    ( cd "$goldband_dir" && bun run gen:skill-docs --host opencode )
-  fi
-
-  if [ ! -d "$opencode_dir" ]; then
-    echo "  warning: .opencode/skills/ generation failed — run 'bun run gen:skill-docs --host opencode' manually" >&2
-    return 1
-  fi
-
-  for skill_dir in "$opencode_dir"/goldband*/; do
-    if [ -f "$skill_dir/SKILL.md" ]; then
-      skill_name="$(basename "$skill_dir")"
-      [ "$skill_name" = "goldband" ] && continue
-      target="$skills_dir/$skill_name"
-      if [ -L "$target" ] || [ ! -e "$target" ]; then
-        _link_or_copy "$skill_dir" "$target"
-        linked+=("$skill_name")
-      fi
-    fi
-  done
-  if [ ${#linked[@]} -gt 0 ]; then
-    echo "  linked skills: ${linked[*]}"
-  fi
 }
 
 # 4. Install for Claude (default)
@@ -1291,18 +1261,8 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
   if [ ! -d "$AGENTS_DIR" ]; then
     echo "  warning: no .agents/skills/ directory found — run 'bun run build' first" >&2
   else
-    for skill_dir in "$AGENTS_DIR"/goldband*/; do
-      [ -f "$skill_dir/SKILL.md" ] || continue
-      skill_name="$(basename "$skill_dir")"
-      target_dir="$KIRO_SKILLS/$skill_name"
-      mkdir -p "$target_dir"
-      # Generated Codex skills use $HOME/.codex (not ~/), plus $GOLDBAND_ROOT variables.
-      # Rewrite the default GOLDBAND_ROOT value and any remaining literal paths.
-      sed -e 's|\$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
-          -e "s|~/.codex/skills/goldband|~/.kiro/skills/goldband|g" \
-          -e "s|~/.claude/skills/goldband|~/.kiro/skills/goldband|g" \
-          "$skill_dir/SKILL.md" > "$target_dir/SKILL.md"
-    done
+    create_internal_workflow_docs "$AGENTS_DIR" "$KIRO_GOLDBAND" "kiro"
+    cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$KIRO_SKILLS" "$AGENTS_DIR" "kiro"
     echo "goldband ready (kiro)."
     echo "  browse: $BROWSE_BIN"
     echo "  kiro skills: $KIRO_SKILLS"
@@ -1313,7 +1273,7 @@ fi
 if [ "$INSTALL_FACTORY" -eq 1 ]; then
   mkdir -p "$FACTORY_SKILLS"
   create_factory_runtime_root "$SOURCE_GOLDBAND_DIR" "$FACTORY_GOLDBAND"
-  link_factory_skill_dirs "$SOURCE_GOLDBAND_DIR" "$FACTORY_SKILLS"
+  cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$FACTORY_SKILLS" "$SOURCE_GOLDBAND_DIR/.factory/skills" "factory"
   echo "goldband ready (factory)."
   echo "  browse: $BROWSE_BIN"
   echo "  factory skills: $FACTORY_SKILLS"
@@ -1323,7 +1283,7 @@ fi
 if [ "$INSTALL_OPENCODE" -eq 1 ]; then
   mkdir -p "$OPENCODE_SKILLS"
   create_opencode_runtime_root "$SOURCE_GOLDBAND_DIR" "$OPENCODE_GOLDBAND"
-  link_opencode_skill_dirs "$SOURCE_GOLDBAND_DIR" "$OPENCODE_SKILLS"
+  cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$OPENCODE_SKILLS" "$SOURCE_GOLDBAND_DIR/.opencode/skills" "opencode"
   echo "goldband ready (opencode)."
   echo "  browse: $BROWSE_BIN"
   echo "  opencode skills: $OPENCODE_SKILLS"

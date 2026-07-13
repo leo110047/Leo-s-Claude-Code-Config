@@ -24,9 +24,26 @@ const ALL_HOSTS = [
   'hermes',
   'gbrain',
 ];
+const CAPABILITY_INVOCATION_ROOTS = [
+  'README.md',
+  'README.en.md',
+  'examples/CLAUDE.md',
+  'commands',
+  'plugin-assets/claude-code-plugin/commands',
+  'codex/agents',
+  'codex/hooks/hook-router.js',
+  'codex/prompts/goldband.md',
+  'hooks/scripts/lib/hook-router/lifecycle-policy.js',
+  'hooks/scripts/lib/skill-activation/activation-rules.js',
+  'plugin-assets/claude-code-plugin/hooks/scripts/lib/hook-router/lifecycle-policy.js',
+  'plugin-assets/claude-code-plugin/hooks/scripts/lib/skill-activation/activation-rules.js',
+  'goldband-loop/CONTRIBUTING.md',
+  'goldband-loop/SKILL.md',
+];
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
 validateManifest(manifest);
+validateCapabilityInvocations(manifest);
 
 const capabilityActions = manifest.capabilities.flatMap((capability) =>
   capability.actions.map((action) => ({
@@ -132,6 +149,50 @@ function validateManifest(value) {
       validateAction(capability.id, action, seen);
     }
   }
+}
+
+function validateCapabilityInvocations(value) {
+  const validActions = new Set(
+    value.capabilities.flatMap((capability) =>
+      capability.actions.map((action) => `${capability.id}/${action.id}`),
+    ),
+  );
+  const invalid = CAPABILITY_INVOCATION_ROOTS.flatMap((entry) =>
+    invocationFiles(path.join(root, entry)),
+  ).flatMap((file) => invalidInvocations(file, validActions));
+
+  if (invalid.length > 0) {
+    throw new Error(
+      `invalid Goldband capability invocation; expected $goldband <capability> <action>:\n${invalid.join('\n')}`,
+    );
+  }
+}
+
+function invalidInvocations(file, validActions) {
+  const content = fs.readFileSync(file, 'utf8');
+  const pattern =
+    /(?:\$|\/)goldband(?:[ \t]+([a-z][a-z0-9-]*))?(?:[ \t]+([a-z][a-z0-9-]*))?/gi;
+  return [...content.matchAll(pattern)]
+    .filter((match) => match[1])
+    .filter((match) => {
+      if (!match[2]) return true;
+      return !validActions.has(
+        `${match[1].toLowerCase()}/${match[2].toLowerCase()}`,
+      );
+    })
+    .map((match) => {
+      const line = content.slice(0, match.index).split('\n').length;
+      return `${path.relative(root, file)}:${line}: ${JSON.stringify(match[0])}`;
+    });
+}
+
+function invocationFiles(entry) {
+  if (!fs.existsSync(entry)) return [];
+  const stat = fs.statSync(entry);
+  if (stat.isFile()) return [entry];
+  return fs
+    .readdirSync(entry, { withFileTypes: true })
+    .flatMap((child) => invocationFiles(path.join(entry, child.name)));
 }
 
 function validateCapability(capability) {

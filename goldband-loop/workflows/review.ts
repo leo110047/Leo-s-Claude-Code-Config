@@ -183,11 +183,31 @@ function collectTrackedDiff(ctx: WorkflowContext): DiffOutput {
 
 function diffArgSets(ctx: WorkflowContext): string[][] {
   if (ctx.options.staged) return [['diff', '--staged']];
-  if (ctx.options.base) return [['diff', `${ctx.options.base}...HEAD`]];
-  if (ctx.options.worktree) {
-    return hasHead(ctx.cwd) ? [['diff', 'HEAD']] : [['diff', '--cached'], ['diff']];
+  if (ctx.options.base && ctx.options.worktree) {
+    return [['diff', mergeBase(ctx.cwd, ctx.options.base)]];
   }
-  return [['diff']];
+  const argSets: string[][] = [];
+  if (ctx.options.base) argSets.push(['diff', `${ctx.options.base}...HEAD`]);
+  if (ctx.options.worktree) {
+    argSets.push(
+      ...(hasHead(ctx.cwd)
+        ? [['diff', 'HEAD']]
+        : [['diff', '--cached'], ['diff']]),
+    );
+  }
+  return argSets.length > 0 ? argSets : [['diff']];
+}
+
+function mergeBase(cwd: string, base: string): string {
+  const result = spawnSync('git', ['merge-base', base, 'HEAD'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  const commit = result.stdout.trim();
+  if (result.status !== 0 || !commit) {
+    throw new Error(result.stderr || `git merge-base failed for ${base}`);
+  }
+  return commit;
 }
 
 function hasHead(cwd: string): boolean {

@@ -426,6 +426,37 @@ describe('workflow runtime', () => {
     }
   });
 
+  test('base plus worktree diff includes committed and uncommitted changes', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(join(repo, 'committed.txt'), 'committed change\n');
+      commitAll(repo, 'feature commit');
+      writeFileSync(join(repo, 'tracked.txt'), 'uncommitted change\n');
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      expect(step).toBeDefined();
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { base: 'HEAD~1', worktree: true },
+      });
+
+      const collected = output as { source: string; diff: string };
+      expect(collected.source).toMatch(/^git diff [0-9a-f]+$/);
+      expect(collected.diff).toContain('committed.txt');
+      expect(collected.diff).toContain('committed change');
+      expect(collected.diff).toContain('tracked.txt');
+      expect(collected.diff).toContain('uncommitted change');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   test('worktree diff skips secret-like untracked file content', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
     try {

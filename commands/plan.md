@@ -25,7 +25,7 @@ is complete.
 
 Create a comprehensive implementation plan before writing any code.
 
-For architecture or implementation-plan review, use `/goldband plan-eng-review`
+For architecture or implementation-plan review, use `/goldband review plan-engineering`
 after the draft exists. This command creates the plan; the workflow review
 command pressure-tests it.
 
@@ -96,7 +96,7 @@ command pressure-tests it.
 - **NEVER** write code until user explicitly confirms with "yes" or "proceed"
 - Always verify assumptions with actual code (Read, Grep, Glob) before planning
 - For architecture or direction-setting work, do not optimize for minimal diff; explain why this is the healthiest option now and when it should be replaced
-- If the plan is complex, risky, or cross-module, recommend `/goldband plan-eng-review` before implementation
+- If the plan is complex, risky, or cross-module, recommend `/goldband review plan-engineering` before implementation
 - If user says "modify", adjust the plan and present again
 
 ## <HARD-GATE> No Code Without Design

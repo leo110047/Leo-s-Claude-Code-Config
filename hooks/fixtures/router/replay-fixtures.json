@@ -77,7 +77,7 @@
       "stdoutIncludes": [
         "hookSpecificOutput",
         "SessionStart",
-        "context-restore"
+        "context restore"
       ],
       "stderrIncludes": [
         "SessionStart"

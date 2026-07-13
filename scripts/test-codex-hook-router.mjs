@@ -324,7 +324,10 @@ function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
 function testLifecycleContexts() {
   const output = runHook({ hook_event_name: 'SessionStart' });
   assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(output.hookSpecificOutput.additionalContext, /context-restore/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /\$goldband context restore/,
+  );
 }
 
 function testSessionStartContextIsDedupedBySession() {
@@ -340,7 +343,7 @@ function testSessionStartContextIsDedupedBySession() {
   assert.equal(outputs[0].hookSpecificOutput.hookEventName, 'SessionStart');
   assert.match(
     outputs[0].hookSpecificOutput.additionalContext,
-    /context-restore/,
+    /\$goldband context restore/,
   );
   assertNoopOutput(outputs[1]);
   assertNoopOutput(outputs[2]);
@@ -435,6 +438,15 @@ function testPromptWorkflowHint() {
     output.hookSpecificOutput.additionalContext,
     /\$goldband investigate/,
   );
+}
+
+function testPromptWorkflowHintRequiresTriggerBoundaries() {
+  const output = runHook({
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'Please give me an explanation of this file.',
+  });
+
+  assertNoopOutput(output);
 }
 
 function testWorkflowHintsLoadOnlyForPromptRouting() {
@@ -561,6 +573,7 @@ testSessionStartExpiredDedupeMarkerIsCleanedUp();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
+testPromptWorkflowHintRequiresTriggerBoundaries();
 testWorkflowHintsLoadOnlyForPromptRouting();
 testWorkflowTelemetry();
 testCompletionClaimsDoNotUseRegex();
