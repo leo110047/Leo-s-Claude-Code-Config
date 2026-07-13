@@ -41,11 +41,6 @@ install_pack_quality() {
     install_shell_launchers
 }
 
-install_pack_unity() {
-    install_pack_quality
-    install_unity
-}
-
 install_codex_skills() {
     local skill_list=()
     while IFS= read -r skill; do
@@ -106,6 +101,9 @@ install_codex_prompts() {
 install_codex_hooks() {
     link_component "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" "Codex hooks.json"
     link_component "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" "Codex hook scripts"
+    mkdir -p "$(dirname "$CODEX_REVIEW_RUNTIME_FILE")"
+    materialize_file_copy "$REPO_DIR/hooks/scripts/lib/rules-resolver.js" "$CODEX_REVIEW_RUNTIME_FILE"
+    echo -e "  ${GREEN}[同步] Codex review Rules resolver${NC}"
 }
 
 install_codex_rules() {
@@ -157,7 +155,9 @@ install_commands() {
 }
 
 install_rules() {
-    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (5 個)"
+    local rule_count
+    rule_count=$(find "$REPO_DIR/rules" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    link_component "$REPO_DIR/rules" "$CLAUDE_DIR/rules" "Rules (${rule_count} 個)"
 }
 
 merge_hooks_config() {
@@ -357,19 +357,4 @@ install_goldband_project_style_gate() {
     mv -f "$tmp" "$hook_path"
     chmod +x "$hook_path"
     echo -e "  ${GREEN}[安裝] goldband repo project style gate -> $hook_path${NC}"
-}
-
-install_unity() {
-    local project_dir
-    project_dir="$(pwd)"
-    if [ ! -d "Assets" ]; then
-        echo -e "${YELLOW}警告：當前目錄不像是 Unity 專案（沒有 Assets 資料夾）${NC}"
-        read -p "是否繼續？(y/n): " cont
-        if [ "$cont" != "y" ]; then
-            echo -e "${RED}安裝取消${NC}"
-            return
-        fi
-    fi
-    mkdir -p "$project_dir/.claude"
-    link_component "$REPO_DIR/skills/projects/unity" "$project_dir/.claude/skills" "Unity Skills (10 個)"
 }

@@ -1,4 +1,13 @@
 import type { TemplateContext } from './types';
+import { getHostConfig } from '../../hosts/index';
+
+export function generateRuntimeRoot(ctx: TemplateContext): string {
+  const hostConfig = getHostConfig(ctx.host);
+  const localRootArg = hostConfig.localSkillRoot === hostConfig.globalRoot
+    ? ''
+    : ` "${hostConfig.localSkillRoot}"`;
+  return `. "$HOME/${hostConfig.globalRoot}/bin/goldband-env"${localRootArg} || exit $?`;
+}
 
 export function generateSlugEval(ctx: TemplateContext): string {
   return `eval "$(${ctx.paths.binDir}/goldband-slug 2>/dev/null)"`;

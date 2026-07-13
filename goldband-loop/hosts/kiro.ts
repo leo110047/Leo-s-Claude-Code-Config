@@ -9,7 +9,6 @@ const kiro: HostConfig = {
   globalRoot: '.kiro/skills/goldband',
   localSkillRoot: '.kiro/skills/goldband',
   hostSubdir: '.kiro',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -23,8 +22,6 @@ const kiro: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.kiro/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.kiro/skills/goldband' },
     { from: '.claude/skills', to: '.kiro/skills' },
     { from: '~/.codex/skills/goldband', to: '~/.kiro/skills/goldband' },
     { from: '.codex/skills', to: '.kiro/skills' },

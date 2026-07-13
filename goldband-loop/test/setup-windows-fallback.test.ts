@@ -49,8 +49,8 @@ describe('setup: _link_or_copy invariant (D7)', () => {
     expect(SETUP_SRC).toContain('_print_windows_copy_note_once');
   });
 
-  test('link_claude_selected_skill_dirs calls the Windows note printer', () => {
-    const fnStart = SETUP_SRC.indexOf('link_claude_selected_skill_dirs() {');
+  test('workflow materialization calls the Windows note printer', () => {
+    const fnStart = SETUP_SRC.indexOf('create_internal_workflow_docs() {');
     const fnEnd = SETUP_SRC.indexOf('\n}\n', fnStart);
     const fnBody = SETUP_SRC.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_print_windows_copy_note_once');

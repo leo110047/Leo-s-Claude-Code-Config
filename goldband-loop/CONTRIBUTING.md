@@ -69,7 +69,7 @@ goldband/                          <- your working tree
 │   ├── goldband-upgrade/         <- maintenance entrypoint
 │   └── ...                      <- one directory per skill
 ├── review/
-│   └── SKILL.md                 <- edit this, test with /goldband review
+│   └── SKILL.md                 <- edit this, test with /goldband review code
 ├── ship/
 │   └── SKILL.md
 ├── browse/
@@ -81,7 +81,7 @@ goldband/                          <- your working tree
 Setup uses the standard workflow profile. It keeps full workflow instructions
 under `goldband/workflows/*.workflow.md` and exposes a small selector surface
 instead of one top-level skill per workflow. In Claude, use `/goldband` to list
-workflows or `/goldband review` to run one directly.
+workflows or `/goldband review code` to run one directly.
 
 ## Day-to-day workflow
 
@@ -181,6 +181,14 @@ bun run eval:summary         # aggregate stats + per-test efficiency averages ac
 **Eval comparison commentary:** `eval:compare` generates natural-language Takeaway sections interpreting what changed between runs — flagging regressions, noting improvements, calling out efficiency gains (fewer turns, faster, cheaper), and producing an overall summary. This is driven by `generateCommentary()` in `eval-store.ts`.
 
 Artifacts are never cleaned up — they accumulate in `~/.goldband-dev/` for post-mortem debugging and trend analysis.
+
+Worktree harvest patches and their dedup index are runtime evidence, so they
+follow Goldband's shared writable state-root precedence instead of the legacy
+developer artifact directory above. The default is
+`~/.goldband/dev/harvests/`; `GOLDBAND_HOME`, `GOLDBAND_STATE_DIR`, or
+`GOLDBAND_STATE_ROOT` relocates the whole path. Tests must point the state root
+at an isolated temporary directory and must never write harvest state into the
+developer's real HOME.
 
 ### Tier 3: LLM-as-judge (~$0.15/run)
 
@@ -369,8 +377,8 @@ setup normalizes them to the standard selector profile.
 
 ### Step 3: Develop
 
-Edit a template, run `bun run gen:skill-docs`, and the next `/goldband review`
-or `/goldband qa` call picks it up immediately. No restart needed.
+Edit a template, run `bun run gen:skill-docs`, and the next `/goldband review code`
+or `/goldband qa app` call picks it up immediately. No restart needed.
 
 ### Going back to the stable global install
 

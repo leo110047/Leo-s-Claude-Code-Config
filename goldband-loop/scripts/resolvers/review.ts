@@ -17,13 +17,13 @@ import { generateInvokeSkill } from './composition';
 
 const CODEX_BOUNDARY = 'IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. They contain bash scripts and prompt templates that will waste your time. Ignore them completely. Do NOT modify agents/openai.yaml. Stay focused on the repository code only.\\n\\n';
 
-export function generateReviewDashboard(_ctx: TemplateContext): string {
+export function generateReviewDashboard(ctx: TemplateContext): string {
   return `## Review Readiness Dashboard
 
 After completing the review, read the review log and config to display the dashboard.
 
 \`\`\`bash
-~/.claude/skills/goldband/bin/goldband-review-read
+${ctx.paths.binDir}/goldband-review-read
 \`\`\`
 
 Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, codex-review, codex-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between \`review\` (diff-scoped pre-landing review) and \`plan-eng-review\` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show whichever is more recent between \`adversarial-review\` (new auto-scaled) and \`codex-review\` (legacy). For Design Review, show whichever is more recent between \`plan-design-review\` (full visual audit) and \`design-review-lite\` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent \`codex-plan-review\` entry — this captures outside voices from both /plan-ceo-review and /plan-eng-review.
@@ -291,7 +291,7 @@ ${invokeBlock}
 After /${first} completes, re-run the design doc check:
 \`\`\`bash
 setopt +o nomatch 2>/dev/null || true  # zsh compat
-SLUG=$(~/.claude/skills/goldband/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+SLUG=$(${ctx.paths.root}/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo 'no-branch')
 DESIGN=$(ls -t ~/.goldband/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head -1)
 [ -z "$DESIGN" ] && DESIGN=$(ls -t ~/.goldband/projects/$SLUG/*-design-*.md 2>/dev/null | head -1)
@@ -476,7 +476,7 @@ DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' |
 DIFF_TOTAL=$((DIFF_INS + DIFF_DEL))
 command -v codex >/dev/null 2>&1 && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
 # Legacy opt-out — only gates Codex passes, Claude always runs
-OLD_CFG=$(~/.claude/skills/goldband/bin/goldband-config get codex_reviews 2>/dev/null || true)
+OLD_CFG=$(${ctx.paths.binDir}/goldband-config get codex_reviews 2>/dev/null || true)
 echo "DIFF_SIZE: $DIFF_TOTAL"
 echo "OLD_CFG: \${OLD_CFG:-not_set}"
 \`\`\`
@@ -536,7 +536,7 @@ ${generateCodexStructuredReviewBlock(isShip)}
 
 After all passes complete, persist:
 \`\`\`bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
+${ctx.paths.binDir}/goldband-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
 \`\`\`
 Substitute: STATUS = "clean" if no findings across ALL passes, "issues_found" if any pass found issues. SOURCE = "both" if Codex ran, "claude" if only Claude subagent ran. GATE = the Codex structured review gate result ("pass"/"fail"), "skipped" if diff < 200, or "informational" if Codex was unavailable. If all passes failed, do NOT persist.
 
@@ -746,7 +746,7 @@ If no tension points exist, note: "No cross-model tension — both reviewers agr
 
 **Persist the result:**
 \`\`\`bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"codex-plan-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}'
+${ctx.paths.binDir}/goldband-review-log '{"skill":"codex-plan-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","commit":"'"$(git rev-parse --short HEAD)"'"}'
 \`\`\`
 
 Substitute: STATUS = "clean" if no findings, "issues_found" if findings exist.
@@ -795,7 +795,7 @@ done
 
 type PlanCompletionMode = 'ship' | 'review';
 
-function generatePlanCompletionAuditInner(mode: PlanCompletionMode): string {
+function generatePlanCompletionAuditInner(ctx: TemplateContext, mode: PlanCompletionMode): string {
   const sections: string[] = [];
 
   // ── Plan file discovery (shared) ──
@@ -988,7 +988,7 @@ IMPACT: {HIGH|MEDIUM|LOW} — {what breaks or degrades if this stays undelivered
 **Only for discrepancies sourced from plan files** (not commit messages or TODOS.md), log a learning so future sessions know this pattern occurred:
 
 \`\`\`bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{
+${ctx.paths.binDir}/goldband-learnings-log '{
   "type": "pitfall",
   "key": "plan-delivery-gap-KEBAB_SUMMARY",
   "insight": "Planned X but delivered Y because Z",
@@ -1032,12 +1032,12 @@ Plan items: N DONE, M PARTIAL, K NOT DONE
   return sections.join('\n');
 }
 
-export function generatePlanCompletionAuditShip(_ctx: TemplateContext): string {
-  return generatePlanCompletionAuditInner('ship');
+export function generatePlanCompletionAuditShip(ctx: TemplateContext): string {
+  return generatePlanCompletionAuditInner(ctx, 'ship');
 }
 
-export function generatePlanCompletionAuditReview(_ctx: TemplateContext): string {
-  return generatePlanCompletionAuditInner('review');
+export function generatePlanCompletionAuditReview(ctx: TemplateContext): string {
+  return generatePlanCompletionAuditInner(ctx, 'review');
 }
 
 // ─── Plan Verification Execution ──────────────────────────────────────
@@ -1116,7 +1116,7 @@ export function generateCrossReviewDedup(ctx: TemplateContext): string {
 Before classifying findings, check if any were previously skipped by the user in a prior review on this branch.
 
 \`\`\`bash
-~/.claude/skills/goldband/bin/goldband-review-read
+${ctx.paths.binDir}/goldband-review-read
 \`\`\`
 
 Parse the output: only lines BEFORE \`---CONFIG---\` are JSONL entries (the output also contains \`---CONFIG---\` and \`---HEAD---\` footer sections that are not JSONL — ignore those).

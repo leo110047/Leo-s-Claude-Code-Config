@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { defineWorkflow } from './definition';
 import { workflowAssetPath } from './paths';
 import { objectSchema } from './schema';
-import type { HostName, RiskLevel, WorkflowDefinition, WorkflowStep } from './types';
+import type { WorkflowDefinition, WorkflowStep } from './types';
 import {
   captureReviewIterationState,
   reviewSignalFromOutput,
@@ -11,103 +11,31 @@ import {
   reviewTargetMet,
 } from './review';
 import { captureQaIterationState, qaSignalFromOutput, qaSteps, qaTargetMet } from './qa';
+import { CAPABILITY_ACTIONS } from './capability-registry.generated';
 
-const ALL_HOSTS: HostName[] = [
-  'claude',
-  'codex',
-  'factory',
-  'kiro',
-  'opencode',
-  'slate',
-  'cursor',
-  'openclaw',
-  'hermes',
-  'gbrain',
-];
+export const CORE_WORKFLOWS = CAPABILITY_ACTIONS
+  .filter((entry) => entry.runtime !== 'registered-only')
+  .map((entry) => entry.name);
 
-export const CORE_WORKFLOWS = [
-  'goldband-review',
-  'goldband-investigate',
-  'goldband-qa',
-  'plan',
-  'goldband-cso',
-  'goldband-ship',
-] as const;
-
-const WORKFLOW_NAMES = [
-  'goldband-autoplan',
-  'goldband-benchmark',
-  'goldband-benchmark-models',
-  'goldband-browse',
-  'goldband-canary',
-  'goldband-careful',
-  'goldband-codex',
-  'goldband-context-restore',
-  'goldband-context-save',
-  'goldband-cso',
-  'goldband-design-consultation',
-  'goldband-design-html',
-  'goldband-design-review',
-  'goldband-design-shotgun',
-  'goldband-devex-review',
-  'goldband-document-generate',
-  'goldband-document-release',
-  'goldband-freeze',
-  'goldband-guard',
-  'goldband-health',
-  'goldband-investigate',
-  'goldband-ios-clean',
-  'goldband-ios-design-review',
-  'goldband-ios-fix',
-  'goldband-ios-qa',
-  'goldband-ios-sync',
-  'goldband-land-and-deploy',
-  'goldband-landing-report',
-  'goldband-learn',
-  'goldband-make-pdf',
-  'goldband-office-hours',
-  'goldband-open-goldband-browser',
-  'goldband-pair-agent',
-  'goldband-plan-ceo-review',
-  'goldband-plan-design-review',
-  'goldband-plan-devex-review',
-  'goldband-plan-eng-review',
-  'goldband-plan-tune',
-  'goldband-qa',
-  'goldband-qa-only',
-  'goldband-retro',
-  'goldband-review',
-  'goldband-scrape',
-  'goldband-setup-browser-cookies',
-  'goldband-setup-deploy',
-  'goldband-setup-gbrain',
-  'goldband-ship',
-  'goldband-skillify',
-  'goldband-sync-gbrain',
-  'goldband-unfreeze',
-  'goldband-upgrade',
-  'plan',
-] as const;
-
-export type WorkflowName = (typeof WORKFLOW_NAMES)[number];
-
-export const WORKFLOW_REGISTRY: WorkflowDefinition[] = WORKFLOW_NAMES.map((name) =>
+export const WORKFLOW_REGISTRY: WorkflowDefinition[] = CAPABILITY_ACTIONS.map((entry) =>
   defineWorkflow({
-    name,
-    target: targetFor(name),
-    evaluationSignal: evaluationFor(name),
-    iterationCap: iterationCapFor(name),
-    stopConditions: stopConditionsFor(name),
-    sourceTemplate: sourceTemplateFor(name),
-    entrypointType: entrypointTypeFor(name),
-    integrationStatus: isCore(name) ? 'integrated' : 'registered-only',
-    hostSupport: name === 'plan' ? ['claude'] : ALL_HOSTS,
-    riskLevel: riskFor(name),
+    capability: entry.capability,
+    action: entry.action,
+    name: entry.name,
+    target: targetFor(entry.name),
+    evaluationSignal: evaluationFor(entry.name),
+    iterationCap: iterationCapFor(entry.name),
+    stopConditions: stopConditionsFor(entry.name),
+    sourceTemplate: entry.sourceTemplate,
+    entrypointType: entry.runtime === 'typed' ? 'typed' : entry.runtime === 'compatibility' ? 'compatibility' : 'legacy-thin',
+    integrationStatus: entry.runtime === 'registered-only' ? 'registered-only' : 'integrated',
+    hostSupport: entry.hostSupport,
+    riskLevel: entry.riskLevel,
     evidencePolicy: 'Write one JSONL event per runtime step with digest, status, duration, and artifacts.',
-    migrationNotes: migrationFor(name),
-    nextStep: nextStepFor(name),
-    steps: stepsFor(name),
-    ...loopHooksFor(name),
+    migrationNotes: migrationFor(entry.name),
+    nextStep: nextStepFor(entry.name),
+    steps: stepsFor(entry.name, entry.runtime),
+    ...loopHooksFor(entry.name),
   }),
 );
 
@@ -125,14 +53,10 @@ export function registeredOnlyWorkflows(): WorkflowDefinition[] {
   return WORKFLOW_REGISTRY.filter((entry) => entry.integrationStatus === 'registered-only');
 }
 
-function isCore(name: string): boolean {
-  return (CORE_WORKFLOWS as readonly string[]).includes(name);
-}
-
-function stepsFor(name: string): WorkflowStep[] {
-  if (name === 'goldband-review') return reviewSteps;
-  if (name === 'goldband-qa') return qaSteps;
-  if (isCore(name)) return compatibilitySteps(name);
+function stepsFor(name: string, runtime: string): WorkflowStep[] {
+  if (name === 'review/code') return reviewSteps;
+  if (name === 'qa/app') return qaSteps;
+  if (runtime === 'compatibility') return compatibilitySteps(name);
   return [];
 }
 
@@ -145,7 +69,7 @@ function compatibilitySteps(name: string): WorkflowStep[] {
       if (ctx.options.mode === 'real') {
         throw new Error(`${name} compatibility runtime only supports mock mode; use the markdown skill until typed migration is complete`);
       }
-      const sourceTemplate = sourceTemplateFor(name);
+      const sourceTemplate = getWorkflow(name).sourceTemplate;
       const content = readFileSync(workflowAssetPath(sourceTemplate), 'utf8');
       return {
         mode: 'compatibility',
@@ -157,24 +81,12 @@ function compatibilitySteps(name: string): WorkflowStep[] {
   }];
 }
 
-function entrypointTypeFor(name: string) {
-  if (name === 'goldband-review' || name === 'goldband-qa') return 'typed' as const;
-  if (isCore(name)) return 'compatibility' as const;
-  return 'legacy-thin' as const;
-}
-
-function sourceTemplateFor(name: string): string {
-  if (name === 'plan') return '../commands/plan.md';
-  if (name === 'goldband-upgrade') return 'goldband-upgrade/SKILL.md.tmpl';
-  return `${name.replace(/^goldband-/, '')}/SKILL.md.tmpl`;
-}
-
 function promptDigest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
 function targetFor(name: string): string {
-  if (name === 'goldband-review') return 'Find concrete pre-landing code risks from a diff.';
+  if (name === 'review/code') return 'Find concrete pre-landing code risks from a diff.';
   if (name.includes('investigate')) return 'Find root cause with explicit evidence.';
   if (name.includes('qa')) return 'Verify user-visible behavior with pass/fail evidence.';
   if (name.includes('plan')) return 'Improve or validate implementation plans before code changes.';
@@ -183,7 +95,7 @@ function targetFor(name: string): string {
 }
 
 function evaluationFor(name: string): string {
-  if (name === 'goldband-review') return 'Validated findings and rendered report from the selected diff.';
+  if (name === 'review/code') return 'Validated findings and rendered report from the selected diff.';
   if (name.includes('qa')) return 'Recorded pass/fail checks, screenshots, or reproduction evidence.';
   if (name.includes('investigate')) return 'Hypothesis narrowed to a verified cause or explicit blocker.';
   if (name.includes('ship') || name.includes('deploy')) return 'Release gates and post-action readback are explicit.';
@@ -191,30 +103,30 @@ function evaluationFor(name: string): string {
 }
 
 function stopConditionsFor(name: string): string[] {
-  if (name === 'goldband-review') {
+  if (name === 'review/code') {
     return ['findings-converged', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
   }
-  if (name === 'goldband-qa') {
+  if (name === 'qa/app') {
     return ['target-met', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
   }
   return ['target-met', 'same-blocker-repeated', 'iteration-cap'];
 }
 
 function iterationCapFor(name: string): number {
-  if (name === 'goldband-review' || name === 'goldband-qa') return 2;
+  if (name === 'review/code' || name === 'qa/app') return 2;
   return 1;
 }
 
 function migrationFor(name: string): string {
-  if (name === 'goldband-review') return 'First fully typed workflow.';
-  if (name === 'goldband-qa') return 'Minimal typed mock adapter for convergence-loop runtime.';
-  if (isCore(name)) return 'Core compatibility runtime; typed migration still pending.';
+  if (name === 'review/code') return 'First fully typed capability action.';
+  if (name === 'qa/app') return 'Minimal typed mock adapter for convergence-loop runtime.';
+  if ((CORE_WORKFLOWS as string[]).includes(name)) return 'Compatibility runtime; typed migration still pending.';
   return 'Registered for inventory coverage; runtime integration pending.';
 }
 
 function nextStepFor(name: string): string {
-  if (name === 'goldband-review') return 'Keep schema and evidence fixtures stable.';
-  if (name === 'goldband-qa') return 'Promote real browser checks and screenshot artifacts after mock loop settles.';
+  if (name === 'review/code') return 'Keep schema and evidence fixtures stable.';
+  if (name === 'qa/app') return 'Promote real browser checks and screenshot artifacts after mock loop settles.';
   if (name.includes('investigate')) return 'Promote hypothesis and evidence loop to typed steps.';
   if (name.includes('qa')) return 'Promote browser checks and screenshot artifacts to typed steps.';
   if (name.includes('plan')) return 'Type non-interactive review pieces while preserving HITL prompts.';
@@ -223,21 +135,15 @@ function nextStepFor(name: string): string {
   return 'Prioritize after core runtime coverage settles.';
 }
 
-function riskFor(name: string): RiskLevel {
-  if (/(ship|deploy|canary|upgrade|sync|setup|land-and-deploy|ios-qa)/.test(name)) return 'high';
-  if (/(qa|browse|cso|review|investigate|scrape|pair-agent|make-pdf)/.test(name)) return 'medium';
-  return 'low';
-}
-
 function loopHooksFor(name: string): Partial<WorkflowDefinition> {
-  if (name === 'goldband-review') {
+  if (name === 'review/code') {
     return {
       evaluateSignal: reviewSignalFromOutput,
       isTargetMet: reviewTargetMet,
       captureIterationState: captureReviewIterationState,
     };
   }
-  if (name === 'goldband-qa') {
+  if (name === 'qa/app') {
     return {
       evaluateSignal: qaSignalFromOutput,
       isTargetMet: qaTargetMet,

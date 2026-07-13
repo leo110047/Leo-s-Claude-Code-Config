@@ -272,6 +272,7 @@ show_codex_install_status() {
     show_codex_prompts_status
     show_repo_path_status "codex hooks.json" "$CODEX_HOOKS_FILE" "$REPO_DIR/codex/hooks.json" "codex-hooks"
     show_repo_path_status "codex hook scripts" "$CODEX_HOOKS_DIR" "$REPO_DIR/codex/hooks" "codex-hooks"
+    show_repo_path_status "codex review Rules runtime" "$CODEX_REVIEW_RUNTIME_FILE" "$REPO_DIR/hooks/scripts/lib/rules-resolver.js" "codex-hooks"
     show_codex_rules_status
     show_codex_skills_status
     show_mcp_token_status
@@ -425,13 +426,42 @@ show_workflow_status() {
 show_workflow_runtime_status() {
     local label="$1"
     local workflow_dir="$2"
-    local workflow_version
+    local workflow_version contract_source expected_contract installed_contract
     if [ -d "$workflow_dir" ]; then
         workflow_version="$(read_workflow_version "$workflow_dir" 2>/dev/null || echo "unknown")"
-        echo -e "  ${GREEN}[OK]${NC} Goldband Loop $label (${workflow_version})"
+        contract_source="$(workflow_contract_source "$workflow_dir" 2>/dev/null || true)"
+        expected_contract="$(workflow_contract_fingerprint "$contract_source" 2>/dev/null || true)"
+        installed_contract="$(cat "$workflow_dir/.installed-contract" 2>/dev/null || true)"
+        if [ -f "$workflow_dir/.installed-source" ] && [ -z "$expected_contract" ]; then
+            echo -e "  ${RED}[unverifiable]${NC} Goldband Loop $label (${workflow_version}) — workflow contract source unavailable"
+            echo "    source: ${contract_source:-$(cat "$workflow_dir/.installed-source" 2>/dev/null || echo unknown)}"
+            GOLDBAND_STATUS_EXIT_CODE=2
+        elif [ -n "$expected_contract" ] &&
+            { [ -n "$installed_contract" ] || [ -f "$workflow_dir/.installed-version" ]; } &&
+            [ "$installed_contract" != "$expected_contract" ]; then
+            echo -e "  ${RED}[stale]${NC} Goldband Loop $label (${workflow_version}) — workflow contract drift"
+            echo "    建議: 重跑 ./install.sh workflow 或 workflow-codex。"
+            GOLDBAND_STATUS_EXIT_CODE=2
+        else
+            echo -e "  ${GREEN}[OK]${NC} Goldband Loop $label (${workflow_version})"
+        fi
     else
         echo -e "  ${YELLOW}[未安裝]${NC} Goldband Loop $label"
     fi
+}
+
+workflow_contract_source() {
+    local workflow_dir="$1"
+    local installed_source
+
+    if [ -f "$workflow_dir/.installed-source" ]; then
+        installed_source="$(cat "$workflow_dir/.installed-source" 2>/dev/null || true)"
+        [ -n "$installed_source" ] || return 1
+        printf '%s\n' "$installed_source"
+        return 0
+    fi
+
+    resolve_workflow_repo_dir
 }
 
 workflow_profile_value() {

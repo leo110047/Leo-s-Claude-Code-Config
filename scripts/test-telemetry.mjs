@@ -314,8 +314,8 @@ function testCodexStructuredDenyTelemetryName() {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
         permissionDecisionReason: 'copy changed without matching regex',
-        telemetryName: 'recursive-force-delete',
       },
+      internalTelemetry: { name: 'recursive-force-delete' },
     },
   );
 

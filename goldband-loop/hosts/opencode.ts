@@ -9,7 +9,6 @@ const opencode: HostConfig = {
   globalRoot: '.config/opencode/skills/goldband',
   localSkillRoot: '.opencode/skills/goldband',
   hostSubdir: '.opencode',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -23,8 +22,6 @@ const opencode: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.config/opencode/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.opencode/skills/goldband' },
     { from: '.claude/skills', to: '.opencode/skills' },
   ],
 

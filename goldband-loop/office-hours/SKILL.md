@@ -62,35 +62,36 @@ gbrain:
 ## Preamble (run first)
 
 ```bash
-_UPD=$(~/.claude/skills/goldband/bin/goldband-update-check 2>/dev/null || .claude/skills/goldband/bin/goldband-update-check 2>/dev/null || true)
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPD=$($GOLDBAND_BIN/goldband-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.goldband/sessions
 touch ~/.goldband/sessions/"$PPID"
 _SESSIONS=$(find ~/.goldband/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.goldband/sessions -mmin +120 -type f -exec rm {} + 2>/dev/null || true
-_PROACTIVE=$(~/.claude/skills/goldband/bin/goldband-config get proactive 2>/dev/null || echo "true")
+_PROACTIVE=$($GOLDBAND_BIN/goldband-config get proactive 2>/dev/null || echo "true")
 _PROACTIVE_PROMPTED=$([ -f ~/.goldband/.proactive-prompted ] && echo "yes" || echo "no")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
-_SKILL_PREFIX=$(~/.claude/skills/goldband/bin/goldband-config get skill_prefix 2>/dev/null || echo "false")
+_SKILL_PREFIX=$($GOLDBAND_BIN/goldband-config get skill_prefix 2>/dev/null || echo "false")
 echo "PROACTIVE: $_PROACTIVE"
 echo "PROACTIVE_PROMPTED: $_PROACTIVE_PROMPTED"
 echo "SKILL_PREFIX: $_SKILL_PREFIX"
-source <(~/.claude/skills/goldband/bin/goldband-repo-mode 2>/dev/null) || true
+source <($GOLDBAND_BIN/goldband-repo-mode 2>/dev/null) || true
 REPO_MODE=${REPO_MODE:-unknown}
 echo "REPO_MODE: $REPO_MODE"
 _LAKE_SEEN=$([ -f ~/.goldband/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
-_TEL=$(~/.claude/skills/goldband/bin/goldband-config get telemetry 2>/dev/null || true)
+_TEL=$($GOLDBAND_BIN/goldband-config get telemetry 2>/dev/null || true)
 _TEL_PROMPTED=$([ -f ~/.goldband/.telemetry-prompted ] && echo "yes" || echo "no")
 _TEL_START=$(date +%s)
 _SESSION_ID="$$-$(date +%s)"
 echo "TELEMETRY: ${_TEL:-off}"
 echo "TEL_PROMPTED: $_TEL_PROMPTED"
-_EXPLAIN_LEVEL=$(~/.claude/skills/goldband/bin/goldband-config get explain_level 2>/dev/null || echo "default")
+_EXPLAIN_LEVEL=$($GOLDBAND_BIN/goldband-config get explain_level 2>/dev/null || echo "default")
 if [ "$_EXPLAIN_LEVEL" != "default" ] && [ "$_EXPLAIN_LEVEL" != "terse" ]; then _EXPLAIN_LEVEL="default"; fi
 echo "EXPLAIN_LEVEL: $_EXPLAIN_LEVEL"
-_QUESTION_TUNING=$(~/.claude/skills/goldband/bin/goldband-config get question_tuning 2>/dev/null || echo "false")
+_QUESTION_TUNING=$($GOLDBAND_BIN/goldband-config get question_tuning 2>/dev/null || echo "false")
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.goldband/analytics
 if [ "$_TEL" != "off" ]; then
@@ -98,42 +99,42 @@ echo '{"skill":"office-hours","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$
 fi
 for _PF in $(find ~/.goldband/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
-    if [ "$_TEL" != "off" ] && [ -x "~/.claude/skills/goldband/bin/goldband-telemetry-log" ]; then
-      ~/.claude/skills/goldband/bin/goldband-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true
+    if [ "$_TEL" != "off" ] && [ -x "$GOLDBAND_BIN/goldband-telemetry-log" ]; then
+      $GOLDBAND_BIN/goldband-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true
     fi
     rm -f "$_PF" 2>/dev/null || true
   fi
   break
 done
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" 2>/dev/null || true
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 _LEARN_FILE="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}/learnings.jsonl"
 if [ -f "$_LEARN_FILE" ]; then
   _LEARN_COUNT=$(wc -l < "$_LEARN_FILE" 2>/dev/null | tr -d ' ')
   echo "LEARNINGS: $_LEARN_COUNT entries loaded"
   if [ "$_LEARN_COUNT" -gt 5 ] 2>/dev/null; then
-    ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 3 2>/dev/null || true
+    $GOLDBAND_BIN/goldband-learnings-search --limit 3 2>/dev/null || true
   fi
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/goldband/bin/goldband-timeline-log '{"skill":"office-hours","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+$GOLDBAND_BIN/goldband-timeline-log '{"skill":"office-hours","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
 fi
-_ROUTING_DECLINED=$(~/.claude/skills/goldband/bin/goldband-config get routing_declined 2>/dev/null || echo "false")
+_ROUTING_DECLINED=$($GOLDBAND_BIN/goldband-config get routing_declined 2>/dev/null || echo "false")
 echo "HAS_ROUTING: $_HAS_ROUTING"
 echo "ROUTING_DECLINED: $_ROUTING_DECLINED"
 _VENDORED="no"
-if [ -d ".claude/skills/goldband" ] && [ ! -L ".claude/skills/goldband" ]; then
-  if [ -f ".claude/skills/goldband/VERSION" ] || [ -d ".claude/skills/goldband/.git" ]; then
+if [ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && [ ! -L "$GOLDBAND_LOCAL_ROOT" ]; then
+  if [ -f "$GOLDBAND_LOCAL_ROOT/VERSION" ] || [ -d "$GOLDBAND_LOCAL_ROOT/.git" ]; then
     _VENDORED="yes"
   fi
 fi
 echo "VENDORED_GOLDBAND: $_VENDORED"
 echo "MODEL_OVERLAY: claude"
-_CHECKPOINT_MODE=$(~/.claude/skills/goldband/bin/goldband-config get checkpoint_mode 2>/dev/null || echo "explicit")
-_CHECKPOINT_PUSH=$(~/.claude/skills/goldband/bin/goldband-config get checkpoint_push 2>/dev/null || echo "false")
+_CHECKPOINT_MODE=$($GOLDBAND_BIN/goldband-config get checkpoint_mode 2>/dev/null || echo "explicit")
+_CHECKPOINT_PUSH=$($GOLDBAND_BIN/goldband-config get checkpoint_push 2>/dev/null || echo "false")
 echo "CHECKPOINT_MODE: $_CHECKPOINT_MODE"
 echo "CHECKPOINT_PUSH: $_CHECKPOINT_PUSH"
 [ -n "$OPENCLAW_SESSION" ] && echo "SPAWNED_SESSION: true" || true
@@ -149,15 +150,15 @@ If the user invokes a skill in plan mode, the skill takes precedence over generi
 
 If `PROACTIVE` is `"false"`, do not auto-invoke or proactively suggest skills. If a skill seems useful, ask: "I think /skillname might help here — want me to run it?"
 
-If `SKILL_PREFIX` is `"true"`, suggest/invoke `/goldband-*` names. Disk paths stay `~/.claude/skills/goldband/[skill-name]/SKILL.md`.
+If `SKILL_PREFIX` is `"true"`, suggest/invoke `/goldband-*` names. Disk paths stay `$GOLDBAND_ROOT/[skill-name]/SKILL.md`.
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/goldband/goldband-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined).
+If output shows `UPGRADE_AVAILABLE <old> <new>`: read `$GOLDBAND_ROOT/goldband-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined).
 
 If output shows `JUST_UPGRADED <from> <to>`: print "Running goldband v{to} (just updated!)". If `SPAWNED_SESSION` is true, skip feature discovery.
 
 Feature discovery, max one prompt per session:
-- Missing `~/.claude/skills/goldband/.feature-prompted-continuous-checkpoint`: AskUserQuestion for Continuous checkpoint auto-commits. If accepted, run `~/.claude/skills/goldband/bin/goldband-config set checkpoint_mode continuous`. Always touch marker.
-- Missing `~/.claude/skills/goldband/.feature-prompted-model-overlay`: inform "Model overlays are active. MODEL_OVERLAY shows the patch." Always touch marker.
+- Missing `$GOLDBAND_ROOT/.feature-prompted-continuous-checkpoint`: AskUserQuestion for Continuous checkpoint auto-commits. If accepted, run `$GOLDBAND_BIN/goldband-config set checkpoint_mode continuous`. Always touch marker.
+- Missing `$GOLDBAND_ROOT/.feature-prompted-model-overlay`: inform "Model overlays are active. MODEL_OVERLAY shows the patch." Always touch marker.
 
 After upgrade prompts, continue workflow.
 
@@ -170,7 +171,7 @@ Options:
 - B) Restore V0 prose — set `explain_level: terse`
 
 If A: leave `explain_level` unset (defaults to `default`).
-If B: run `~/.claude/skills/goldband/bin/goldband-config set explain_level terse`.
+If B: run `$GOLDBAND_BIN/goldband-config set explain_level terse`.
 
 Always run (regardless of choice):
 ```bash
@@ -196,7 +197,7 @@ Options:
 - A) Help goldband get better! (recommended)
 - B) No thanks
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set telemetry community`
+If A: run `$GOLDBAND_BIN/goldband-config set telemetry community`
 
 If B: ask follow-up:
 
@@ -206,8 +207,8 @@ Options:
 - A) Sure, anonymous is fine
 - B) No thanks, fully off
 
-If B→A: run `~/.claude/skills/goldband/bin/goldband-config set telemetry anonymous`
-If B→B: run `~/.claude/skills/goldband/bin/goldband-config set telemetry off`
+If B→A: run `$GOLDBAND_BIN/goldband-config set telemetry anonymous`
+If B→B: run `$GOLDBAND_BIN/goldband-config set telemetry off`
 
 Always run:
 ```bash
@@ -224,8 +225,8 @@ Options:
 - A) Keep it on (recommended)
 - B) Turn it off — I'll type /commands myself
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set proactive true`
-If B: run `~/.claude/skills/goldband/bin/goldband-config set proactive false`
+If A: run `$GOLDBAND_BIN/goldband-config set proactive true`
+If B: run `$GOLDBAND_BIN/goldband-config set proactive false`
 
 Always run:
 ```bash
@@ -270,13 +271,13 @@ Key routing rules:
 
 Then commit the change: `git add CLAUDE.md && git commit -m "chore: add goldband skill routing rules to CLAUDE.md"`
 
-If B: run `~/.claude/skills/goldband/bin/goldband-config set routing_declined true` and say they can re-enable with `goldband-config set routing_declined false`.
+If B: run `$GOLDBAND_BIN/goldband-config set routing_declined true` and say they can re-enable with `goldband-config set routing_declined false`.
 
 This only happens once per project. Skip if `HAS_ROUTING` is `yes` or `ROUTING_DECLINED` is `true`.
 
 If `VENDORED_GOLDBAND` is `yes`, warn once via AskUserQuestion unless `~/.goldband/.vendoring-warned-$SLUG` exists:
 
-> This project has goldband vendored in `.claude/skills/goldband/`. Vendoring is deprecated.
+> This project has goldband vendored in `$GOLDBAND_LOCAL_REL/`. Vendoring is deprecated.
 > Migrate to team mode?
 
 Options:
@@ -284,17 +285,18 @@ Options:
 - B) No, I'll handle it myself
 
 If A:
-1. Run `git rm -r .claude/skills/goldband/`
-2. Run `echo '.claude/skills/goldband/' >> .gitignore`
-3. Run `~/.claude/skills/goldband/bin/goldband-team-init required` (or `optional`)
-4. Run `git add .claude/ .gitignore CLAUDE.md && git commit -m "chore: migrate goldband from vendored to team mode"`
-5. Tell the user: "Done. Each developer now runs: `cd ~/.claude/skills/goldband && ./setup --team`"
+1. Run `git rm -r "$GOLDBAND_LOCAL_REL/"`
+2. Run `echo "$GOLDBAND_LOCAL_REL/" >> .gitignore`
+3. Run `$GOLDBAND_BIN/goldband-team-init required` (or `optional`)
+4. Run `git add "$GOLDBAND_LOCAL_REL" .gitignore CLAUDE.md AGENTS.md && git commit -m "chore: migrate goldband from vendored to team mode"`
+5. Tell the user: "Done. Each developer now runs: `cd "$GOLDBAND_GLOBAL_ROOT" && ./setup --team`"
 
 If B: say "OK, you're on your own to keep the vendored copy up to date."
 
 Always run (regardless of choice):
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 touch ~/.goldband/.vendoring-warned-${SLUG:-unknown}
 ```
 
@@ -390,6 +392,7 @@ Before calling AskUserQuestion, verify:
 ## Artifacts Sync (skill start)
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 # Prefer the v1.27.0.0 artifacts file; fall back to brain file for users
 # upgrading mid-stream before the migration script runs.
@@ -398,8 +401,8 @@ if [ -f "$HOME/.goldband-artifacts-remote.txt" ]; then
 else
   _BRAIN_REMOTE_FILE="$HOME/.goldband-brain-remote.txt"
 fi
-_BRAIN_SYNC_BIN="~/.claude/skills/goldband/bin/goldband-brain-sync"
-_BRAIN_CONFIG_BIN="~/.claude/skills/goldband/bin/goldband-config"
+_BRAIN_SYNC_BIN="$GOLDBAND_BIN/goldband-brain-sync"
+_BRAIN_CONFIG_BIN="$GOLDBAND_BIN/goldband-config"
 
 # /sync-gbrain context-load: teach the agent to use gbrain when it's available.
 # Per-worktree pin: post-spike redesign uses kubectl-style `.gbrain-source` in the
@@ -508,8 +511,9 @@ If A/B and `~/.goldband/.git` is missing, ask whether to run `goldband-artifacts
 At skill END before telemetry:
 
 ```bash
-"~/.claude/skills/goldband/bin/goldband-brain-sync" --discover-new 2>/dev/null || true
-"~/.claude/skills/goldband/bin/goldband-brain-sync" --once 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+"$GOLDBAND_BIN/goldband-brain-sync" --discover-new 2>/dev/null || true
+"$GOLDBAND_BIN/goldband-brain-sync" --once 2>/dev/null || true
 ```
 
 
@@ -552,7 +556,8 @@ Bad: "I've identified a potential issue in the authentication flow that may caus
 At session start or after compaction, recover recent project context.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _PROJ="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}"
 if [ -d "$_PROJ" ]; then
   echo "--- RECENT ARTIFACTS ---"
@@ -707,11 +712,12 @@ If you are looping on the same diagnostic, same file, or failed fix variants, ST
 
 ## Question Tuning (skip entirely if `QUESTION_TUNING: false`)
 
-Before each AskUserQuestion, choose `question_id` from `scripts/question-registry.ts` or `{skill}-{slug}`, then run `~/.claude/skills/goldband/bin/goldband-question-preference --check "<id>"`. `AUTO_DECIDE` means choose the recommended option and say "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." `ASK_NORMALLY` means ask.
+Before each AskUserQuestion, choose `question_id` from `scripts/question-registry.ts` or `{skill}-{slug}`, then run `$GOLDBAND_BIN/goldband-question-preference --check "<id>"`. `AUTO_DECIDE` means choose the recommended option and say "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." `ASK_NORMALLY` means ask.
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/goldband/bin/goldband-question-log '{"skill":"office-hours","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-question-log '{"skill":"office-hours","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -720,7 +726,8 @@ User-origin gate (profile-poisoning defense): write tune events ONLY when `tune:
 
 Write (only after confirmation for free-form):
 ```bash
-~/.claude/skills/goldband/bin/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
 ```
 
 Exit code 2 = rejected as not user-originated; do not retry. On success: "Set `<id>` → `<preference>`. Active immediately."
@@ -735,7 +742,7 @@ Always flag anything that looks wrong — one sentence, what you noticed and its
 
 ## Search Before Building
 
-Before building anything unfamiliar, **search first.** See `~/.claude/skills/goldband/ETHOS.md`.
+Before building anything unfamiliar, **search first.** See `$GOLDBAND_ROOT/ETHOS.md`.
 - **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
 
 **Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
@@ -770,7 +777,7 @@ Knowledge candidate:
   scope: global | project | machine
   evidence: <file/command/report path or workflow evidence id>
   why reusable: <one sentence>
-  capture: ~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "<evidence>" --title "<one-line title>" --type <problem-solution|decision|practice> --domains <domain> --summary "<one-line recall summary>" --confidence N --body-file path/to/sanitized-entry.md
+  capture: $GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "<evidence>" --title "<one-line title>" --type <problem-solution|decision|practice> --domains <domain> --summary "<one-line recall summary>" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
 This is an agent semantic judgment, not runtime keyword matching. Use
@@ -787,7 +794,8 @@ do not promote to active knowledge without explicit review.
 Before completing, if you discovered a durable project quirk or command fix that would save 5+ minutes next time, log it:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
 ```
 
 Do not log obvious facts or one-time transient errors.
@@ -802,18 +810,19 @@ After workflow completion, log telemetry. Use skill `name:` from frontmatter. OU
 Run this bash:
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _TEL_END=$(date +%s)
 _TEL_DUR=$(( _TEL_END - _TEL_START ))
 rm -f ~/.goldband/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
 # Session timeline: record skill completion (local-only, never sent anywhere)
-~/.claude/skills/goldband/bin/goldband-timeline-log '{"skill":"SKILL_NAME","event":"completed","branch":"'$(git branch --show-current 2>/dev/null || echo unknown)'","outcome":"OUTCOME","duration_s":"'"$_TEL_DUR"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+$GOLDBAND_BIN/goldband-timeline-log '{"skill":"SKILL_NAME","event":"completed","branch":"'$(git branch --show-current 2>/dev/null || echo unknown)'","outcome":"OUTCOME","duration_s":"'"$_TEL_DUR"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 # Local analytics (gated on telemetry setting)
 if [ "$_TEL" != "off" ]; then
 echo '{"skill":"SKILL_NAME","duration_s":"'"$_TEL_DUR"'","outcome":"OUTCOME","browse":"USED_BROWSE","session":"'"$_SESSION_ID"'","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> ~/.goldband/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 # Remote telemetry (opt-in, requires binary)
-if [ "$_TEL" != "off" ] && [ -x ~/.claude/skills/goldband/bin/goldband-telemetry-log ]; then
-  ~/.claude/skills/goldband/bin/goldband-telemetry-log \
+if [ "$_TEL" != "off" ] && [ -x $GOLDBAND_BIN/goldband-telemetry-log ]; then
+  $GOLDBAND_BIN/goldband-telemetry-log \
     --skill "SKILL_NAME" --duration "$_TEL_DUR" --outcome "OUTCOME" \
     --used-browse "USED_BROWSE" --session-id "$_SESSION_ID" 2>/dev/null &
 fi
@@ -828,10 +837,8 @@ Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXI
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/goldband/browse/dist/browse" ] && B="$_ROOT/.claude/skills/goldband/browse/dist/browse"
-[ -z "$B" ] && B="$HOME/.claude/skills/goldband/browse/dist/browse"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+B="$GOLDBAND_BROWSE/browse"
 if [ -x "$B" ]; then
   echo "READY: $B"
 else
@@ -876,7 +883,8 @@ You are a **YC office hours partner**. Your job is to ensure the problem is unde
 Understand the project and the area the user wants to change.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 ```
 
 1. Read `CLAUDE.md`, `TODOS.md` (if they exist).
@@ -894,12 +902,13 @@ eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
 Search for relevant learnings from previous sessions:
 
 ```bash
-_CROSS_PROJ=$(~/.claude/skills/goldband/bin/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_CROSS_PROJ=$($GOLDBAND_BIN/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
 if [ "$_CROSS_PROJ" = "true" ]; then
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --cross-project 2>/dev/null || true
+  $GOLDBAND_BIN/goldband-learnings-search --limit 10 --cross-project 2>/dev/null || true
 else
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 2>/dev/null || true
+  $GOLDBAND_BIN/goldband-learnings-search --limit 10 2>/dev/null || true
 fi
 ```
 
@@ -914,8 +923,8 @@ Options:
 - A) Enable cross-project learnings (recommended)
 - B) Keep learnings project-scoped only
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings true`
-If B: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings false`
+If A: run `$GOLDBAND_BIN/goldband-config set cross_project_learnings true`
+If B: run `$GOLDBAND_BIN/goldband-config set cross_project_learnings false`
 
 Then re-run the search with the appropriate flag.
 
@@ -1385,10 +1394,8 @@ Emit ONE AskUserQuestion that lists every alternative (A/B and optionally C) as 
 ## Visual Design Exploration
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-D=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/goldband/design/dist/design" ] && D="$_ROOT/.claude/skills/goldband/design/dist/design"
-[ -z "$D" ] && D="$HOME/.claude/skills/goldband/design/dist/design"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+D="$GOLDBAND_DESIGN/design"
 [ -x "$D" ] && echo "DESIGN_READY" || echo "DESIGN_NOT_AVAILABLE"
 ```
 
@@ -1402,7 +1409,8 @@ Generating visual mockups of the proposed design... (say "skip" if you don't nee
 **Step 1: Set up the design directory**
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _DESIGN_DIR="$HOME/.goldband/projects/$SLUG/designs/mockup-$(date +%Y%m%d)"
 mkdir -p "$_DESIGN_DIR"
 echo "DESIGN_DIR: $_DESIGN_DIR"
@@ -1584,7 +1592,8 @@ Append one JSON line with these fields (substitute actual values from this sessi
 - `topics`: array of 2-3 topic keywords that describe what this session was about
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-developer-profile --log-session '{"date":"TIMESTAMP","mode":"MODE","project_slug":"SLUG","signal_count":N,"signals":SIGNALS_ARRAY,"design_doc":"DOC_PATH","assignment":"ASSIGNMENT_TEXT","resources_shown":[],"topics":TOPICS_ARRAY}' 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-developer-profile --log-session '{"date":"TIMESTAMP","mode":"MODE","project_slug":"SLUG","signal_count":N,"signals":SIGNALS_ARRAY,"design_doc":"DOC_PATH","assignment":"ASSIGNMENT_TEXT","resources_shown":[],"topics":TOPICS_ARRAY}' 2>/dev/null || true
 ```
 
 The session entry is appended to `developer-profile.json`'s `sessions[]` array. A second
@@ -1598,7 +1607,8 @@ selection in Phase 6 Beat 3.5.
 Write the design document to the project directory.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 ```
@@ -1815,7 +1825,8 @@ over time.
 ### Step 1: Read Builder Profile
 
 ```bash
-PROFILE=$(~/.claude/skills/goldband/bin/goldband-builder-profile 2>/dev/null) || PROFILE="SESSION_COUNT: 0
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+PROFILE=$($GOLDBAND_BIN/goldband-builder-profile 2>/dev/null) || PROFILE="SESSION_COUNT: 0
 TIER: introduction"
 SESSION_TIER=$(echo "$PROFILE" | grep "^TIER:" | awk '{print $2}')
 SESSION_COUNT=$(echo "$PROFILE" | grep "^SESSION_COUNT:" | awk '{print $2}')
@@ -1939,7 +1950,8 @@ This must feel earned, not broadcast. If the evidence doesn't support it, skip e
 with a narrative arc (not a data table). The arc tells the STORY of their journey in
 second person, referencing specific things they said across sessions. Then open it:
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-paths)"
 open "$GOLDBAND_STATE_ROOT/builder-journey.md"
 ```
 
@@ -2042,8 +2054,9 @@ PAUL GRAHAM ESSAYS:
 1. Log the selected resource URLs to the builder profile (single source of truth).
 Append a resource-tracking entry:
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null || true)"
-~/.claude/skills/goldband/bin/goldband-developer-profile --log-session '{"date":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","mode":"resources","project_slug":"'"${SLUG:-unknown}"'","signal_count":0,"signals":[],"design_doc":"","assignment":"","resources_shown":["URL1","URL2","URL3"],"topics":[]}' 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null || true)"
+$GOLDBAND_BIN/goldband-developer-profile --log-session '{"date":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","mode":"resources","project_slug":"'"${SLUG:-unknown}"'","signal_count":0,"signals":[],"design_doc":"","assignment":"","resources_shown":["URL1","URL2","URL3"],"topics":[]}' 2>/dev/null || true
 ```
 
 2. Log the selection to analytics:
@@ -2086,7 +2099,8 @@ insight during this session, you may log it for future sessions in addition to
 the required `Knowledge candidate` final-report field:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"office-hours","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-log '{"skill":"office-hours","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`
@@ -2109,7 +2123,8 @@ For high-value, verified material that may graduate into a skill or rule, captur
 a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
 Use `problem-solution` for a pitfall with a known fix, `decision` for an

@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Durable transaction context for sibling-shell upgrade workflow blocks.
+set -euo pipefail
+
+command_name="${1:-}"
+
+fail() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+if [ -n "${GOLDBAND_HOME:-}" ]; then
+  state_root="$GOLDBAND_HOME"
+elif [ -n "${HOME:-}" ]; then
+  state_root="$HOME/.goldband"
+else
+  fail "HOME or GOLDBAND_HOME is required for upgrade transaction state"
+fi
+context_file="$state_root/upgrade-context"
+
+require_runtime_contract() {
+  [ -n "${GOLDBAND_GLOBAL_ROOT:-}" ] || fail "run goldband-env before goldband-upgrade-context"
+  [ -n "${GOLDBAND_BIN:-}" ] || fail "GOLDBAND_BIN is unavailable"
+}
+
+detect_install() {
+  if [ -d "$GOLDBAND_GLOBAL_ROOT/.git" ]; then
+    INSTALL_TYPE="global-git"
+    INSTALL_DIR="$GOLDBAND_GLOBAL_ROOT"
+  elif [ -d "${HOME:-}/.goldband/repos/goldband/.git" ]; then
+    INSTALL_TYPE="global-git"
+    INSTALL_DIR="${HOME:-}/.goldband/repos/goldband"
+  elif [ -n "${GOLDBAND_LOCAL_ROOT:-}" ] && [ -d "$GOLDBAND_LOCAL_ROOT/.git" ]; then
+    INSTALL_TYPE="local-git"
+    INSTALL_DIR="$GOLDBAND_LOCAL_ROOT"
+  elif [ -n "${GOLDBAND_LOCAL_ROOT:-}" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ]; then
+    INSTALL_TYPE="vendored"
+    INSTALL_DIR="$GOLDBAND_LOCAL_ROOT"
+  elif [ -d "$GOLDBAND_GLOBAL_ROOT" ]; then
+    INSTALL_TYPE="vendored-global"
+    INSTALL_DIR="$GOLDBAND_GLOBAL_ROOT"
+  else
+    fail "goldband install not found"
+  fi
+}
+
+emit_context() {
+  printf 'INSTALL_TYPE=%q\nINSTALL_DIR=%q\nOLD_VERSION=%q\n' \
+    "$INSTALL_TYPE" "$INSTALL_DIR" "$OLD_VERSION"
+}
+
+load_context() {
+  [ -f "$context_file" ] && [ ! -L "$context_file" ] || \
+    fail "upgrade context is missing; run the detection step again"
+  IFS= read -r INSTALL_TYPE < "$context_file" || fail "invalid upgrade context"
+  IFS= read -r INSTALL_DIR < <(sed -n '2p' "$context_file") || fail "invalid upgrade context"
+  IFS= read -r OLD_VERSION < <(sed -n '3p' "$context_file") || fail "invalid upgrade context"
+  [ -n "$INSTALL_TYPE" ] && [ -n "$INSTALL_DIR" ] && [ -n "$OLD_VERSION" ] || \
+    fail "incomplete upgrade context"
+}
+
+emit_local_context() {
+  LOCAL_GOLDBAND=""
+  if [ -n "${GOLDBAND_LOCAL_ROOT:-}" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ]; then
+    resolved_local=$(cd "$GOLDBAND_LOCAL_ROOT" && pwd -P)
+    resolved_primary=$(cd "$INSTALL_DIR" && pwd -P)
+    if [ "$resolved_local" != "$resolved_primary" ]; then
+      LOCAL_GOLDBAND="$GOLDBAND_LOCAL_ROOT"
+    fi
+  fi
+  TEAM_MODE=$("$GOLDBAND_BIN/goldband-config" get team_mode 2>/dev/null || echo "false")
+  emit_context
+  printf 'LOCAL_GOLDBAND=%q\nTEAM_MODE=%q\n' "$LOCAL_GOLDBAND" "$TEAM_MODE"
+}
+
+require_runtime_contract
+case "$command_name" in
+  start)
+    detect_install
+    OLD_VERSION=$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")
+    mkdir -p "$state_root"
+    umask 077
+    tmp_file=$(mktemp "$state_root/upgrade-context.XXXXXX")
+    printf '%s\n%s\n%s\n' "$INSTALL_TYPE" "$INSTALL_DIR" "$OLD_VERSION" > "$tmp_file"
+    mv "$tmp_file" "$context_file"
+    emit_context
+    ;;
+  load)
+    load_context
+    emit_context
+    ;;
+  local)
+    load_context
+    emit_local_context
+    ;;
+  clear)
+    rm -f "$context_file"
+    ;;
+  *)
+    fail "usage: goldband-upgrade-context <start|load|local|clear>"
+    ;;
+esac

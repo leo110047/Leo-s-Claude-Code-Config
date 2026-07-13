@@ -6,9 +6,17 @@ import { evidencePath, stateRoot } from './evidence';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
+  prepareSpecialistReview,
   runParallelSpecialistReview,
   unwrapFindings,
+  type PreparedSpecialistReview,
 } from './review-engine';
+import {
+  buildReviewPromptTelemetry,
+  createReviewRulesSnapshot,
+  coreReviewRules,
+  type RulesBundle,
+} from './review-rules';
 import { findingsSchema, normalizeFindings, textSchema } from './schema';
 import type {
   EvaluationSignalSnapshot,
@@ -89,15 +97,36 @@ function collectDiff(ctx: WorkflowContext): DiffOutput {
 async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   const input = diffSchema.validate(ctx.input);
   const adapter = adapterFor(reviewHost(ctx));
-  const prompt = buildReviewPrompt(ctx, input.diff);
-  const result = await adapter.runJson(prompt, findingsEnvelopeJsonSchema);
+  const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
+  const coreRules = coreReviewRules(ctx.cwd, input.diff, rulesSnapshot);
+  const prompt = buildReviewPrompt(ctx, input.diff, coreRules);
+  const specialistMode = ctx.options.specialists ?? 'auto';
+  const specialistReview = prepareSpecialistReview(
+    ctx,
+    input.diff,
+    specialistMode,
+    rulesSnapshot,
+  );
+  recordReviewPromptTelemetry(
+    ctx,
+    adapter.name,
+    prompt,
+    coreRules.bundle,
+    specialistReview,
+  );
+  const result = await adapter.runJson(
+    prompt,
+    findingsEnvelopeJsonSchema,
+    ctx.cwd,
+  );
   const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
   const specialistFindings = await runParallelSpecialistReview(
     ctx,
     adapter,
     input.diff,
     findingsEnvelopeJsonSchema,
-    ctx.options.specialists ?? 'auto',
+    specialistMode,
+    specialistReview,
   );
   return aggregateReviewFindings([...coreFindings, ...specialistFindings]);
 }
@@ -107,17 +136,14 @@ function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
 }
 
 function verifyFindings(ctx: WorkflowContext): ReviewFinding[] {
-  return aggregateReviewFindings(findingsSchema.validate(ctx.input).map((finding) => {
-    if (finding.severity !== 'critical' && finding.severity !== 'high') return finding;
-    if (finding.evidence) return finding;
-    return downgradeUnverifiedFinding(finding);
-  }));
+  return aggregateReviewFindings(findingsSchema.validate(ctx.input))
+    .filter((finding) => isRuntimeDiagnostic(finding) || hasConcreteFailurePath(finding));
 }
 
 function renderReport(ctx: WorkflowContext): string {
   const findings = findingsSchema.validate(ctx.input);
   const lines = [
-    '# goldband-review runtime report',
+    '# review/code runtime report',
     '',
     'Read-only review: no files were modified.',
     '',
@@ -127,19 +153,12 @@ function renderReport(ctx: WorkflowContext): string {
   } else {
     for (const finding of findings) {
       const loc = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-      const mode = finding.blocking ? 'blocking' : 'advisory';
-      const category = finding.category ? ` ${finding.category}` : '';
-      const specialists = finding.contributingSpecialists?.length
-        ? ` specialists=${finding.contributingSpecialists.join(',')}`
-        : finding.specialist
-          ? ` specialist=${finding.specialist}`
-          : '';
-      lines.push(`- [${finding.severity}/${mode}${category}] ${loc} - ${finding.summary}${specialists}`);
+      lines.push(`- [${finding.severity}] ${finding.summary} — ${loc}`);
       if (finding.evidence) lines.push(`  Evidence: ${finding.evidence}`);
-      if (finding.failureScenario) lines.push(`  Failure scenario: ${finding.failureScenario}`);
-      if (finding.recommendation) lines.push(`  Recommendation: ${finding.recommendation}`);
+      if (finding.failureScenario) lines.push(`  Trigger: ${finding.failureScenario}`);
+      if (finding.recommendation) lines.push(`  Fix: ${finding.recommendation}`);
       if (finding.suggestedVerification) {
-        lines.push(`  Suggested verification: ${finding.suggestedVerification}`);
+        lines.push(`  Verify: ${finding.suggestedVerification}`);
       }
     }
   }
@@ -168,11 +187,31 @@ function collectTrackedDiff(ctx: WorkflowContext): DiffOutput {
 
 function diffArgSets(ctx: WorkflowContext): string[][] {
   if (ctx.options.staged) return [['diff', '--staged']];
-  if (ctx.options.base) return [['diff', `${ctx.options.base}...HEAD`]];
-  if (ctx.options.worktree) {
-    return hasHead(ctx.cwd) ? [['diff', 'HEAD']] : [['diff', '--cached'], ['diff']];
+  if (ctx.options.base && ctx.options.worktree) {
+    return [['diff', mergeBase(ctx.cwd, ctx.options.base)]];
   }
-  return [['diff']];
+  const argSets: string[][] = [];
+  if (ctx.options.base) argSets.push(['diff', `${ctx.options.base}...HEAD`]);
+  if (ctx.options.worktree) {
+    argSets.push(
+      ...(hasHead(ctx.cwd)
+        ? [['diff', 'HEAD']]
+        : [['diff', '--cached'], ['diff']]),
+    );
+  }
+  return argSets.length > 0 ? argSets : [['diff']];
+}
+
+function mergeBase(cwd: string, base: string): string {
+  const result = spawnSync('git', ['merge-base', base, 'HEAD'], {
+    cwd,
+    encoding: 'utf8',
+  });
+  const commit = result.stdout.trim();
+  if (result.status !== 0 || !commit) {
+    throw new Error(result.stderr || `git merge-base failed for ${base}`);
+  }
+  return commit;
 }
 
 function hasHead(cwd: string): boolean {
@@ -244,7 +283,7 @@ function skippedUntrackedFileDiff(rel: string, reason: string): string {
     '--- /dev/null',
     `+++ b/${rel}`,
     '@@ -0,0 +1,1 @@',
-    `+[[goldband-review skipped untracked file: ${reason}]]`,
+    `+[[review/code skipped untracked file: ${reason}]]`,
   ].join('\n');
 }
 
@@ -278,14 +317,12 @@ function detectSecretLikeContent(text: string): string | null {
   return null;
 }
 
-function downgradeUnverifiedFinding(finding: ReviewFinding): ReviewFinding {
-  return {
-    ...finding,
-    severity: 'info',
-    summary: `[unverified ${finding.severity}] ${finding.summary}`,
-    evidence: 'High-severity finding lacked concrete diff evidence during runtime verification.',
-    blocking: false,
-  };
+function hasConcreteFailurePath(finding: ReviewFinding): boolean {
+  return Boolean(finding.line && finding.evidence && finding.failureScenario);
+}
+
+function isRuntimeDiagnostic(finding: ReviewFinding): boolean {
+  return finding.category === 'host-capability' || finding.category === 'specialist-runtime';
 }
 
 function reviewHost(ctx: WorkflowContext): 'mock' | 'claude' | 'codex' {
@@ -294,7 +331,11 @@ function reviewHost(ctx: WorkflowContext): 'mock' | 'claude' | 'codex' {
   throw new Error('--mode real requires --host claude or --host codex');
 }
 
-function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
+export function buildReviewPrompt(
+  ctx: WorkflowContext,
+  diff: string,
+  rules = coreReviewRules(ctx.cwd, diff),
+): string {
   const template = readFileSync(workflowAssetPath(ctx.workflow.sourceTemplate), 'utf8');
   const label = workflowLabelFromTemplate(template);
   return [
@@ -302,14 +343,41 @@ function buildReviewPrompt(ctx: WorkflowContext, diff: string): string {
     reviewIterationPromptContext(ctx),
     readReviewAsset('shared-rubric.md'),
     readReviewAsset('findings-schema.md'),
+    readReviewAsset('checklist.md'),
+    'APPLICABLE_GOLDBAND_RULES_START',
+    rules.text,
+    'APPLICABLE_GOLDBAND_RULES_END',
     'Return only JSON matching the provided findings schema.',
     'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
-    'Review this diff for concrete, evidence-backed issues.',
-    'Every finding needs evidence, failureScenario, recommendation, and suggestedVerification.',
+    'Use the diff to define scope. Inspect the read-only repository outside the diff when needed to verify wiring, authoritative ownership, consumers, registrations, and dead code.',
+    'Only report a finding when you can name an exact file and line, a concrete input or runtime state with a reachable execution path, and the incorrect result plus practical impact.',
+    'Do not report style preferences, generic best practices, speculative risks, or test gaps without a demonstrated behavioral defect.',
     'DIFF_START',
     diff,
     'DIFF_END',
   ].join('\n');
+}
+
+function recordReviewPromptTelemetry(
+  ctx: WorkflowContext,
+  host: string,
+  corePrompt: string,
+  coreBundle: RulesBundle,
+  specialistReview: PreparedSpecialistReview,
+): void {
+  const telemetry = buildReviewPromptTelemetry({
+    host,
+    corePrompt,
+    coreBundle,
+    specialistPrompts: specialistReview.items,
+    selectedSpecialists: specialistReview.selection.selected,
+  });
+  const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
+  mkdirSync(dir, { recursive: true });
+  const iteration = ctx.iterationContext?.iteration;
+  const suffix = iteration ? `-iteration-${iteration}` : '';
+  const file = join(dir, `${ctx.runId}-review-prompt${suffix}.json`);
+  writeFileSync(file, `${JSON.stringify(telemetry, null, 2)}\n`);
 }
 
 function readReviewAsset(name: string): string {
@@ -415,6 +483,8 @@ const findingsJsonSchema = {
       evidence: { type: ['string', 'null'] },
       recommendation: { type: ['string', 'null'] },
       category: { type: ['string', 'null'] },
+      ruleId: { type: ['string', 'null'] },
+      policySource: { type: ['string', 'null'] },
       failureScenario: { type: ['string', 'null'] },
       suggestedVerification: { type: ['string', 'null'] },
       blocking: { type: ['boolean', 'null'] },
@@ -432,6 +502,8 @@ const findingsJsonSchema = {
       'evidence',
       'recommendation',
       'category',
+      'ruleId',
+      'policySource',
       'failureScenario',
       'suggestedVerification',
       'blocking',

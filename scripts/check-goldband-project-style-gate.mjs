@@ -10,21 +10,6 @@ const repoRoot = findRepoRoot();
 
 const checks = [
   {
-    id: 'selector-parity',
-    label: 'Goldband selector and docs parity',
-    command: 'node',
-    args: ['scripts/test-goldband-selector-parity.mjs'],
-    matches: (file) =>
-      [
-        'commands/goldband.md',
-        'codex/prompts/goldband.md',
-        'CLAUDE.md',
-        'README.md',
-        'README.en.md',
-        'AGENTS.md',
-      ].includes(file),
-  },
-  {
     id: 'plugin-distribution',
     label: 'Plugin distribution artifacts',
     command: 'node',

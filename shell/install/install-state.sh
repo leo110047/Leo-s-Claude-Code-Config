@@ -30,9 +30,6 @@ normalize_install_target() {
         all|pack-quality)
             printf '%s\n' skills-dev claude-guidance commands rules hooks launchers
             ;;
-        pack-unity)
-            printf '%s\n' skills-dev claude-guidance commands rules hooks launchers
-            ;;
         all-full)
             printf '%s\n' skills-full claude-guidance commands rules hooks launchers
             ;;
@@ -305,6 +302,7 @@ detect_installed_refresh_targets() {
     repo_path_installed_from "$REPO_DIR/codex/prompts/goldband.md" "$CODEX_GOLDBAND_PROMPT_FILE" && targets+=("codex-prompts")
     repo_path_installed_from "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" && targets+=("codex-hooks")
     repo_path_installed_from "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" && targets+=("codex-hooks")
+    repo_path_installed_from "$REPO_DIR/hooks/scripts/lib/rules-resolver.js" "$CODEX_REVIEW_RUNTIME_FILE" && targets+=("codex-hooks")
     [ -f "$CODEX_RULES_DIR/goldband.rules" ] && targets+=("codex-rules")
     [ -f "$CODEX_SKILL_PROFILE_FILE" ] && targets+=("codex-skills")
 

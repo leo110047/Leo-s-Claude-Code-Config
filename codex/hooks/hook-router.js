@@ -4,16 +4,30 @@ const MAX_STDIN_BYTES = 1024 * 1024;
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { requireFirst } = require('./module-loader');
 const {
   classifyHighRiskToolUse,
   findHighRiskBash,
   findHighRiskPatch,
 } = require('./high-risk-policy');
 const { dataRoot, recordHookTelemetry } = require('./telemetry');
-const {
-  armFromPrompt,
-  evaluateCrossReviewGate,
-} = require('../../hooks/scripts/lib/hook-router/cross-review-gate');
+function loadCrossReviewGate() {
+  return requireFirst([
+    path.resolve(
+      __dirname,
+      '..',
+      '..',
+      'hooks',
+      'scripts',
+      'lib',
+      'hook-router',
+      'cross-review-gate.js',
+    ),
+    path.resolve(__dirname, 'cross-review-gate.js'),
+  ]);
+}
+
+const { armFromPrompt, evaluateCrossReviewGate } = loadCrossReviewGate();
 
 const ADVISORY_SECRET_PATTERNS = [
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
@@ -23,35 +37,41 @@ const ADVISORY_SECRET_PATTERNS = [
 const DEFAULT_DEDUPE_RETENTION_DAYS = 30;
 const CODEX_STOP_BLOCK_EXIT_CODE = 2;
 
-const WORKFLOW_HINTS = [
-  {
-    name: 'review',
-    pattern: /\b(code\s*review|review|pr\s*review)\b|審查|檢查/i,
-    message:
-      'For full code review, run the Goldband review workflow via $goldband review when installed. Use bounded reviewer agents only as a second pass.',
-  },
-  {
-    name: 'debug',
-    pattern:
-      /\b(debug|bug|error|failure|failing|failed|root cause|regression)\b|除錯|錯誤|失敗|異常|根因/i,
-    message:
-      'For bugs or failing commands, capture the exact failure first and run the Goldband investigate workflow via $goldband investigate when installed before fixing.',
-  },
-  {
-    name: 'security',
-    pattern:
-      /\b(security|secret|token|credential|auth|permission|cve|vulnerability)\b|安全|權限|憑證|密鑰|漏洞/i,
-    message:
-      'For security-sensitive work, run the Goldband cso workflow via $goldband cso when installed or use the security checklist before changing behavior.',
-  },
-  {
-    name: 'planning',
-    pattern:
-      /\b(plan|planning|proposal|roadmap|architecture|design)\b|計畫|規劃|拆解|架構/i,
-    message:
-      'For multi-file or risky planning, prefer /plan and run the Goldband plan-eng-review workflow via $goldband plan-eng-review when installed before implementation.',
-  },
-];
+let workflowHints;
+
+function loadWorkflowHints() {
+  if (!workflowHints) {
+    workflowHints = require('./capability-routing.generated.json');
+  }
+  return workflowHints;
+}
+
+function workflowTriggerMatches(prompt, trigger) {
+  const normalizedPrompt = String(prompt || '').toLowerCase();
+  const normalizedTrigger = String(trigger || '')
+    .trim()
+    .toLowerCase();
+  if (!normalizedTrigger) return false;
+
+  if (!/^[a-z0-9]+(?:[\s-]+[a-z0-9]+)*$/.test(normalizedTrigger)) {
+    return normalizedPrompt.includes(normalizedTrigger);
+  }
+
+  const escaped = normalizedTrigger
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('\\s+');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`).test(
+    normalizedPrompt,
+  );
+}
+
+function hasExplicitWorkflowInvocation(prompt) {
+  return (
+    /\$goldband\s+[a-z][a-z0-9-]*\s+[a-z][a-z0-9-]*/i.test(prompt) ||
+    /(?:^|\s)\/plan\b/i.test(prompt)
+  );
+}
 
 function readStdinRaw() {
   return new Promise((resolve) => {
@@ -76,7 +96,8 @@ function parseInput(raw) {
 }
 
 function writeJson(value) {
-  process.stdout.write(JSON.stringify(value));
+  const { internalTelemetry: _internalTelemetry, ...publicValue } = value || {};
+  process.stdout.write(JSON.stringify(publicValue));
 }
 
 function buildAdditionalContextOutput(hookEventName, additionalContext) {
@@ -88,35 +109,40 @@ function buildAdditionalContextOutput(hookEventName, additionalContext) {
   };
 }
 
-function buildSystemMessageOutput(message) {
-  return { systemMessage: message };
-}
-
 function buildStopBlockOutput(
   message,
   telemetryName = 'cross-review-required',
+  systemMessage = null,
 ) {
   return {
     hookSpecificOutput: {
       hookEventName: 'Stop',
-      telemetryName,
       decision: {
         behavior: 'deny',
         message,
       },
     },
+    internalTelemetry: { name: telemetryName },
+    ...(systemMessage ? { systemMessage } : {}),
     codexExitCode: CODEX_STOP_BLOCK_EXIT_CODE,
     stderr: message,
   };
 }
 
-function buildPreToolUseDeny(reason, telemetryName = null) {
+function buildPreToolUseDeny(
+  reason,
+  telemetryName = null,
+  internalTelemetry = null,
+) {
   return {
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
       permissionDecision: 'deny',
       permissionDecisionReason: reason,
-      telemetryName,
+    },
+    internalTelemetry: {
+      ...(internalTelemetry || {}),
+      name: telemetryName,
     },
   };
 }
@@ -125,12 +151,12 @@ function buildPermissionRequestDeny(reason, telemetryName = null) {
   return {
     hookSpecificOutput: {
       hookEventName: 'PermissionRequest',
-      telemetryName,
       decision: {
         behavior: 'deny',
         message: reason,
       },
     },
+    internalTelemetry: { name: telemetryName },
   };
 }
 
@@ -138,12 +164,8 @@ function resultAdditionalContext(hookEventName, additionalContext) {
   return buildAdditionalContextOutput(hookEventName, additionalContext);
 }
 
-function resultSystemMessage(message) {
-  return buildSystemMessageOutput(message);
-}
-
-function resultStopBlock(message, telemetryName) {
-  return buildStopBlockOutput(message, telemetryName);
+function resultStopBlock(message, telemetryName, systemMessage) {
+  return buildStopBlockOutput(message, telemetryName, systemMessage);
 }
 
 function resultPreToolUseDeny(decision) {
@@ -330,28 +352,12 @@ function runStyleGateAdvisory(files) {
   }
 }
 
-function evaluateSubagentStopResult(input) {
-  const message = input.last_assistant_message || '';
-  if (hasCompletionClaim(message) && !hasEvidence(message)) {
-    return resultSystemMessage(
-      'Subagent output claims completion without concrete evidence. Treat it as unverified until checked in the parent session.',
-    );
-  }
-  return null;
-}
-
 function evaluateStopResult(input) {
   const gateResult = evaluateCrossReviewGate(input);
   if (gateResult.decision === 'block') {
     return resultStopBlock(gateResult.logs.join('\n'), gateResult.blockedBy);
   }
 
-  const message = input.last_assistant_message || '';
-  if (hasCompletionClaim(message) && !hasEvidence(message)) {
-    return resultSystemMessage(
-      'The response appears to claim completion without concrete evidence. Re-check files or commands before relying on it.',
-    );
-  }
   return null;
 }
 
@@ -361,38 +367,45 @@ function evaluateLifecycleResult(input) {
     if (!markOnce(input, 'session-start-context-restore-hint')) return null;
     return resultAdditionalContext(
       'SessionStart',
-      'For resumed or context-sensitive work, run the Goldband context-restore workflow via $goldband context-restore when installed before editing.',
+      'For resumed or context-sensitive work, run the Goldband context restore workflow via $goldband context restore when installed before editing.',
     );
   }
   if (eventName === 'Stop') {
     return evaluateStopResult(input);
   }
-
   return null;
 }
 
 function evaluateUserPromptSubmitResult(input) {
   const prompt = input.prompt || '';
   const crossReviewContract = armCrossReviewIfRequested(input);
-  if (/\/goldband-|\/plan\b/.test(prompt)) {
-    return crossReviewContract
-      ? resultAdditionalContext(
-          'UserPromptSubmit',
-          formatCrossReviewArmMessage(crossReviewContract),
-        )
+  const messages = [];
+
+  if (hasExplicitWorkflowInvocation(prompt)) {
+    if (crossReviewContract) {
+      messages.push(formatCrossReviewArmMessage(crossReviewContract));
+    }
+    return messages.length > 0
+      ? resultAdditionalContext('UserPromptSubmit', messages.join('\n\n'))
       : null;
   }
 
-  const messages = WORKFLOW_HINTS.filter((hint) =>
-    hint.pattern.test(prompt),
-  ).map((hint) => hint.message);
+  messages.push(
+    ...loadWorkflowHints()
+      .filter((hint) =>
+        hint.triggers.some((trigger) =>
+          workflowTriggerMatches(prompt, trigger),
+        ),
+      )
+      .map((hint) => hint.message),
+  );
 
   if (crossReviewContract) {
     messages.unshift(formatCrossReviewArmMessage(crossReviewContract));
   }
 
   if (messages.length === 0) return null;
-  return resultAdditionalContext('UserPromptSubmit', messages.join(' '));
+  return resultAdditionalContext('UserPromptSubmit', messages.join('\n\n'));
 }
 
 function armCrossReviewIfRequested(input) {
@@ -422,7 +435,6 @@ function evaluatePreToolUseResult(input) {
   if (decision) {
     return resultPreToolUseDeny(decision);
   }
-
   const command = input.tool_input?.command || '';
   const toolName = input.tool_name || '';
   const contexts = [];
@@ -464,7 +476,6 @@ function evaluateInput(input) {
   if (eventName === 'PermissionRequest')
     return evaluatePermissionRequestResult(input);
   if (eventName === 'PostToolUse') return evaluatePostToolUseResult(input);
-  if (eventName === 'SubagentStop') return evaluateSubagentStopResult(input);
   return evaluateLifecycleResult(input);
 }
 
@@ -479,26 +490,6 @@ function isProbablyMutatingMcp(toolName) {
       toolName,
     )
   );
-}
-
-function hasCompletionClaim(message) {
-  return /\b(done|complete|completed|fixed|implemented|finished|resolved|all set|verified)\b|已完成|修好|處理好了/i.test(
-    message || '',
-  );
-}
-
-function hasEvidence(message) {
-  const text = String(message || '');
-  const evidencePatterns = [
-    /\b(?:npm|pnpm|yarn|bun|node|python3?|bash|sh|git|cargo|go|pytest|vitest|jest|tsc|eslint|ruff)\s+[^\n.]+/i,
-    /\b(?:passed|failed|exit code|exit status)\b/i,
-    /\b\d+\s+(?:passing|passed|failing|failed|tests?)\b/i,
-    /\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+(?::\d+)?\b/,
-    /\b[A-Za-z0-9_.-]+\.(?:js|jsx|ts|tsx|py|md|json|toml|yaml|yml|sh|mjs|cjs)(?::\d+)?\b/,
-    /\bgit\s+(?:diff|status|show|log)\b/i,
-    /測試\s*(?:通過|失敗)|驗證\s*(?:通過|失敗)|指令[:：]|檔案[:：]|路徑[:：]/,
-  ];
-  return evidencePatterns.some((pattern) => pattern.test(text));
 }
 
 async function main() {
@@ -523,6 +514,4 @@ module.exports = {
   evaluateInput,
   findHighRiskBash,
   findHighRiskPatch,
-  hasCompletionClaim,
-  hasEvidence,
 };

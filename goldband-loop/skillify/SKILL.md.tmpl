@@ -211,7 +211,7 @@ Resolve the goldband install dir. Two reliable signals (in order):
    `$B skill list` (the `bundled` row). The skill dir is
    `<goldband-install>/browser-skills/hackernews-frontpage/`, so the install
    dir is two `dirname` calls above its `_lib/browse-client.ts`.
-2. The active goldband skills install at `~/.claude/skills/goldband/`. Read
+2. The active goldband skills install at `$GOLDBAND_ROOT/`. Read
    the symlink target if it's a symlink, otherwise use the path directly.
 
 Example (run as Bun, not bash, to avoid shell-redirect parsing issues):

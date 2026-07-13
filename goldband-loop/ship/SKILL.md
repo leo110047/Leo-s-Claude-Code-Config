@@ -30,35 +30,36 @@ triggers:
 ## Preamble (run first)
 
 ```bash
-_UPD=$(~/.claude/skills/goldband/bin/goldband-update-check 2>/dev/null || .claude/skills/goldband/bin/goldband-update-check 2>/dev/null || true)
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPD=$($GOLDBAND_BIN/goldband-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.goldband/sessions
 touch ~/.goldband/sessions/"$PPID"
 _SESSIONS=$(find ~/.goldband/sessions -mmin -120 -type f 2>/dev/null | wc -l | tr -d ' ')
 find ~/.goldband/sessions -mmin +120 -type f -exec rm {} + 2>/dev/null || true
-_PROACTIVE=$(~/.claude/skills/goldband/bin/goldband-config get proactive 2>/dev/null || echo "true")
+_PROACTIVE=$($GOLDBAND_BIN/goldband-config get proactive 2>/dev/null || echo "true")
 _PROACTIVE_PROMPTED=$([ -f ~/.goldband/.proactive-prompted ] && echo "yes" || echo "no")
 _BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 echo "BRANCH: $_BRANCH"
-_SKILL_PREFIX=$(~/.claude/skills/goldband/bin/goldband-config get skill_prefix 2>/dev/null || echo "false")
+_SKILL_PREFIX=$($GOLDBAND_BIN/goldband-config get skill_prefix 2>/dev/null || echo "false")
 echo "PROACTIVE: $_PROACTIVE"
 echo "PROACTIVE_PROMPTED: $_PROACTIVE_PROMPTED"
 echo "SKILL_PREFIX: $_SKILL_PREFIX"
-source <(~/.claude/skills/goldband/bin/goldband-repo-mode 2>/dev/null) || true
+source <($GOLDBAND_BIN/goldband-repo-mode 2>/dev/null) || true
 REPO_MODE=${REPO_MODE:-unknown}
 echo "REPO_MODE: $REPO_MODE"
 _LAKE_SEEN=$([ -f ~/.goldband/.completeness-intro-seen ] && echo "yes" || echo "no")
 echo "LAKE_INTRO: $_LAKE_SEEN"
-_TEL=$(~/.claude/skills/goldband/bin/goldband-config get telemetry 2>/dev/null || true)
+_TEL=$($GOLDBAND_BIN/goldband-config get telemetry 2>/dev/null || true)
 _TEL_PROMPTED=$([ -f ~/.goldband/.telemetry-prompted ] && echo "yes" || echo "no")
 _TEL_START=$(date +%s)
 _SESSION_ID="$$-$(date +%s)"
 echo "TELEMETRY: ${_TEL:-off}"
 echo "TEL_PROMPTED: $_TEL_PROMPTED"
-_EXPLAIN_LEVEL=$(~/.claude/skills/goldband/bin/goldband-config get explain_level 2>/dev/null || echo "default")
+_EXPLAIN_LEVEL=$($GOLDBAND_BIN/goldband-config get explain_level 2>/dev/null || echo "default")
 if [ "$_EXPLAIN_LEVEL" != "default" ] && [ "$_EXPLAIN_LEVEL" != "terse" ]; then _EXPLAIN_LEVEL="default"; fi
 echo "EXPLAIN_LEVEL: $_EXPLAIN_LEVEL"
-_QUESTION_TUNING=$(~/.claude/skills/goldband/bin/goldband-config get question_tuning 2>/dev/null || echo "false")
+_QUESTION_TUNING=$($GOLDBAND_BIN/goldband-config get question_tuning 2>/dev/null || echo "false")
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.goldband/analytics
 if [ "$_TEL" != "off" ]; then
@@ -66,42 +67,42 @@ echo '{"skill":"ship","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basenam
 fi
 for _PF in $(find ~/.goldband/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
-    if [ "$_TEL" != "off" ] && [ -x "~/.claude/skills/goldband/bin/goldband-telemetry-log" ]; then
-      ~/.claude/skills/goldband/bin/goldband-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true
+    if [ "$_TEL" != "off" ] && [ -x "$GOLDBAND_BIN/goldband-telemetry-log" ]; then
+      $GOLDBAND_BIN/goldband-telemetry-log --event-type skill_run --skill _pending_finalize --outcome unknown --session-id "$_SESSION_ID" 2>/dev/null || true
     fi
     rm -f "$_PF" 2>/dev/null || true
   fi
   break
 done
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" 2>/dev/null || true
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 _LEARN_FILE="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}/learnings.jsonl"
 if [ -f "$_LEARN_FILE" ]; then
   _LEARN_COUNT=$(wc -l < "$_LEARN_FILE" 2>/dev/null | tr -d ' ')
   echo "LEARNINGS: $_LEARN_COUNT entries loaded"
   if [ "$_LEARN_COUNT" -gt 5 ] 2>/dev/null; then
-    ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 3 2>/dev/null || true
+    $GOLDBAND_BIN/goldband-learnings-search --limit 3 2>/dev/null || true
   fi
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/goldband/bin/goldband-timeline-log '{"skill":"ship","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+$GOLDBAND_BIN/goldband-timeline-log '{"skill":"ship","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
 fi
-_ROUTING_DECLINED=$(~/.claude/skills/goldband/bin/goldband-config get routing_declined 2>/dev/null || echo "false")
+_ROUTING_DECLINED=$($GOLDBAND_BIN/goldband-config get routing_declined 2>/dev/null || echo "false")
 echo "HAS_ROUTING: $_HAS_ROUTING"
 echo "ROUTING_DECLINED: $_ROUTING_DECLINED"
 _VENDORED="no"
-if [ -d ".claude/skills/goldband" ] && [ ! -L ".claude/skills/goldband" ]; then
-  if [ -f ".claude/skills/goldband/VERSION" ] || [ -d ".claude/skills/goldband/.git" ]; then
+if [ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && [ ! -L "$GOLDBAND_LOCAL_ROOT" ]; then
+  if [ -f "$GOLDBAND_LOCAL_ROOT/VERSION" ] || [ -d "$GOLDBAND_LOCAL_ROOT/.git" ]; then
     _VENDORED="yes"
   fi
 fi
 echo "VENDORED_GOLDBAND: $_VENDORED"
 echo "MODEL_OVERLAY: claude"
-_CHECKPOINT_MODE=$(~/.claude/skills/goldband/bin/goldband-config get checkpoint_mode 2>/dev/null || echo "explicit")
-_CHECKPOINT_PUSH=$(~/.claude/skills/goldband/bin/goldband-config get checkpoint_push 2>/dev/null || echo "false")
+_CHECKPOINT_MODE=$($GOLDBAND_BIN/goldband-config get checkpoint_mode 2>/dev/null || echo "explicit")
+_CHECKPOINT_PUSH=$($GOLDBAND_BIN/goldband-config get checkpoint_push 2>/dev/null || echo "false")
 echo "CHECKPOINT_MODE: $_CHECKPOINT_MODE"
 echo "CHECKPOINT_PUSH: $_CHECKPOINT_PUSH"
 [ -n "$OPENCLAW_SESSION" ] && echo "SPAWNED_SESSION: true" || true
@@ -117,15 +118,15 @@ If the user invokes a skill in plan mode, the skill takes precedence over generi
 
 If `PROACTIVE` is `"false"`, do not auto-invoke or proactively suggest skills. If a skill seems useful, ask: "I think /skillname might help here — want me to run it?"
 
-If `SKILL_PREFIX` is `"true"`, suggest/invoke `/goldband-*` names. Disk paths stay `~/.claude/skills/goldband/[skill-name]/SKILL.md`.
+If `SKILL_PREFIX` is `"true"`, suggest/invoke `/goldband-*` names. Disk paths stay `$GOLDBAND_ROOT/[skill-name]/SKILL.md`.
 
-If output shows `UPGRADE_AVAILABLE <old> <new>`: read `~/.claude/skills/goldband/goldband-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined).
+If output shows `UPGRADE_AVAILABLE <old> <new>`: read `$GOLDBAND_ROOT/goldband-upgrade/SKILL.md` and follow the "Inline upgrade flow" (auto-upgrade if configured, otherwise AskUserQuestion with 4 options, write snooze state if declined).
 
 If output shows `JUST_UPGRADED <from> <to>`: print "Running goldband v{to} (just updated!)". If `SPAWNED_SESSION` is true, skip feature discovery.
 
 Feature discovery, max one prompt per session:
-- Missing `~/.claude/skills/goldband/.feature-prompted-continuous-checkpoint`: AskUserQuestion for Continuous checkpoint auto-commits. If accepted, run `~/.claude/skills/goldband/bin/goldband-config set checkpoint_mode continuous`. Always touch marker.
-- Missing `~/.claude/skills/goldband/.feature-prompted-model-overlay`: inform "Model overlays are active. MODEL_OVERLAY shows the patch." Always touch marker.
+- Missing `$GOLDBAND_ROOT/.feature-prompted-continuous-checkpoint`: AskUserQuestion for Continuous checkpoint auto-commits. If accepted, run `$GOLDBAND_BIN/goldband-config set checkpoint_mode continuous`. Always touch marker.
+- Missing `$GOLDBAND_ROOT/.feature-prompted-model-overlay`: inform "Model overlays are active. MODEL_OVERLAY shows the patch." Always touch marker.
 
 After upgrade prompts, continue workflow.
 
@@ -138,7 +139,7 @@ Options:
 - B) Restore V0 prose — set `explain_level: terse`
 
 If A: leave `explain_level` unset (defaults to `default`).
-If B: run `~/.claude/skills/goldband/bin/goldband-config set explain_level terse`.
+If B: run `$GOLDBAND_BIN/goldband-config set explain_level terse`.
 
 Always run (regardless of choice):
 ```bash
@@ -164,7 +165,7 @@ Options:
 - A) Help goldband get better! (recommended)
 - B) No thanks
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set telemetry community`
+If A: run `$GOLDBAND_BIN/goldband-config set telemetry community`
 
 If B: ask follow-up:
 
@@ -174,8 +175,8 @@ Options:
 - A) Sure, anonymous is fine
 - B) No thanks, fully off
 
-If B→A: run `~/.claude/skills/goldband/bin/goldband-config set telemetry anonymous`
-If B→B: run `~/.claude/skills/goldband/bin/goldband-config set telemetry off`
+If B→A: run `$GOLDBAND_BIN/goldband-config set telemetry anonymous`
+If B→B: run `$GOLDBAND_BIN/goldband-config set telemetry off`
 
 Always run:
 ```bash
@@ -192,8 +193,8 @@ Options:
 - A) Keep it on (recommended)
 - B) Turn it off — I'll type /commands myself
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set proactive true`
-If B: run `~/.claude/skills/goldband/bin/goldband-config set proactive false`
+If A: run `$GOLDBAND_BIN/goldband-config set proactive true`
+If B: run `$GOLDBAND_BIN/goldband-config set proactive false`
 
 Always run:
 ```bash
@@ -238,13 +239,13 @@ Key routing rules:
 
 Then commit the change: `git add CLAUDE.md && git commit -m "chore: add goldband skill routing rules to CLAUDE.md"`
 
-If B: run `~/.claude/skills/goldband/bin/goldband-config set routing_declined true` and say they can re-enable with `goldband-config set routing_declined false`.
+If B: run `$GOLDBAND_BIN/goldband-config set routing_declined true` and say they can re-enable with `goldband-config set routing_declined false`.
 
 This only happens once per project. Skip if `HAS_ROUTING` is `yes` or `ROUTING_DECLINED` is `true`.
 
 If `VENDORED_GOLDBAND` is `yes`, warn once via AskUserQuestion unless `~/.goldband/.vendoring-warned-$SLUG` exists:
 
-> This project has goldband vendored in `.claude/skills/goldband/`. Vendoring is deprecated.
+> This project has goldband vendored in `$GOLDBAND_LOCAL_REL/`. Vendoring is deprecated.
 > Migrate to team mode?
 
 Options:
@@ -252,17 +253,18 @@ Options:
 - B) No, I'll handle it myself
 
 If A:
-1. Run `git rm -r .claude/skills/goldband/`
-2. Run `echo '.claude/skills/goldband/' >> .gitignore`
-3. Run `~/.claude/skills/goldband/bin/goldband-team-init required` (or `optional`)
-4. Run `git add .claude/ .gitignore CLAUDE.md && git commit -m "chore: migrate goldband from vendored to team mode"`
-5. Tell the user: "Done. Each developer now runs: `cd ~/.claude/skills/goldband && ./setup --team`"
+1. Run `git rm -r "$GOLDBAND_LOCAL_REL/"`
+2. Run `echo "$GOLDBAND_LOCAL_REL/" >> .gitignore`
+3. Run `$GOLDBAND_BIN/goldband-team-init required` (or `optional`)
+4. Run `git add "$GOLDBAND_LOCAL_REL" .gitignore CLAUDE.md AGENTS.md && git commit -m "chore: migrate goldband from vendored to team mode"`
+5. Tell the user: "Done. Each developer now runs: `cd "$GOLDBAND_GLOBAL_ROOT" && ./setup --team`"
 
 If B: say "OK, you're on your own to keep the vendored copy up to date."
 
 Always run (regardless of choice):
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 touch ~/.goldband/.vendoring-warned-${SLUG:-unknown}
 ```
 
@@ -358,6 +360,7 @@ Before calling AskUserQuestion, verify:
 ## Artifacts Sync (skill start)
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 # Prefer the v1.27.0.0 artifacts file; fall back to brain file for users
 # upgrading mid-stream before the migration script runs.
@@ -366,8 +369,8 @@ if [ -f "$HOME/.goldband-artifacts-remote.txt" ]; then
 else
   _BRAIN_REMOTE_FILE="$HOME/.goldband-brain-remote.txt"
 fi
-_BRAIN_SYNC_BIN="~/.claude/skills/goldband/bin/goldband-brain-sync"
-_BRAIN_CONFIG_BIN="~/.claude/skills/goldband/bin/goldband-config"
+_BRAIN_SYNC_BIN="$GOLDBAND_BIN/goldband-brain-sync"
+_BRAIN_CONFIG_BIN="$GOLDBAND_BIN/goldband-config"
 
 # /sync-gbrain context-load: teach the agent to use gbrain when it's available.
 # Per-worktree pin: post-spike redesign uses kubectl-style `.gbrain-source` in the
@@ -476,8 +479,9 @@ If A/B and `~/.goldband/.git` is missing, ask whether to run `goldband-artifacts
 At skill END before telemetry:
 
 ```bash
-"~/.claude/skills/goldband/bin/goldband-brain-sync" --discover-new 2>/dev/null || true
-"~/.claude/skills/goldband/bin/goldband-brain-sync" --once 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+"$GOLDBAND_BIN/goldband-brain-sync" --discover-new 2>/dev/null || true
+"$GOLDBAND_BIN/goldband-brain-sync" --once 2>/dev/null || true
 ```
 
 
@@ -520,7 +524,8 @@ Bad: "I've identified a potential issue in the authentication flow that may caus
 At session start or after compaction, recover recent project context.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _PROJ="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}"
 if [ -d "$_PROJ" ]; then
   echo "--- RECENT ARTIFACTS ---"
@@ -675,11 +680,12 @@ If you are looping on the same diagnostic, same file, or failed fix variants, ST
 
 ## Question Tuning (skip entirely if `QUESTION_TUNING: false`)
 
-Before each AskUserQuestion, choose `question_id` from `scripts/question-registry.ts` or `{skill}-{slug}`, then run `~/.claude/skills/goldband/bin/goldband-question-preference --check "<id>"`. `AUTO_DECIDE` means choose the recommended option and say "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." `ASK_NORMALLY` means ask.
+Before each AskUserQuestion, choose `question_id` from `scripts/question-registry.ts` or `{skill}-{slug}`, then run `$GOLDBAND_BIN/goldband-question-preference --check "<id>"`. `AUTO_DECIDE` means choose the recommended option and say "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." `ASK_NORMALLY` means ask.
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/goldband/bin/goldband-question-log '{"skill":"ship","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-question-log '{"skill":"ship","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -688,7 +694,8 @@ User-origin gate (profile-poisoning defense): write tune events ONLY when `tune:
 
 Write (only after confirmation for free-form):
 ```bash
-~/.claude/skills/goldband/bin/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
 ```
 
 Exit code 2 = rejected as not user-originated; do not retry. On success: "Set `<id>` → `<preference>`. Active immediately."
@@ -703,7 +710,7 @@ Always flag anything that looks wrong — one sentence, what you noticed and its
 
 ## Search Before Building
 
-Before building anything unfamiliar, **search first.** See `~/.claude/skills/goldband/ETHOS.md`.
+Before building anything unfamiliar, **search first.** See `$GOLDBAND_ROOT/ETHOS.md`.
 - **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
 
 **Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
@@ -738,7 +745,7 @@ Knowledge candidate:
   scope: global | project | machine
   evidence: <file/command/report path or workflow evidence id>
   why reusable: <one sentence>
-  capture: ~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "<evidence>" --title "<one-line title>" --type <problem-solution|decision|practice> --domains <domain> --summary "<one-line recall summary>" --confidence N --body-file path/to/sanitized-entry.md
+  capture: $GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "<evidence>" --title "<one-line title>" --type <problem-solution|decision|practice> --domains <domain> --summary "<one-line recall summary>" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
 This is an agent semantic judgment, not runtime keyword matching. Use
@@ -755,7 +762,8 @@ do not promote to active knowledge without explicit review.
 Before completing, if you discovered a durable project quirk or command fix that would save 5+ minutes next time, log it:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
 ```
 
 Do not log obvious facts or one-time transient errors.
@@ -770,18 +778,19 @@ After workflow completion, log telemetry. Use skill `name:` from frontmatter. OU
 Run this bash:
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _TEL_END=$(date +%s)
 _TEL_DUR=$(( _TEL_END - _TEL_START ))
 rm -f ~/.goldband/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
 # Session timeline: record skill completion (local-only, never sent anywhere)
-~/.claude/skills/goldband/bin/goldband-timeline-log '{"skill":"SKILL_NAME","event":"completed","branch":"'$(git branch --show-current 2>/dev/null || echo unknown)'","outcome":"OUTCOME","duration_s":"'"$_TEL_DUR"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+$GOLDBAND_BIN/goldband-timeline-log '{"skill":"SKILL_NAME","event":"completed","branch":"'$(git branch --show-current 2>/dev/null || echo unknown)'","outcome":"OUTCOME","duration_s":"'"$_TEL_DUR"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 # Local analytics (gated on telemetry setting)
 if [ "$_TEL" != "off" ]; then
 echo '{"skill":"SKILL_NAME","duration_s":"'"$_TEL_DUR"'","outcome":"OUTCOME","browse":"USED_BROWSE","session":"'"$_SESSION_ID"'","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' >> ~/.goldband/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 # Remote telemetry (opt-in, requires binary)
-if [ "$_TEL" != "off" ] && [ -x ~/.claude/skills/goldband/bin/goldband-telemetry-log ]; then
-  ~/.claude/skills/goldband/bin/goldband-telemetry-log \
+if [ "$_TEL" != "off" ] && [ -x $GOLDBAND_BIN/goldband-telemetry-log ]; then
+  $GOLDBAND_BIN/goldband-telemetry-log \
     --skill "SKILL_NAME" --duration "$_TEL_DUR" --outcome "OUTCOME" \
     --used-browse "USED_BROWSE" --session-id "$_SESSION_ID" 2>/dev/null &
 fi
@@ -834,61 +843,25 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 
 
-## Programmatic runtime entrypoint
-
-The runtime contract for this workflow lives in `goldband-loop/workflows/`.
-Use the programmatic path for mock smoke tests and structured evidence:
-
-```bash
-bun run workflows/run.ts goldband-ship --mode mock
-```
-
-The compatibility runtime reads this legacy prompt source and writes step
-evidence to:
-
-```bash
-${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/goldband-ship.jsonl
-```
-
-Live ship/release execution still uses the markdown flow below until typed
-migration is complete.
+> This project-specific contract is retained only as migration source material.
+> It is not part of the public Goldband capability interface. Shipping policy
+> belongs in a repository-owned release gate.
 
 # Ship: Fully Automated Ship Workflow
 
-You are running the `/ship` workflow. This is a **non-interactive, fully automated** workflow. Do NOT ask for confirmation at any step. The user said `/ship` which means DO IT. Run straight through and output the PR URL at the end.
+Run `/ship` end to end without routine confirmation and finish with the PR/MR URL.
 
-**Only stop for:**
-- On the base branch (abort)
-- Merge conflicts that can't be auto-resolved (stop, show conflicts)
-- In-branch test failures (pre-existing failures are triaged, not auto-blocking)
-- Pre-landing review finds ASK items that need user judgment
-- MINOR or MAJOR version bump needed (ask — see Step 12)
-- Greptile review comments that need user decision (complex fixes, false positives)
-- AI-assessed coverage below minimum threshold (hard gate with user override — see Step 7)
-- Plan items NOT DONE with no user override (see Step 8)
-- Plan verification failures (see Step 8.1)
-- TODOS.md missing and user wants to create one (ask — see Step 14)
-- TODOS.md disorganized and user wants to reorganize (ask — see Step 14)
+**STOP only for:** base/default branch; unresolved merge conflicts; in-branch test
+failures; review `ASK` items; MINOR/MAJOR bump approval; Greptile decisions;
+coverage override; incomplete plan items; failed plan verification; or the explicit
+TODOS create/reorganize questions in Step 14. Pre-existing failures are triaged.
 
-**Never stop for:**
-- Uncommitted changes (always include them)
-- Version bump choice (auto-pick MICRO or PATCH — see Step 12)
-- CHANGELOG content (auto-generate from diff)
-- Commit message approval (auto-commit)
-- Multi-file changesets (auto-split into bisectable commits)
-- TODOS.md completed-item detection (auto-mark)
-- Auto-fixable review findings (dead code, N+1, stale comments — fixed automatically)
-- Test coverage gaps within target threshold (auto-generate and commit, or flag in PR body)
+**Do not stop for:** uncommitted or multi-file changes; MICRO/PATCH selection;
+CHANGELOG or commit-message approval; completed-TODO detection; auto-fixable
+findings; or coverage gaps within the allowed threshold.
 
-**Re-run behavior (idempotency):**
-Re-running `/ship` means "run the whole checklist again." Every verification step
-(tests, coverage audit, plan completion, pre-landing review, adversarial review,
-VERSION/CHANGELOG check, TODOS, document-release) runs on every invocation.
-Only *actions* are idempotent:
-- Step 12: If VERSION already bumped, skip the bump but still read the version
-- Step 17: If already pushed, skip the push command
-- Step 19: If PR exists, update the body instead of creating a new PR
-Never skip a verification step because a prior `/ship` run already performed it.
+**Re-runs repeat every verification.** Only mutations are idempotent: reuse an
+existing VERSION bump, skip an already-current push, and update an existing PR/MR.
 
 ---
 
@@ -907,7 +880,8 @@ Never skip a verification step because a prior `/ship` run already performed it.
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-read
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-review-read
 ```
 
 Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, codex-review, codex-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between `review` (diff-scoped pre-landing review) and `plan-eng-review` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show whichever is more recent between `adversarial-review` (new auto-scaled) and `codex-review` (legacy). For Design Review, show whichever is more recent between `plan-design-review` (full visual audit) and `design-review-lite` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent `codex-plan-review` entry — this captures outside voices from both /plan-ceo-review and /plan-eng-review.
@@ -961,7 +935,7 @@ Check diff size: `git diff <base>...HEAD --stat | tail -1`. If the diff is >200 
 
 If CEO Review is missing, mention as informational ("CEO Review not run — recommended for product changes") but do NOT block.
 
-For Design Review: run `source <(~/.claude/skills/goldband/bin/goldband-diff-scope <base> 2>/dev/null)`. If `SCOPE_FRONTEND=true` and no design review (plan-design-review or design-review-lite) exists in the dashboard, mention: "Design Review not run — this PR changes frontend code. The lite design check will run automatically in Step 9, but consider running /design-review for a full visual audit post-implementation." Still never block.
+For Design Review: run `source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null)`. If `SCOPE_FRONTEND=true` and no design review (plan-design-review or design-review-lite) exists in the dashboard, mention: "Design Review not run — this PR changes frontend code. The lite design check will run automatically in Step 9, but consider running /design-review for a full visual audit post-implementation." Still never block.
 
 Continue to Step 2 — do NOT block or ask. Ship runs its own review in Step 9.
 
@@ -1484,7 +1458,8 @@ Maximum 2 generation passes total. If B/C continues, record the accepted risk or
 Write a QA-consumable artifact:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
 ```
@@ -1758,12 +1733,13 @@ Add a `## Verification Results` section to the PR body (Step 19):
 Search for relevant learnings from previous sessions:
 
 ```bash
-_CROSS_PROJ=$(~/.claude/skills/goldband/bin/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_CROSS_PROJ=$($GOLDBAND_BIN/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
 if [ "$_CROSS_PROJ" = "true" ]; then
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "release ship version changelog merge pr" --cross-project 2>/dev/null || true
+  $GOLDBAND_BIN/goldband-learnings-search --limit 10 --query "release ship version changelog merge pr" --cross-project 2>/dev/null || true
 else
-  ~/.claude/skills/goldband/bin/goldband-learnings-search --limit 10 --query "release ship version changelog merge pr" 2>/dev/null || true
+  $GOLDBAND_BIN/goldband-learnings-search --limit 10 --query "release ship version changelog merge pr" 2>/dev/null || true
 fi
 ```
 
@@ -1778,8 +1754,8 @@ Options:
 - A) Enable cross-project learnings (recommended)
 - B) Keep learnings project-scoped only
 
-If A: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings true`
-If B: run `~/.claude/skills/goldband/bin/goldband-config set cross_project_learnings false`
+If A: run `$GOLDBAND_BIN/goldband-config set cross_project_learnings true`
+If B: run `$GOLDBAND_BIN/goldband-config set cross_project_learnings false`
 
 Then re-run the search with the appropriate flag.
 
@@ -1907,7 +1883,8 @@ higher confidence.
 Check if the diff touches frontend files using `goldband-diff-scope`:
 
 ```bash
-source <(~/.claude/skills/goldband/bin/goldband-diff-scope <base> 2>/dev/null)
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null)
 ```
 
 **If `SCOPE_FRONTEND=false`:** Skip design review silently. No output.
@@ -1930,7 +1907,8 @@ source <(~/.claude/skills/goldband/bin/goldband-diff-scope <base> 2>/dev/null)
 6. **Log the result** for the Review Readiness Dashboard:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":0,"commit":"COMMIT"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":0,"commit":"COMMIT"}'
 ```
 
 Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, COMMIT = output of `git rev-parse --short HEAD`.
@@ -1965,7 +1943,8 @@ Present Codex output under a `CODEX (design):` header, merged with the checklist
 ### Detect stack and scope
 
 ```bash
-source <(~/.claude/skills/goldband/bin/goldband-diff-scope <base> 2>/dev/null) || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null) || true
 # Detect stack for specialist context
 STACK=""
 [ -f Gemfile ] && STACK="${STACK}ruby "
@@ -1992,7 +1971,8 @@ echo "TEST_FW: ${TEST_FW:-unknown}"
 ### Read specialist hit rates (adaptive gating)
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-specialist-stats 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-specialist-stats 2>/dev/null || true
 ```
 
 ### Select specialists
@@ -2000,17 +1980,17 @@ echo "TEST_FW: ${TEST_FW:-unknown}"
 Based on the scope signals above, select which specialists to dispatch.
 
 **Always-on (dispatch on every review with 50+ changed lines):**
-1. **Testing** — read `~/.claude/skills/goldband/review/specialists/testing.md`
-2. **Maintainability** — read `~/.claude/skills/goldband/review/specialists/maintainability.md`
+1. **Testing** — read `$GOLDBAND_ROOT/review/specialists/testing.md`
+2. **Maintainability** — read `$GOLDBAND_ROOT/review/specialists/maintainability.md`
 
 **If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to the Fix-First flow (item 4).
 
 **Conditional (dispatch if the matching scope signal is true):**
-3. **Security** — if SCOPE_AUTH=true, OR if SCOPE_BACKEND=true AND DIFF_LINES > 100. Read `~/.claude/skills/goldband/review/specialists/security.md`
-4. **Performance** — if SCOPE_BACKEND=true OR SCOPE_FRONTEND=true. Read `~/.claude/skills/goldband/review/specialists/performance.md`
-5. **Data Migration** — if SCOPE_MIGRATIONS=true. Read `~/.claude/skills/goldband/review/specialists/data-migration.md`
-6. **API Contract** — if SCOPE_API=true. Read `~/.claude/skills/goldband/review/specialists/api-contract.md`
-7. **Design** — if SCOPE_FRONTEND=true. Use the existing design review checklist at `~/.claude/skills/goldband/review/design-checklist.md`
+3. **Security** — if SCOPE_AUTH=true, OR if SCOPE_BACKEND=true AND DIFF_LINES > 100. Read `$GOLDBAND_ROOT/review/specialists/security.md`
+4. **Performance** — if SCOPE_BACKEND=true OR SCOPE_FRONTEND=true. Read `$GOLDBAND_ROOT/review/specialists/performance.md`
+5. **Data Migration** — if SCOPE_MIGRATIONS=true. Read `$GOLDBAND_ROOT/review/specialists/data-migration.md`
+6. **API Contract** — if SCOPE_API=true. Read `$GOLDBAND_ROOT/review/specialists/api-contract.md`
+7. **Design** — if SCOPE_FRONTEND=true. Use the existing design review checklist at `$GOLDBAND_ROOT/review/design-checklist.md`
 
 ### Adaptive gating
 
@@ -2042,7 +2022,8 @@ Construct the prompt for each specialist. The prompt includes:
 3. Past learnings for this domain (if any exist):
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-search --type pitfall --query "{specialist domain}" --limit 5 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-search --type pitfall --query "{specialist domain}" --limit 5 2>/dev/null || true
 ```
 
 If learnings are found, include them: "Past learnings for this domain: {learnings}"
@@ -2149,7 +2130,7 @@ Remember these stats — you will need them for the review-log entry in Step 5.8
 If activated, dispatch one more subagent via the Agent tool (foreground, not background).
 
 The Red Team subagent receives:
-1. The red-team checklist from `~/.claude/skills/goldband/review/specialists/red-team.md`
+1. The red-team checklist from `$GOLDBAND_ROOT/review/specialists/red-team.md`
 2. The merged specialist findings from Step 9.2 (so it knows what was already caught)
 3. The git diff command
 
@@ -2171,7 +2152,8 @@ If the Red Team subagent fails or times out, skip silently and continue.
 Before classifying findings, check if any were previously skipped by the user in a prior review on this branch.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-read
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-review-read
 ```
 
 Parse the output: only lines BEFORE `---CONFIG---` are JSONL entries (the output also contains `---CONFIG---` and `---HEAD---` footer sections that are not JSONL — ignore those).
@@ -2221,7 +2203,8 @@ Output a summary header: `Pre-Landing Review: N issues (X critical, Y informatio
 
 9. Persist the review result to the review log:
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"specialists":SPECIALISTS_JSON,"findings":FINDINGS_JSON,"commit":"'"$(git rev-parse --short HEAD)"'","via":"ship"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-review-log '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"specialists":SPECIALISTS_JSON,"findings":FINDINGS_JSON,"commit":"'"$(git rev-parse --short HEAD)"'","via":"ship"}'
 ```
 Substitute TIMESTAMP (ISO 8601), STATUS ("clean" if no issues, "issues_found" otherwise),
 and N values from the summary counts above. The `via:"ship"` distinguishes from standalone `/review` runs.
@@ -2290,13 +2273,14 @@ Every diff gets adversarial review from both Claude and Codex. LOC is not a prox
 **Detect diff size and tool availability:**
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 DIFF_BASE=$(git merge-base origin/<base> HEAD)
 DIFF_INS=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
 DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
 DIFF_TOTAL=$((DIFF_INS + DIFF_DEL))
 command -v codex >/dev/null 2>&1 && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
 # Legacy opt-out — only gates Codex passes, Claude always runs
-OLD_CFG=$(~/.claude/skills/goldband/bin/goldband-config get codex_reviews 2>/dev/null || true)
+OLD_CFG=$($GOLDBAND_BIN/goldband-config get codex_reviews 2>/dev/null || true)
 echo "DIFF_SIZE: $DIFF_TOTAL"
 echo "OLD_CFG: ${OLD_CFG:-not_set}"
 ```
@@ -2384,7 +2368,8 @@ If `DIFF_TOTAL < 200`: skip this section silently. The Claude + Codex adversaria
 
 After all passes complete, persist:
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
 ```
 Substitute: STATUS = "clean" if no findings across ALL passes, "issues_found" if any pass found issues. SOURCE = "both" if Codex ran, "claude" if only Claude subagent ran. GATE = the Codex structured review gate result ("pass"/"fail"), "skipped" if diff < 200, or "informational" if Codex was unavailable. If all passes failed, do NOT persist.
 
@@ -2416,7 +2401,8 @@ insight during this session, you may log it for future sessions in addition to
 the required `Knowledge candidate` final-report field:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"ship","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-log '{"skill":"ship","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
 
 **Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`
@@ -2439,7 +2425,8 @@ For high-value, verified material that may graduate into a skill or rule, captur
 a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
 Use `problem-solution` for a pitfall with a known fix, `decision` for an
@@ -2457,7 +2444,8 @@ Pick ONE keyword that names the headline feature you're shipping. The keyword sh
 Worked examples (ship-specific): good keywords are `learnings-search`, `pacing`, `worktree-ship`. Bad: `the branch headline`, `v1.31.1.0`, `feat: token-or search`.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
 
 If any learnings come back, name which one applies to the version bump or CHANGELOG framing in one sentence. If none come back, continue without reference — the absence is itself useful information.
@@ -2536,6 +2524,9 @@ Read the `STATE:` line and dispatch:
 3. **Queue-aware version pick (workspace-aware ship, v1.6.4.0+).** Call `bin/goldband-next-version` to see what's already claimed by open PRs + active sibling Conductor worktrees, then render the queue state to the user:
 
    ```bash
+   BASE_VERSION=$(git show origin/<base>:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "0.0.0.0")
+   [ -n "$BASE_VERSION" ] || { echo "ERROR: base VERSION is empty" >&2; exit 1; }
+   BUMP_LEVEL="<chosen-bump-level>"
    QUEUE_JSON=$(bun run bin/goldband-next-version \
      --base <base> \
      --bump "$BUMP_LEVEL" \
@@ -2559,9 +2550,27 @@ Read the `STATE:` line and dispatch:
    - If `ACTIVE_SIBLING_COUNT > 0` and any active sibling's VERSION is `>= NEW_VERSION`, use **AskUserQuestion**: "Sibling workspace <path> has v<X> committed <N>h ago but hasn't PR'd yet. Wait for them to ship first, or advance past? A) Advance past (recommended for unrelated work), B) Abort /ship and sync up with sibling first."
    - Validate `NEW_VERSION` matches `MAJOR.MINOR.PATCH.MICRO`. If util returns an empty or malformed version, fall back to local bump.
 
-4. **Validate** `NEW_VERSION` and write it to **both** `VERSION` and `package.json`. This block runs only when `STATE: FRESH`.
+4. For `STATE: FRESH`, validate `NEW_VERSION` and write both version files.
 
 ```bash
+BASE_VERSION=$(git show origin/<base>:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "0.0.0.0")
+BUMP_LEVEL="<chosen-bump-level>"
+QUEUE_JSON=$(bun run bin/goldband-next-version \
+  --base <base> \
+  --bump "$BUMP_LEVEL" \
+  --current-version "$BASE_VERSION" 2>/dev/null || echo '{"offline":true}')
+NEW_VERSION=$(echo "$QUEUE_JSON" | jq -r '.version // empty')
+if [ -z "$NEW_VERSION" ]; then
+  IFS=. read -r _MAJOR _MINOR _PATCH _MICRO <<< "$BASE_VERSION"
+  case "$BUMP_LEVEL" in
+    major) NEW_VERSION="$((_MAJOR + 1)).0.0.0" ;;
+    minor) NEW_VERSION="$_MAJOR.$((_MINOR + 1)).0.0" ;;
+    patch) NEW_VERSION="$_MAJOR.$_MINOR.$((_PATCH + 1)).0" ;;
+    micro) NEW_VERSION="$_MAJOR.$_MINOR.$_PATCH.$((_MICRO + 1))" ;;
+    *) echo "ERROR: invalid bump level: $BUMP_LEVEL" >&2; exit 1 ;;
+  esac
+  echo "⚠ workspace-aware ship offline — using local bump only: $NEW_VERSION"
+fi
 if ! printf '%s' "$NEW_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "ERROR: NEW_VERSION ($NEW_VERSION) does not match MAJOR.MINOR.PATCH.MICRO pattern. Aborting."
   exit 1
@@ -2655,56 +2664,17 @@ echo "Drift repaired: package.json synced to $REPAIR_VERSION. No version bump pe
 
 ## Step 14: TODOS.md (auto-update)
 
-Cross-reference the project's TODOS.md against the changes being shipped. Mark completed items automatically; prompt only if the file is missing or disorganized.
+Read the canonical format at `.claude/skills/review/TODOS-format.md`.
 
-Read `.claude/skills/review/TODOS-format.md` for the canonical format reference.
-
-**1. Check if TODOS.md exists** in the repository root.
-
-**If TODOS.md does not exist:** Use AskUserQuestion:
-- Message: "Goldband Loop recommends maintaining a TODOS.md organized by skill/component, then priority (P0 at top through P4, then Completed at bottom). See TODOS-format.md for the full format. Would you like to create one?"
-- Options: A) Create it now, B) Skip for now
-- If A: Create `TODOS.md` with a skeleton (# TODOS heading + ## Completed section). Continue to step 3.
-- If B: Skip the rest of Step 14. Continue to Step 15.
-
-**2. Check structure and organization:**
-
-Read TODOS.md and verify it follows the recommended structure:
-- Items grouped under `## <Skill/Component>` headings
-- Each item has `**Priority:**` field with P0-P4 value
-- A `## Completed` section at the bottom
-
-**If disorganized** (missing priority fields, no component groupings, no Completed section): Use AskUserQuestion:
-- Message: "TODOS.md doesn't follow the recommended structure (skill/component groupings, P0-P4 priority, Completed section). Would you like to reorganize it?"
-- Options: A) Reorganize now (recommended), B) Leave as-is
-- If A: Reorganize in-place following TODOS-format.md. Preserve all content — only restructure, never delete items.
-- If B: Continue to step 3 without restructuring.
-
-**3. Detect completed TODOs:**
-
-This step is fully automatic — no user interaction.
-
-Use the diff and commit history already gathered in earlier steps:
-- `git diff <base>...HEAD` (full diff against the base branch)
-- `git log <base>..HEAD --oneline` (all commits being shipped)
-
-For each TODO item, check if the changes in this PR complete it by:
-- Matching commit messages against the TODO title and description
-- Checking if files referenced in the TODO appear in the diff
-- Checking if the TODO's described work matches the functional changes
-
-**Be conservative:** Only mark a TODO as completed if there is clear evidence in the diff. If uncertain, leave it alone.
-
-**4. Move completed items** to the `## Completed` section at the bottom. Append: `**Completed:** vX.Y.Z (YYYY-MM-DD)`
-
-**5. Output summary:**
-- `TODOS.md: N items marked complete (item1, item2, ...). M items remaining.`
-- Or: `TODOS.md: No completed items detected. M items remaining.`
-- Or: `TODOS.md: Created.` / `TODOS.md: Reorganized.`
-
-**6. Defensive:** If TODOS.md cannot be written (permission error, disk full), warn the user and continue. Never stop the ship workflow for a TODOS failure.
-
-Save this summary — it goes into the PR body in Step 19.
+- Missing file: ask **Create now** or **Skip**. If created, add `# TODOS` and a
+  final `## Completed` section.
+- Missing component headings, P0-P4 priorities, or final Completed section: ask
+  **Reorganize** or **Leave as-is**. Reorganization preserves every item.
+- Otherwise, use `git diff <base>...HEAD` and `git log <base>..HEAD --oneline` to
+  mark only clearly completed items. Move them to `## Completed` and append
+  `**Completed:** vX.Y.Z (YYYY-MM-DD)`. Uncertain items stay untouched.
+- Report created/reorganized status or completed and remaining counts; retain the
+  summary for Step 19. Write failures warn and continue.
 
 ---
 
@@ -2865,7 +2835,7 @@ git push -u origin <branch-name>
 
 **Subagent prompt:**
 
-> You are executing the /document-release workflow after a code push. Read the full skill file `${HOME}/.claude/skills/goldband/document-release/SKILL.md` and execute its complete workflow end-to-end, including CHANGELOG clobber protection, doc exclusions, risky-change gates, and named staging. Do NOT attempt to edit the PR body — no PR exists yet. Branch: `<branch>`, base: `<base>`.
+> You are executing the /document-release workflow after a code push. Read the full skill file `$GOLDBAND_ROOT/document-release/SKILL.md` and execute its complete workflow end-to-end, including CHANGELOG clobber protection, doc exclusions, risky-change gates, and named staging. Do NOT attempt to edit the PR body — no PR exists yet. Branch: `<branch>`, base: `<base>`.
 >
 > After completing the workflow, output a single JSON object on the LAST LINE of your response (no other text after it):
 > `{"files_updated":["README.md","CLAUDE.md",...],"commit_sha":"abc1234","pushed":true,"documentation_section":"<markdown block for PR body's ## Documentation section>"}`
@@ -2900,10 +2870,10 @@ glab mr view -F json 2>/dev/null | jq -r 'if .state == "opened" then "MR_EXISTS"
 
 If an **open** PR/MR already exists: **update** the PR body using `gh pr edit --body "..."` (GitHub) or `glab mr update -d "..."` (GitLab). Always regenerate the PR body from scratch using this run's fresh results (test output, coverage audit, review findings, adversarial review, TODOS summary, documentation_section from Step 18). Never reuse stale PR body content from a prior run.
 
-**Always update the PR title to start with `v$NEW_VERSION`.** PR titles use the workspace-aware format `v<NEW_VERSION> <type>: <summary>` — version ALWAYS first, no exceptions, no "custom title kept intentionally" escape hatch. The shared helper `bin/goldband-pr-title-rewrite.sh` is the single source of truth for the rule.
+**Always update the PR title to start with the current `VERSION` file value.** PR titles use the workspace-aware format `v<NEW_VERSION> <type>: <summary>` — version ALWAYS first, no exceptions, no "custom title kept intentionally" escape hatch. The shared helper `bin/goldband-pr-title-rewrite.sh` is the single source of truth for the rule.
 
 1. Read the current title: `CURRENT=$(gh pr view --json title -q .title)` (or `glab mr view -F json | jq -r .title`).
-2. Compute the corrected title: `NEW_TITLE=$(~/.claude/skills/goldband/bin/goldband-pr-title-rewrite.sh "$NEW_VERSION" "$CURRENT")`. The helper handles three cases: title already correct (no-op), title has a different `v<X.Y.Z.W>` prefix (replace it), or title has no version prefix (prepend one).
+2. Read `NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)`, then compute the corrected title: `NEW_TITLE=$($GOLDBAND_BIN/goldband-pr-title-rewrite.sh "$NEW_VERSION" "$CURRENT")`. The helper handles three cases: title already correct (no-op), title has a different `v<X.Y.Z.W>` prefix (replace it), or title has no version prefix (prepend one).
 3. If `NEW_TITLE` differs from `CURRENT`, run `gh pr edit --title "$NEW_TITLE"` (or `glab mr update -t "$NEW_TITLE"`).
 4. **Self-check:** re-fetch the title and assert it starts with `v$NEW_VERSION `. If it does not, retry the edit once. If still wrong, surface the failure to the user.
 
@@ -2977,6 +2947,7 @@ you missed it.>
 **If GitHub:**
 
 ```bash
+NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)
 # PR title MUST start with v$NEW_VERSION — enforced on every run, no exceptions.
 # (See Step 19 idempotency block + bin/goldband-pr-title-rewrite.sh for the rule.)
 gh pr create --base <base> --title "v$NEW_VERSION <type>: <summary>" --body "$(cat <<'EOF'
@@ -2988,6 +2959,7 @@ EOF
 **If GitLab:**
 
 ```bash
+NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)
 # MR title MUST start with v$NEW_VERSION — enforced on every run, no exceptions.
 # (See Step 19 idempotency block + bin/goldband-pr-title-rewrite.sh for the rule.)
 glab mr create -b <base> -t "v$NEW_VERSION <type>: <summary>" -d "$(cat <<'EOF'
@@ -3008,7 +2980,8 @@ Print the branch name, remote URL, and instruct the user to create the PR/MR man
 Log coverage and plan completion data so `/retro` can track trends:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 ```
 
 Append to `~/.goldband/projects/$SLUG/$BRANCH-reviews.jsonl`:

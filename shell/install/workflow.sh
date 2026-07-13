@@ -44,6 +44,23 @@ read_workflow_version() {
     return 1
 }
 
+workflow_contract_fingerprint() {
+    local repo_dir="$1"
+    local relative_path file_path
+    command -v cksum >/dev/null 2>&1 || return 1
+
+    for relative_path in setup generated/capability-actions.json; do
+        [ -f "$repo_dir/$relative_path" ] || return 1
+    done
+
+    {
+        for relative_path in setup generated/capability-actions.json; do
+            file_path="$repo_dir/$relative_path"
+            cksum "$file_path" | awk '{print $1 ":" $2}'
+        done
+    } | cksum | awk '{print $1 ":" $2}'
+}
+
 find_workflow_config_bin() {
     local candidate
     for candidate in \
@@ -107,6 +124,34 @@ write_workflow_installed_versions() {
     fi
 }
 
+write_workflow_installed_contracts() {
+    local host="$1"
+    local repo_dir="$2"
+    local fingerprint runtime_root
+
+    fingerprint="$(workflow_contract_fingerprint "$repo_dir")" || return 0
+
+    if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
+        runtime_root="$HOME/.claude/skills/goldband"
+        write_workflow_installed_contract "$runtime_root" "$fingerprint" "$repo_dir"
+    fi
+
+    if [ "$host" = "codex" ] || [ "$host" = "auto" ]; then
+        runtime_root="$HOME/.codex/skills/goldband"
+        write_workflow_installed_contract "$runtime_root" "$fingerprint" "$repo_dir"
+    fi
+}
+
+write_workflow_installed_contract() {
+    local runtime_root="$1"
+    local fingerprint="$2"
+    local repo_dir="$3"
+
+    [ -d "$runtime_root" ] && [ ! -L "$runtime_root" ] || return 0
+    printf '%s\n' "$fingerprint" > "$runtime_root/.installed-contract"
+    printf '%s\n' "$repo_dir" > "$runtime_root/.installed-source"
+}
+
 install_workflow_claude_command_selector() {
     local src="$REPO_DIR/commands/goldband.md"
     local dest="$CLAUDE_DIR/commands/goldband.md"
@@ -157,6 +202,7 @@ install_workflow_host() {
     fi
     cleanup_workflow_user_entries
     write_workflow_installed_versions "$host" "$version"
+    write_workflow_installed_contracts "$host" "$repo_dir"
 }
 
 run_workflow_setup() {

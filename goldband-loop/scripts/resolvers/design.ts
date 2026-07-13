@@ -66,7 +66,7 @@ Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "is
 
 // NOTE: design-checklist.md is a subset of this methodology for code-level detection.
 // When adding items here, also update review/design-checklist.md, and vice versa.
-export function generateDesignMethodology(_ctx: TemplateContext): string {
+export function generateDesignMethodology(ctx: TemplateContext): string {
   return `## Modes
 
 ### Full (default)
@@ -365,7 +365,7 @@ Compare screenshots and observations across pages for:
 
 **Project-scoped:**
 \`\`\`bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
+eval "$(${ctx.paths.binDir}/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 \`\`\`
 Write to: \`~/.goldband/projects/{slug}/{user}-{branch}-design-audit-{datetime}.md\`
 
@@ -789,18 +789,13 @@ export function generateDesignSetup(ctx: TemplateContext): string {
   return `## DESIGN SETUP (run this check BEFORE any design mockup command)
 
 \`\`\`bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-D=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/${ctx.paths.localSkillRoot}/design/dist/design" ] && D="$_ROOT/${ctx.paths.localSkillRoot}/design/dist/design"
-[ -z "$D" ] && D="$HOME${ctx.paths.designDir.replace(/^~/, '')}/design"
+D="${ctx.paths.designDir}/design"
 if [ -x "$D" ]; then
   echo "DESIGN_READY: $D"
 else
   echo "DESIGN_NOT_AVAILABLE"
 fi
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/${ctx.paths.localSkillRoot}/browse/dist/browse" ] && B="$_ROOT/${ctx.paths.localSkillRoot}/browse/dist/browse"
-[ -z "$B" ] && B="$HOME${ctx.paths.browseDir.replace(/^~/, '')}/browse"
+B="${ctx.paths.browseDir}/browse"
 if [ -x "$B" ]; then
   echo "BROWSE_READY: $B"
 else
@@ -834,10 +829,7 @@ export function generateDesignMockup(ctx: TemplateContext): string {
   return `## Visual Design Exploration
 
 \`\`\`bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-D=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/${ctx.paths.localSkillRoot}/design/dist/design" ] && D="$_ROOT/${ctx.paths.localSkillRoot}/design/dist/design"
-[ -z "$D" ] && D="$HOME${ctx.paths.designDir.replace(/^~/, '')}/design"
+D="${ctx.paths.designDir}/design"
 [ -x "$D" ] && echo "DESIGN_READY" || echo "DESIGN_NOT_AVAILABLE"
 \`\`\`
 
@@ -851,7 +843,7 @@ Generating visual mockups of the proposed design... (say "skip" if you don't nee
 **Step 1: Set up the design directory**
 
 \`\`\`bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$(${ctx.paths.binDir}/goldband-slug 2>/dev/null)"
 _DESIGN_DIR="$HOME/.goldband/projects/$SLUG/designs/mockup-$(date +%Y%m%d)"
 mkdir -p "$_DESIGN_DIR"
 echo "DESIGN_DIR: $_DESIGN_DIR"

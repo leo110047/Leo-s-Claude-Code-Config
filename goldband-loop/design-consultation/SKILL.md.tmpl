@@ -315,7 +315,7 @@ This phase generates visual previews of the proposed design system. Two paths de
 Generate AI-rendered mockups showing the proposed design system applied to realistic screens for this product. This is far more powerful than an HTML preview — the user sees what their product could actually look like.
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _DESIGN_DIR="$HOME/.goldband/projects/$SLUG/designs/design-system-$(date +%Y%m%d)"
 mkdir -p "$_DESIGN_DIR"
 echo "DESIGN_DIR: $_DESIGN_DIR"

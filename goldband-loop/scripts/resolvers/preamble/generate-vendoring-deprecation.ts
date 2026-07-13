@@ -3,7 +3,7 @@ import type { TemplateContext } from '../types';
 export function generateVendoringDeprecation(ctx: TemplateContext): string {
   return `If \`VENDORED_GOLDBAND\` is \`yes\`, warn once via AskUserQuestion unless \`~/.goldband/.vendoring-warned-$SLUG\` exists:
 
-> This project has goldband vendored in \`.claude/skills/goldband/\`. Vendoring is deprecated.
+> This project has goldband vendored in \`$GOLDBAND_LOCAL_REL/\`. Vendoring is deprecated.
 > Migrate to team mode?
 
 Options:
@@ -11,11 +11,11 @@ Options:
 - B) No, I'll handle it myself
 
 If A:
-1. Run \`git rm -r .claude/skills/goldband/\`
-2. Run \`echo '.claude/skills/goldband/' >> .gitignore\`
+1. Run \`git rm -r "$GOLDBAND_LOCAL_REL/"\`
+2. Run \`echo "$GOLDBAND_LOCAL_REL/" >> .gitignore\`
 3. Run \`${ctx.paths.binDir}/goldband-team-init required\` (or \`optional\`)
-4. Run \`git add .claude/ .gitignore CLAUDE.md && git commit -m "chore: migrate goldband from vendored to team mode"\`
-5. Tell the user: "Done. Each developer now runs: \`cd ~/.claude/skills/goldband && ./setup --team\`"
+4. Run \`git add "$GOLDBAND_LOCAL_REL" .gitignore CLAUDE.md AGENTS.md && git commit -m "chore: migrate goldband from vendored to team mode"\`
+5. Tell the user: "Done. Each developer now runs: \`cd "$GOLDBAND_GLOBAL_ROOT" && ./setup --team\`"
 
 If B: say "OK, you're on your own to keep the vendored copy up to date."
 

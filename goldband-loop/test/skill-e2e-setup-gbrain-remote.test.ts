@@ -20,8 +20,8 @@ import { runAgentSdkTest, passThroughNonAskUserQuestion, resolveClaudeBinary } f
 
 // Periodic-tier: the model's interpretation of "follow Path 4 only" is
 // non-deterministic (it sometimes skips Step 8 CLAUDE.md write, sometimes
-// shortcuts past the verify helper). The deterministic gate coverage for
-// Path 4 lives in test/setup-gbrain-path4-structure.test.ts (free, <200ms).
+// shortcuts past the verify helper). Deterministic verification and artifact
+// initialization are covered by their binary-level free tests.
 const shouldRun = !!process.env.EVALS && process.env.EVALS_TIER === 'periodic';
 const describeE2E = shouldRun ? describe : describe.skip;
 

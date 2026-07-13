@@ -96,7 +96,9 @@ function listRepoFiles() {
   if (result.status !== 0) {
     throw new ToolError('failed to list tracked files', result.stderr.trim());
   }
-  return splitGitPathList(result.stdout);
+  return splitGitPathList(result.stdout).filter((file) =>
+    fs.existsSync(path.join(repoRoot, file)),
+  );
 }
 
 function splitGitPathList(output) {

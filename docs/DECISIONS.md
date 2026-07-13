@@ -1,5 +1,50 @@
 # Goldband Decisions
 
+## 2026-07-12: Remove the Unity-Specific Skill Pack
+
+Decision: remove `skills/projects/unity/` and its installer surfaces completely.
+Goldband keeps portable engineering workflows, but no longer owns or distributes
+a Unity-specific project skill pack.
+
+Implementation contract:
+
+- `pack-unity` and `unity` are removed rather than retained as compatibility
+  aliases; invoking either now follows the normal unknown-option failure path.
+- Installer state, validation, examples, architecture inventory, and generated
+  assets must not reference the removed pack.
+- General C#, game, mobile, performance, testing, and architecture work may use
+  portable skills. Reintroducing a Unity-specific capability requires a new
+  product decision and complete installer and validation wiring.
+
+## 2026-07-11: Rules Are Enforced by Independent Review
+
+Decision: `rules/*.md` remains the policy-content source of truth. A
+metadata-only `rules/manifest.json` selects applicable Rules for programmatic
+code review. Each review reads the current Rule text once into an immutable
+snapshot shared by its core prompt, specialist prompts, and prompt telemetry.
+The next review creates a fresh snapshot.
+
+Implementation contract:
+
+- `hooks/scripts/lib/rules-resolver.js` is a pure read-only resolver. It
+  validates complete manifest coverage, applies manifest-owned group selectors,
+  reads the current source text, and returns content hashes.
+- Claude and Codex review use the same resolver contract. Generated plugin
+  copies and installed adapters are projections, not independent policy owners.
+- Review fails closed when the manifest is incomplete, a Rule is missing, or
+  the Rules payload exceeds its explicit byte budget.
+- Deterministic gates verify manifest coverage, review prompt injection,
+  generated asset drift, and installed runtime dependencies.
+- Codex materializes the review resolver at
+  `~/.codex/review-runtime/rules-resolver.js`; this path is independent of
+  whether `~/.codex/hooks` is a symlink or copied directory.
+- Semantic properties such as single authoritative truth, dead code, islands,
+  and architecture boundaries belong to independent code review. They are not
+  approximated by regex style gates or writer self-attestation.
+- PreToolUse and Stop do not load, classify, or audit Rules. Goldband does not
+  infer workspace ownership from arbitrary shell commands and does not maintain
+  writer leases or semantic completion receipts.
+
 ## 2026-07-06: App Surface Support Uses Shared Config or Separate Adapters
 
 Decision: support app surfaces without rewriting the existing CLI setup paths.
@@ -205,3 +250,116 @@ Failure signals:
 - `install.sh status` claims host parity when a host only has advisory or CLI
   exposure.
 - Sanitizer tests stop covering secret-shaped and instruction-like content.
+
+## 2026-07-13: Capability Manifest and Model-Native Prompt Boundary
+
+Decision: expose one capability-based interface, `$goldband <capability>
+<action>`, with no aliases for historical workflow names. Keep capability and
+policy metadata in `goldband.manifest.json`; generate registry, routing hints,
+inventory, policy projection, router menu, and capability docs from it.
+
+Prompt contract:
+
+- Shared prompts contain only the goal, relevant context, hard boundaries, and
+  verification that can change the result.
+- The model owns semantic reasoning, decomposition, tool selection, and
+  adaptation.
+- Runtime owns routing, authorization, outward-facing and irreversible action
+  gates, typed evidence, stop conditions, state, and observability.
+- Browser instructions and workflow contracts are read on demand. They are not
+  embedded in the root skill or repeated in every prompt.
+
+Why:
+
+- OpenAI's prompting guidance recommends starting from the desired result,
+  adding only useful context and a few boundaries, and leaving room for the
+  model to choose tools and adjust its approach.
+- The old catalog duplicated names and policy across generated skills, hooks,
+  registry code, inventory, and docs. Those copies drifted and consumed model
+  context without adding deterministic enforcement.
+- Keeping old aliases would preserve the duplicate public contract and prevent
+  missing migrations from failing visibly.
+
+Migration contract:
+
+- Standard installs expose only `goldband`.
+- Installer cleanup removes Goldband-managed historical skill entrypoints.
+- Internal documents use `workflows/<capability>/<action>.workflow.md`.
+- Unknown historical names fail; they never redirect silently.
+- `node scripts/generate-goldband-surfaces.mjs --check` is the freshness gate.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Preserve every old name as an alias | Keeps the catalog and migration burden alive indefinitely. |
+| Keep routing tables handwritten per host | Recreates drift between Claude, Codex, hooks, runtime, and docs. |
+| Put every workflow and browser instruction in root `SKILL.md` | Pays the context cost before the instructions are relevant and over-constrains model-native reasoning. |
+
+## 2026-07-13: CI Boundary Owners Must Verify Their Completion Contracts
+
+Decision: deterministic infrastructure boundaries own their complete outcome.
+Callers and tests must not compensate for an incomplete owner contract with
+sleep calls, partial spot checks, or undeclared tool dependencies.
+
+Implementation contract:
+
+- `process-supervisor.mjs` does not resolve forced termination until the whole
+  process group is gone or a bounded cleanup verification fails explicitly.
+- Codex high-risk shell policy separates unquoted shell command boundaries
+  before command-local flags and targets are classified. Cross-command flag
+  leakage is never treated as evidence of a destructive command.
+- `check-codex-portability.sh` uses only declared baseline dependencies. Missing
+  inputs and scanner errors fail closed with a distinct infrastructure error.
+- `generated/capability-actions.json` owns the complete installed workflow
+  document set. Clean-install verification compares the exact projection for
+  both Claude and Codex instead of checking one representative file.
+- Workflow installs record the canonical source path together with a contract
+  fingerprint derived from the capability contract and its projection logic.
+  `install.sh status` verifies against that same source, reports drift even when
+  the human-readable version did not change, and fails explicitly when the
+  recorded source is no longer available.
+
+Assumptions:
+
+- POSIX process groups remain the process-tree authority on macOS and Linux;
+  Windows continues to use `taskkill /T`.
+- The shell hook is a conservative lexical policy adapter, not a general shell
+  interpreter. Compound rules that intentionally span a pipe remain explicit.
+- `cksum`, `awk`, and `grep` are available in supported installer and CI shells.
+
+Consequences:
+
+- CI failures identify the owning boundary: cleanup, policy classification,
+  portability scanning, or install projection.
+- Forced process cleanup can take up to the bounded confirmation window before
+  returning, and a surviving tree becomes an explicit failure.
+- Changing workflow projection logic makes existing installs stale until the
+  relevant workflow installer is rerun.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Add a delay to the flaky descendant test | Moves lifecycle responsibility into consumers and remains timing-dependent. |
+| Allow the hook false positive manually | Leaves the classifier structurally unable to distinguish command boundaries. |
+| Install `rg` in CI only | Keeps an unnecessary undeclared dependency in a baseline portability gate. |
+| Check only `review/code.workflow.md` and the version marker | Cannot detect partial or same-version stale installs. |
+
+Failure signals:
+
+- A supervisor result returns while `process.kill(pid, 0)` still succeeds for a
+  descendant in the supervised group.
+- Safe adjacent shell commands can combine their flags into a denial.
+- A missing portability scanner or input still prints `[OK]`.
+- `install.sh status` reports green for a legacy flat workflow layout.
+- A runtime installed through `GOLDBAND_LOOP_DIR` is compared against a
+  different repository, or its missing recorded source is silently ignored.
+
+Revisit triggers:
+
+- Supported platforms provide a stronger native process-tree completion API.
+- Shell policy expands to constructs that require a maintained parser rather
+  than the current bounded lexical adapter.
+- Workflow projections move out of `goldband-loop/setup` into a standalone
+  materializer with its own stable contract version.

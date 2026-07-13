@@ -53,6 +53,7 @@ CODEX_PROMPTS_DIR="$CODEX_DIR/prompts"
 CODEX_GOLDBAND_PROMPT_FILE="$CODEX_PROMPTS_DIR/goldband.md"
 CODEX_HOOKS_FILE="$CODEX_DIR/hooks.json"
 CODEX_HOOKS_DIR="$CODEX_DIR/hooks"
+CODEX_REVIEW_RUNTIME_FILE="$CODEX_DIR/review-runtime/rules-resolver.js"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
 CODEX_SKILLS_DIR="$HOME/.agents/skills"
 CODEX_SKILL_PROFILE_FILE="$CODEX_SKILLS_DIR/.goldband-profile"
@@ -77,7 +78,6 @@ show_help_claude_options() {
     echo "  ----- Claude Code -----"
     echo "  pack-core   安裝核心包（預設，最小 token）"
     echo "  pack-quality 安裝品質開發包（core + commands）"
-    echo "  pack-unity  安裝 Unity 包（quality + unity skills）"
     echo "  all         安裝所有組件（相容舊用法，等同 pack-quality）"
     echo "  all-full    安裝所有組件（skills 使用 full profile）"
     echo "  skills      安裝全域 skills（等同 skills-full）"
@@ -90,7 +90,6 @@ show_help_claude_options() {
     echo "  hooks       只安裝 hooks"
     echo "  style-gate  安裝全域 git style gate（pre-commit + commit-msg）"
     echo "  launchers   安裝 shell 啟動整合（claude/codex 啟動前自動檢查更新）"
-    echo "  unity       安裝 Unity 專案 skills 到當前目錄"
 }
 
 show_help_codex_options() {
@@ -131,7 +130,6 @@ show_help_examples() {
     echo "  ./install.sh workflow-codex # 安裝 Goldband Loop 到 Codex（standard profile）"
     echo "  GOLDBAND_LOOP_DIR=../goldband-loop ./install.sh all-with-workflow"
     echo "  ./install.sh all-tools    # Claude + Codex 全部安裝"
-    echo "  ./install.sh unity        # 在 Unity 專案中安裝"
     echo "  ./install.sh status       # 檢查狀態"
 }
 
@@ -231,11 +229,6 @@ for arg in "$@"; do
             echo -e "${GREEN}安裝 core-quality pack...${NC}"
             echo ""
             install_pack_quality
-            ;;
-        pack-unity)
-            echo -e "${GREEN}安裝 unity-pack...${NC}"
-            echo ""
-            install_pack_unity
             ;;
         all)
             echo -e "${GREEN}安裝所有組件（相容舊用法，等同 pack-quality）...${NC}"
@@ -348,9 +341,6 @@ for arg in "$@"; do
             echo -e "${GREEN}安裝 Claude + Codex 全組件 + Goldband Loop...${NC}"
             echo ""
             install_all_with_workflow
-            ;;
-        unity)
-            install_unity
             ;;
         *)
             echo -e "${RED}未知選項: $arg${NC}"

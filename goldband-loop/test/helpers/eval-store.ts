@@ -567,7 +567,7 @@ export interface BudgetRegression {
 /**
  * Compute budget regressions: tests where tool calls or turns grew by more
  * than `ratioCap` between two runs. Pure function — caller decides how to
- * surface the result. Used by test/skill-budget-regression.test.ts and any
+ * surface the result. Used by eval comparison commands and any
  * future ship gate.
  *
  * `ratioCap` defaults to 2.0 (>2× growth is a regression). Override via

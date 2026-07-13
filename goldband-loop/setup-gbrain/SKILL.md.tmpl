@@ -59,7 +59,7 @@ implemented as a dispatcher binary.
 ## Step 1: Detect current state
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-gbrain-detect
+$GOLDBAND_BIN/goldband-gbrain-detect
 ```
 
 Capture the JSON output. It contains: `gbrain_on_path`, `gbrain_version`,
@@ -115,7 +115,7 @@ dead Postgres URL). Fire a targeted AskUserQuestion BEFORE Step 2:
 >   ❌ N/A
 > Net: A is the right starting move; B/C are explicit destructive paths; D bails.
 
-**If A (Retry)**: re-run `~/.claude/skills/goldband/bin/goldband-gbrain-detect`
+**If A (Retry)**: re-run `$GOLDBAND_BIN/goldband-gbrain-detect`
 with `GOLDBAND_DETECT_NO_CACHE=1` (busts the 60s cache). If the new
 `gbrain_local_status` is `ok`, continue to Step 2. If still `broken-db` or
 `broken-config`, fire the same AskUserQuestion again (the user picks again).
@@ -202,7 +202,7 @@ Path 4 subsection).
 For Paths 1, 2a, 2b, 3, switch — only if `gbrain_on_path=false`:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-gbrain-install
+$GOLDBAND_BIN/goldband-gbrain-install
 ```
 
 The installer runs D5 detect-first (probes `~/git/gbrain`, `~/gbrain` first),
@@ -222,7 +222,7 @@ Path-specific.
 Source the secret-read helper, collect URL with `read -s` + redacted preview:
 
 ```bash
-. ~/.claude/skills/goldband/bin/goldband-gbrain-lib.sh
+. $GOLDBAND_BIN/goldband-gbrain-lib.sh
 read_secret_to_env GBRAIN_POOLER_URL "Paste Session Pooler URL: " \
   --echo-redacted 's#://[^@]*@#://***@#'
 ```
@@ -230,7 +230,7 @@ read_secret_to_env GBRAIN_POOLER_URL "Paste Session Pooler URL: " \
 Then validate structurally:
 
 ```bash
-printf '%s' "$GBRAIN_POOLER_URL" | ~/.claude/skills/goldband/bin/goldband-gbrain-supabase-verify -
+printf '%s' "$GBRAIN_POOLER_URL" | $GOLDBAND_BIN/goldband-gbrain-supabase-verify -
 ```
 
 If the verify exit code is 3 (direct-connection URL), the verifier's own
@@ -261,7 +261,7 @@ Show the D11 PAT scope disclosure verbatim BEFORE collecting the token:
 Then:
 
 ```bash
-. ~/.claude/skills/goldband/bin/goldband-gbrain-lib.sh
+. $GOLDBAND_BIN/goldband-gbrain-lib.sh
 read_secret_to_env SUPABASE_ACCESS_TOKEN "Paste PAT: "
 ```
 
@@ -274,7 +274,7 @@ tier. Pro may require them to upgrade the org first at supabase.com.
 List orgs, pick one (AskUserQuestion if multiple):
 
 ```bash
-orgs=$(~/.claude/skills/goldband/bin/goldband-gbrain-supabase-provision list-orgs --json)
+orgs=$($GOLDBAND_BIN/goldband-gbrain-supabase-provision list-orgs --json)
 ```
 
 If the `.orgs` array is empty, surface: "Your Supabase account has no
@@ -303,11 +303,11 @@ trap 'echo ""; echo "goldband-gbrain: interrupted. In-flight ref: $INFLIGHT_REF"
 Create + wait + fetch:
 
 ```bash
-result=$(~/.claude/skills/goldband/bin/goldband-gbrain-supabase-provision \
+result=$($GOLDBAND_BIN/goldband-gbrain-supabase-provision \
   create gbrain "$REGION" "$ORG_SLUG" --json)
 INFLIGHT_REF=$(echo "$result" | jq -r .ref)
-~/.claude/skills/goldband/bin/goldband-gbrain-supabase-provision wait "$INFLIGHT_REF" --json
-pooler=$(~/.claude/skills/goldband/bin/goldband-gbrain-supabase-provision \
+$GOLDBAND_BIN/goldband-gbrain-supabase-provision wait "$INFLIGHT_REF" --json
+pooler=$($GOLDBAND_BIN/goldband-gbrain-supabase-provision \
   pooler-url "$INFLIGHT_REF" --json)
 GBRAIN_DATABASE_URL=$(echo "$pooler" | jq -r .pooler_url)
 export GBRAIN_DATABASE_URL
@@ -372,7 +372,7 @@ non-loopback host); refuse `http://` for non-localhost.
 **4b. Collect bearer token via the secret-read helper (D10, never argv).**
 
 ```bash
-. ~/.claude/skills/goldband/bin/goldband-gbrain-lib.sh
+. $GOLDBAND_BIN/goldband-gbrain-lib.sh
 read_secret_to_env GBRAIN_MCP_TOKEN "Paste bearer token: " \
   --echo-redacted 's/.\{6\}$/***REDACTED***/'
 ```
@@ -382,7 +382,7 @@ classified JSON output:
 
 ```bash
 verify_json=$(GBRAIN_MCP_TOKEN="$GBRAIN_MCP_TOKEN" \
-  ~/.claude/skills/goldband/bin/goldband-gbrain-mcp-verify "$MCP_URL")
+  $GOLDBAND_BIN/goldband-gbrain-mcp-verify "$MCP_URL")
 status=$(echo "$verify_json" | jq -r .status)
 ```
 
@@ -423,7 +423,7 @@ Capture two values from the verify output for downstream steps:
 **If A (Yes)**: install + init local PGLite with rollback-safe semantics (D7):
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-gbrain-install || exit $?
+$GOLDBAND_BIN/goldband-gbrain-install || exit $?
 # At this point the local gbrain CLI is on PATH. Init PGLite, but back up any
 # existing ~/.gbrain/config.json first (rollback if init fails).
 if [ -f "$HOME/.gbrain/config.json" ]; then
@@ -565,7 +565,7 @@ session start, not mid-session."
 If we're in a git repo with an `origin` remote, check the policy:
 
 ```bash
-current_tier=$(~/.claude/skills/goldband/bin/goldband-gbrain-repo-policy get)
+current_tier=$($GOLDBAND_BIN/goldband-gbrain-repo-policy get)
 ```
 
 Branches:
@@ -583,7 +583,7 @@ Branches:
 
   On answer (other than skip-for-now):
   ```bash
-  ~/.claude/skills/goldband/bin/goldband-gbrain-repo-policy set "$REMOTE" "$TIER"
+  $GOLDBAND_BIN/goldband-gbrain-repo-policy set "$REMOTE" "$TIER"
   ```
   Then import iff `read-write`.
 
@@ -618,8 +618,8 @@ verify output (Path 4) or `false` (Paths 1/2/3 — local mode doesn't probe):
 
 ```bash
 URL_FORM=${URL_FORM_SUPPORTED:-false}
-~/.claude/skills/goldband/bin/goldband-artifacts-init --url-form-supported "$URL_FORM"
-~/.claude/skills/goldband/bin/goldband-config set artifacts_sync_mode artifacts-only
+$GOLDBAND_BIN/goldband-artifacts-init --url-form-supported "$URL_FORM"
+$GOLDBAND_BIN/goldband-config set artifacts_sync_mode artifacts-only
 # or "full" if user picked yes-full
 ```
 
@@ -655,7 +655,7 @@ try:
 except Exception:
     pass
 ")
-~/.claude/skills/goldband/bin/goldband-gbrain-source-wireup --strict \
+$GOLDBAND_BIN/goldband-gbrain-source-wireup --strict \
   ${GBRAIN_URL:+--database-url "$GBRAIN_URL"}
 ```
 
@@ -685,7 +685,7 @@ curated `~/.goldband/` artifacts into gbrain so the retrieval surface
 
 Run the probe to size the operation:
 ```bash
-~/.claude/skills/goldband/bin/goldband-memory-ingest --probe
+$GOLDBAND_BIN/goldband-memory-ingest --probe
 ```
 
 Read the output. If `Total files in window: 0`, skip — there's nothing
@@ -729,8 +729,8 @@ Options:
 
 After answer:
 ```bash
-~/.claude/skills/goldband/bin/goldband-config set transcript_ingest_mode <choice>
-~/.claude/skills/goldband/bin/goldband-gbrain-sync --full --no-brain-sync
+$GOLDBAND_BIN/goldband-config set transcript_ingest_mode <choice>
+$GOLDBAND_BIN/goldband-gbrain-sync --full --no-brain-sync
 ```
 (`--no-brain-sync` because Step 7 already wired that path; this just
 runs the code import + memory ingest stages. Brain-sync will run on the
@@ -875,9 +875,9 @@ configured Mac is a first-class doctor path: every step detects existing
 state, repairs only what's missing, and reports here.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-gbrain-detect 2>/dev/null || true
-~/.claude/skills/goldband/bin/goldband-config get transcript_ingest_mode 2>/dev/null || echo "off"
-~/.claude/skills/goldband/bin/goldband-config get artifacts_sync_mode 2>/dev/null || echo "off"
+$GOLDBAND_BIN/goldband-gbrain-detect 2>/dev/null || true
+$GOLDBAND_BIN/goldband-config get transcript_ingest_mode 2>/dev/null || echo "off"
+$GOLDBAND_BIN/goldband-config get artifacts_sync_mode 2>/dev/null || echo "off"
 [ -f ~/.goldband/.gbrain-sync-state.json ] && cat ~/.goldband/.gbrain-sync-state.json || echo "{}"
 ```
 

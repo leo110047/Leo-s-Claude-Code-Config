@@ -9,7 +9,6 @@ const slate: HostConfig = {
   globalRoot: '.slate/skills/goldband',
   localSkillRoot: '.slate/skills/goldband',
   hostSubdir: '.slate',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -23,8 +22,6 @@ const slate: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '~/.slate/skills/goldband' },
-    { from: '.claude/skills/goldband', to: '.slate/skills/goldband' },
     { from: '.claude/skills', to: '.slate/skills' },
   ],
 

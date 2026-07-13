@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -15,6 +16,8 @@ import {
 } from './lib/plugin-distribution.mjs';
 import { summarizeHooks } from './lib/plugin-hook-summary.mjs';
 
+const require = createRequire(import.meta.url);
+
 function main() {
   const skipCli = process.argv.includes('--skip-cli');
   assert.deepEqual(
@@ -24,6 +27,7 @@ function main() {
   );
   const expected = readExpectedAssets();
   assertExpectedFilesExist(expected);
+  assertCodexRuntimeDependencyClosure(expected);
   assertPluginHookCommandsArePortable();
   assertPluginPackageShape(PLUGIN_ROOT_PATH, expected);
   if (!skipCli) {
@@ -32,16 +36,62 @@ function main() {
   console.log('[OK] plugin distribution check passed');
 }
 
+function localRequirePaths(file) {
+  const content = fs.readFileSync(file, 'utf8');
+  return [...content.matchAll(/require\(['"](\.\/[^'"]+)['"]\)/g)].map(
+    (match) => match[1],
+  );
+}
+
+function resolveLocalModule(fromFile, request) {
+  const candidate = path.resolve(path.dirname(fromFile), request);
+  return [
+    candidate,
+    `${candidate}.js`,
+    `${candidate}.cjs`,
+    `${candidate}.json`,
+  ].find((file) => fs.existsSync(file));
+}
+
+function assertCodexRuntimeDependencyClosure(expected) {
+  const root = path.join(ROOT_DIR, 'codex', 'hooks');
+  const pending = [path.join(root, 'hook-router.js')];
+  const visited = new Set();
+  const dependencies = new Set();
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (visited.has(file)) continue;
+    visited.add(file);
+    for (const request of localRequirePaths(file)) {
+      const dependency = resolveLocalModule(file, request);
+      if (!dependency || !dependency.startsWith(`${root}${path.sep}`)) continue;
+      dependencies.add(
+        path.relative(ROOT_DIR, dependency).split(path.sep).join('/'),
+      );
+      pending.push(dependency);
+    }
+  }
+  const inventory = new Set(expected.codex.hookRuntimeDependencies);
+  assert.deepEqual(
+    [...dependencies].filter((file) => !inventory.has(file)),
+    [],
+    'Codex hook dependency closure is missing from plugin inventory',
+  );
+}
+
 function assertExpectedFilesExist(expected) {
   assert.equal(expected.schemaVersion, 1);
   const requiredPaths = [
     expected.plugin.manifest,
     expected.plugin.marketplaceManifest,
     expected.claude.generatedRuleSkill,
+    expected.claude.rulesManifest,
     ...expected.claude.commands,
     ...expected.claude.rules,
     ...expected.claude.hookScripts,
     ...expected.claude.runtimeDependencies,
+    ...expected.codex.reviewRuntimeDependencies,
+    ...expected.codex.hookRuntimeDependencies,
   ];
   for (const relative of requiredPaths) {
     assert.ok(
@@ -140,7 +190,20 @@ function assertInstalledAssets(installPath, expected) {
   assertSkillAssets(installPath, expected);
   assertHookAssets(installPath, expected);
   assertRuntimeDependencies(installPath, expected);
+  assertRulesAssets(installPath, expected);
   assertGoldbandLanguageCommandIsPluginSafe(installPath);
+}
+
+function assertRulesAssets(installPath, expected) {
+  for (const rulePath of [
+    expected.claude.rulesManifest,
+    ...expected.claude.rules,
+  ]) {
+    assert.ok(
+      fs.existsSync(path.join(installPath, rulePath)),
+      `installed Rule asset missing: ${rulePath}`,
+    );
+  }
 }
 
 function assertCommandAssets(installPath, expected) {
@@ -217,6 +280,7 @@ function assertInstalledRuntimeExecutes(installPath) {
     hook_event_name: 'Stop',
     session_id: 'plugin-runtime-test',
   });
+  assertPackagedRulesResolver(installPath);
   const suggestions = runNodeHook(
     installPath,
     'hooks/scripts/hooks/skill-activation-suggestions.js',
@@ -231,6 +295,26 @@ function assertInstalledRuntimeExecutes(installPath) {
     suggestions.stdout.includes('Cross-review gate armed'),
     false,
     'skill activation hook must not report cross-review armed when runtime is absent',
+  );
+}
+
+function assertPackagedRulesResolver(installPath) {
+  const packagedResolver = require(
+    path.join(installPath, 'hooks/scripts/lib/rules-resolver.js'),
+  );
+  const bundle = packagedResolver.resolveRules({
+    repoRoot: ROOT_DIR,
+    rulesDir: path.join(installPath, 'rules'),
+    phase: 'review',
+    paths: ['src/app.ts'],
+  });
+  assert.ok(
+    bundle.rules.some((rule) => rule.id === 'semantic-review-criteria'),
+    'packaged review Rules must include semantic-review-criteria',
+  );
+  assert.match(
+    packagedResolver.formatRulesBundle(bundle),
+    /Architecture and Integration Boundaries/,
   );
 }
 

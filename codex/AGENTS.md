@@ -33,8 +33,9 @@ Keep durable workflow policy in skills, commands, hooks, or project-level
 
 ## Judgment Defaults
 
-Condensed from the shared `rules/` policies (escalation, change-scope,
-session-handoff), which Codex does not auto-load:
+Condensed from the shared `rules/` policies (architecture boundaries,
+verification, escalation, change scope, security, and session handoff), which
+Codex does not auto-load:
 
 - Proceed autonomously on reversible, in-scope, verifiable work. Stop and ask
   for irreversible or outward-facing actions, materially ambiguous requests,
@@ -42,9 +43,23 @@ session-handoff), which Codex does not auto-load:
 - Stop after two failed fix attempts on the same failing signal. Report what
   was tried and observed instead of trying a third variation.
 - Never weaken, skip, or delete a test, assertion, or lint rule to make a
-  check pass.
+  check pass. If a gate is wrong, update its stated policy, implementation, and
+  regression coverage together with evidence.
 - Fix at the layer where the root cause lives. Prefer reuse and deletion over
-  addition; no new abstraction or flag for a single call site.
+  addition. A single call-site abstraction needs a real ownership boundary,
+  external adapter, test seam, or stable domain concept.
+- Keep external SDK and wire types behind adapters. Shared contracts stay
+  provider-neutral and runtime-validated; native permission authority must not
+  be bypassed or silently widened.
+- Give each domain fact, decision, and capability one authoritative owner.
+  Facades call the owner's operations, caches and projections remain traceable
+  to them, and every required user surface must be wired and reachable.
+- Use deterministic logic for known structure, hard invariants, and safety
+  constraints. Isolate optional AI failure; when AI is the core capability,
+  fail explicitly instead of fabricating or silently downgrading results.
+- Treat localhost, child-process, SDK, HTTP, WebSocket, and tool boundaries as
+  untrusted. Validate before side effects or persistence, and require live
+  evidence for provider, approval, process, or platform behavior claims.
 - When the minimal fix and the structurally healthy fix diverge, present both
   and let the user choose; recommend the healthy path.
 - Persist durable decisions to `docs/DECISIONS.md`-style records and leave a

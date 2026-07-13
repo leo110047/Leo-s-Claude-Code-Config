@@ -38,7 +38,25 @@ function runHook(input, extraEnv = {}) {
 
   const stdout = result.stdout.trim();
   assert.notEqual(stdout, '', 'hook must emit valid JSON on stdout');
-  return JSON.parse(stdout);
+  const output = JSON.parse(stdout);
+  assertCodexPreToolUseSchema(input, output);
+  return output;
+}
+
+function assertCodexPreToolUseSchema(input, output) {
+  if (input.hook_event_name !== 'PreToolUse' || !output.hookSpecificOutput) {
+    return;
+  }
+  const allowed = new Set([
+    'hookEventName',
+    'permissionDecision',
+    'permissionDecisionReason',
+    'additionalContext',
+    'updatedInput',
+  ]);
+  for (const key of Object.keys(output.hookSpecificOutput)) {
+    assert.ok(allowed.has(key), `Codex PreToolUse schema rejects ${key}`);
+  }
 }
 
 function assertNoopOutput(output) {
@@ -79,7 +97,7 @@ function testHighRiskBashDenied() {
     ['git clean -f', /git clean/, 'destructive-git-clean'],
   ];
 
-  for (const [command, reasonPattern, telemetryName] of commands) {
+  for (const [command, reasonPattern] of commands) {
     const output = runHook({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
@@ -97,7 +115,8 @@ function testHighRiskBashDenied() {
       reasonPattern,
       command,
     );
-    assert.equal(output.hookSpecificOutput.telemetryName, telemetryName);
+    assert.equal(output.hookSpecificOutput.telemetryName, undefined);
+    assert.equal(output.internalTelemetry, undefined);
   }
 }
 
@@ -151,10 +170,7 @@ function testPermissionRequestOnlyDeniesHighRisk() {
     'PermissionRequest',
   );
   assert.equal(riskyOutput.hookSpecificOutput.decision.behavior, 'deny');
-  assert.equal(
-    riskyOutput.hookSpecificOutput.telemetryName,
-    'destructive-git-history',
-  );
+  assert.equal(riskyOutput.hookSpecificOutput.telemetryName, undefined);
 }
 
 function testPatchSecretDenied() {
@@ -308,7 +324,10 @@ function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
 function testLifecycleContexts() {
   const output = runHook({ hook_event_name: 'SessionStart' });
   assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(output.hookSpecificOutput.additionalContext, /context-restore/);
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /\$goldband context restore/,
+  );
 }
 
 function testSessionStartContextIsDedupedBySession() {
@@ -324,7 +343,7 @@ function testSessionStartContextIsDedupedBySession() {
   assert.equal(outputs[0].hookSpecificOutput.hookEventName, 'SessionStart');
   assert.match(
     outputs[0].hookSpecificOutput.additionalContext,
-    /context-restore/,
+    /\$goldband context restore/,
   );
   assertNoopOutput(outputs[1]);
   assertNoopOutput(outputs[2]);
@@ -421,6 +440,56 @@ function testPromptWorkflowHint() {
   );
 }
 
+function testPromptWorkflowHintRequiresTriggerBoundaries() {
+  const output = runHook({
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'Please give me an explanation of this file.',
+  });
+
+  assertNoopOutput(output);
+}
+
+function testDirectWorkflowInvocationSuppressesHints() {
+  for (const prompt of [
+    '$goldband plan create 重構認證邏輯',
+    '/plan 重構認證邏輯',
+  ]) {
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'UserPromptSubmit',
+        prompt,
+      }),
+    );
+  }
+}
+
+function testWorkflowHintsLoadOnlyForPromptRouting() {
+  const routingPath = path.join(
+    repoDir,
+    'codex',
+    'hooks',
+    'capability-routing.generated.json',
+  );
+  const program = `
+    const assert = require('node:assert/strict');
+    const routerPath = ${JSON.stringify(routerPath)};
+    const routingPath = require.resolve(${JSON.stringify(routingPath)});
+    const router = require(routerPath);
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} });
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'Stop' });
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'UserPromptSubmit', prompt: 'please review this diff' });
+    assert.ok(require.cache[routingPath]);
+  `;
+  const result = spawnSync(process.execPath, ['-e', program], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
 function testWorkflowTelemetry() {
   runHook({
     hook_event_name: 'PreToolUse',
@@ -457,32 +526,28 @@ function testWorkflowTelemetry() {
   );
 }
 
-function testSubagentCompletionNeedsEvidence() {
-  const unsupportedClaims = [
+function testCompletionClaimsDoNotUseRegex() {
+  const conversationalClaims = [
     'Done, everything is complete.',
     'Done, verified.',
     'Fixed. I checked the file.',
+    'Audit 已完成，接下來說明設計取捨。',
   ];
 
-  for (const lastAssistantMessage of unsupportedClaims) {
-    const output = runHook({
-      hook_event_name: 'SubagentStop',
-      last_assistant_message: lastAssistantMessage,
-    });
-
-    assert.match(
-      output.systemMessage,
-      /without concrete evidence/,
-      lastAssistantMessage,
+  for (const lastAssistantMessage of conversationalClaims) {
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'Stop',
+        last_assistant_message: lastAssistantMessage,
+      }),
+    );
+    assertNoopOutput(
+      runHook({
+        hook_event_name: 'SubagentStop',
+        last_assistant_message: lastAssistantMessage,
+      }),
     );
   }
-
-  const supportedOutput = runHook({
-    hook_event_name: 'SubagentStop',
-    last_assistant_message:
-      'Fixed. Verified with node scripts/test-codex-hook-router.mjs and README.md:101.',
-  });
-  assertNoopOutput(supportedOutput);
 }
 
 function testStopDoesNotSuggestKnowledgeCapture() {
@@ -522,8 +587,11 @@ testSessionStartExpiredDedupeMarkerIsCleanedUp();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
+testPromptWorkflowHintRequiresTriggerBoundaries();
+testDirectWorkflowInvocationSuppressesHints();
+testWorkflowHintsLoadOnlyForPromptRouting();
 testWorkflowTelemetry();
-testSubagentCompletionNeedsEvidence();
+testCompletionClaimsDoNotUseRegex();
 testStopDoesNotSuggestKnowledgeCapture();
 
 console.log('[OK] Codex hook router behavior verified');

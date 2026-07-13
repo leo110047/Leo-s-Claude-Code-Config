@@ -9,7 +9,6 @@ const factory: HostConfig = {
   globalRoot: '.factory/skills/goldband',
   localSkillRoot: '.factory/skills/goldband',
   hostSubdir: '.factory',
-  usesEnvVars: true,
 
   frontmatter: {
     mode: 'allowlist',
@@ -29,8 +28,6 @@ const factory: HostConfig = {
   },
 
   pathRewrites: [
-    { from: '~/.claude/skills/goldband', to: '$GOLDBAND_ROOT' },
-    { from: '.claude/skills/goldband', to: '.factory/skills/goldband' },
     { from: '.claude/skills/review', to: '.factory/skills/goldband/review' },
     { from: '.claude/skills', to: '.factory/skills' },
   ],

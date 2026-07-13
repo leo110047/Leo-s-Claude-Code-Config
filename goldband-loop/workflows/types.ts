@@ -46,6 +46,8 @@ export type WorkflowStep<T = unknown> = {
 };
 
 export type WorkflowDefinition = {
+  capability: string;
+  action: string;
   name: string;
   target: string;
   evaluationSignal: string;
@@ -108,6 +110,8 @@ export type ReviewFinding = {
   evidence?: string;
   recommendation?: string;
   category?: string;
+  ruleId?: string;
+  policySource?: string;
   failureScenario?: string;
   suggestedVerification?: string;
   blocking?: boolean;

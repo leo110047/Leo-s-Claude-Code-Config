@@ -8,6 +8,8 @@ Normal `/review` and specialist runtime output use this shape:
   "line": 42,
   "severity": "critical|high|medium|low|info",
   "category": "correctness-contract|testing|security|performance|migration-data|api-host-parity|maintainability|ux-design|specialist-runtime|specialist-skipped|host-capability",
+  "ruleId": "architecture-boundaries",
+  "policySource": "rules/architecture-boundaries.md",
   "summary": "One-sentence problem.",
   "failureScenario": "Concrete way this fails for a user, maintainer, workflow, or gate.",
   "evidence": "Specific diff/code/test/config evidence.",
@@ -19,11 +21,21 @@ Normal `/review` and specialist runtime output use this shape:
 }
 ```
 
-Rules:
+Validity rules:
 
 - Use `null` for optional fields that do not apply when a JSON schema requires
   the key.
+- Code findings require an exact `file` and `line`, concrete `evidence`, and a
+  `failureScenario` that identifies the triggering input or runtime state,
+  reachable path, incorrect result, expected result, and practical impact.
+- `recommendation`, `suggestedVerification`, policy, and specialist fields are
+  metadata. They cannot substitute for the validity requirements above.
+- Human-readable reports must preserve `evidence` and
+  `suggestedVerification` when those fields are present in the validated
+  finding.
+- Suppress speculative findings instead of returning a confidence score.
 - Do not output patches or apply fixes.
 - Do not output cross-review verdict markers from normal `/review`.
-- Cross-review adapters may map `category` to `ruleId`, but the shared finding
-  evidence and failure scenario must remain intact.
+- When a finding enforces a Goldband Rule, preserve its `ruleId` and
+  `policySource` through normalization and aggregation. Use `null` only when no
+  Rule applies.

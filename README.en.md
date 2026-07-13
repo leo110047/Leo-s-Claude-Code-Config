@@ -133,6 +133,13 @@ Dependencies:
 - Claude installer assets: `commands/`, `rules/`, `hooks/`, portable skills
 - Codex assets: config, profiles, prompts, rules, hooks, custom agents, portable skills
 - Goldband Loop runtime: Claude uses `~/.claude/skills/goldband`; Codex uses `~/.codex/skills/goldband`
+- Rules review: programmatic code review reloads, selects, and injects the
+  applicable current `rules/*.md` on every run. It does not depend on writer
+  self-attestation or session receipts. Deterministic checks validate manifest
+  coverage, prompt payload budgets, and generated plugin distribution drift.
+  `codex-hooks` materializes its resolver at
+  `~/.codex/review-runtime/rules-resolver.js`, independently of whether the
+  hook directory is a symlink or copied directory.
 
 Goldband Loop uses one standard workflow discovery profile:
 
@@ -229,13 +236,13 @@ These workflow entry points require `workflow`, `workflow-codex`, or
 `all-with-workflow` first:
 
 - Claude: `/goldband`
-- Codex: `$goldband <workflow>`
+- Codex: `$goldband <capability> <action>`
 - Planning command: `/plan`
 - Verification command: `/verify`
 
 Run `/goldband` or `$goldband` with no argument to list installed
 workflows, then choose by number or name. Direct examples:
-`/goldband review` on Claude, `$goldband review` on Codex. A
+`/goldband review code` on Claude, `$goldband review code` on Codex. A
 `pack-quality`-only install does not expose Goldband Loop workflows.
 
 ## Updates

@@ -13,6 +13,7 @@ const {
   ALLOWED_CATEGORIES,
   ALLOWED_CONFIDENCE,
   SCHEMA_VERSION,
+  normalizeUsageEvent,
   resolveRunId,
   validateUsageEvent,
 } = require('../scripts/lib/telemetry-schema.cjs');
@@ -58,6 +59,24 @@ function testPersistentRunIdFileFallback() {
 
   assert.equal(first, second);
   assert.equal(fs.readFileSync(runIdFile, 'utf8').trim(), first);
+}
+
+function testEventRunIdPriorityUsesSharedResolver() {
+  const fromSource = normalizeUsageEvent(
+    { run_id: 'source-run' },
+    { run_id: 'option-run', env: { GOLDBAND_RUN_ID: 'env-run' } },
+  );
+  const fromOption = normalizeUsageEvent(
+    {},
+    { run_id: 'option-run', env: { GOLDBAND_RUN_ID: 'env-run' } },
+  );
+  const fromEnvironment = normalizeUsageEvent(
+    {},
+    { env: { GOLDBAND_RUN_ID: 'env-run' } },
+  );
+  assert.equal(fromSource.run_id, 'source-run');
+  assert.equal(fromOption.run_id, 'option-run');
+  assert.equal(fromEnvironment.run_id, 'env-run');
 }
 
 function testValidatorMatchesJsonSchemaContract() {
@@ -116,6 +135,7 @@ function testAppendUsageEventUsesRunIdMarkerFallback() {
 }
 
 testPersistentRunIdFileFallback();
+testEventRunIdPriorityUsesSharedResolver();
 testValidatorMatchesJsonSchemaContract();
 testAppendUsageEventUsesRunIdMarkerFallback();
 

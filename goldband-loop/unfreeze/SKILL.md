@@ -19,6 +19,10 @@ allowed-tools:
 
 # /unfreeze — Clear Freeze Boundary
 
+```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+```
+
 Remove the edit restriction set by `/freeze`, allowing edits to all directories.
 
 ```bash
@@ -29,7 +33,8 @@ echo '{"skill":"unfreeze","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(bas
 ## Clear the boundary
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+eval "$($GOLDBAND_BIN/goldband-paths)"
 STATE_DIR="$GOLDBAND_STATE_ROOT"
 if [ -f "$STATE_DIR/freeze-dir.txt" ]; then
   PREV=$(cat "$STATE_DIR/freeze-dir.txt")

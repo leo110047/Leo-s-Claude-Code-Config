@@ -70,8 +70,8 @@ If URLs are missing, AskUserQuestion: "What's the URL for the docs/product I sho
 Check for prior /plan-devex-review scores:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
-~/.claude/skills/goldband/bin/goldband-review-read 2>/dev/null | grep plan-devex-review || echo "NO_PRIOR_PLAN_REVIEW"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
+$GOLDBAND_BIN/goldband-review-read 2>/dev/null | grep plan-devex-review || echo "NO_PRIOR_PLAN_REVIEW"
 ```
 
 If prior scores exist, display them. These are your baseline for the boomerang comparison.
@@ -206,7 +206,7 @@ Flag any dimension where live score < plan score - 2 (reality fell short of plan
 **PLAN MODE EXCEPTION — ALWAYS RUN:**
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-review-log '{"skill":"devex-review","timestamp":"TIMESTAMP","status":"STATUS","overall_score":N,"product_type":"TYPE","tthw_measured":"TTHW","dimensions_tested":N,"dimensions_inferred":N,"boomerang":"YES_OR_NO","commit":"COMMIT"}'
+$GOLDBAND_BIN/goldband-review-log '{"skill":"devex-review","timestamp":"TIMESTAMP","status":"STATUS","overall_score":N,"product_type":"TYPE","tthw_measured":"TTHW","dimensions_tested":N,"dimensions_inferred":N,"boomerang":"YES_OR_NO","commit":"COMMIT"}'
 ```
 
 {{REVIEW_DASHBOARD}}

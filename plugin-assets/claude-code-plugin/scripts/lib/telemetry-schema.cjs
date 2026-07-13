@@ -51,12 +51,13 @@ function randomEventId() {
   return stableIdFrom(`${Date.now()}:${Math.random()}`, 'evt');
 }
 
-function resolveRunId(input = {}, env = process.env) {
+function resolveRunId(input = {}, env = process.env, fallbackRunId = null) {
   return (
     safeString(input.run_id) ||
     safeString(input.runId) ||
     safeString(input.session_id) ||
     safeString(input.sessionId) ||
+    safeString(fallbackRunId) ||
     safeString(env.CLAUDE_SESSION_ID) ||
     safeString(env.CODEX_SESSION_ID) ||
     safeString(env.GOLDBAND_RUN_ID) ||
@@ -105,14 +106,7 @@ function isPlainObject(value) {
 }
 
 function resolveEventRunId(source, options) {
-  return (
-    safeString(source.run_id) ||
-    safeString(source.runId) ||
-    safeString(source.session_id) ||
-    safeString(source.sessionId) ||
-    safeString(options.run_id) ||
-    resolveRunId(source, options.env || process.env)
-  );
+  return resolveRunId(source, options.env || process.env, options.run_id);
 }
 
 function resolveEventId(source, options) {

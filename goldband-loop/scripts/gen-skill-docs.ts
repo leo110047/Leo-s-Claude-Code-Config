@@ -23,6 +23,7 @@ import { generatePlanCompletionAuditShip, generatePlanCompletionAuditReview, gen
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
 import type { HostConfig } from './host-config';
 import { TOKEN_CEILING_BYTES } from './skill-budget';
+import { generateRuntimeRoot } from './resolvers/utility';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -333,6 +334,24 @@ function extractHookSafetyProse(tmplContent: string): string | null {
 // ─── Template Processing ────────────────────────────────────
 
 const GENERATED_HEADER = `<!-- AUTO-GENERATED from {{SOURCE}} — do not edit directly -->\n<!-- Regenerate: bun run gen:skill-docs -->\n`;
+const RUNTIME_CONTRACT_REFERENCE = /\$GOLDBAND_(GLOBAL_ROOT|LOCAL_REL|LOCAL_ROOT|ROOT|BIN|BROWSE|DESIGN|MAKE_PDF)\b/g;
+const RUNTIME_CONTRACT_INITIALIZER = '/bin/goldband-env';
+
+/**
+ * Bash tool calls are sibling processes, so variables initialized in the
+ * preamble cannot be consumed by a later fenced block. Keep the host-aware
+ * contract single-sourced in generateRuntimeRoot(), then materialize it into
+ * every executable block that references the contract.
+ */
+export function injectBlockLocalRuntimeContracts(content: string, ctx: TemplateContext): string {
+  const contract = generateRuntimeRoot(ctx);
+  return content.replace(/```bash\n([\s\S]*?)```/g, (fence, block: string) => {
+    if (![...block.matchAll(RUNTIME_CONTRACT_REFERENCE)].length || block.includes(RUNTIME_CONTRACT_INITIALIZER)) {
+      return fence;
+    }
+    return `\`\`\`bash\n${contract}\n${block}\`\`\``;
+  });
+}
 
 /**
  * Process external host output: routing, frontmatter, path rewrites, metadata.
@@ -476,6 +495,8 @@ function processTemplate(tmplPath: string, host: Host = 'claude'): { outputPath:
     symlinkLoop = result.symlinkLoop;
   }
 
+  content = injectBlockLocalRuntimeContracts(content, ctx);
+
   // Prepend generated header (after frontmatter)
   const header = GENERATED_HEADER.replace('{{SOURCE}}', path.basename(tmplPath));
   const fmEnd = content.indexOf('---', content.indexOf('---') + 3);
@@ -539,7 +560,8 @@ for (const currentHost of hostsToRun) {
 
       // Track token budget
       const lines = content.split('\n').length;
-      const tokens = Math.round(content.length / 4); // ~4 chars per token
+      const contentBytes = new TextEncoder().encode(content).length;
+      const tokens = Math.round(contentBytes / 4); // ~4 bytes per token
       tokenBudget.push({ skill: relOutput, lines, tokens });
 
       // Token ceiling check: warn if any generated SKILL.md exceeds ~40K tokens (160KB).
@@ -549,8 +571,8 @@ for (const currentHost of hostsToRun) {
       // exists to catch a runaway preamble or resolver that's grown by 10K+ tokens in
       // a release, not to force compression on carefully-tuned big skills (ship,
       // plan-ceo-review, office-hours all legitimately pack 25-35K tokens of behavior).
-      if (content.length > TOKEN_CEILING_BYTES) {
-        console.warn(`⚠️  TOKEN CEILING: ${relOutput} is ${content.length} bytes (~${tokens} tokens), exceeds ${TOKEN_CEILING_BYTES} byte ceiling (~40K tokens)`);
+      if (contentBytes > TOKEN_CEILING_BYTES) {
+        console.warn(`⚠️  TOKEN CEILING: ${relOutput} is ${contentBytes} bytes (~${tokens} tokens), exceeds ${TOKEN_CEILING_BYTES} byte ceiling (~40K tokens)`);
       }
     }
 

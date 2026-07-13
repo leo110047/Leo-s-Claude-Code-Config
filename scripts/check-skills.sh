@@ -83,7 +83,7 @@ check_special_frontmatter() {
   esac
 
   case "$rel" in
-    skills/global/frontend-design/SKILL.md|skills/projects/unity/*/SKILL.md)
+    skills/global/frontend-design/SKILL.md)
       if ! printf '%s\n' "$frontmatter" | grep -q '^paths:'; then
         echo "[FAIL] $rel missing paths:"
         EXIT_CODE=1

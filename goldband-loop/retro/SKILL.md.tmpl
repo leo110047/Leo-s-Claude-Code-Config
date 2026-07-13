@@ -566,7 +566,7 @@ Check review JSONL logs for plan completion data from /ship runs this period:
 
 ```bash
 setopt +o nomatch 2>/dev/null || true  # zsh compat
-eval "$(~/.claude/skills/goldband/bin/goldband-slug 2>/dev/null)"
+eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 cat ~/.goldband/projects/$SLUG/*-reviews.jsonl 2>/dev/null | grep '"skill":"ship"' | grep '"plan_items_total"' || echo "NO_PLAN_DATA"
 ```
 
@@ -649,8 +649,7 @@ Locate and run the discovery script using this fallback chain:
 
 ```bash
 DISCOVER_BIN=""
-[ -x ~/.claude/skills/goldband/bin/goldband-global-discover ] && DISCOVER_BIN=~/.claude/skills/goldband/bin/goldband-global-discover
-[ -z "$DISCOVER_BIN" ] && [ -x .claude/skills/goldband/bin/goldband-global-discover ] && DISCOVER_BIN=.claude/skills/goldband/bin/goldband-global-discover
+[ -x "$GOLDBAND_BIN/goldband-global-discover" ] && DISCOVER_BIN="$GOLDBAND_BIN/goldband-global-discover"
 [ -z "$DISCOVER_BIN" ] && which goldband-global-discover >/dev/null 2>&1 && DISCOVER_BIN=$(which goldband-global-discover)
 [ -z "$DISCOVER_BIN" ] && [ -f bin/goldband-global-discover.ts ] && DISCOVER_BIN="bun run bin/goldband-global-discover.ts"
 echo "DISCOVER_BIN: $DISCOVER_BIN"

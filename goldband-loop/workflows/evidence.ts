@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, appendFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { resolveGoldbandStateRoot } from '../lib/state-root';
 import type {
   EvaluationSignalSnapshot,
   SignalTrailEntry,
@@ -66,17 +66,5 @@ export function digest(value: unknown): string {
 }
 
 export function stateRoot(options: WorkflowRunOptions = {}): string {
-  if (options.goldbandHome) return options.goldbandHome;
-  if (process.env.GOLDBAND_HOME) return process.env.GOLDBAND_HOME;
-  if (process.env.GOLDBAND_STATE_DIR) return process.env.GOLDBAND_STATE_DIR;
-  if (process.env.GOLDBAND_STATE_ROOT) return process.env.GOLDBAND_STATE_ROOT;
-  if (pluginDataBelongsToGoldband()) return process.env.CLAUDE_PLUGIN_DATA as string;
-  return join(homedir(), '.goldband');
-}
-
-function pluginDataBelongsToGoldband(): boolean {
-  return Boolean(
-    process.env.CLAUDE_PLUGIN_DATA &&
-    process.env.CLAUDE_PLUGIN_ROOT?.toLowerCase().includes('goldband'),
-  );
+  return resolveGoldbandStateRoot(options.goldbandHome);
 }

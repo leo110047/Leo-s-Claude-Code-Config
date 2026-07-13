@@ -60,7 +60,6 @@ result against a machine-readable inventory.
   - `mcp/*.template`
 - portable shared skills:
   - `skills/global/`
-  - `skills/projects/`
 - validation gates:
   - `scripts/check-goldband-loop-inventory.mjs`
   - `scripts/test-sandbox.sh`
@@ -83,6 +82,30 @@ Concrete ownership signals include:
 - [goldband-loop/inventory.json](goldband-loop/inventory.json)
 
 ## Integration Contract
+
+### Rules Review Runtime
+
+`rules/*.md` is the policy-content source of truth.
+`rules/manifest.json` provides deterministic review metadata, and
+`hooks/scripts/lib/rules-resolver.js` is the provider-neutral, read-only
+resolver used by both Claude and Codex review workflows.
+
+Each review creates one immutable snapshot of the current Rule text. The core
+prompt, selected specialist prompts, and prompt telemetry all consume that same
+snapshot; the next review creates a fresh one. Manifest-owned group selectors
+decide applicability, so Rule membership is not duplicated in resolver code.
+The resolver, prompt payload budget, manifest coverage, installed dependency
+inventory, and generated plugin assets are deterministic gates. Codex installs
+the resolver at `~/.codex/review-runtime/rules-resolver.js`, outside the hook
+directory symlink.
+Semantic findings are produced by independent review, not by PreToolUse, Stop,
+workspace leases, shell classification, or writer self-attestation.
+
+Cross-review hook adapters are host-specific projections over
+`goldband-loop/cross-review/core.cjs`. Minimal workflow runtime roots include
+the complete `cross-review/` directory next to `bin/`; explicit module discovery
+handles source checkouts and installed Codex/Claude runtime roots without
+assuming one fixed relative depth.
 
 ### Claude Plugin Contract
 

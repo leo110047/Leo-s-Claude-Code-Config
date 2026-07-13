@@ -18,11 +18,11 @@
 - [ ] 補齊 stop predicate 的可執行測試：
   `target-met`、`iteration-cap`、`same-blocker-repeated`、`no-improvement`。
 
-- [ ] 補齊 `goldband-review` 多輪語意：
+- [ ] 補齊 `review/code` 多輪語意：
   第一輪 findings 要能進入第二輪 context，第二輪要能判斷既有 findings 是否解掉、
   是否出現新問題，最後輸出 machine-readable loop summary。
 
-- [ ] 補齊 `goldband-qa` 最小 typed adapter：
+- [ ] 補齊 `qa/app` 最小 typed adapter：
   固定 mock check list、schema 驗證 pass/fail、第二輪只 rerun failed checks。
   真 browser QA 不要硬搬進這次範圍；若未支援，要明確記 blocked / out of scope。
 
@@ -35,10 +35,10 @@
   `loop-summary`，能重建 signal trail 與 stop reason。
 
 - [ ] 補跑或補建測試：
-  loop controller unit tests、`goldband-review` mock 多輪整合測試、
-  `goldband-qa` mock 多輪整合測試、iteration cap 限制測試。
+  loop controller unit tests、`review/code` mock 多輪整合測試、
+  `qa/app` mock 多輪整合測試、iteration cap 限制測試。
 
-- [ ] 補做 `goldband-review` real LLM e2e。
+- [ ] 補做 `review/code` real LLM e2e。
   若 host、授權、網路、或 budget gate 無法執行，不可用 mock 冒充；要在結果中
   明確標為 blocked / not verified。
 
@@ -54,7 +54,7 @@
 ### 驗收標準
 
 - [ ] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
-- [ ] `goldband-review` 與 `goldband-qa` 的 mock 多輪整合測試都有逐輪 evidence。
+- [ ] `review/code` 與 `qa/app` 的 mock 多輪整合測試都有逐輪 evidence。
 - [ ] real-mode 驗證結果被誠實標記為 pass、blocked、或 not verified。
 - [ ] 文件描述、registry 狀態、runtime 行為三者一致。
 - [ ] 沒有直接編輯 generated `SKILL.md`。

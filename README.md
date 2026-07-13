@@ -142,8 +142,11 @@ git pull --ff-only
   portable skills。
 - Codex installer assets：`AGENTS.md`、config、requirements、prompts、rules、
   hooks、profiles、permission profiles、custom agents、portable skills。
-- Goldband Loop runtime：Claude 用 `/goldband`，Codex 用 `$goldband <workflow>`
+- Goldband Loop runtime：Claude 用 `/goldband <capability> <action>`，Codex 用 `$goldband <capability> <action>`
   列出並執行已安裝 workflow。
+- Rules review：程式化 code review 每次從目前的 `rules/*.md` 重新選擇並注入
+  適用規則，不依賴 writer 自我聲明或 session receipt。Rules manifest、prompt
+  payload budget 與 plugin distribution drift 由 deterministic checks 驗證。
 - Local knowledge layer：`${GOLDBAND_HOME:-$HOME/.goldband}/knowledge/`，
   儲存已整理、可召回、未來可能畢業成 skill/rule 的 knowledge 條目。
 - Optional assets：global git style gate、MCP templates、container-first
@@ -162,6 +165,9 @@ code 表示狀態不是全綠。
   `GOLDBAND_SKIP_PLAYWRIGHT=1` 明確跳過 browser workflows。
 - hooks、rules、cross-review gate 和 sandbox 都是防誤操作與 evidence gate，不是
   惡意同權限操作者的安全邊界。
+- `codex-hooks` 會把 code review 的 Rules resolver 安裝到
+  `~/.codex/review-runtime/rules-resolver.js`，不依賴 `~/.codex/hooks` 是 symlink
+  還是複製目錄。
 
 ## 文件地圖
 

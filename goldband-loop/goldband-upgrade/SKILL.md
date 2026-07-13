@@ -21,6 +21,10 @@ allowed-tools:
 
 # /goldband-upgrade
 
+```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+```
+
 Upgrade goldband to the latest version and show what's new.
 
 ## Inline upgrade flow
@@ -31,9 +35,10 @@ This section is referenced by all skill preambles when they detect `UPGRADE_AVAI
 
 First, check if auto-upgrade is enabled:
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _AUTO=""
 [ "${GOLDBAND_AUTO_UPGRADE:-}" = "1" ] && _AUTO="true"
-[ -z "$_AUTO" ] && _AUTO=$(~/.claude/skills/goldband/bin/goldband-config get auto_upgrade 2>/dev/null || true)
+[ -z "$_AUTO" ] && _AUTO=$($GOLDBAND_BIN/goldband-config get auto_upgrade 2>/dev/null || true)
 echo "AUTO_UPGRADE=$_AUTO"
 ```
 
@@ -47,7 +52,8 @@ echo "AUTO_UPGRADE=$_AUTO"
 
 **If "Always keep me up to date":**
 ```bash
-~/.claude/skills/goldband/bin/goldband-config set auto_upgrade true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-config set auto_upgrade true
 ```
 Tell user: "Auto-upgrade enabled. Future updates will install automatically." Then proceed to Step 2.
 
@@ -73,48 +79,28 @@ Tell user the snooze duration: "Next reminder in 24h" (or 48h or 1 week, dependi
 
 **If "Never ask again":**
 ```bash
-~/.claude/skills/goldband/bin/goldband-config set update_check false
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-config set update_check false
 ```
-Tell user: "Update checks disabled. Run `~/.claude/skills/goldband/bin/goldband-config set update_check true` to re-enable."
+Tell user: "Update checks disabled. Run `$GOLDBAND_BIN/goldband-config set update_check true` to re-enable."
 Continue with the current skill.
 
 ### Step 2: Detect install type
 
 ```bash
-if [ -d "$HOME/.claude/skills/goldband/.git" ]; then
-  INSTALL_TYPE="global-git"
-  INSTALL_DIR="$HOME/.claude/skills/goldband"
-elif [ -d "$HOME/.goldband/repos/goldband/.git" ]; then
-  INSTALL_TYPE="global-git"
-  INSTALL_DIR="$HOME/.goldband/repos/goldband"
-elif [ -d ".claude/skills/goldband/.git" ]; then
-  INSTALL_TYPE="local-git"
-  INSTALL_DIR=".claude/skills/goldband"
-elif [ -d ".agents/skills/goldband/.git" ]; then
-  INSTALL_TYPE="local-git"
-  INSTALL_DIR=".agents/skills/goldband"
-elif [ -d ".claude/skills/goldband" ]; then
-  INSTALL_TYPE="vendored"
-  INSTALL_DIR=".claude/skills/goldband"
-elif [ -d "$HOME/.claude/skills/goldband" ]; then
-  INSTALL_TYPE="vendored-global"
-  INSTALL_DIR="$HOME/.claude/skills/goldband"
-else
-  echo "ERROR: goldband not found"
-  exit 1
-fi
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" start) || exit $?
+eval "$_UPGRADE_CONTEXT"
 echo "Install type: $INSTALL_TYPE at $INSTALL_DIR"
+echo "Old version: $OLD_VERSION"
 ```
 
-The install type and directory path printed above will be used in all subsequent steps.
+The helper stores this transaction context under the Goldband state root. Every
+later bash block reloads it explicitly, so no step depends on a sibling shell.
 
 ### Step 3: Save old version
 
-Use the install directory from Step 2's output below:
-
-```bash
-OLD_VERSION=$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")
-```
+Step 2 already captured the old version in the durable upgrade context.
 
 ### Step 4: Upgrade
 
@@ -122,6 +108,10 @@ Use the install type and directory detected in Step 2:
 
 **For git installs** (global-git, local-git):
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" load) || exit $?
+eval "$_UPGRADE_CONTEXT"
+case "$INSTALL_TYPE" in global-git|local-git) ;; *) echo "ERROR: expected a git install" >&2; exit 1 ;; esac
 cd "$INSTALL_DIR"
 STASH_OUTPUT=$(git stash 2>&1)
 git fetch origin
@@ -132,6 +122,10 @@ If `$STASH_OUTPUT` contains "Saved working directory", warn the user: "Note: loc
 
 **For vendored installs** (vendored, vendored-global):
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" load) || exit $?
+eval "$_UPGRADE_CONTEXT"
+case "$INSTALL_TYPE" in vendored|vendored-global) ;; *) echo "ERROR: expected a vendored install" >&2; exit 1 ;; esac
 PARENT=$(dirname "$INSTALL_DIR")
 TMP_DIR=$(mktemp -d)
 git clone --depth 1 https://github.com/leo110047/goldband.git "$TMP_DIR/goldband"
@@ -146,27 +140,24 @@ rm -rf "$INSTALL_DIR.bak" "$TMP_DIR"
 Use the install directory from Step 2. Check if there's also a local vendored copy, and whether team mode is active:
 
 ```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-LOCAL_GOLDBAND=""
-if [ -n "$_ROOT" ] && [ -d "$_ROOT/.claude/skills/goldband" ]; then
-  _RESOLVED_LOCAL=$(cd "$_ROOT/.claude/skills/goldband" && pwd -P)
-  _RESOLVED_PRIMARY=$(cd "$INSTALL_DIR" && pwd -P)
-  if [ "$_RESOLVED_LOCAL" != "$_RESOLVED_PRIMARY" ]; then
-    LOCAL_GOLDBAND="$_ROOT/.claude/skills/goldband"
-  fi
-fi
-_TEAM_MODE=$(~/.claude/skills/goldband/bin/goldband-config get team_mode 2>/dev/null || echo "false")
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" local) || exit $?
+eval "$_UPGRADE_CONTEXT"
 echo "LOCAL_GOLDBAND=$LOCAL_GOLDBAND"
-echo "TEAM_MODE=$_TEAM_MODE"
+echo "TEAM_MODE=$TEAM_MODE"
 ```
 
 **If `LOCAL_GOLDBAND` is non-empty AND `TEAM_MODE` is `true`:** Remove the vendored copy. Team mode uses the global install as the single source of truth.
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" local) || exit $?
+eval "$_UPGRADE_CONTEXT"
+[ -n "$LOCAL_GOLDBAND" ] && [ "$TEAM_MODE" = "true" ] || { echo "ERROR: team-mode removal contract not satisfied" >&2; exit 1; }
 cd "$_ROOT"
-git rm -r --cached .claude/skills/goldband/ 2>/dev/null || true
-if ! grep -qF '.claude/skills/goldband/' .gitignore 2>/dev/null; then
-  echo '.claude/skills/goldband/' >> .gitignore
+git rm -r --cached "$GOLDBAND_LOCAL_REL/" 2>/dev/null || true
+if ! grep -qF "$GOLDBAND_LOCAL_REL/" .gitignore 2>/dev/null; then
+  echo "$GOLDBAND_LOCAL_REL/" >> .gitignore
 fi
 rm -rf "$LOCAL_GOLDBAND"
 ```
@@ -174,16 +165,24 @@ Tell user: "Removed vendored copy at `$LOCAL_GOLDBAND` (team mode active — glo
 
 **If `LOCAL_GOLDBAND` is non-empty AND `TEAM_MODE` is NOT `true`:** Update it by copying from the freshly-upgraded primary install (same approach as README vendored install):
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" local) || exit $?
+eval "$_UPGRADE_CONTEXT"
+[ -n "$LOCAL_GOLDBAND" ] && [ "$TEAM_MODE" != "true" ] || { echo "ERROR: vendored-sync contract not satisfied" >&2; exit 1; }
 mv "$LOCAL_GOLDBAND" "$LOCAL_GOLDBAND.bak"
 cp -Rf "$INSTALL_DIR" "$LOCAL_GOLDBAND"
 rm -rf "$LOCAL_GOLDBAND/.git"
 cd "$LOCAL_GOLDBAND" && ./setup
 rm -rf "$LOCAL_GOLDBAND.bak"
 ```
-Tell user: "Also updated vendored copy at `$LOCAL_GOLDBAND` — commit `.claude/skills/goldband/` when you're ready."
+Tell user: "Also updated vendored copy at `$LOCAL_GOLDBAND` — commit `$GOLDBAND_LOCAL_REL/` when you're ready."
 
 If `./setup` fails, restore from backup and warn the user:
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" local) || exit $?
+eval "$_UPGRADE_CONTEXT"
+[ -n "$LOCAL_GOLDBAND" ] || { echo "ERROR: no vendored copy to restore" >&2; exit 1; }
 rm -rf "$LOCAL_GOLDBAND"
 mv "$LOCAL_GOLDBAND.bak" "$LOCAL_GOLDBAND"
 ```
@@ -196,6 +195,9 @@ and new version. Migrations handle state fixes that `./setup` alone can't cover
 (stale config, orphaned files, directory structure changes).
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" load) || exit $?
+eval "$_UPGRADE_CONTEXT"
 MIGRATIONS_DIR="$INSTALL_DIR/goldband-upgrade/migrations"
 if [ -d "$MIGRATIONS_DIR" ]; then
   for migration in $(find "$MIGRATIONS_DIR" -maxdepth 1 -name 'v*.sh' -type f 2>/dev/null | sort -V); do
@@ -218,10 +220,14 @@ for how to add new migrations.
 ### Step 5: Write marker + clear cache
 
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" load) || exit $?
+eval "$_UPGRADE_CONTEXT"
 mkdir -p ~/.goldband
 echo "$OLD_VERSION" > ~/.goldband/just-upgraded-from
 rm -f ~/.goldband/last-update-check
 rm -f ~/.goldband/update-snoozed
+"$GOLDBAND_BIN/goldband-upgrade-context" clear
 ```
 
 ### Step 6: Show What's New
@@ -252,8 +258,8 @@ When invoked directly as `/goldband-upgrade` (not from a preamble):
 
 1. Force a fresh update check (bypass cache):
 ```bash
-~/.claude/skills/goldband/bin/goldband-update-check --force 2>/dev/null || \
-.claude/skills/goldband/bin/goldband-update-check --force 2>/dev/null || true
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+$GOLDBAND_BIN/goldband-update-check --force 2>/dev/null || true
 ```
 Use the output to determine if an upgrade is available.
 
@@ -269,11 +275,14 @@ Run the Step 2 bash block above to detect the primary install type and directory
 
 **If `LOCAL_GOLDBAND` is non-empty AND `TEAM_MODE` is NOT `true`**, compare versions:
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+_UPGRADE_CONTEXT=$("$GOLDBAND_BIN/goldband-upgrade-context" local) || exit $?
+eval "$_UPGRADE_CONTEXT"
 PRIMARY_VER=$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")
 LOCAL_VER=$(cat "$LOCAL_GOLDBAND/VERSION" 2>/dev/null || echo "unknown")
 echo "PRIMARY=$PRIMARY_VER LOCAL=$LOCAL_VER"
 ```
 
-**If versions differ:** follow the Step 4.5 sync bash block above to update the local copy from the primary. Tell user: "Global v{PRIMARY_VER} is up to date. Updated local vendored copy from v{LOCAL_VER} → v{PRIMARY_VER}. Commit `.claude/skills/goldband/` when you're ready."
+**If versions differ:** follow the Step 4.5 sync bash block above to update the local copy from the primary. Tell user: "Global v{PRIMARY_VER} is up to date. Updated local vendored copy from v{LOCAL_VER} → v{PRIMARY_VER}. Commit `$GOLDBAND_LOCAL_REL/` when you're ready."
 
 **If versions match:** tell the user "You're on the latest version (v{PRIMARY_VER}). Global and local vendored copy are both up to date."

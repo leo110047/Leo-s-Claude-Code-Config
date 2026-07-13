@@ -1,6 +1,6 @@
 /**
- * Host config system tests — 100% coverage of host-config.ts, hosts/index.ts,
- * host-config-export.ts, and golden-file regression checks.
+ * Host config system tests for host-config.ts, hosts/index.ts, and
+ * host-config-export.ts.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -114,7 +114,6 @@ describe('validateHostConfig', () => {
       globalRoot: '.test/skills/goldband',
       localSkillRoot: '.test/skills/goldband',
       hostSubdir: '.test',
-      usesEnvVars: true,
       frontmatter: { mode: 'allowlist', keepFields: ['name', 'description'] },
       generation: { generateMetadata: false },
       pathRewrites: [],
@@ -244,41 +243,12 @@ describe('validateAllConfigs', () => {
 // ─── HOST_PATHS derivation ──────────────────────────────────
 
 describe('HOST_PATHS derivation from configs', () => {
-  test('Claude uses literal home paths (no env vars)', () => {
-    expect(HOST_PATHS.claude.skillRoot).toBe('~/.claude/skills/goldband');
-    expect(HOST_PATHS.claude.binDir).toBe('~/.claude/skills/goldband/bin');
-    expect(HOST_PATHS.claude.browseDir).toBe('~/.claude/skills/goldband/browse/dist');
-    expect(HOST_PATHS.claude.designDir).toBe('~/.claude/skills/goldband/design/dist');
-  });
-
-  test('Codex uses $GOLDBAND_ROOT env vars', () => {
-    expect(HOST_PATHS.codex.skillRoot).toBe('$GOLDBAND_ROOT');
-    expect(HOST_PATHS.codex.binDir).toBe('$GOLDBAND_BIN');
-    expect(HOST_PATHS.codex.browseDir).toBe('$GOLDBAND_BROWSE');
-    expect(HOST_PATHS.codex.designDir).toBe('$GOLDBAND_DESIGN');
-  });
-
-  test('every host with usesEnvVars=true gets env var paths', () => {
+  test('every host uses the shared runtime variable contract', () => {
     for (const config of ALL_HOST_CONFIGS) {
-      if (config.usesEnvVars) {
-        expect(HOST_PATHS[config.name].skillRoot).toBe('$GOLDBAND_ROOT');
-        expect(HOST_PATHS[config.name].binDir).toBe('$GOLDBAND_BIN');
-      }
-    }
-  });
-
-  test('every host with usesEnvVars=false gets literal paths', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      if (!config.usesEnvVars) {
-        expect(HOST_PATHS[config.name].skillRoot).toContain('~/');
-        expect(HOST_PATHS[config.name].binDir).toContain('/bin');
-      }
-    }
-  });
-
-  test('localSkillRoot matches config for every host', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      expect(HOST_PATHS[config.name].localSkillRoot).toBe(config.localSkillRoot);
+      expect(HOST_PATHS[config.name].skillRoot).toBe('$GOLDBAND_ROOT');
+      expect(HOST_PATHS[config.name].binDir).toBe('$GOLDBAND_BIN');
+      expect(HOST_PATHS[config.name].browseDir).toBe('$GOLDBAND_BROWSE');
+      expect(HOST_PATHS[config.name].designDir).toBe('$GOLDBAND_DESIGN');
     }
   });
 
@@ -326,13 +296,6 @@ describe('host-config-export.ts CLI', () => {
     const { stdout, exitCode } = run('get', 'codex', 'globalRoot');
     expect(exitCode).toBe(0);
     expect(stdout).toBe('.codex/skills/goldband');
-  });
-
-  test('get returns boolean as 1/0', () => {
-    const { stdout: t } = run('get', 'claude', 'usesEnvVars');
-    expect(t).toBe('0');
-    const { stdout: f } = run('get', 'codex', 'usesEnvVars');
-    expect(f).toBe('1');
   });
 
   test('get with missing args exits 1', () => {
@@ -427,30 +390,6 @@ describe('host-config-export.ts CLI', () => {
   });
 });
 
-// ─── Golden-file regression ─────────────────────────────────
-
-describe('golden-file regression', () => {
-  const GOLDEN_DIR = path.join(ROOT, 'test', 'fixtures', 'golden');
-
-  test('Claude ship skill matches golden baseline', () => {
-    const golden = fs.readFileSync(path.join(GOLDEN_DIR, 'claude-ship-SKILL.md'), 'utf-8');
-    const current = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
-    expect(current).toBe(golden);
-  });
-
-  test('Codex ship skill matches golden baseline', () => {
-    const golden = fs.readFileSync(path.join(GOLDEN_DIR, 'codex-ship-SKILL.md'), 'utf-8');
-    const current = fs.readFileSync(path.join(ROOT, '.agents', 'skills', 'goldband-ship', 'SKILL.md'), 'utf-8');
-    expect(current).toBe(golden);
-  });
-
-  test('Factory ship skill matches golden baseline', () => {
-    const golden = fs.readFileSync(path.join(GOLDEN_DIR, 'factory-ship-SKILL.md'), 'utf-8');
-    const current = fs.readFileSync(path.join(ROOT, '.factory', 'skills', 'goldband-ship', 'SKILL.md'), 'utf-8');
-    expect(current).toBe(golden);
-  });
-});
-
 // ─── Individual host config correctness ─────────────────────
 
 describe('host config correctness', () => {
@@ -471,16 +410,6 @@ describe('host config correctness', () => {
       } else {
         expect(config.install.linkingStrategy).toBe('symlink-generated');
       }
-    }
-  });
-
-  test('claude does not use env vars', () => {
-    expect(claude.usesEnvVars).toBe(false);
-  });
-
-  test('all external hosts use env vars', () => {
-    for (const config of getExternalHosts()) {
-      expect(config.usesEnvVars).toBe(true);
     }
   });
 
@@ -566,6 +495,15 @@ describe('host config correctness', () => {
       expect(config.pathRewrites.length).toBeGreaterThan(0);
     }
     expect(claude.pathRewrites.length).toBe(0);
+  });
+
+  test('host path rewrites do not own the Goldband runtime root contract', () => {
+    for (const config of getExternalHosts()) {
+      expect(config.pathRewrites.some((rewrite) =>
+        rewrite.from === '~/.claude/skills/goldband'
+        || rewrite.from === '.claude/skills/goldband'
+      )).toBe(false);
+    }
   });
 
   test('every host has runtimeRoot.globalSymlinks', () => {

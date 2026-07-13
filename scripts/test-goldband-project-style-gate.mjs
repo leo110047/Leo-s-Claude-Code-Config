@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
 const tests = [
-  ['selector files trigger selector parity', testSelectorParitySelection],
   ['hook config triggers hook reference check', testHookReferenceSelection],
   ['codex rules trigger portability check', testCodexPortabilitySelection],
   ['style gate files trigger self-test', testStyleGateSelection],
@@ -14,11 +13,6 @@ const tests = [
 for (const [name, test] of tests) {
   test();
   console.log(`ok - ${name}`);
-}
-
-function testSelectorParitySelection() {
-  const result = dryRun(['codex/prompts/goldband.md']);
-  assert.deepEqual(result.checks, ['selector-parity']);
 }
 
 function testHookReferenceSelection() {

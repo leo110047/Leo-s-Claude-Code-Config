@@ -42,7 +42,7 @@ The runtime contract for this workflow lives in `goldband-loop/workflows/`.
 Use the programmatic path for mock smoke tests and structured evidence:
 
 ```bash
-bun run workflows/run.ts goldband-qa --loop --mode mock
+bun run workflows/run.ts qa app --loop --mode mock
 ```
 
 The typed mock adapter runs a fixed check list, records schema-validated
@@ -183,8 +183,8 @@ Pick ONE keyword that names the buggy component or page. The keyword should be a
 Worked examples (qa-specific): good keywords are `checkout-button`, `signup-form`, `payment`. Bad: `tests are failing`, `<failing-test>`, `app/views/_checkout.html.erb`.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
-~/.claude/skills/goldband/bin/goldband-knowledge search --domain qa --query "<your-keyword>" --limit 5 2>/dev/null || true
+$GOLDBAND_BIN/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
+$GOLDBAND_BIN/goldband-knowledge search --domain qa --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
 
 If any learnings or curated knowledge entries come back, name which one applies

@@ -16,7 +16,8 @@ import * as http from 'http';
 import { runAgentSdkTest, passThroughNonAskUserQuestion, resolveClaudeBinary } from './helpers/agent-sdk-runner';
 
 // Periodic-tier (companion to skill-e2e-setup-gbrain-remote.test.ts).
-// Deterministic gate coverage lives in setup-gbrain-path4-structure.test.ts.
+// Deterministic auth classification is covered by
+// goldband-gbrain-mcp-verify.test.ts.
 const shouldRun = !!process.env.EVALS && process.env.EVALS_TIER === 'periodic';
 const describeE2E = shouldRun ? describe : describe.skip;
 

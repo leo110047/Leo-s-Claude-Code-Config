@@ -9,7 +9,6 @@ const claude: HostConfig = {
   globalRoot: '.claude/skills/goldband',
   localSkillRoot: '.claude/skills/goldband',
   hostSubdir: '.claude',
-  usesEnvVars: false,
 
   frontmatter: {
     mode: 'denylist',

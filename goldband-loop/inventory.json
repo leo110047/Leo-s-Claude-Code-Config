@@ -1,10 +1,487 @@
 {
-  "schema": 1,
+  "schema": 2,
   "runtimeRoot": "goldband",
+  "visibleSkills": [
+    "goldband"
+  ],
   "internalClaudeSkills": [
     "_goldband-command"
   ],
-  "skills": [
+  "capabilities": [
+    {
+      "id": "review",
+      "description": "Independent review with a selected engineering lens.",
+      "defaultAction": "code",
+      "actions": [
+        {
+          "id": "code",
+          "description": "Review a code diff.",
+          "runtime": "typed",
+          "risk": "medium"
+        },
+        {
+          "id": "security",
+          "description": "Review security and trust boundaries.",
+          "runtime": "compatibility",
+          "risk": "medium"
+        },
+        {
+          "id": "design",
+          "description": "Review visual and product design.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "devex",
+          "description": "Review developer experience.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "opposite-host",
+          "description": "Get an opposite-host second opinion.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "plan-ceo",
+          "description": "Review product scope and ambition.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "plan-design",
+          "description": "Review a plan's design contract.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "plan-devex",
+          "description": "Review a plan's developer experience.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "plan-engineering",
+          "description": "Review architecture and implementation plans.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        }
+      ]
+    },
+    {
+      "id": "investigate",
+      "description": "Find and verify the root cause of a failure.",
+      "defaultAction": "code",
+      "actions": [
+        {
+          "id": "code",
+          "description": "Investigate code or runtime behavior.",
+          "runtime": "compatibility",
+          "risk": "medium"
+        }
+      ]
+    },
+    {
+      "id": "qa",
+      "description": "Verify product behavior with explicit evidence.",
+      "defaultAction": "app",
+      "actions": [
+        {
+          "id": "app",
+          "description": "Run product QA and record evidence.",
+          "runtime": "typed",
+          "risk": "medium"
+        },
+        {
+          "id": "report-only",
+          "description": "Report QA findings without fixing.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        }
+      ]
+    },
+    {
+      "id": "release",
+      "description": "Prepare, land, deploy, and verify a release.",
+      "defaultAction": "land",
+      "actions": [
+        {
+          "id": "land",
+          "description": "Merge, deploy, and verify.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "setup",
+          "description": "Configure deployment.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "canary",
+          "description": "Monitor a deployment after release.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "report",
+          "description": "Produce a landing report.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "docs",
+          "description": "Update documentation for a release.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "plan",
+      "description": "Create, expand, or tune an implementation plan.",
+      "defaultAction": "create",
+      "actions": [
+        {
+          "id": "create",
+          "description": "Create an implementation plan.",
+          "runtime": "compatibility",
+          "risk": "low",
+          "hostSupport": [
+            "claude"
+          ]
+        },
+        {
+          "id": "auto",
+          "description": "Run the complete plan review pipeline.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "strategy",
+          "description": "Explore product direction and scope.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "tune",
+          "description": "Tune recurring planning questions.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "description": "Operate the persistent browser and browser-backed tools.",
+      "defaultAction": "session",
+      "actions": [
+        {
+          "id": "session",
+          "description": "Use the persistent browser for interactive work.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "open",
+          "description": "Open a visible browser workbench.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "scrape",
+          "description": "Extract content or media from a page.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "cookies",
+          "description": "Import browser cookies for authenticated testing.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "pair",
+          "description": "Pair another agent with the browser.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "description": "Define, explore, and prototype product design.",
+      "defaultAction": "consult",
+      "actions": [
+        {
+          "id": "consult",
+          "description": "Define a design direction and system.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "prototype",
+          "description": "Generate an HTML design prototype.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "explore",
+          "description": "Explore multiple design directions.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "safety",
+      "description": "Apply or remove workflow safety boundaries.",
+      "defaultAction": "guard",
+      "actions": [
+        {
+          "id": "careful",
+          "description": "Enable careful command handling.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "guard",
+          "description": "Enable workflow-local safety rails.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "freeze",
+          "description": "Restrict edits to an approved scope.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "unfreeze",
+          "description": "Remove an active edit restriction.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "context",
+      "description": "Save, restore, and summarize working context.",
+      "defaultAction": "restore",
+      "actions": [
+        {
+          "id": "save",
+          "description": "Save current working context.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "restore",
+          "description": "Restore saved working context.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "retro",
+          "description": "Summarize recent work and lessons.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "knowledge",
+      "description": "Recall, configure, and synchronize Goldband knowledge.",
+      "defaultAction": "recall",
+      "actions": [
+        {
+          "id": "recall",
+          "description": "Inspect Goldband learnings and knowledge.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "setup",
+          "description": "Configure GBrain integration.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "sync",
+          "description": "Synchronize GBrain knowledge.",
+          "runtime": "registered-only",
+          "risk": "high"
+        }
+      ]
+    },
+    {
+      "id": "benchmark",
+      "description": "Measure workflow or model performance.",
+      "defaultAction": "workflow",
+      "actions": [
+        {
+          "id": "workflow",
+          "description": "Benchmark product or workflow performance.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "models",
+          "description": "Compare model performance.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "document",
+      "description": "Create product documentation and publication artifacts.",
+      "defaultAction": "generate",
+      "actions": [
+        {
+          "id": "generate",
+          "description": "Generate product or module documentation.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "pdf",
+          "description": "Create a PDF artifact.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "description": "Inspect or maintain the Goldband installation.",
+      "defaultAction": "health",
+      "actions": [
+        {
+          "id": "health",
+          "description": "Inspect Goldband health and installation state.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "upgrade",
+          "description": "Upgrade Goldband.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "skill-authoring",
+          "description": "Create or improve a Goldband workflow skill.",
+          "runtime": "registered-only",
+          "risk": "low"
+        }
+      ]
+    },
+    {
+      "id": "ios",
+      "description": "Maintain and validate iOS-specific product behavior.",
+      "defaultAction": "qa",
+      "actions": [
+        {
+          "id": "clean",
+          "description": "Clean iOS project state.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "review",
+          "description": "Review iOS design and behavior.",
+          "runtime": "registered-only",
+          "risk": "medium"
+        },
+        {
+          "id": "fix",
+          "description": "Repair iOS implementation issues.",
+          "runtime": "registered-only",
+          "risk": "low"
+        },
+        {
+          "id": "qa",
+          "description": "Run iOS QA.",
+          "runtime": "registered-only",
+          "risk": "high"
+        },
+        {
+          "id": "sync",
+          "description": "Synchronize iOS project state.",
+          "runtime": "registered-only",
+          "risk": "high"
+        }
+      ]
+    }
+  ],
+  "binaries": [
+    "chrome-cdp",
+    "dev-setup",
+    "dev-teardown",
+    "goldband-analytics",
+    "goldband-artifacts-init",
+    "goldband-artifacts-url",
+    "goldband-brain-consumer",
+    "goldband-brain-enqueue",
+    "goldband-brain-reader",
+    "goldband-brain-restore",
+    "goldband-brain-sync",
+    "goldband-brain-uninstall",
+    "goldband-builder-profile",
+    "goldband-codex-probe",
+    "goldband-community-dashboard",
+    "goldband-config",
+    "goldband-cross-review",
+    "goldband-developer-profile",
+    "goldband-diff-scope",
+    "goldband-env",
+    "goldband-extension",
+    "goldband-gbrain-detect",
+    "goldband-gbrain-install",
+    "goldband-gbrain-mcp-verify",
+    "goldband-gbrain-repo-policy",
+    "goldband-gbrain-source-wireup",
+    "goldband-gbrain-supabase-provision",
+    "goldband-gbrain-supabase-verify",
+    "goldband-global-discover",
+    "goldband-ios-qa-daemon",
+    "goldband-ios-qa-mint",
+    "goldband-jsonl-merge",
+    "goldband-knowledge",
+    "goldband-knowledge-review",
+    "goldband-learnings-log",
+    "goldband-learnings-search",
+    "goldband-model-benchmark",
+    "goldband-next-version",
+    "goldband-open-url",
+    "goldband-patch-names",
+    "goldband-paths",
+    "goldband-platform-detect",
+    "goldband-pr-title-rewrite.sh",
+    "goldband-question-log",
+    "goldband-question-preference",
+    "goldband-relink",
+    "goldband-repo-mode",
+    "goldband-review-log",
+    "goldband-review-read",
+    "goldband-security-dashboard",
+    "goldband-session-update",
+    "goldband-settings-hook",
+    "goldband-slug",
+    "goldband-specialist-stats",
+    "goldband-taste-update",
+    "goldband-team-init",
+    "goldband-telemetry-log",
+    "goldband-telemetry-sync",
+    "goldband-timeline-log",
+    "goldband-timeline-read",
+    "goldband-uninstall",
+    "goldband-update-check",
+    "goldband-upgrade-context"
+  ],
+  "forbiddenLegacyEntrypoints": [
     "goldband-autoplan",
     "goldband-benchmark",
     "goldband-benchmark-models",
@@ -55,82 +532,8 @@
     "goldband-skillify",
     "goldband-sync-gbrain",
     "goldband-unfreeze",
-    "goldband-upgrade"
-  ],
-  "binaries": [
-    "chrome-cdp",
-    "dev-setup",
-    "dev-teardown",
-    "goldband-analytics",
-    "goldband-artifacts-init",
-    "goldband-artifacts-url",
-    "goldband-brain-consumer",
-    "goldband-brain-enqueue",
-    "goldband-brain-reader",
-    "goldband-brain-restore",
-    "goldband-brain-sync",
-    "goldband-brain-uninstall",
-    "goldband-builder-profile",
-    "goldband-codex-probe",
-    "goldband-community-dashboard",
-    "goldband-config",
-    "goldband-cross-review",
-    "goldband-developer-profile",
-    "goldband-diff-scope",
-    "goldband-extension",
-    "goldband-gbrain-detect",
-    "goldband-gbrain-install",
-    "goldband-gbrain-mcp-verify",
-    "goldband-gbrain-repo-policy",
-    "goldband-gbrain-source-wireup",
-    "goldband-gbrain-supabase-provision",
-    "goldband-gbrain-supabase-verify",
-    "goldband-global-discover",
-    "goldband-ios-qa-daemon",
-    "goldband-ios-qa-mint",
-    "goldband-jsonl-merge",
-    "goldband-knowledge",
-    "goldband-knowledge-review",
-    "goldband-learnings-log",
-    "goldband-learnings-search",
-    "goldband-model-benchmark",
-    "goldband-next-version",
-    "goldband-open-url",
-    "goldband-patch-names",
-    "goldband-paths",
-    "goldband-platform-detect",
-    "goldband-pr-title-rewrite.sh",
-    "goldband-question-log",
-    "goldband-question-preference",
-    "goldband-relink",
-    "goldband-repo-mode",
-    "goldband-review-log",
-    "goldband-review-read",
-    "goldband-security-dashboard",
-    "goldband-session-update",
-    "goldband-settings-hook",
-    "goldband-slug",
-    "goldband-specialist-stats",
-    "goldband-taste-update",
-    "goldband-team-init",
-    "goldband-telemetry-log",
-    "goldband-telemetry-sync",
-    "goldband-timeline-log",
-    "goldband-timeline-read",
-    "goldband-uninstall",
-    "goldband-update-check"
-  ],
-  "codexSkillReplacements": {
-    "goldband-codex": "goldband-claude"
-  },
-  "forbiddenSkillPrefixParts": [
-    [
-      "g",
-      "stack"
-    ],
-    [
-      "workflow"
-    ]
+    "goldband-upgrade",
+    "plan"
   ],
   "forbiddenCommands": [
     "checkpoint",

@@ -1,8 +1,8 @@
-import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { extractNameAndDescription } from '../scripts/resolvers/codex-helpers';
+import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import type { ReviewFinding } from './types';
 
 export type HostResult = {
@@ -16,7 +16,7 @@ export type HostAdapter = {
     readOnlyEnforced: boolean;
     parallelDispatch: boolean;
   };
-  runJson(prompt: string, schema: unknown): Promise<HostResult>;
+  runJson(prompt: string, schema: unknown, cwd: string): Promise<HostResult>;
 };
 
 const READ_ONLY_PARALLEL_CAPABILITIES = {
@@ -28,7 +28,7 @@ export class MockHostAdapter implements HostAdapter {
   name = 'mock' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
-  async runJson(prompt = ''): Promise<HostResult> {
+  async runJson(prompt = '', _schema?: unknown, _cwd?: string): Promise<HostResult> {
     const findings = mockFindingsForPrompt(prompt);
     const parsed = { findings };
     return { text: JSON.stringify(parsed), parsed };
@@ -49,12 +49,14 @@ function loopIteration(prompt: string): number | undefined {
 
 function mockFinding(index: number): ReviewFinding {
   return {
-      file: 'src/example.ts',
-      line: index + 1,
-      severity: 'medium',
-      summary: `Mock review finding ${index} with concrete diff evidence.`,
-      evidence: '+ riskyChange();',
-      recommendation: 'Add a guard and a focused regression test.',
+    file: 'src/example.ts',
+    line: index + 1,
+    severity: 'medium',
+    summary: `Mock review finding ${index} with concrete diff evidence.`,
+    evidence: '+ riskyChange();',
+    failureScenario: 'A valid request reaches riskyChange() and returns the wrong result.',
+    recommendation: 'Add a guard and a focused regression test.',
+    suggestedVerification: 'Run the focused mock review regression test.',
   };
 }
 
@@ -62,13 +64,19 @@ export class CodexHostAdapter implements HostAdapter {
   name = 'codex' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
-  async runJson(prompt: string, schema: unknown): Promise<HostResult> {
+  async runJson(prompt: string, schema: unknown, cwd: string): Promise<HostResult> {
     const dir = mkdtempSync(join(tmpdir(), 'goldband-codex-'));
     const schemaFile = join(dir, 'schema.json');
     const outputFile = join(dir, 'last-message.json');
     writeFileSync(schemaFile, JSON.stringify(schema));
     try {
-      const result = await runProcess('codex', codexRunJsonArgs(prompt, schemaFile, outputFile), 120000);
+      const result = await runProcess(
+        'codex',
+        codexRunJsonArgs(prompt, schemaFile, outputFile),
+        120000,
+        2000,
+        cwd,
+      );
       if (result.status !== 0) throw new Error(result.stderr || result.stdout);
       return readStructuredResult(result.stdout, outputFile);
     } finally {
@@ -81,8 +89,14 @@ export class ClaudeHostAdapter implements HostAdapter {
   name = 'claude' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
-  async runJson(prompt: string, schema: unknown): Promise<HostResult> {
-    const result = await runProcess('claude', claudeRunJsonArgs(prompt, schema), 120000);
+  async runJson(prompt: string, schema: unknown, cwd: string): Promise<HostResult> {
+    const result = await runProcess(
+      'claude',
+      claudeRunJsonArgs(prompt, schema),
+      120000,
+      2000,
+      cwd,
+    );
     if (result.status !== 0) throw new Error(result.stderr || result.stdout);
     return parseClaudeJson(result.stdout);
   }
@@ -121,7 +135,7 @@ export function claudeRunJsonArgs(prompt: string, schema: unknown): string[] {
     'json',
     '--disable-slash-commands',
     '--tools',
-    '',
+    'Read,Glob,Grep',
     '--disallowedTools',
     'Bash,Edit,Write',
     '--max-budget-usd',
@@ -137,45 +151,32 @@ export function runProcess(
   args: string[],
   timeoutMs: number,
   killGraceMs = 2000,
+  cwd?: string,
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let killTimer: ReturnType<typeof setTimeout> | undefined;
-    let settled = false;
-    const finish = (status: number | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      resolve({ status, stdout, stderr });
-    };
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
+  return superviseCommand(command, args, {
+    cwd,
+    timeoutMs,
+    killGraceMs,
+    captureOutput: true,
+    label: 'goldband workflow',
+    stdout: { write() {} },
+    stderr: { write() {} },
+  }).then((result) => {
+    let stderr = result.stderr;
+    if (result.reason === 'timeout') {
       stderr += `\n${command} timed out after ${timeoutMs}ms`;
-      killTimer = setTimeout(() => {
+      if (result.forceKilled) {
         stderr += `\n${command} killed after failing to exit on SIGTERM`;
-        child.kill('SIGKILL');
-        finish(null);
-      }, killGraceMs);
-    }, timeoutMs);
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-    child.on('error', (error) => {
-      stderr = stderr || error.message;
-      finish(1);
-    });
-    child.on('close', (status) => {
-      finish(status);
-    });
+      }
+    }
+    return {
+      status:
+        result.reason === 'exit' || result.reason === 'spawn-error'
+          ? result.exitCode
+          : null,
+      stdout: result.stdout,
+      stderr,
+    };
   });
 }
 

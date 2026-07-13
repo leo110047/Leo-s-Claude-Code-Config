@@ -3,66 +3,64 @@
 > goldband is Goldband Loop: AI coding skills + a fast headless browser binary + a design CLI. This file indexes every capability so agents can discover and invoke them without crawling individual SKILL.md files.
 
 Conventions:
-- Skills are invoked by name (e.g. `/ship`, `/plan-ceo-review`).
+- Capabilities use `$goldband <capability> <action>`; historical workflow names are not aliases.
 - Browse commands run as `browse <command> [args]` (or `$B` shorthand).
 - Design commands run as `design <command> [args]` (or `$D`).
 - Project-specific config lives in `CLAUDE.md`. Always read it first.
 
-## Skills
+## Capability actions
 
-- [/goldband](goldband/SKILL.md): Goldband workflow router for review, QA, investigation, shipping, deploy verification, security audit, design review, benchmarking, docs, planning, browser testing, and context restore.
-- [/goldband-autoplan](goldband-autoplan/SKILL.md): Auto-review pipeline — reads the full CEO, design, eng, and DX review skills from disk and runs them sequentially with auto-decisions using 6 decision principles.
-- [/goldband-benchmark](goldband-benchmark/SKILL.md): Performance regression detection using the browse daemon.
-- [/goldband-benchmark-models](goldband-benchmark-models/SKILL.md): Cross-model benchmark for goldband skills.
-- [/goldband-browse](goldband-browse/SKILL.md): Fast headless browser for QA testing and site dogfooding.
-- [/goldband-canary](goldband-canary/SKILL.md): Post-deploy canary monitoring.
-- [/goldband-careful](goldband-careful/SKILL.md): Safety guardrails for destructive commands.
-- [/goldband-claude](goldband-claude/SKILL.md): Claude Code CLI wrapper for non-Claude hosts - three modes.
-- [/goldband-codex](goldband-codex/SKILL.md): OpenAI Codex CLI wrapper — three modes.
-- [/goldband-context-restore](goldband-context-restore/SKILL.md): Restore working context saved earlier by /context-save.
-- [/goldband-context-save](goldband-context-save/SKILL.md): Save working context.
-- [/goldband-cso](goldband-cso/SKILL.md): Chief Security Officer mode.
-- [/goldband-design-consultation](goldband-design-consultation/SKILL.md): Design consultation: understands your product, researches the landscape, proposes a complete design system (aesthetic, typography, color, layout, spacing, motion), and generates font+color preview pages.
-- [/goldband-design-html](goldband-design-html/SKILL.md): Design finalization: generates production-quality Pretext-native HTML/CSS.
-- [/goldband-design-review](goldband-design-review/SKILL.md): Designer's eye QA: finds visual inconsistency, spacing issues, hierarchy problems, AI slop patterns, and slow interactions — then fixes them.
-- [/goldband-design-shotgun](goldband-design-shotgun/SKILL.md): Design shotgun: generate multiple AI design variants, open a comparison board, collect structured feedback, and iterate.
-- [/goldband-devex-review](goldband-devex-review/SKILL.md): Live developer experience audit.
-- [/goldband-document-generate](goldband-document-generate/SKILL.md): Generate missing documentation from scratch for a feature, module, or entire project.
-- [/goldband-document-release](goldband-document-release/SKILL.md): Post-ship documentation update.
-- [/goldband-freeze](goldband-freeze/SKILL.md): Restrict file edits to a specific directory for the session.
-- [/goldband-guard](goldband-guard/SKILL.md): Full safety mode: destructive command warnings + directory-scoped edits.
-- [/goldband-health](goldband-health/SKILL.md): Code quality dashboard.
-- [/goldband-investigate](goldband-investigate/SKILL.md): Systematic debugging with root cause investigation.
-- [/goldband-ios-clean](goldband-ios-clean/SKILL.md): Remove the DebugBridge SPM package and all #if DEBUG wiring from an iOS app.
-- [/goldband-ios-design-review](goldband-ios-design-review/SKILL.md): Visual design audit for iOS apps on real hardware.
-- [/goldband-ios-fix](goldband-ios-fix/SKILL.md): Autonomous iOS bug fixer.
-- [/goldband-ios-qa](goldband-ios-qa/SKILL.md): Live-device iOS QA for SwiftUI apps.
-- [/goldband-ios-sync](goldband-ios-sync/SKILL.md): Regenerate the iOS debug bridge against the latest upstream goldband templates.
-- [/goldband-land-and-deploy](goldband-land-and-deploy/SKILL.md): Land and deploy workflow.
-- [/goldband-landing-report](goldband-landing-report/SKILL.md): Read-only queue dashboard for workspace-aware ship.
-- [/goldband-learn](goldband-learn/SKILL.md): Manage project learnings.
-- [/goldband-make-pdf](goldband-make-pdf/SKILL.md): Turn any markdown file into a publication-quality PDF.
-- [/goldband-office-hours](goldband-office-hours/SKILL.md): YC Office Hours — two modes.
-- [/goldband-open-goldband-browser](goldband-open-goldband-browser/SKILL.md): Launch Goldband Loop Browser — AI-controlled Chromium with the sidebar extension baked in.
-- [/goldband-pair-agent](goldband-pair-agent/SKILL.md): Pair a remote AI agent with your browser.
-- [/goldband-plan-ceo-review](goldband-plan-ceo-review/SKILL.md): CEO/founder-mode plan review.
-- [/goldband-plan-design-review](goldband-plan-design-review/SKILL.md): Designer's eye plan review — interactive, like CEO and Eng review.
-- [/goldband-plan-devex-review](goldband-plan-devex-review/SKILL.md): Interactive developer experience plan review.
-- [/goldband-plan-eng-review](goldband-plan-eng-review/SKILL.md): Eng manager-mode plan review.
-- [/goldband-plan-tune](goldband-plan-tune/SKILL.md): Self-tuning question sensitivity + developer psychographic for goldband (v1: observational).
-- [/goldband-qa](goldband-qa/SKILL.md): Systematically QA test a web application and fix bugs found.
-- [/goldband-qa-only](goldband-qa-only/SKILL.md): Report-only QA testing.
-- [/goldband-retro](goldband-retro/SKILL.md): Weekly engineering retrospective.
-- [/goldband-review](goldband-review/SKILL.md): Pre-landing PR review.
-- [/goldband-scrape](goldband-scrape/SKILL.md): Pull data from a web page.
-- [/goldband-setup-browser-cookies](goldband-setup-browser-cookies/SKILL.md): Import cookies from your real Chromium browser into the headless browse session.
-- [/goldband-setup-deploy](goldband-setup-deploy/SKILL.md): Configure deployment settings for /land-and-deploy.
-- [/goldband-setup-gbrain](goldband-setup-gbrain/SKILL.md): Set up gbrain for this coding agent: install the CLI, initialize a local PGLite or Supabase brain, register MCP, capture per-remote trust policy.
-- [/goldband-ship](goldband-ship/SKILL.md): Ship workflow: detect + merge base branch, run tests, review diff, bump VERSION, update CHANGELOG, commit, push, create PR.
-- [/goldband-skillify](goldband-skillify/SKILL.md): Codify the most recent successful /scrape flow into a permanent browser-skill on disk.
-- [/goldband-sync-gbrain](goldband-sync-gbrain/SKILL.md): Keep gbrain current with this repo's code and refresh agent search guidance in CLAUDE.md.
-- [/goldband-unfreeze](goldband-unfreeze/SKILL.md): Clear the freeze boundary set by /freeze, allowing edits to all directories again.
-- [/goldband-upgrade](goldband-upgrade/SKILL.md): Upgrade goldband to the latest version.
+- `$goldband benchmark models`: Compare model performance.
+- `$goldband benchmark workflow`: Benchmark product or workflow performance.
+- `$goldband browser cookies`: Import browser cookies for authenticated testing.
+- `$goldband browser open`: Open a visible browser workbench.
+- `$goldband browser pair`: Pair another agent with the browser.
+- `$goldband browser scrape`: Extract content or media from a page.
+- `$goldband browser session`: Use the persistent browser for interactive work.
+- `$goldband context restore`: Restore saved working context.
+- `$goldband context retro`: Summarize recent work and lessons.
+- `$goldband context save`: Save current working context.
+- `$goldband design consult`: Define a design direction and system.
+- `$goldband design explore`: Explore multiple design directions.
+- `$goldband design prototype`: Generate an HTML design prototype.
+- `$goldband document generate`: Generate product or module documentation.
+- `$goldband document pdf`: Create a PDF artifact.
+- `$goldband investigate code`: Investigate code or runtime behavior.
+- `$goldband ios clean`: Clean iOS project state.
+- `$goldband ios fix`: Repair iOS implementation issues.
+- `$goldband ios qa`: Run iOS QA.
+- `$goldband ios review`: Review iOS design and behavior.
+- `$goldband ios sync`: Synchronize iOS project state.
+- `$goldband knowledge recall`: Inspect Goldband learnings and knowledge.
+- `$goldband knowledge setup`: Configure GBrain integration.
+- `$goldband knowledge sync`: Synchronize GBrain knowledge.
+- `$goldband plan auto`: Run the complete plan review pipeline.
+- `$goldband plan create`: Create an implementation plan.
+- `$goldband plan strategy`: Explore product direction and scope.
+- `$goldband plan tune`: Tune recurring planning questions.
+- `$goldband qa app`: Run product QA and record evidence.
+- `$goldband qa report-only`: Report QA findings without fixing.
+- `$goldband release canary`: Monitor a deployment after release.
+- `$goldband release docs`: Update documentation for a release.
+- `$goldband release land`: Merge, deploy, and verify.
+- `$goldband release report`: Produce a landing report.
+- `$goldband release setup`: Configure deployment.
+- `$goldband review code`: Review a code diff.
+- `$goldband review design`: Review visual and product design.
+- `$goldband review devex`: Review developer experience.
+- `$goldband review opposite-host`: Get an opposite-host second opinion.
+- `$goldband review plan-ceo`: Review product scope and ambition.
+- `$goldband review plan-design`: Review a plan's design contract.
+- `$goldband review plan-devex`: Review a plan's developer experience.
+- `$goldband review plan-engineering`: Review architecture and implementation plans.
+- `$goldband review security`: Review security and trust boundaries.
+- `$goldband safety careful`: Enable careful command handling.
+- `$goldband safety freeze`: Restrict edits to an approved scope.
+- `$goldband safety guard`: Enable workflow-local safety rails.
+- `$goldband safety unfreeze`: Remove an active edit restriction.
+- `$goldband system health`: Inspect Goldband health and installation state.
+- `$goldband system skill-authoring`: Create or improve a Goldband workflow skill.
+- `$goldband system upgrade`: Upgrade Goldband.
 
 ## Browse Commands
 

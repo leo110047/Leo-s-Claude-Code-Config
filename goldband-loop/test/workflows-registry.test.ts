@@ -11,15 +11,18 @@ import {
 const ROOT = resolve(import.meta.dir, '..');
 
 describe('workflow registry', () => {
-  test('covers every installed workflow skill and the root plan command', () => {
+  test('covers every manifest capability action', () => {
     const inventory = JSON.parse(
       readFileSync(resolve(ROOT, 'inventory.json'), 'utf8'),
     );
     const registryNames = new Set(WORKFLOW_REGISTRY.map((entry) => entry.name));
-    for (const name of inventory.skills) {
+    const names = inventory.capabilities.flatMap((capability: { id: string; actions: Array<{ id: string }> }) =>
+      capability.actions.map((action) => `${capability.id}/${action.id}`),
+    );
+    for (const name of names) {
       expect(registryNames.has(name)).toBe(true);
     }
-    expect(registryNames.has('plan')).toBe(true);
+    expect(registryNames.size).toBe(names.length);
   });
 
   test('all entries have contract fields and valid source pointers', () => {
@@ -43,26 +46,24 @@ describe('workflow registry', () => {
     expect(registeredOnlyWorkflows().length).toBeGreaterThan(40);
   });
 
-  test('integrated workflows expose a runtime thin entrypoint in source guidance', () => {
+  test('integrated workflows expose their capability action CLI in source guidance', () => {
     for (const name of CORE_WORKFLOWS) {
       const entry = WORKFLOW_REGISTRY.find((item) => item.name === name);
       expect(entry).toBeDefined();
       if (!entry) continue;
       const source = readFileSync(resolve(ROOT, entry.sourceTemplate), 'utf8');
-      expect(source).toContain('Programmatic runtime entrypoint');
-      expect(source).toContain(`workflows/run.ts ${name}`);
-      expect(source).toContain(`/workflow-runs/${name}.jsonl`);
+      expect(source).toContain(`workflows/run.ts ${entry.capability} ${entry.action}`);
     }
   });
 
   test('coverage report table matches registry contract fields', () => {
-    const report = readFileSync(resolve(ROOT, 'workflows/COVERAGE.md'), 'utf8');
+    const report = readFileSync(resolve(ROOT, '../docs/generated/capabilities.md'), 'utf8');
     const tableRows = new Map<string, string[]>();
     for (const line of report.split('\n')) {
       const cells = line.split('|').map((cell) => cell.trim()).filter(Boolean);
-      const [name] = cells;
-      if (!name || name === 'Workflow' || name.startsWith('---')) continue;
-      const normalizedName = name.replaceAll('`', '');
+      const [capability, action] = cells;
+      if (!capability || !action || capability === 'Capability' || capability.startsWith('---')) continue;
+      const normalizedName = `${capability.replaceAll('`', '')}/${action.replaceAll('`', '')}`;
       if (WORKFLOW_REGISTRY.some((entry) => entry.name === normalizedName)) {
         tableRows.set(normalizedName, cells);
       }
@@ -73,15 +74,17 @@ describe('workflow registry', () => {
       const cells = tableRows.get(entry.name);
       expect(cells).toBeDefined();
       if (!cells) continue;
-      expect(cells[1]).toBe(entry.integrationStatus);
-      expect(cells[2]).toBe(entry.entrypointType);
-      expect(cells[3]).toBe(entry.riskLevel);
-      expect(cells[4]).toBe(entry.nextStep);
+      expect(cells[0].replaceAll('`', '')).toBe(entry.capability);
+      expect(cells[1].replaceAll('`', '')).toBe(entry.action);
+      expect(cells[3].replaceAll('`', '')).toBe(entry.integrationStatus === 'integrated' ? entry.entrypointType : 'registered-only');
+      expect(cells[4].replaceAll('`', '')).toBe(entry.riskLevel);
     }
   });
 
   test('missing loop contract fields fail at definition time', () => {
     expect(() => defineWorkflow({
+      capability: 'broken',
+      action: 'test',
       name: 'broken',
       target: 'x',
       evaluationSignal: 'x',
@@ -98,6 +101,8 @@ describe('workflow registry', () => {
     })).toThrow('iterationCap');
 
     expect(() => defineWorkflow({
+      capability: 'broken',
+      action: 'test',
       name: 'broken',
       target: 'x',
       evaluationSignal: 'x',

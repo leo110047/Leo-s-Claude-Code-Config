@@ -2,7 +2,7 @@
   "sessionId": "cross-review-missing-plan",
   "updatedAt": "2026-07-06T13:15:07.373Z",
   "lastSuggestedSkills": [
-    "goldband-review"
+    "goldband:review/code"
   ],
   "lastBaselineVersion": "1",
   "lastKnowledgeAdvisoryKey": null

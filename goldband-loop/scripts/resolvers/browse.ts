@@ -54,7 +54,7 @@ export function generateCommandReference(_ctx: TemplateContext): string {
 export function generateSnapshotFlags(_ctx: TemplateContext): string {
   const lines: string[] = [
     'The snapshot is your primary tool for understanding and interacting with pages.',
-    '`$B` is the browse binary (resolved from `$_ROOT/.claude/skills/goldband/browse/dist/browse` or `~/.claude/skills/goldband/browse/dist/browse`).',
+    '`$B` is the browse binary resolved from the active Goldband runtime contract.',
     '',
     '**Syntax:** `$B snapshot [flags]`',
     '',
@@ -103,10 +103,7 @@ export function generateBrowseSetup(ctx: TemplateContext): string {
   return `## SETUP (run this check BEFORE any browse command)
 
 \`\`\`bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/${ctx.paths.localSkillRoot}/browse/dist/browse" ] && B="$_ROOT/${ctx.paths.localSkillRoot}/browse/dist/browse"
-[ -z "$B" ] && B="$HOME${ctx.paths.browseDir.replace(/^~/, '')}/browse"
+B="${ctx.paths.browseDir}/browse"
 if [ -x "$B" ]; then
   echo "READY: $B"
 else

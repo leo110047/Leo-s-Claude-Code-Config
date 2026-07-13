@@ -69,7 +69,7 @@ The runtime contract for this workflow lives in `goldband-loop/workflows/`.
 Use the programmatic path for mock smoke tests and structured evidence:
 
 ```bash
-bun run workflows/run.ts goldband-investigate --mode mock
+bun run workflows/run.ts investigate code --mode mock
 ```
 
 The compatibility runtime reads this legacy prompt source and writes step
@@ -125,7 +125,7 @@ Pick ONE keyword from the hypothesis. The keyword should be a noun: the failing 
 Worked examples (investigate-specific): good keywords are `auth-cookie`, `session-expiry`, `redirect-loop`. Bad: `auth.ts:47`, `fix the auth bug`, `<hypothesis-keyword>`.
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
+$GOLDBAND_BIN/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
 
 If any learnings come back, name which one applies to your investigation in one sentence. If none come back, continue without reference — the absence of a matching prior learning is itself useful information.
@@ -145,7 +145,7 @@ _FREEZE_SCRIPT="${CLAUDE_SKILL_DIR}/../freeze/bin/check-freeze.sh"
 **If FREEZE_AVAILABLE:** Identify the narrowest directory containing the affected files. Write it to the freeze state file:
 
 ```bash
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 STATE_DIR="$GOLDBAND_STATE_ROOT"
 mkdir -p "$STATE_DIR"
 echo "<detected-directory>/" > "$STATE_DIR/freeze-dir.txt"
@@ -257,7 +257,7 @@ Status:          DONE | DONE_WITH_CONCERNS | BLOCKED
 Log the investigation as a learning for future sessions. Use `type: "investigation"` and include the affected files so future investigations on the same area can find this:
 
 ```bash
-~/.claude/skills/goldband/bin/goldband-learnings-log '{"skill":"investigate","type":"investigation","key":"ROOT_CAUSE_KEY","insight":"ROOT_CAUSE_SUMMARY","confidence":9,"source":"observed","files":["affected/file1.ts","affected/file2.ts"]}'
+$GOLDBAND_BIN/goldband-learnings-log '{"skill":"investigate","type":"investigation","key":"ROOT_CAUSE_KEY","insight":"ROOT_CAUSE_SUMMARY","confidence":9,"source":"observed","files":["affected/file1.ts","affected/file2.ts"]}'
 ```
 
 {{LEARNINGS_LOG}}

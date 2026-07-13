@@ -38,6 +38,10 @@ hooks:
 
 # /guard — Full Safety Mode
 
+```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+```
+
 Activates both destructive command warnings and directory-scoped edit restrictions.
 This is the combination of `/careful` + `/freeze` in a single command.
 
@@ -59,16 +63,15 @@ Ask the user which directory to restrict edits to. Use AskUserQuestion:
 
 Once the user provides a directory path:
 
-1. Resolve it to an absolute path:
+Resolve the path and persist the boundary in the same shell call:
 ```bash
-FREEZE_DIR=$(cd "<user-provided-path>" 2>/dev/null && pwd)
-echo "$FREEZE_DIR"
-```
-
-2. Ensure trailing slash and save to the freeze state file:
-```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+FREEZE_DIR=$(cd "<user-provided-path>" 2>/dev/null && pwd) || {
+  echo "ERROR: cannot resolve freeze directory: <user-provided-path>" >&2
+  exit 1
+}
 FREEZE_DIR="${FREEZE_DIR%/}/"
-eval "$(~/.claude/skills/goldband/bin/goldband-paths)"
+eval "$($GOLDBAND_BIN/goldband-paths)"
 STATE_DIR="$GOLDBAND_STATE_ROOT"
 mkdir -p "$STATE_DIR"
 echo "$FREEZE_DIR" > "$STATE_DIR/freeze-dir.txt"

@@ -13,7 +13,7 @@ import { spawnSync } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { resolveGoldbandStateRoot } from './state-root';
 
 // --- Interfaces ---
 
@@ -68,25 +68,26 @@ interface DedupIndex {
   hashes: Record<string, string>; // hash → first-seen runId
 }
 
-function getDedupPath(): string {
-  return path.join(os.homedir(), '.goldband-dev', 'harvests', 'dedup.json');
+function getDedupPath(harvestRoot: string): string {
+  return path.join(harvestRoot, 'dedup.json');
 }
 
-function loadDedupIndex(): DedupIndex {
+function loadDedupIndex(harvestRoot: string): DedupIndex {
   try {
-    const raw = fs.readFileSync(getDedupPath(), 'utf-8');
+    const raw = fs.readFileSync(getDedupPath(harvestRoot), 'utf-8');
     return JSON.parse(raw);
   } catch {
     return { hashes: {} };
   }
 }
 
-function saveDedupIndex(index: DedupIndex): void {
-  const dir = path.dirname(getDedupPath());
+function saveDedupIndex(harvestRoot: string, index: DedupIndex): void {
+  const dedupPath = getDedupPath(harvestRoot);
+  const dir = path.dirname(dedupPath);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = getDedupPath() + '.tmp';
+  const tmp = dedupPath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(index, null, 2));
-  fs.renameSync(tmp, getDedupPath());
+  fs.renameSync(tmp, dedupPath);
 }
 
 // --- WorktreeManager ---
@@ -94,16 +95,18 @@ function saveDedupIndex(index: DedupIndex): void {
 export class WorktreeManager {
   private repoRoot: string;
   private runId: string;
+  private harvestRoot: string;
   private active: Map<string, WorktreeInfo> = new Map();
   private harvestResults: HarvestResult[] = [];
 
-  constructor(repoRoot?: string) {
+  constructor(repoRoot?: string, stateRoot?: string) {
     if (repoRoot) {
       this.repoRoot = repoRoot;
     } else {
       this.repoRoot = git(['rev-parse', '--show-toplevel'], process.cwd());
     }
     this.runId = crypto.randomUUID();
+    this.harvestRoot = path.join(resolveGoldbandStateRoot(stateRoot), 'dev', 'harvests');
 
     // Register cleanup on process exit
     process.on('exit', () => {
@@ -177,21 +180,21 @@ export class WorktreeManager {
 
       // Dedup check
       const hash = crypto.createHash('sha256').update(patch).digest('hex');
-      const dedupIndex = loadDedupIndex();
+      const dedupIndex = loadDedupIndex(this.harvestRoot);
       const isDuplicate = hash in dedupIndex.hashes;
 
       let patchPath = '';
 
       if (!isDuplicate) {
         // Save patch
-        const harvestDir = path.join(os.homedir(), '.goldband-dev', 'harvests', this.runId);
+        const harvestDir = path.join(this.harvestRoot, this.runId);
         fs.mkdirSync(harvestDir, { recursive: true });
         patchPath = path.join(harvestDir, `${testName}.patch`);
         fs.writeFileSync(patchPath, patch);
 
         // Update dedup index
         dedupIndex.hashes[hash] = this.runId;
-        saveDedupIndex(dedupIndex);
+        saveDedupIndex(this.harvestRoot, dedupIndex);
       }
 
       const result: HarvestResult = {

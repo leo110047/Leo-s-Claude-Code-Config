@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { defineWorkflow } from '../workflows/definition';
@@ -14,7 +21,11 @@ import {
 import { findingsSchema, objectSchema } from '../workflows/schema';
 import { runWorkflow } from '../workflows/runtime';
 import type { EvaluationSignalSnapshot } from '../workflows/types';
-import { reviewSignalFromOutput, reviewSteps } from '../workflows/review';
+import {
+  buildReviewPrompt,
+  reviewSignalFromOutput,
+  reviewSteps,
+} from '../workflows/review';
 import { qaChecksSchema } from '../workflows/schema';
 import {
   MockHostAdapter,
@@ -25,11 +36,20 @@ import {
 import {
   REVIEW_SPECIALISTS,
   aggregateReviewFindings,
-  runParallelSpecialistReview,
+  buildSpecialistPrompt,
   selectReviewSpecialists,
 } from '../workflows/review-engine';
+import {
+  MAX_REVIEW_AGGREGATE_RULES_BYTES,
+  MAX_REVIEW_RULES_BYTES,
+  assertRulesPayloadBudget,
+  buildReviewPromptTelemetry,
+  coreReviewRules,
+  specialistReviewRules,
+} from '../workflows/review-rules';
 
 const ROOT = resolve(import.meta.dir, '..');
+const PROJECT_ROOT = resolve(ROOT, '..');
 let tmpHome: string;
 
 beforeEach(() => {
@@ -43,7 +63,7 @@ afterEach(() => {
 describe('workflow runtime', () => {
   test('core compatibility workflows emit evidence in mock mode', async () => {
     for (const workflow of integratedWorkflows()) {
-      const options = workflow.name === 'goldband-review'
+      const options = workflow.name === 'review/code'
         ? { diffFile: 'test/fixtures/workflows/review.diff' }
         : {};
       const result = await runWorkflow(workflow, {
@@ -66,7 +86,7 @@ describe('workflow runtime', () => {
   });
 
   test('compatibility workflows fail closed in real mode', async () => {
-    await expect(runWorkflow(getWorkflow('goldband-investigate'), {
+    await expect(runWorkflow(getWorkflow('investigate/code'), {
       mode: 'real',
       host: 'codex',
       goldbandHome: tmpHome,
@@ -75,18 +95,18 @@ describe('workflow runtime', () => {
   });
 
   test('registered-only workflows are not runnable', async () => {
-    await expect(runWorkflow(getWorkflow('goldband-benchmark'), {
+    await expect(runWorkflow(getWorkflow('benchmark/workflow'), {
       goldbandHome: tmpHome,
     })).rejects.toThrow('registered-only');
   });
 
   test('iteration cap and repeated-blocker stop condition are enforced', async () => {
-    await expect(runWorkflow(getWorkflow('goldband-review'), {
+    await expect(runWorkflow(getWorkflow('review/code'), {
       iteration: 3,
       goldbandHome: tmpHome,
     })).rejects.toThrow('iteration cap');
 
-    const result = await runWorkflow(getWorkflow('goldband-investigate'), {
+    const result = await runWorkflow(getWorkflow('investigate/code'), {
       repeatedBlocker: true,
       goldbandHome: tmpHome,
       cwd: ROOT,
@@ -131,13 +151,13 @@ describe('workflow runtime', () => {
   });
 
   test('loop rejects workflows without signal hooks before writing evidence', () => {
-    const result = runCli(['goldband-investigate', '--loop', '--mode', 'mock'], {
+    const result = runCli(['investigate/code', '--loop', '--mode', 'mock'], {
       GOLDBAND_HOME: tmpHome,
     });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('does not support --loop');
-    expect(existsSync(evidencePath('goldband-investigate', { goldbandHome: tmpHome }))).toBe(false);
+    expect(existsSync(evidencePath('investigate/code', { goldbandHome: tmpHome }))).toBe(false);
   });
 
   test('same-blocker-repeated is inferred from consecutive signals', () => {
@@ -168,7 +188,7 @@ describe('workflow runtime', () => {
   });
 
   test('review same-blocker key ignores summary wording changes', () => {
-    const workflow = getWorkflow('goldband-review');
+    const workflow = getWorkflow('review/code');
     const previousSignal = reviewSignalFromOutput([{
       file: 'src/example.ts',
       line: 2,
@@ -239,22 +259,46 @@ describe('workflow runtime', () => {
     expect(event.error).toContain('expected object output');
   });
 
-  test('goldband-review typed flow renders validated report', async () => {
-    const result = await runWorkflow(getWorkflow('goldband-review'), {
+  test('review/code typed flow renders validated report', async () => {
+    const result = await runWorkflow(getWorkflow('review/code'), {
       mode: 'mock',
       cwd: ROOT,
       goldbandHome: tmpHome,
       diffFile: 'test/fixtures/workflows/review.diff',
     });
     expect(String(result.output)).toContain('Mock review finding');
-    const events = readJsonl('goldband-review');
+    expect(String(result.output)).toContain('Evidence: + riskyChange();');
+    expect(String(result.output)).toContain('Verify: Run the focused mock review regression test.');
+    const reportArtifact = result.artifacts.find((file) => file.endsWith('-code.md'));
+    expect(reportArtifact).toBeDefined();
+    const savedReport = readFileSync(reportArtifact as string, 'utf8');
+    expect(savedReport).toContain('Evidence: + riskyChange();');
+    expect(savedReport).toContain('Verify: Run the focused mock review regression test.');
+    const events = readJsonl('review/code');
     expect(events.map((event) => event.step)).toContain('collect-diff');
     expect(events.map((event) => event.step)).toContain('render-report');
     expect(events.every((event) => event.runId === result.runId)).toBe(true);
+    const telemetry = JSON.parse(
+      readFileSync(
+        join(
+          tmpHome,
+          'workflow-runs',
+          'telemetry',
+          `${result.runId}-review-prompt.json`,
+        ),
+        'utf8',
+      ),
+    );
+    expect(telemetry.host).toBe('mock');
+    expect(telemetry.rulesCount).toBeGreaterThan(0);
+    expect(telemetry.rulesBytes).toBeGreaterThan(0);
+    expect(telemetry.promptBytes).toBeGreaterThan(telemetry.rulesBytes);
+    expect(Array.isArray(telemetry.selectedSpecialists)).toBe(true);
+    expect(JSON.stringify(telemetry)).not.toContain('Architecture and Integration Boundaries');
   });
 
-  test('goldband-review loop converges after previous findings reach zero', async () => {
-    const result = await runWorkflowLoop(getWorkflow('goldband-review'), {
+  test('review/code loop converges after previous findings reach zero', async () => {
+    const result = await runWorkflowLoop(getWorkflow('review/code'), {
       mode: 'mock',
       cwd: ROOT,
       goldbandHome: tmpHome,
@@ -265,7 +309,7 @@ describe('workflow runtime', () => {
     expect(result.stopReason).toBe('findings-converged');
     expect(result.signalTrail.map((entry) => signalCount(entry.signal))).toEqual([2, 0]);
 
-    const runEvents = readJsonl('goldband-review').filter((event) => event.runId === result.runId);
+    const runEvents = readJsonl('review/code').filter((event) => event.runId === result.runId);
     expect(runEvents.some((event) => event.step === 'loop-summary')).toBe(true);
     expect(runEvents.filter((event) => event.step === 'run-review').map((event) => event.iteration))
       .toEqual([1, 2]);
@@ -289,8 +333,8 @@ describe('workflow runtime', () => {
     expect(findings).toHaveLength(1);
   });
 
-  test('goldband-qa loop reruns only failed checks', async () => {
-    const result = await runWorkflowLoop(getWorkflow('goldband-qa'), {
+  test('qa/app loop reruns only failed checks', async () => {
+    const result = await runWorkflowLoop(getWorkflow('qa/app'), {
       mode: 'mock',
       cwd: ROOT,
       goldbandHome: tmpHome,
@@ -300,7 +344,7 @@ describe('workflow runtime', () => {
     expect(result.stopReason).toBe('target-met');
     expect(result.signalTrail.map((entry) => signalCount(entry.signal))).toEqual([1, 0]);
 
-    const events = readJsonl('goldband-qa').filter((event) => event.runId === result.runId);
+    const events = readJsonl('qa/app').filter((event) => event.runId === result.runId);
     const selectEvents = events.filter((event) => event.step === 'select-checks');
     expect(selectEvents).toHaveLength(2);
     expect(selectEvents[0].outputDigest).not.toBe(selectEvents[1].outputDigest);
@@ -314,7 +358,7 @@ describe('workflow runtime', () => {
   });
 
   test('loop max iterations cannot exceed registry cap', async () => {
-    await expect(runWorkflowLoop(getWorkflow('goldband-review'), {
+    await expect(runWorkflowLoop(getWorkflow('review/code'), {
       mode: 'mock',
       cwd: ROOT,
       goldbandHome: tmpHome,
@@ -324,26 +368,26 @@ describe('workflow runtime', () => {
   });
 
   test('CLI rejects real mode without a real host and invalid enums', () => {
-    const noHost = runCli(['goldband-review', '--mode', 'real']);
+    const noHost = runCli(['review/code', '--mode', 'real']);
     expect(noHost.status).toBe(2);
     expect(noHost.stderr).toContain('--mode real requires --host claude or --host codex');
 
-    const badMode = runCli(['goldband-review', '--mode', 'banana']);
+    const badMode = runCli(['review/code', '--mode', 'banana']);
     expect(badMode.status).toBe(2);
     expect(badMode.stderr).toContain('invalid --mode: banana');
 
-    const badHost = runCli(['goldband-review', '--mode', 'real', '--host', 'mock']);
+    const badHost = runCli(['review/code', '--mode', 'real', '--host', 'mock']);
     expect(badHost.status).toBe(2);
     expect(badHost.stderr).toContain('--mode real requires --host claude or --host codex');
 
-    const badSpecialists = runCli(['goldband-review', '--specialists', 'banana']);
+    const badSpecialists = runCli(['review/code', '--specialists', 'banana']);
     expect(badSpecialists.status).toBe(2);
     expect(badSpecialists.stderr).toContain('invalid --specialists: banana');
   });
 
   test('CLI warns when max-iterations is provided without loop', () => {
     const result = runCli([
-      'goldband-review',
+      'review/code',
       '--mode',
       'mock',
       '--max-iterations',
@@ -364,13 +408,13 @@ describe('workflow runtime', () => {
       commitAll(repo, 'initial');
       writeFileSync(join(repo, 'new-file.txt'), 'hello\n');
 
-      const result = await runWorkflow(getWorkflow('goldband-review'), {
+      const result = await runWorkflow(getWorkflow('review/code'), {
         mode: 'mock',
         cwd: repo,
         goldbandHome: tmpHome,
         worktree: true,
       });
-      const collect = readJsonl('goldband-review')
+      const collect = readJsonl('review/code')
         .find((event) => event.runId === result.runId && event.step === 'collect-diff');
       expect(collect?.outputDigest).toBe(digest({
         source: 'git diff HEAD + untracked',
@@ -389,6 +433,37 @@ describe('workflow runtime', () => {
     }
   });
 
+  test('base plus worktree diff includes committed and uncommitted changes', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(join(repo, 'committed.txt'), 'committed change\n');
+      commitAll(repo, 'feature commit');
+      writeFileSync(join(repo, 'tracked.txt'), 'uncommitted change\n');
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      expect(step).toBeDefined();
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { base: 'HEAD~1', worktree: true },
+      });
+
+      const collected = output as { source: string; diff: string };
+      expect(collected.source).toMatch(/^git diff [0-9a-f]+$/);
+      expect(collected.diff).toContain('committed.txt');
+      expect(collected.diff).toContain('committed change');
+      expect(collected.diff).toContain('tracked.txt');
+      expect(collected.diff).toContain('uncommitted change');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   test('worktree diff skips secret-like untracked file content', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
     try {
@@ -401,7 +476,7 @@ describe('workflow runtime', () => {
       expect(step).toBeDefined();
       const output = await step!.run({
         runId: 'test-run',
-        workflow: getWorkflow('goldband-review'),
+        workflow: getWorkflow('review/code'),
         cwd: repo,
         artifacts: [],
         options: { worktree: true },
@@ -430,7 +505,7 @@ describe('workflow runtime', () => {
       expect(step).toBeDefined();
       const output = await step!.run({
         runId: 'test-run',
-        workflow: getWorkflow('goldband-review'),
+        workflow: getWorkflow('review/code'),
         cwd: repo,
         artifacts: [],
         options: { worktree: true },
@@ -458,7 +533,7 @@ describe('workflow runtime', () => {
         '+new',
       ].join('\n'));
 
-      const result = await runWorkflow(getWorkflow('goldband-review'), {
+      const result = await runWorkflow(getWorkflow('review/code'), {
         mode: 'mock',
         cwd: repo,
         goldbandHome: tmpHome,
@@ -471,12 +546,12 @@ describe('workflow runtime', () => {
     }
   });
 
-  test('high findings without evidence are retained as unverified info', async () => {
+  test('findings without an exact reachable failure path are suppressed', async () => {
     const step = reviewSteps.find((item) => item.name === 'verify-findings');
     expect(step).toBeDefined();
     const result = await step!.run({
       runId: 'test-run',
-      workflow: getWorkflow('goldband-review'),
+      workflow: getWorkflow('review/code'),
       cwd: ROOT,
       artifacts: [],
       options: {},
@@ -486,13 +561,85 @@ describe('workflow runtime', () => {
         summary: 'Possibly serious issue.',
       }],
     });
-    expect(result).toEqual([{
-      file: 'src/example.ts',
-      severity: 'info',
-      summary: '[unverified high] Possibly serious issue.',
-      evidence: 'High-severity finding lacked concrete diff evidence during runtime verification.',
-      blocking: false,
-    }]);
+    expect(result).toEqual([]);
+  });
+
+  test('core and specialist review prompts inject checklist, schema, rubric, and selected Rules', () => {
+    const ctx = {
+      runId: 'rules-prompt-test',
+      workflow: getWorkflow('review/code'),
+      cwd: PROJECT_ROOT,
+      artifacts: [],
+      options: { host: 'codex' as const },
+    };
+    const diff = [
+      'diff --git a/scripts/install-auth.ts b/scripts/install-auth.ts',
+      '+provider permission installer change',
+    ].join('\n');
+    const core = buildReviewPrompt(ctx, diff);
+    expect(core).toContain('# Shared Review Rubric');
+    expect(core).toContain('# Shared Finding Shape');
+    expect(core).toContain('# Read-Only Review Checklist');
+    expect(core).toContain('# Security Boundaries');
+    expect(core).toContain('# Git Workflow');
+    expect(core).toContain('# Semantic Review Criteria');
+
+    const security = buildSpecialistPrompt(ctx, diff, 'security');
+    expect(security).toContain('# Security Boundaries');
+    expect(security).toContain('# Semantic Review Criteria');
+    expect(security).not.toContain('# Git Workflow');
+    expect(security).toContain('inspect the repository outside the diff');
+
+    const hostParity = buildSpecialistPrompt(ctx, diff, 'api-host-parity');
+    expect(hostParity).toContain('# Git Workflow');
+    expect(hostParity).toContain('# Security Boundaries');
+  });
+
+  test('review Rules payload budgets use measured headroom and fail closed on aggregate fan-out', () => {
+    const core = coreReviewRules(PROJECT_ROOT, 'provider installer change');
+    const security = specialistReviewRules(PROJECT_ROOT, 'security');
+    const coreBytes = Buffer.byteLength(core.text);
+    const securityBytes = Buffer.byteLength(security.text);
+    expect(coreBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
+    expect(securityBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
+    expect(MAX_REVIEW_RULES_BYTES).toBeGreaterThanOrEqual(32 * 1024);
+    expect(MAX_REVIEW_AGGREGATE_RULES_BYTES).toBeGreaterThan(124_353);
+
+    expect(() =>
+      assertRulesPayloadBudget(
+        {
+          repoRoot: PROJECT_ROOT,
+          rules: [
+            {
+              id: 'oversized-fixture',
+              sourceFile: 'rules/fixture.md',
+              content: 'x'.repeat(MAX_REVIEW_RULES_BYTES + 1),
+              contentHash: 'fixture',
+            },
+          ],
+          ruleIds: ['oversized-fixture'],
+          contentHash: 'fixture',
+        },
+        'oversized-fixture',
+      ),
+    ).toThrow('Rules payload exceeds budget');
+
+    const specialistPrompts = Array.from({ length: 12 }, () => ({
+      prompt: security.text,
+      bundle: security.bundle,
+    }));
+    expect(() =>
+      buildReviewPromptTelemetry({
+        host: 'codex',
+        corePrompt: core.text,
+        coreBundle: core.bundle,
+        specialistPrompts,
+        selectedSpecialists: Array.from(
+          { length: 12 },
+          () => 'security' as const,
+        ),
+      }),
+    ).toThrow('aggregate Rules payload exceeds budget');
   });
 
   test('review specialist selection includes host parity for workflow and prompt diffs', () => {
@@ -503,10 +650,8 @@ describe('workflow runtime', () => {
       '+allowed-tools:',
     ].join('\n'));
 
-    expect(selection.selected).toContain('correctness-contract');
-    expect(selection.selected).toContain('testing');
-    expect(selection.selected).toContain('maintainability');
-    expect(selection.selected).toContain('api-host-parity');
+    expect(selection.selected).toEqual(['security', 'api-host-parity']);
+    expect(selection.selected.length).toBeLessThanOrEqual(2);
   });
 
   test('review specialist selection supports explicit all mode', () => {
@@ -542,6 +687,8 @@ describe('workflow runtime', () => {
         suggestedVerification: 'Run bun test b.test.ts',
         blocking: false,
         specialist: 'correctness-contract',
+        ruleId: 'claim-verification',
+        policySource: 'rules/claim-verification.md',
       },
       {
         file: 'a.ts',
@@ -563,136 +710,11 @@ describe('workflow runtime', () => {
     ]);
     expect(result[0].contributingSpecialists).toEqual(['correctness-contract', 'testing']);
     expect(result[0].evidence).toBe('longer and more specific diff evidence from second specialist');
+    expect(result[0].ruleId).toBe('claim-verification');
+    expect(result[0].policySource).toBe('rules/claim-verification.md');
+    expect(result[1].evidence).toBeUndefined();
     expect(result[1].blocking).toBe(false);
     expect(result[1].summary).toContain('[unverified critical]');
-  });
-
-  test('parallel specialist review uses bounded concurrent dispatch', async () => {
-    let active = 0;
-    let maxActive = 0;
-    let calls = 0;
-    const adapter = {
-      name: 'mock' as const,
-      capabilities: { readOnlyEnforced: true, parallelDispatch: true },
-      async runJson() {
-        calls += 1;
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        active -= 1;
-        return {
-          text: '{"findings":[]}',
-          parsed: { findings: [] },
-        };
-      },
-    };
-    const findings = await runParallelSpecialistReview(
-      {
-        runId: 'test-run',
-        workflow: getWorkflow('goldband-review'),
-        cwd: ROOT,
-        artifacts: [],
-        options: {},
-      },
-      adapter,
-      [
-        '+auth token check',
-        '+schema migration',
-        '+workflow host-adapter codex prompt',
-        '+performance cache query',
-      ].join('\n'),
-      {},
-    );
-
-    expect(calls).toBeGreaterThan(4);
-    expect(maxActive).toBeGreaterThan(1);
-    expect(maxActive).toBeLessThanOrEqual(4);
-    expect(findings.every((finding) => finding.category !== 'host-capability')).toBe(true);
-  });
-
-  test('parallel specialist review honors explicit off mode without dispatch', async () => {
-    let calls = 0;
-    const adapter = {
-      name: 'mock' as const,
-      capabilities: { readOnlyEnforced: false, parallelDispatch: false },
-      async runJson() {
-        calls += 1;
-        return {
-          text: '{"findings":[]}',
-          parsed: { findings: [] },
-        };
-      },
-    };
-    const findings = await runParallelSpecialistReview(
-      {
-        runId: 'test-run',
-        workflow: getWorkflow('goldband-review'),
-        cwd: ROOT,
-        artifacts: [],
-        options: { specialists: 'off' },
-      },
-      adapter,
-      '+auth token check',
-      {},
-      'off',
-    );
-
-    expect(calls).toBe(0);
-    expect(findings).toHaveLength(REVIEW_SPECIALISTS.length);
-    expect(findings.every((finding) => finding.category === 'specialist-skipped')).toBe(true);
-  });
-
-  test('parallel specialist review reports host capability degradation', async () => {
-    const noReadOnly = await runParallelSpecialistReview(
-      workflowContext(getWorkflow('goldband-review')),
-      {
-        name: 'mock' as const,
-        capabilities: { readOnlyEnforced: false, parallelDispatch: true },
-        async runJson() {
-          throw new Error('should not dispatch without read-only enforcement');
-        },
-      },
-      '+auth token check',
-      {},
-    );
-    expect(noReadOnly).toHaveLength(1);
-    expect(noReadOnly[0].category).toBe('host-capability');
-    expect(noReadOnly[0].evidence).toContain('read-only enforcement unavailable');
-
-    const noParallel = await runParallelSpecialistReview(
-      workflowContext(getWorkflow('goldband-review')),
-      {
-        name: 'mock' as const,
-        capabilities: { readOnlyEnforced: true, parallelDispatch: false },
-        async runJson() {
-          throw new Error('should not dispatch without parallel support');
-        },
-      },
-      '+tiny docs change',
-      {},
-    );
-    expect(noParallel[0].category).toBe('host-capability');
-    expect(noParallel[0].evidence).toContain('parallel specialist dispatch unavailable');
-    expect(noParallel.some((finding) => finding.category === 'specialist-skipped')).toBe(true);
-  });
-
-  test('parallel specialist review turns rejected specialists into blocking findings', async () => {
-    const findings = await runParallelSpecialistReview(
-      workflowContext(getWorkflow('goldband-review')),
-      {
-        name: 'mock' as const,
-        capabilities: { readOnlyEnforced: true, parallelDispatch: true },
-        async runJson() {
-          throw new Error('adapter crashed');
-        },
-      },
-      '+workflow host-adapter codex prompt',
-      {},
-    );
-    const failures = findings.filter((finding) => finding.category === 'specialist-runtime');
-    expect(failures.length).toBeGreaterThan(0);
-    expect(failures.every((finding) => finding.blocking)).toBe(true);
-    expect(failures[0].evidence).toContain('adapter crashed');
   });
 
   test('Codex JSON adapter args enforce read-only sandbox and output schema', () => {
@@ -718,6 +740,22 @@ describe('workflow runtime', () => {
       '--max-budget-usd',
       '0.50',
     ]);
+    expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual([
+      '--tools',
+      'Read,Glob,Grep',
+    ]);
+  });
+
+  test('runProcess executes the host in the target cwd', async () => {
+    const result = await runProcess(
+      process.execPath,
+      ['-e', 'process.stdout.write(process.cwd())'],
+      1000,
+      100,
+      tmpHome,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(realpathSync(tmpHome));
   });
 
   test('runProcess resolves after killing a process that ignores SIGTERM', async () => {
@@ -732,6 +770,34 @@ describe('workflow runtime', () => {
     expect(result.status).toBeNull();
     expect(result.stderr).toContain('timed out after 20ms');
     expect(result.stderr).toContain('killed after failing to exit on SIGTERM');
+  });
+
+  test('runProcess does not leave a descendant that ignores SIGTERM', async () => {
+    if (process.platform === 'win32') return;
+    const pidFile = join(tmpHome, 'run-process-grandchild.pid');
+    const grandchild = [
+      'process.on("SIGTERM", () => {});',
+      'setInterval(() => {}, 1000);',
+    ].join(' ');
+    const parent = [
+      'const { spawn } = require("node:child_process");',
+      'const { writeFileSync } = require("node:fs");',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: 'ignore' });`,
+      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));`,
+      'process.on("SIGTERM", () => {});',
+      'setInterval(() => {}, 1000);',
+    ].join('\n');
+
+    await runProcess(process.execPath, ['-e', parent], 50, 50);
+    const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
+    let alive = true;
+    try {
+      process.kill(pid, 0);
+    } catch {
+      alive = false;
+    }
+    if (alive) process.kill(pid, 'SIGKILL');
+    expect(alive).toBe(false);
   });
 
   test('review findings schema rejects invalid optional field types', () => {
@@ -781,7 +847,7 @@ describe('workflow runtime', () => {
     expect(events.map((event) => event.step)).toContain('run-review');
     for (const event of events) {
       expect(event.runId).toBe('c31e6249-de5d-4266-a3c0-b5dd7199fe11');
-      expect(event.workflow).toBe('goldband-review');
+      expect(event.workflow).toBe('review/code');
       expect(typeof event.outputDigest).toBe('string');
       expect(['ok', 'failed', 'skipped']).toContain(event.status);
       expect(Array.isArray(event.artifacts)).toBe(true);
@@ -807,7 +873,9 @@ function runCli(
   args: string[],
   env: Record<string, string | undefined> = {},
 ): { status: number | null; stderr: string } {
-  const result = spawnSync('bun', ['run', 'workflows/run.ts', ...args], {
+  const [first, ...rest] = args;
+  const canonicalArgs = first?.includes('/') ? [...first.split('/'), ...rest] : args;
+  const result = spawnSync('bun', ['run', 'workflows/run.ts', ...canonicalArgs], {
     cwd: ROOT,
     encoding: 'utf8',
     env: { ...process.env, ...env },
@@ -882,7 +950,7 @@ function signalCount(signal: EvaluationSignalSnapshot): number {
   return signal.score;
 }
 
-function workflowContext(workflow = getWorkflow('goldband-review')) {
+function workflowContext(workflow = getWorkflow('review/code')) {
   return {
     runId: 'test-run',
     workflow,

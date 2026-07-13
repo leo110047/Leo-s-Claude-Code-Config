@@ -5,8 +5,8 @@
  * Forward-pass tests land when the FFI path is built — see
  * docs/designs/BUN_NATIVE_INFERENCE.md for the roadmap.
  *
- * Skipped when the TestSavantAI model cache is absent (first-run CI)
- * because the tokenizer.json lives alongside the model files.
+ * Run explicitly with `bun run test:ml`; the standard free suite excludes
+ * model-dependent benchmarks.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -17,8 +17,12 @@ import * as path from 'path';
 const MODEL_DIR = path.join(os.homedir(), '.goldband', 'models', 'testsavant-small');
 const TOKENIZER_AVAILABLE = fs.existsSync(path.join(MODEL_DIR, 'tokenizer.json'));
 
+if (!TOKENIZER_AVAILABLE) {
+  throw new Error(`TestSavantAI tokenizer cache missing at ${MODEL_DIR}`);
+}
+
 describe('bun-native tokenizer', () => {
-  test.skipIf(!TOKENIZER_AVAILABLE)('loads HF tokenizer.json into a WordPiece state', async () => {
+  test('loads HF tokenizer.json into a WordPiece state', async () => {
     const { loadHFTokenizer } = await import('../src/security-bunnative');
     const tok = loadHFTokenizer(MODEL_DIR);
     expect(tok.vocab.size).toBeGreaterThan(1000); // BERT vocab is ~30k
@@ -29,7 +33,7 @@ describe('bun-native tokenizer', () => {
     expect(typeof tok.padId).toBe('number');
   });
 
-  test.skipIf(!TOKENIZER_AVAILABLE)('encodes simple English into [CLS] ... [SEP] frame', async () => {
+  test('encodes simple English into [CLS] ... [SEP] frame', async () => {
     const { loadHFTokenizer, encodeWordPiece } = await import('../src/security-bunnative');
     const tok = loadHFTokenizer(MODEL_DIR);
     const ids = encodeWordPiece('hello world', tok);
@@ -39,7 +43,7 @@ describe('bun-native tokenizer', () => {
     expect(ids.length).toBeGreaterThanOrEqual(3); // [CLS] + >=1 content + [SEP]
   });
 
-  test.skipIf(!TOKENIZER_AVAILABLE)('truncates to max_length', async () => {
+  test('truncates to max_length', async () => {
     const { loadHFTokenizer, encodeWordPiece } = await import('../src/security-bunnative');
     const tok = loadHFTokenizer(MODEL_DIR);
     // Build a deliberately long input
@@ -48,7 +52,7 @@ describe('bun-native tokenizer', () => {
     expect(ids.length).toBeLessThanOrEqual(128);
   });
 
-  test.skipIf(!TOKENIZER_AVAILABLE)('unknown tokens fall back to [UNK]', async () => {
+  test('unknown tokens fall back to [UNK]', async () => {
     const { loadHFTokenizer, encodeWordPiece } = await import('../src/security-bunnative');
     const tok = loadHFTokenizer(MODEL_DIR);
     // A pathological string that definitely has no vocab match
@@ -58,7 +62,7 @@ describe('bun-native tokenizer', () => {
     expect(ids[ids.length - 1]).toBe(tok.sepId);
   });
 
-  test.skipIf(!TOKENIZER_AVAILABLE)('matches transformers.js for a regression set', async () => {
+  test('matches transformers.js for a regression set', async () => {
     // Correctness anchor for the future native forward pass — if the
     // native tokenizer ever drifts from transformers.js, downstream
     // classifier outputs will silently diverge. Test on 5 canonical
@@ -103,7 +107,7 @@ describe('bun-native tokenizer', () => {
 });
 
 describe('bun-native benchmark harness', () => {
-  test.skipIf(!TOKENIZER_AVAILABLE)('benchClassify returns well-shaped latency report', async () => {
+  test('benchClassify returns well-shaped latency report', async () => {
     // Sanity: the harness returns p50/p95/p99/mean and doesn't crash on
     // a small sample. We DO run the actual classifier here because the
     // stub still goes through WASM — keep the sample small so CI stays fast.

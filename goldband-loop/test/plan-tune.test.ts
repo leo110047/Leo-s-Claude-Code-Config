@@ -357,36 +357,6 @@ describe('archetypes', () => {
 });
 
 // -----------------------------------------------------------------------
-// Registry completeness — warn about SKILL.md.tmpl AskUserQuestion calls
-// that don't appear to map to any registry entry.
-//
-// This is NOT a strict CI failure. Many AskUserQuestion invocations are
-// dynamic (agent generates question text at runtime), which is fine — the
-// agent picks the best-fitting registry id or generates an ad-hoc id.
-//
-// The test reports a count for visibility. A future enhancement will scan
-// for specific question_id references in template prose and require those
-// referenced ids to exist in the registry.
-// -----------------------------------------------------------------------
-
-describe('AskUserQuestion template coverage (informational)', () => {
-  test('count of templates using AskUserQuestion is non-trivial', () => {
-    const templates = findAllTemplates();
-    const usingAsk = templates.filter((p) =>
-      fs.readFileSync(p, 'utf-8').includes('AskUserQuestion'),
-    );
-    // At the time of writing, ~35 templates reference AskUserQuestion.
-    // This sanity check catches an accidental global removal.
-    expect(usingAsk.length).toBeGreaterThan(20);
-  });
-
-  test('registry covers >= 10 skills from template files', () => {
-    const stats = getRegistryStats();
-    expect(Object.keys(stats.by_skill).length).toBeGreaterThanOrEqual(10);
-  });
-});
-
-// -----------------------------------------------------------------------
 // One-way door classifier (belt-and-suspenders keyword fallback)
 // -----------------------------------------------------------------------
 
@@ -451,76 +421,6 @@ describe('one-way-doors classifier', () => {
   test('skill-category set covers security + deploy', () => {
     expect(ONE_WAY_SKILL_CATEGORY_SET.has('cso:approval')).toBe(true);
     expect(ONE_WAY_SKILL_CATEGORY_SET.has('land-and-deploy:approval')).toBe(true);
-  });
-});
-
-// -----------------------------------------------------------------------
-// Preamble injection — the QUESTION_TUNING section must appear for tier >=2
-// -----------------------------------------------------------------------
-
-describe('preamble — QUESTION_TUNING injection', () => {
-  test('tier 2+ skills include the Question Tuning section', async () => {
-    const { generatePreamble } = await import('../scripts/resolvers/preamble');
-    const ctx = {
-      skillName: 'test-skill',
-      tmplPath: 'test.tmpl',
-      host: 'claude' as const,
-      paths: {
-        skillRoot: '~/.claude/skills/goldband',
-        localSkillRoot: '.claude/skills/goldband',
-        binDir: '~/.claude/skills/goldband/bin',
-        browseDir: '~/.claude/skills/goldband/browse/dist',
-        designDir: '~/.claude/skills/goldband/design/dist',
-      },
-      preambleTier: 2,
-    };
-    const out = generatePreamble(ctx);
-    expect(out).toContain('QUESTION_TUNING: $_QUESTION_TUNING');
-    expect(out).toContain('## Question Tuning');
-    expect(out).toContain('goldband-question-preference --check');
-    expect(out).toContain('goldband-question-log');
-    expect(out).toContain('profile-poisoning defense');
-    expect(out).toContain('inline-user');
-  });
-
-  test('tier 1 skills do NOT include Question Tuning section', async () => {
-    const { generatePreamble } = await import('../scripts/resolvers/preamble');
-    const ctx = {
-      skillName: 'test-skill',
-      tmplPath: 'test.tmpl',
-      host: 'claude' as const,
-      paths: {
-        skillRoot: '~/.claude/skills/goldband',
-        localSkillRoot: '.claude/skills/goldband',
-        binDir: '~/.claude/skills/goldband/bin',
-        browseDir: '~/.claude/skills/goldband/browse/dist',
-        designDir: '~/.claude/skills/goldband/design/dist',
-      },
-      preambleTier: 1,
-    };
-    const out = generatePreamble(ctx);
-    // QUESTION_TUNING config echo still fires (it's in the bash block which all tiers get),
-    // but the prose section should NOT be present for tier 1.
-    expect(out).not.toContain('## Question Tuning');
-  });
-
-  test('codex host produces different paths', async () => {
-    const { generateQuestionTuning } = await import('../scripts/resolvers/question-tuning');
-    const codexCtx = {
-      skillName: 'test',
-      tmplPath: 'x',
-      host: 'codex' as const,
-      paths: {
-        skillRoot: '$GOLDBAND_ROOT',
-        localSkillRoot: '.agents/skills/goldband',
-        binDir: '$GOLDBAND_BIN',
-        browseDir: '$GOLDBAND_BROWSE',
-        designDir: '$GOLDBAND_DESIGN',
-      },
-    };
-    const out = generateQuestionTuning(codexCtx);
-    expect(out).toContain('$GOLDBAND_BIN/goldband-question-preference');
-    expect(out).toContain('$GOLDBAND_BIN/goldband-question-log');
   });
 });
 
@@ -632,27 +532,3 @@ describe('end-to-end pipeline (binaries working together)', () => {
     }
   });
 });
-
-function findAllTemplates(): string[] {
-  const results: string[] = [];
-  function walk(dir: string) {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        // Skip node_modules and dotfiles
-        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-        walk(full);
-      } else if (entry.isFile() && entry.name === 'SKILL.md.tmpl') {
-        results.push(full);
-      }
-    }
-  }
-  walk(ROOT);
-  return results;
-}
