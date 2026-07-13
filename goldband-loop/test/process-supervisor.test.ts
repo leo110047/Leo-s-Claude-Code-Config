@@ -76,7 +76,7 @@ describe('process supervisor', () => {
 
     const grandchildPid = await readPid(grandchildPidFile);
     expect(result.exitCode).toBe(124);
-    expect(await waitForExit(grandchildPid)).toBe(true);
+    expect(isAlive(grandchildPid)).toBe(false);
   });
 
   test('cleans descendants left behind after the root exits normally', async () => {

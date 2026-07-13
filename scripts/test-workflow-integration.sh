@@ -47,10 +47,10 @@ create_fake_goldband_loop() {
 
 create_fake_loop_metadata() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/.agents/skills"
+  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated" "$loop_dir/.agents/skills"
+  printf '{"schemaVersion":1,"actions":[]}\n' > "$loop_dir/generated/capability-actions.json"
   printf '0.0.0-test\n' > "$loop_dir/VERSION"
   write_skill "$loop_dir" "goldband"
-
   local skill
   for skill in investigate review qa ship browse goldband-upgrade; do
     local skill_name="goldband-$skill"
@@ -58,7 +58,6 @@ create_fake_loop_metadata() {
     write_skill "$loop_dir/$skill" "$skill_name"
     write_skill "$loop_dir/.agents/skills/$skill_name" "$skill_name"
   done
-
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
 # test checklist
 EOF_CHECKLIST
@@ -109,7 +108,6 @@ esac
 EOF_CONFIG
   chmod +x "$loop_dir/bin/goldband-config"
 }
-
 write_fake_repo_mode_bin() {
   local loop_dir="$1"
   cat > "$loop_dir/bin/goldband-repo-mode" <<'EOF_MODE'
@@ -118,7 +116,6 @@ printf 'REPO_MODE=solo\n'
 EOF_MODE
   chmod +x "$loop_dir/bin/goldband-repo-mode"
 }
-
 write_fake_setup_script() {
   local loop_dir="$1"
   write_fake_setup_header "$loop_dir"
@@ -127,7 +124,6 @@ write_fake_setup_script() {
   append_fake_setup_footer "$loop_dir"
   chmod +x "$loop_dir/setup"
 }
-
 write_fake_setup_header() {
   local loop_dir="$1"
   cat > "$loop_dir/setup" <<'EOF_SETUP'
@@ -144,7 +140,6 @@ while [ $# -gt 0 ]; do
     *) shift ;;
   esac
 done
-
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 mkdir -p "$HOME/.goldband/projects"
@@ -154,7 +149,6 @@ if [ "${FAIL_GOLDBAND_LOOP_SETUP:-0}" = "1" ]; then
 fi
 EOF_SETUP
 }
-
 append_fake_setup_claude() {
   local loop_dir="$1"
   cat >> "$loop_dir/setup" <<'EOF_SETUP'
@@ -193,7 +187,6 @@ install_claude() {
 }
 EOF_SETUP
 }
-
 append_fake_setup_codex() {
   local loop_dir="$1"
   cat >> "$loop_dir/setup" <<'EOF_SETUP'
@@ -222,7 +215,6 @@ install_codex() {
 }
 EOF_SETUP
 }
-
 append_fake_setup_footer() {
   local loop_dir="$1"
   cat >> "$loop_dir/setup" <<'EOF_SETUP'
@@ -234,14 +226,12 @@ case "$HOST" in
 esac
 EOF_SETUP
 }
-
 assert_exists() {
   test -e "$1" || {
     echo "missing expected path: $1" >&2
     exit 1
   }
 }
-
 assert_absent() {
   if [ -e "$1" ] || [ -L "$1" ]; then
     echo "unexpected path exists: $1" >&2
@@ -574,7 +564,6 @@ run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile standard --
 COUNT_STATUS="$(HOME="$COUNT_HOME" "$TMP_ROOT/install.sh" status)"
 assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard"
 assert_contains "$COUNT_STATUS" "0 top-level workflows"
-
 STATUS_ALIAS_HOME="$TMP_ROOT/status-alias-home"
 mkdir -p "$STATUS_ALIAS_HOME/.claude/skills/goldband" "$STATUS_ALIAS_HOME/.claude/skills/_goldband-command"
 printf '%s\n' '---' 'name: goldband' '---' > "$STATUS_ALIAS_HOME/.claude/skills/goldband/SKILL.md"
@@ -582,7 +571,6 @@ ln -s "$STATUS_ALIAS_HOME/.claude/skills/goldband/SKILL.md" "$STATUS_ALIAS_HOME/
 STATUS_ALIAS_OUTPUT="$(HOME="$STATUS_ALIAS_HOME" "$TMP_ROOT/install.sh" status 2>&1 || true)"
 assert_contains "$STATUS_ALIAS_OUTPUT" "legacy /goldband skill alias"
 assert_not_contains "$STATUS_ALIAS_OUTPUT" "command not found"
-
 echo "[4/4] status output"
 STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status)"
 assert_contains "$STATUS_OUTPUT" "codex prompt goldband.md"
@@ -591,9 +579,22 @@ assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex runtime (0.0.0-test)"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Claude workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop Codex workflow profile: standard"
 assert_contains "$STATUS_OUTPUT" "Goldband Loop state dir (~/.goldband/projects)"
-
+CUSTOM_SOURCE="$TMP_ROOT/custom-loop-source"
+cp -R "$TMP_ROOT/goldband-loop" "$CUSTOM_SOURCE"
+printf '\n# custom workflow source\n' >> "$CUSTOM_SOURCE/setup"
+for SOURCE_ENV in GOLDBAND_LOOP_DIR WORKFLOW_REPO_DIR; do
+  CUSTOM_HOME="$TMP_ROOT/custom-loop-home-$SOURCE_ENV"
+  env "$SOURCE_ENV=$CUSTOM_SOURCE" HOME="$CUSTOM_HOME" "$TMP_ROOT/install.sh" workflow-codex >/tmp/goldband-loop-custom-source.log
+  CUSTOM_STATUS_OUTPUT="$(HOME="$CUSTOM_HOME" "$TMP_ROOT/install.sh" status 2>&1 || true)"
+  assert_not_contains "$CUSTOM_STATUS_OUTPUT" "workflow contract drift"
+  assert_contains "$(cat "$CUSTOM_HOME/.codex/skills/goldband/.installed-source")" "$CUSTOM_SOURCE"
+done
+mv "$CUSTOM_SOURCE" "$CUSTOM_SOURCE.missing"
+MISSING_SOURCE_OUTPUT="$(HOME="$CUSTOM_HOME" "$TMP_ROOT/install.sh" status 2>&1 || true)"
+assert_contains "$MISSING_SOURCE_OUTPUT" "workflow contract source unavailable"
+printf 'same-version-stale-layout\n' > "$TMP_HOME/.codex/skills/goldband/.installed-contract" && STALE_STATUS_OUTPUT="$(HOME="$TMP_HOME" "$TMP_ROOT/install.sh" status 2>&1 || true)"
+assert_contains "$STALE_STATUS_OUTPUT" "Goldband Loop Codex runtime (0.0.0-test) — workflow contract drift"
 CODEX_REQUIREMENTS_FILE="$TMP_ROOT/etc/codex/requirements.toml" HOME="$TMP_HOME" "$TMP_ROOT/install.sh" uninstall >/tmp/goldband-loop-uninstall.log
 assert_absent "$TMP_HOME/.codex/prompts/goldband.md"
 assert_exists "$TMP_HOME/.codex/prompts/custom.md"
-
 echo "[OK] Goldband Loop installer integration smoke test passed"

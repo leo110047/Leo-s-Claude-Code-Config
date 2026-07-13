@@ -2,10 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CHECK_ROOT="${GOLDBAND_CODEX_PORTABILITY_ROOT:-$ROOT_DIR}"
 
 targets=(
-  "$ROOT_DIR/codex/config.toml"
-  "$ROOT_DIR/codex/rules"
+  "$CHECK_ROOT/codex/config.toml"
+  "$CHECK_ROOT/codex/rules"
 )
 
 patterns=(
@@ -17,14 +18,38 @@ patterns=(
 
 failed=0
 
-for pattern in "${patterns[@]}"; do
-  if rg -n --fixed-strings "$pattern" "${targets[@]}"; then
-    failed=1
+if ! command -v grep >/dev/null 2>&1; then
+  echo "[FAIL] Codex portable baseline check requires grep" >&2
+  exit 2
+fi
+
+for target in "${targets[@]}"; do
+  if [ ! -e "$target" ]; then
+    echo "[FAIL] Codex portable baseline target is missing: $target" >&2
+    exit 2
   fi
 done
 
-if rg -n 'prefix_rule\(.*decision[[:space:]]*=[[:space:]]*"allow".*\)' "$ROOT_DIR/codex/rules"; then
+for pattern in "${patterns[@]}"; do
+  if grep -RInF -- "$pattern" "${targets[@]}"; then
+    failed=1
+  else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+      echo "[FAIL] Codex portable baseline scan failed for pattern: $pattern" >&2
+      exit 2
+    fi
+  fi
+done
+
+if grep -RInE -- 'prefix_rule\(.*decision[[:space:]]*=[[:space:]]*"allow".*\)' "$CHECK_ROOT/codex/rules"; then
   failed=1
+else
+  status=$?
+  if [ "$status" -ne 1 ]; then
+    echo "[FAIL] Codex portable baseline approval scan failed" >&2
+    exit 2
+  fi
 fi
 
 if [ "$failed" -ne 0 ]; then

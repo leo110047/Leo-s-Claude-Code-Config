@@ -13,11 +13,6 @@ const HIGH_RISK_BASH_RULES = [
       'sudo commands are high-risk and require explicit user approval outside the hook path.',
   },
   {
-    pattern: /\b(?:curl|wget)\b[\s\S]*\|\s*(?:sh|bash|zsh|fish)\b/,
-    telemetryName: 'curl-pipe-shell',
-    reason: 'Piping downloaded code directly into a shell is high-risk.',
-  },
-  {
     pattern: /\bdd\b[\s\S]*\bof=\/dev\//,
     telemetryName: 'device-write',
     reason: 'Writing raw data to a device path is high-risk.',
@@ -59,6 +54,78 @@ const HIGH_RISK_BASH_RULES = [
     reason: 'Reading passwords from the system keychain is high-risk.',
   },
 ];
+
+const HIGH_RISK_COMPOUND_BASH_RULES = [
+  {
+    pattern: /\b(?:curl|wget)\b[\s\S]*\|\s*(?:sh|bash|zsh|fish)\b/,
+    telemetryName: 'curl-pipe-shell',
+    reason: 'Piping downloaded code directly into a shell is high-risk.',
+  },
+];
+
+function splitShellCommandSegments(command) {
+  const segments = [];
+  let current = '';
+  const state = { quote: null, escaped: false };
+  const text = String(command || '');
+
+  const flush = () => {
+    const segment = current.trim();
+    if (segment) segments.push(segment);
+    current = '';
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (isQuotedOrEscapedShellCharacter(state, char)) {
+      current += char;
+      continue;
+    }
+
+    const operatorLength = shellOperatorLength(text, i);
+    if (operatorLength > 0) {
+      flush();
+      i += operatorLength - 1;
+      continue;
+    }
+
+    current += char;
+  }
+
+  flush();
+  return segments;
+}
+
+function isQuotedOrEscapedShellCharacter(state, char) {
+  if (state.escaped) {
+    state.escaped = false;
+    return true;
+  }
+  if (char === '\\' && state.quote !== "'") {
+    state.escaped = true;
+    return true;
+  }
+  if (state.quote) {
+    if (char === state.quote) state.quote = null;
+    return true;
+  }
+  if (["'", '"', '`'].includes(char)) {
+    state.quote = char;
+    return true;
+  }
+  return false;
+}
+
+function shellOperatorLength(text, index) {
+  const char = text[index];
+  const next = text[index + 1];
+  if ((char === '&' && next === '&') || (char === '|' && next === '|')) {
+    return 2;
+  }
+  if (char === ';' || char === '\n' || char === '|') return 1;
+  if (char === '&' && text[index - 1] !== '>' && next !== '>') return 1;
+  return 0;
+}
 
 function tokenizeCommand(command) {
   return String(command || '').match(/"[^"]*"|'[^']*'|[^\s]+/g) || [];
@@ -158,12 +225,8 @@ function highRiskDecision(reason, telemetryName) {
   return { reason, telemetryName };
 }
 
-function classifyHighRiskBash(command) {
-  const normalized = String(command || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const tokens = tokenizeCommand(command);
-
+function classifyHighRiskBashSegment(segment) {
+  const tokens = tokenizeCommand(segment);
   for (let i = 0; i < tokens.length; i += 1) {
     if (stripQuotes(tokens[i]) === 'rm' && isRecursiveForceRm(tokens, i)) {
       return highRiskDecision(
@@ -181,7 +244,23 @@ function classifyHighRiskBash(command) {
     );
   }
 
+  const normalized = segment.replace(/\s+/g, ' ').trim();
   const match = HIGH_RISK_BASH_RULES.find((rule) =>
+    rule.pattern.test(normalized),
+  );
+  return match ? highRiskDecision(match.reason, match.telemetryName) : null;
+}
+
+function classifyHighRiskBash(command) {
+  for (const segment of splitShellCommandSegments(command)) {
+    const decision = classifyHighRiskBashSegment(segment);
+    if (decision) return decision;
+  }
+
+  const normalized = String(command || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = HIGH_RISK_COMPOUND_BASH_RULES.find((rule) =>
     rule.pattern.test(normalized),
   );
   return match ? highRiskDecision(match.reason, match.telemetryName) : null;

@@ -80,6 +80,9 @@ jobs:
       - name: Test project style gate
         run: npm run test:project-style-gate
 
+      - name: Test Codex portable baseline gate
+        run: npm run test:codex-portability
+
       - name: Replay hook router golden dataset
         run: npm run test:hook-router
 

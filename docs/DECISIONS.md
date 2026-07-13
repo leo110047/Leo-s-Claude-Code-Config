@@ -295,3 +295,71 @@ Alternatives considered:
 | Preserve every old name as an alias | Keeps the catalog and migration burden alive indefinitely. |
 | Keep routing tables handwritten per host | Recreates drift between Claude, Codex, hooks, runtime, and docs. |
 | Put every workflow and browser instruction in root `SKILL.md` | Pays the context cost before the instructions are relevant and over-constrains model-native reasoning. |
+
+## 2026-07-13: CI Boundary Owners Must Verify Their Completion Contracts
+
+Decision: deterministic infrastructure boundaries own their complete outcome.
+Callers and tests must not compensate for an incomplete owner contract with
+sleep calls, partial spot checks, or undeclared tool dependencies.
+
+Implementation contract:
+
+- `process-supervisor.mjs` does not resolve forced termination until the whole
+  process group is gone or a bounded cleanup verification fails explicitly.
+- Codex high-risk shell policy separates unquoted shell command boundaries
+  before command-local flags and targets are classified. Cross-command flag
+  leakage is never treated as evidence of a destructive command.
+- `check-codex-portability.sh` uses only declared baseline dependencies. Missing
+  inputs and scanner errors fail closed with a distinct infrastructure error.
+- `generated/capability-actions.json` owns the complete installed workflow
+  document set. Clean-install verification compares the exact projection for
+  both Claude and Codex instead of checking one representative file.
+- Workflow installs record the canonical source path together with a contract
+  fingerprint derived from the capability contract and its projection logic.
+  `install.sh status` verifies against that same source, reports drift even when
+  the human-readable version did not change, and fails explicitly when the
+  recorded source is no longer available.
+
+Assumptions:
+
+- POSIX process groups remain the process-tree authority on macOS and Linux;
+  Windows continues to use `taskkill /T`.
+- The shell hook is a conservative lexical policy adapter, not a general shell
+  interpreter. Compound rules that intentionally span a pipe remain explicit.
+- `cksum`, `awk`, and `grep` are available in supported installer and CI shells.
+
+Consequences:
+
+- CI failures identify the owning boundary: cleanup, policy classification,
+  portability scanning, or install projection.
+- Forced process cleanup can take up to the bounded confirmation window before
+  returning, and a surviving tree becomes an explicit failure.
+- Changing workflow projection logic makes existing installs stale until the
+  relevant workflow installer is rerun.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Add a delay to the flaky descendant test | Moves lifecycle responsibility into consumers and remains timing-dependent. |
+| Allow the hook false positive manually | Leaves the classifier structurally unable to distinguish command boundaries. |
+| Install `rg` in CI only | Keeps an unnecessary undeclared dependency in a baseline portability gate. |
+| Check only `review/code.workflow.md` and the version marker | Cannot detect partial or same-version stale installs. |
+
+Failure signals:
+
+- A supervisor result returns while `process.kill(pid, 0)` still succeeds for a
+  descendant in the supervised group.
+- Safe adjacent shell commands can combine their flags into a denial.
+- A missing portability scanner or input still prints `[OK]`.
+- `install.sh status` reports green for a legacy flat workflow layout.
+- A runtime installed through `GOLDBAND_LOOP_DIR` is compared against a
+  different repository, or its missing recorded source is silently ignored.
+
+Revisit triggers:
+
+- Supported platforms provide a stronger native process-tree completion API.
+- Shell policy expands to constructs that require a maintained parser rather
+  than the current bounded lexical adapter.
+- Workflow projections move out of `goldband-loop/setup` into a standalone
+  materializer with its own stable contract version.

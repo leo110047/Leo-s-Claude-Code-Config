@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 const DEFAULT_KILL_GRACE_MS = 2_000;
+const DEFAULT_KILL_CONFIRM_MS = 2_000;
+const KILL_CONFIRM_POLL_MS = 10;
 
 export function superviseCommand(command, args, options = {}) {
   return new ProcessSupervisor(command, args, normalizeOptions(options)).run();
@@ -143,12 +145,12 @@ class ProcessSupervisor {
     }
     this.childExitSignal = signal;
     if (
-      !this.forceKillSent &&
       processTreeExists(this.child, this.useProcessGroup)
     ) {
+      if (this.forceKillSent) this.waitForForcedCleanup();
       return;
     }
-    this.finish(this.shutdownExitCode, this.shutdownReason, signal);
+    this.finishShutdown(signal);
   }
 
   forceKillRemainingTree() {
@@ -160,13 +162,37 @@ class ProcessSupervisor {
       );
       signalTree(this.child, 'SIGKILL', this.useProcessGroup);
     }
-    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+    this.waitForForcedCleanup();
+  }
+
+  waitForForcedCleanup() {
+    if (this.completed || this.cleanupTimer) return;
+    if (!processTreeExists(this.child, this.useProcessGroup)) {
+      this.finishShutdown();
+      return;
+    }
+
+    this.cleanupDeadline ??= Date.now() + this.options.killConfirmMs;
+    if (Date.now() >= this.cleanupDeadline) {
+      this.writeStderr(
+        `[${this.options.label}] process tree still exists ${this.options.killConfirmMs}ms after SIGKILL; cleanup could not be confirmed\n`,
+      );
       this.finish(
-        this.shutdownExitCode,
-        this.shutdownReason,
+        125,
+        'cleanup-failed',
         this.childExitSignal ?? this.child.signalCode,
       );
+      return;
     }
+
+    this.cleanupTimer = setTimeout(() => {
+      this.cleanupTimer = null;
+      this.waitForForcedCleanup();
+    }, Math.min(KILL_CONFIRM_POLL_MS, this.cleanupDeadline - Date.now()));
+  }
+
+  finishShutdown(signal = this.childExitSignal ?? this.child.signalCode) {
+    this.finish(this.shutdownExitCode, this.shutdownReason, signal);
   }
 
   installSignalHandlers() {
@@ -197,6 +223,7 @@ class ProcessSupervisor {
     if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     if (this.completionTimer) clearTimeout(this.completionTimer);
     if (this.killTimer) clearTimeout(this.killTimer);
+    if (this.cleanupTimer) clearTimeout(this.cleanupTimer);
     process.off('SIGINT', this.onSigint);
     process.off('SIGTERM', this.onSigterm);
     process.off('SIGHUP', this.onSighup);
@@ -210,6 +237,10 @@ function normalizeOptions(options) {
     killGraceMs: nonNegativeInteger(
       options.killGraceMs ?? DEFAULT_KILL_GRACE_MS,
       'killGraceMs',
+    ),
+    killConfirmMs: nonNegativeInteger(
+      options.killConfirmMs ?? DEFAULT_KILL_CONFIRM_MS,
+      'killConfirmMs',
     ),
     completionPattern,
     completionExitGraceMs: nonNegativeInteger(

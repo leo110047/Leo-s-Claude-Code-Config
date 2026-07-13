@@ -16,8 +16,14 @@ const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
 const LOOP_DIR = path.join(ROOT_DIR, 'goldband-loop');
 const INVENTORY_PATH = path.join(LOOP_DIR, 'inventory.json');
+const CAPABILITY_CONTRACT_PATH = path.join(
+  LOOP_DIR,
+  'generated',
+  'capability-actions.json',
+);
 function main() {
   const inventory = readJson(INVENTORY_PATH);
+  const capabilityContract = readJson(CAPABILITY_CONTRACT_PATH);
   assert.equal(inventory.schema, 2);
   assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput();
   assertSourceSymlinksResolve(LOOP_DIR);
@@ -28,7 +34,7 @@ function main() {
   try {
     runInstall(tmpHome, 'workflow');
     runInstall(tmpHome, 'workflow-codex');
-    assertInstalledStandardInventory(tmpHome, inventory);
+    assertInstalledStandardInventory(tmpHome, inventory, capabilityContract);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -251,7 +257,7 @@ function assertLegacyConfigMigration() {
   }
 }
 
-function assertInstalledStandardInventory(home, inventory) {
+function assertInstalledStandardInventory(home, inventory, capabilityContract) {
   const claudeSkillsDir = path.join(home, '.claude', 'skills');
   const codexSkillsDir = path.join(home, '.codex', 'skills');
   const claudeRuntime = path.join(claudeSkillsDir, 'goldband');
@@ -267,18 +273,8 @@ function assertInstalledStandardInventory(home, inventory) {
     skillDirectories(codexSkillsDir),
     ['goldband'],
   );
-  assert.ok(
-    fs.existsSync(
-      path.join(claudeRuntime, 'workflows', 'review', 'code.workflow.md'),
-    ),
-    'Claude standard workflow document missing',
-  );
-  assert.ok(
-    fs.existsSync(
-      path.join(codexRuntime, 'workflows', 'review', 'code.workflow.md'),
-    ),
-    'Codex standard workflow document missing',
-  );
+  assertInstalledWorkflowDocuments('Claude', claudeRuntime, capabilityContract);
+  assertInstalledWorkflowDocuments('Codex', codexRuntime, capabilityContract);
   assert.equal(
     fs
       .readFileSync(
@@ -299,6 +295,42 @@ function assertInstalledStandardInventory(home, inventory) {
   );
   assertInstalledRuntimeSupportFiles(claudeRuntime, codexRuntime);
   assertNoLegacyCommands(home, inventory);
+}
+
+function assertInstalledWorkflowDocuments(
+  label,
+  runtimeRoot,
+  capabilityContract,
+) {
+  const expected = capabilityContract.actions.map(({ capability, action }) =>
+    path.join(capability, `${action}.workflow.md`),
+  );
+  const workflowRoot = path.join(runtimeRoot, 'workflows');
+  assertDeepSetEqual(
+    `${label} standard workflow documents`,
+    workflowDocuments(workflowRoot),
+    expected,
+  );
+  for (const relativePath of expected) {
+    assert.ok(
+      fs.existsSync(path.join(workflowRoot, relativePath)),
+      `${label} standard workflow document is broken: ${relativePath}`,
+    );
+  }
+}
+
+function workflowDocuments(root, current = root) {
+  if (!fs.existsSync(current)) return [];
+  const documents = [];
+  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    const entryPath = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      documents.push(...workflowDocuments(root, entryPath));
+    } else if (entry.name.endsWith('.workflow.md')) {
+      documents.push(path.relative(root, entryPath));
+    }
+  }
+  return documents.sort();
 }
 
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
