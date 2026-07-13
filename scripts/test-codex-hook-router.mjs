@@ -437,6 +437,33 @@ function testPromptWorkflowHint() {
   );
 }
 
+function testWorkflowHintsLoadOnlyForPromptRouting() {
+  const routingPath = path.join(
+    repoDir,
+    'codex',
+    'hooks',
+    'capability-routing.generated.json',
+  );
+  const program = `
+    const assert = require('node:assert/strict');
+    const routerPath = ${JSON.stringify(routerPath)};
+    const routingPath = require.resolve(${JSON.stringify(routingPath)});
+    const router = require(routerPath);
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} });
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'Stop' });
+    assert.equal(require.cache[routingPath], undefined);
+    router.evaluateInput({ hook_event_name: 'UserPromptSubmit', prompt: 'please review this diff' });
+    assert.ok(require.cache[routingPath]);
+  `;
+  const result = spawnSync(process.execPath, ['-e', program], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
 function testWorkflowTelemetry() {
   runHook({
     hook_event_name: 'PreToolUse',
@@ -534,6 +561,7 @@ testSessionStartExpiredDedupeMarkerIsCleanedUp();
 testCompactHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
+testWorkflowHintsLoadOnlyForPromptRouting();
 testWorkflowTelemetry();
 testCompletionClaimsDoNotUseRegex();
 testStopDoesNotSuggestKnowledgeCapture();

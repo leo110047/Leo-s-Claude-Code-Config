@@ -37,35 +37,14 @@ const ADVISORY_SECRET_PATTERNS = [
 const DEFAULT_DEDUPE_RETENTION_DAYS = 30;
 const CODEX_STOP_BLOCK_EXIT_CODE = 2;
 
-const WORKFLOW_HINTS = [
-  {
-    name: 'review',
-    pattern: /\b(code\s*review|review|pr\s*review)\b|審查|檢查/i,
-    message:
-      'For full code review, run the Goldband review workflow via $goldband review when installed. Use bounded reviewer agents only as a second pass.',
-  },
-  {
-    name: 'debug',
-    pattern:
-      /\b(debug|bug|error|failure|failing|failed|root cause|regression)\b|除錯|錯誤|失敗|異常|根因/i,
-    message:
-      'For bugs or failing commands, capture the exact failure first and run the Goldband investigate workflow via $goldband investigate when installed before fixing.',
-  },
-  {
-    name: 'security',
-    pattern:
-      /\b(security|secret|token|credential|auth|permission|cve|vulnerability)\b|安全|權限|憑證|密鑰|漏洞/i,
-    message:
-      'For security-sensitive work, run the Goldband cso workflow via $goldband cso when installed or use the security checklist before changing behavior.',
-  },
-  {
-    name: 'planning',
-    pattern:
-      /\b(plan|planning|proposal|roadmap|architecture|design)\b|計畫|規劃|拆解|架構/i,
-    message:
-      'For multi-file or risky planning, prefer /plan and run the Goldband plan-eng-review workflow via $goldband plan-eng-review when installed before implementation.',
-  },
-];
+let workflowHints;
+
+function loadWorkflowHints() {
+  if (!workflowHints) {
+    workflowHints = require('./capability-routing.generated.json');
+  }
+  return workflowHints;
+}
 
 function readStdinRaw() {
   return new Promise((resolve) => {
@@ -375,7 +354,7 @@ function evaluateUserPromptSubmitResult(input) {
   const crossReviewContract = armCrossReviewIfRequested(input);
   const messages = [];
 
-  if (/\/goldband-|\/plan\b/.test(prompt)) {
+  if (/\$goldband\s+[a-z][a-z0-9-]*\s+[a-z][a-z0-9-]*/i.test(prompt)) {
     if (crossReviewContract) {
       messages.push(formatCrossReviewArmMessage(crossReviewContract));
     }
@@ -385,9 +364,13 @@ function evaluateUserPromptSubmitResult(input) {
   }
 
   messages.push(
-    ...WORKFLOW_HINTS.filter((hint) => hint.pattern.test(prompt)).map(
-      (hint) => hint.message,
-    ),
+    ...loadWorkflowHints()
+      .filter((hint) =>
+        hint.triggers.some((trigger) =>
+          prompt.toLowerCase().includes(trigger.toLowerCase()),
+        ),
+      )
+      .map((hint) => hint.message),
   );
 
   if (crossReviewContract) {
