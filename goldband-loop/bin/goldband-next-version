@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
-// goldband-next-version — host-aware VERSION allocator for /ship.
+// goldband-next-version — host-aware VERSION allocator for release preparation.
 //
 // Queries the PR queue (GitHub or GitLab), fetches each open PR's VERSION,
 // scans configurable Conductor sibling worktrees, picks the next free version
 // slot at the requested bump level, and emits the whole picture as JSON.
 //
 // Contract: util NEVER writes files or mutates state. Pure reader + reporter.
-// /ship consumes the JSON and decides what to do.
+// The release workflow consumes the JSON and decides what to do.
 //
 // Usage:
 //   goldband-next-version --base <branch> --bump <major|minor|patch|micro> \
@@ -419,7 +419,7 @@ function parseArgs(argv: string[]): { base: string; bump: Bump; current: string;
 
 // Auto-detect: if --exclude-pr wasn't passed, check whether the current branch
 // already has an open PR and exclude it by default. This prevents the self-
-// reference bug where /ship's own PR inflates the queue on rerun.
+// reference bug where the current PR inflates the queue on rerun.
 function autoDetectExcludePR(): number | null {
   const r = runCommand("gh", ["pr", "view", "--json", "number", "-q", ".number"]);
   if (!r.ok) return null;

@@ -434,7 +434,7 @@ function runTelemetryFixtures() {
   });
   runNode(codexRouter, {
     hook_event_name: 'UserPromptSubmit',
-    prompt: '/goldband-ship',
+    prompt: '/goldband-investigate',
   });
 }
 
@@ -511,7 +511,7 @@ function testReportSummary() {
   );
   assert.ok(
     summary.workflowEntries.inferred.some(
-      (row) => row.host === 'codex' && row.name === 'goldband-ship',
+      (row) => row.host === 'codex' && row.name === 'goldband-investigate',
     ),
   );
   assert.ok(

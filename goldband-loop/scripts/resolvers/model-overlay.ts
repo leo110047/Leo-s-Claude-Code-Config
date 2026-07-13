@@ -60,7 +60,7 @@ export function generateModelOverlay(ctx: TemplateContext): string {
 
 The following nudges are tuned for the ${ctx.model} model family. They are
 **subordinate** to skill workflow, STOP points, AskUserQuestion gates, plan-mode
-safety, and /ship review gates. If a nudge below conflicts with skill instructions,
+safety, and release gates. If a nudge below conflicts with skill instructions,
 the skill wins. Treat these as preferences, not rules.
 
 ${content}`;

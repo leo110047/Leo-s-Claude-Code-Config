@@ -60,14 +60,14 @@ describe('goldband-telemetry-log', () => {
 
   test('produces no output when tier=off', () => {
     setConfig('telemetry', 'off');
-    run(`${BIN}/goldband-telemetry-log --skill ship --duration 30 --outcome success --session-id test-456`);
+    run(`${BIN}/goldband-telemetry-log --skill investigate --duration 30 --outcome success --session-id test-456`);
 
     expect(readJsonl()).toHaveLength(0);
   });
 
   test('defaults to off for invalid tier value', () => {
     setConfig('telemetry', 'invalid_value');
-    run(`${BIN}/goldband-telemetry-log --skill ship --duration 30 --outcome success --session-id test-789`);
+    run(`${BIN}/goldband-telemetry-log --skill investigate --duration 30 --outcome success --session-id test-789`);
 
     expect(readJsonl()).toHaveLength(0);
   });
@@ -326,11 +326,11 @@ describe('goldband-analytics', () => {
     setConfig('telemetry', 'anonymous');
     run(`${BIN}/goldband-telemetry-log --skill qa --duration 120 --outcome success --session-id a-1`);
     run(`${BIN}/goldband-telemetry-log --skill qa --duration 60 --outcome success --session-id a-2`);
-    run(`${BIN}/goldband-telemetry-log --skill ship --duration 30 --outcome error --error-class timeout --session-id a-3`);
+    run(`${BIN}/goldband-telemetry-log --skill investigate --duration 30 --outcome error --error-class timeout --session-id a-3`);
 
     const output = run(`${BIN}/goldband-analytics all`);
     expect(output).toContain('/qa');
-    expect(output).toContain('/ship');
+    expect(output).toContain('/investigate');
     expect(output).toContain('2 runs');
     expect(output).toContain('1 runs');
     expect(output).toContain('Success rate: 66%');

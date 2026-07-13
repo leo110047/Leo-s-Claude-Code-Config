@@ -22,7 +22,7 @@
  * - True cadence eval (3 findings → 3 distinct asks across turns). Current
  *   $OUT_FILE harness captures ONE would-be question per session. Multi-turn
  *   cadence needs new harness support. Filed in TODOs.
- * - Expanded coverage for /ship /office-hours /investigate /qa /review
+ * - Expanded coverage for $goldband release land /office-hours /investigate /qa /review
  *   /design-review /document-release. Touchfiles entries already exist; eval
  *   cases will land as follow-up PRs per skill.
  */

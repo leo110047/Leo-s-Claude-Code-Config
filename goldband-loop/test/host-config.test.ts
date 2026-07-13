@@ -328,7 +328,6 @@ describe('host-config-export.ts CLI', () => {
     expect(lines).toContain('review/shared-rubric.md');
     expect(lines).toContain('review/findings-schema.md');
     expect(lines).toContain('review/checklist.md');
-    expect(lines).toContain('review/ship-fix-first.md');
     expect(lines).toContain('review/design-checklist.md');
     expect(lines).toContain('review/greptile-triage.md');
   });
@@ -340,7 +339,6 @@ describe('host-config-export.ts CLI', () => {
     expect(lines).toContain('review/shared-rubric.md');
     expect(lines).toContain('review/findings-schema.md');
     expect(lines).toContain('review/checklist.md');
-    expect(lines).toContain('review/ship-fix-first.md');
     expect(lines).toContain('review/design-checklist.md');
     expect(lines).toContain('review/greptile-triage.md');
     expect(lines).toContain('review/TODOS-format.md');

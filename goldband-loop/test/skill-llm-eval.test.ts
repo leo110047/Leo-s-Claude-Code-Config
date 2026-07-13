@@ -400,71 +400,6 @@ Rules:
   }, 30_000);
 });
 
-// --- Part 7: Cross-skill consistency judge (C7) ---
-
-describeIfSelected('Cross-skill consistency evals', ['cross-skill greptile consistency'], () => {
-  testIfSelected('cross-skill greptile consistency', async () => {
-    const t0 = Date.now();
-    const reviewContent = fs.readFileSync(path.join(ROOT, 'review', 'SKILL.md'), 'utf-8');
-    const shipContent = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
-    const triageContent = fs.readFileSync(path.join(ROOT, 'review', 'greptile-triage.md'), 'utf-8');
-    const retroContent = fs.readFileSync(path.join(ROOT, 'retro', 'SKILL.md'), 'utf-8');
-
-    const extractGrepLines = (content: string, filename: string) => {
-      const lines = content.split('\n')
-        .filter(l => /greptile|history\.md|REMOTE_SLUG/i.test(l))
-        .map(l => l.trim());
-      return `--- ${filename} ---\n${lines.join('\n')}`;
-    };
-
-    const collected = [
-      extractGrepLines(reviewContent, 'review/SKILL.md'),
-      extractGrepLines(shipContent, 'ship/SKILL.md'),
-      extractGrepLines(triageContent, 'review/greptile-triage.md'),
-      extractGrepLines(retroContent, 'retro/SKILL.md'),
-    ].join('\n\n');
-
-    const result = await callJudge<{ consistent: boolean; issues: string[]; score: number; reasoning: string }>(`You are evaluating whether multiple skill configuration files implement the same data architecture consistently.
-
-INTENDED ARCHITECTURE:
-- greptile-history has TWO paths: per-project (~/.goldband/projects/{slug}/greptile-history.md) and global (~/.goldband/greptile-history.md)
-- /review and /ship WRITE to BOTH paths (per-project for suppressions, global for retro aggregation)
-- /review and /ship delegate write mechanics to greptile-triage.md
-- /retro READS from the GLOBAL path only (it aggregates across all projects)
-- REMOTE_SLUG derivation should be consistent across files that use it
-
-Below are greptile-related lines extracted from each skill file:
-
-${collected}
-
-Evaluate consistency. Respond with ONLY valid JSON:
-{
-  "consistent": true/false,
-  "issues": ["issue 1", "issue 2"],
-  "score": N,
-  "reasoning": "brief explanation"
-}
-
-score (1-5): 5 = perfectly consistent, 1 = contradictory`);
-
-    console.log('Cross-skill consistency:', JSON.stringify(result, null, 2));
-
-    evalCollector?.addTest({
-      name: 'cross-skill greptile consistency',
-      suite: 'Cross-skill consistency evals',
-      tier: 'llm-judge',
-      passed: result.consistent && result.score >= 4,
-      duration_ms: Date.now() - t0,
-      cost_usd: 0.02,
-      judge_scores: { consistency_score: result.score },
-      judge_reasoning: result.reasoning,
-    });
-
-    expect(result.consistent).toBe(true);
-    expect(result.score).toBeGreaterThanOrEqual(4);
-  }, 30_000);
-});
-
 // --- Part 7: Baseline score pinning (C9) ---
 
 describeIfSelected('Baseline score pinning', ['baseline score pinning'], () => {
@@ -588,29 +523,17 @@ ${section}`);
   expect(scores.actionability).toBeGreaterThanOrEqual(thresholds.actionability);
 }
 
-// Block 1: Ship & Release skills
-describeIfSelected('Ship & Release skill evals', ['ship/SKILL.md workflow', 'document-release/SKILL.md workflow'], () => {
-  testIfSelected('ship/SKILL.md workflow', async () => {
-    await runWorkflowJudge({
-      testName: 'ship/SKILL.md workflow',
-      suite: 'Ship & Release skill evals',
-      skillPath: 'ship/SKILL.md',
-      startMarker: '# Ship:',
-      endMarker: '## Important Rules',
-      judgeContext: 'a ship/release workflow document',
-      judgeGoal: 'how to create a PR: merge base branch, run tests, review diff, bump version, update changelog, push, and open PR',
-    });
-  }, 30_000);
-
+// Block 1: Release documentation skill
+describeIfSelected('Release documentation skill evals', ['document-release/SKILL.md workflow'], () => {
   testIfSelected('document-release/SKILL.md workflow', async () => {
     await runWorkflowJudge({
       testName: 'document-release/SKILL.md workflow',
-      suite: 'Ship & Release skill evals',
+      suite: 'Release documentation skill evals',
       skillPath: 'document-release/SKILL.md',
       startMarker: '# Document Release:',
       endMarker: '## Important Rules',
-      judgeContext: 'a post-ship documentation update workflow',
-      judgeGoal: 'how to audit and update project documentation after code ships: README, ARCHITECTURE, CONTRIBUTING, CLAUDE.md, CHANGELOG, TODOS',
+      judgeContext: 'a post-release documentation update workflow',
+      judgeGoal: 'how to audit and update project documentation after a release: README, ARCHITECTURE, CONTRIBUTING, CLAUDE.md, CHANGELOG, TODOS',
     });
   }, 30_000);
 });

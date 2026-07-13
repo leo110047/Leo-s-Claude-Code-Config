@@ -254,7 +254,7 @@ Important: The design checklist should catch issues like blacklisted fonts, smal
 
 // --- Base branch detection smoke tests ---
 
-describeIfSelected('Base branch detection', ['review-base-branch', 'ship-base-branch', 'retro-base-branch'], () => {
+describeIfSelected('Base branch detection', ['review-base-branch', 'retro-base-branch'], () => {
   let baseBranchDir: string;
   const run = (cmd: string, args: string[], cwd: string) =>
     spawnSync(cmd, args, { cwd, stdio: 'pipe', timeout: 5000 });
@@ -325,70 +325,6 @@ Write your findings to ${dir}/review-output.md`,
     expect(usedGitDiff).toBe(true);
   }, 120_000);
 
-  testConcurrentIfSelected('ship-base-branch', async () => {
-    const dir = path.join(baseBranchDir, 'ship-base');
-    fs.mkdirSync(dir, { recursive: true });
-
-    // Create git repo with feature branch
-    run('git', ['init'], dir);
-    run('git', ['config', 'user.email', 'test@test.com'], dir);
-    run('git', ['config', 'user.name', 'Test'], dir);
-
-    fs.writeFileSync(path.join(dir, 'app.ts'), 'console.log("v1");\n');
-    run('git', ['add', 'app.ts'], dir);
-    run('git', ['commit', '-m', 'initial'], dir);
-
-    run('git', ['checkout', '-b', 'feature/ship-test'], dir);
-    fs.writeFileSync(path.join(dir, 'app.ts'), 'console.log("v2");\n');
-    run('git', ['add', 'app.ts'], dir);
-    run('git', ['commit', '-m', 'feat: update to v2'], dir);
-
-    // Extract only Step 0 (base branch detection) from ship/SKILL.md
-    // (copying the full 1900-line file causes agent context bloat and flaky timeouts)
-    const fullShipSkill = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
-    const step0Start = fullShipSkill.indexOf('## Step 0: Detect platform and base branch');
-    const step0End = fullShipSkill.indexOf('## Step 1: Pre-flight');
-    const shipSection = fullShipSkill.slice(step0Start, step0End > step0Start ? step0End : undefined);
-    fs.writeFileSync(path.join(dir, 'ship-SKILL.md'), shipSection);
-
-    const result = await runSkillTest({
-      prompt: `Read ship-SKILL.md. It contains Step 0 (Detect base branch) from the ship workflow.
-
-Run the base branch detection. Since there is no remote, gh commands will fail — fall back to main.
-
-Then run git diff and git log against the detected base branch.
-
-Write a summary to ${dir}/ship-preflight.md including:
-- The detected base branch name
-- The current branch name
-- The diff stat against the base branch`,
-      workingDirectory: dir,
-      maxTurns: 18,
-      timeout: 150_000,
-      testName: 'ship-base-branch',
-      runId,
-    });
-
-    logCost('/ship base-branch', result);
-    recordE2E(evalCollector, '/ship base branch detection', 'Base branch detection', result);
-    expect(result.exitReason).toBe('success');
-
-    // Verify preflight output was written
-    const preflightPath = path.join(dir, 'ship-preflight.md');
-    if (fs.existsSync(preflightPath)) {
-      const content = fs.readFileSync(preflightPath, 'utf-8');
-      expect(content.length).toBeGreaterThan(20);
-      // Should mention the branch name
-      expect(content.toLowerCase()).toMatch(/main|base/);
-    }
-
-    // Verify no destructive actions — no push, no PR creation
-    const destructiveTools = result.toolCalls.filter(tc =>
-      tc.tool === 'Bash' && typeof tc.input === 'string' &&
-      (tc.input.includes('git push') || tc.input.includes('gh pr create'))
-    );
-    expect(destructiveTools).toHaveLength(0);
-  }, 180_000);
 
   testConcurrentIfSelected('retro-base-branch', async () => {
     const dir = path.join(baseBranchDir, 'retro-base');
@@ -584,13 +520,12 @@ describeIfSelected('Review Dashboard Via Attribution', ['review-dashboard-via'],
     ].join('\n'));
     fs.chmodSync(path.join(mockBinDir, 'goldband-review-read'), 0o755);
 
-    // Extract only the Review Readiness Dashboard section from ship/SKILL.md
-    // (copying the full 1900-line file causes agent context bloat and timeouts)
-    const fullSkill = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf-8');
+    // Extract only the Review Readiness Dashboard section from plan-eng-review.
+    const fullSkill = fs.readFileSync(path.join(ROOT, 'plan-eng-review', 'SKILL.md'), 'utf-8');
     const dashStart = fullSkill.indexOf('## Review Readiness Dashboard');
     const dashEnd = fullSkill.indexOf('\n---\n', dashStart);
     const dashSection = fullSkill.slice(dashStart, dashEnd > dashStart ? dashEnd : undefined);
-    fs.writeFileSync(path.join(dashDir, 'ship-SKILL.md'), dashSection);
+    fs.writeFileSync(path.join(dashDir, 'review-dashboard.md'), dashSection);
   });
 
   afterAll(() => {
@@ -601,7 +536,7 @@ describeIfSelected('Review Dashboard Via Attribution', ['review-dashboard-via'],
     const mockBinDir = path.join(dashDir, '.mock-bin');
 
     const result = await runSkillTest({
-      prompt: `Read ship-SKILL.md. You only need to run the Review Readiness Dashboard section.
+      prompt: `Read review-dashboard.md. You only need to run the Review Readiness Dashboard section.
 
 Instead of running ~/.claude/skills/goldband/bin/goldband-review-read, run this mock: ${mockBinDir}/goldband-review-read
 
@@ -610,7 +545,7 @@ Parse the output and display the dashboard table. Pay attention to:
 2. The codex-plan-review entry — it should populate the Outside Voice row
 3. Since Eng Review IS clear, there should be NO gate blocking — just display the dashboard
 
-Skip the preamble, lake intro, telemetry, and all other ship steps.
+Skip the preamble, lake intro, telemetry, and all other workflow steps.
 Write the dashboard output to ${dashDir}/dashboard-output.md`,
       workingDirectory: dashDir,
       maxTurns: 12,
@@ -619,8 +554,8 @@ Write the dashboard output to ${dashDir}/dashboard-output.md`,
       runId,
     });
 
-    logCost('/ship dashboard-via', result);
-    recordE2E(evalCollector, '/ship review dashboard via attribution', 'Dashboard via field', result);
+    logCost('review dashboard-via', result);
+    recordE2E(evalCollector, 'review dashboard via attribution', 'Dashboard via field', result);
     expect(result.exitReason).toBe('success');
 
     // Check dashboard output for via attribution

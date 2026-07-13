@@ -1,5 +1,5 @@
 /**
- * Regression tests for the 4 adversarial findings fixed during /ship:
+ * Regression tests for the 4 adversarial findings fixed during release readiness review:
  *
  * 1. Canary stream-chunk split bypass — rolling-buffer detection across
  *    consecutive text_delta / input_json_delta events.

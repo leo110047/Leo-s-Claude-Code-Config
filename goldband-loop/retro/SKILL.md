@@ -246,7 +246,7 @@ Key routing rules:
 - QA/testing site behavior → invoke /qa or /qa-only
 - Code review/diff check → invoke /review
 - Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Release/deploy/PR → invoke $goldband release land
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 ```
@@ -503,7 +503,7 @@ At skill END before telemetry:
 
 The following nudges are tuned for the claude model family. They are
 **subordinate** to skill workflow, STOP points, AskUserQuestion gates, plan-mode
-safety, and /ship review gates. If a nudge below conflicts with skill instructions,
+safety, and release gates. If a nudge below conflicts with skill instructions,
 the skill wins. Treat these as preferences, not rules.
 
 **Todo-list discipline.** When working through a multi-step plan, mark each task
@@ -682,7 +682,7 @@ Skill: </skill-name-if-running>
 
 Rules: stage only intentional files, NEVER `git add -A`, do not commit broken tests or mid-edit state, and push only if `CHECKPOINT_PUSH` is `"true"`. Do not announce each WIP commit.
 
-`/context-restore` reads `[goldband-context]`; `/ship` squashes WIP commits into clean commits.
+`$goldband context restore` reads `[goldband-context]`; release preparation may squash WIP commits into clean commits.
 
 If `CHECKPOINT_MODE` is `"explicit"`: ignore this section unless a skill or user asks to commit.
 
@@ -796,7 +796,7 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 ## Plan Status Footer
 
-Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
+Skills that run plan reviews include the EXIT PLAN MODE GATE blocking checklist at the end of the workflow, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Operational workflows typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
 ## Step 0: Detect platform and base branch
 
@@ -1100,7 +1100,7 @@ If TODOS.md doesn't exist, skip the Backlog Health row.
 **Skill Usage (if analytics exist):** Read `~/.goldband/analytics/skill-usage.jsonl` if it exists. Filter entries within the retro time window by `ts` field. Separate skill activations (no `event` field) from hook fires (`event: "hook_fire"`). Aggregate by skill name. Present as:
 
 ```
-| Skill Usage | /ship(12) /qa(8) /review(5) · 3 safety hook fires |
+| Capability Usage | release(12) qa(8) review(5) · 3 safety hook fires |
 ```
 
 If the JSONL file doesn't exist or has no entries in the window, skip the Skill Usage row.
@@ -1430,7 +1430,7 @@ Narrative covering:
 - If test ratio < 20%: flag as growth area — "100% test coverage is the goal. Tests make vibe coding safe."
 
 ### Plan Completion
-Check review JSONL logs for plan completion data from /ship runs this period:
+Check review JSONL logs for plan completion data from release runs this period:
 
 ```bash
 . "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?

@@ -185,22 +185,22 @@ assertReviewReadOnlyActivation('skill-name-field', { skill_name: '/review' });
 assertReviewReadOnlyActivation('skillName-field', { skillName: 'review' });
 
 const nonReviewSession = 'review-readonly-regression-non-review';
-const invokeShip = runHook(nonReviewSession, {
+const invokeQa = runHook(nonReviewSession, {
   hook_event_name: 'PreToolUse',
   tool_name: 'Skill',
-  tool_input: { name: 'goldband-ship' },
+  tool_input: { name: 'goldband-qa' },
 });
-assert.equal(invokeShip.status, 0, invokeShip.stderr);
-const editAfterShip = runHook(nonReviewSession, {
+assert.equal(invokeQa.status, 0, invokeQa.stderr);
+const editAfterQa = runHook(nonReviewSession, {
   hook_event_name: 'PreToolUse',
   tool_name: 'Edit',
   tool_input: {
-    file_path: 'ship-mutates.txt',
+    file_path: 'qa-mutates.txt',
     old_string: 'before',
     new_string: 'after',
   },
 });
-assert.equal(editAfterShip.status, 0, editAfterShip.stderr);
+assert.equal(editAfterQa.status, 0, editAfterQa.stderr);
 
 assertAllowedWriteHasNoHookOutput();
 assertSessionStartHasNoHookOutput();

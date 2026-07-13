@@ -89,12 +89,11 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 # update_check: true        # false = suppress version check notifications
 #
 # ─── Skill naming ────────────────────────────────────────────────────
-# skill_prefix: false       # true = namespace skills as /goldband-qa, /goldband-ship
-#                           # false = short names /qa, /ship
+# skill_prefix: false       # Deprecated legacy full-profile naming preference.
 #
 # ─── Checkpoint ──────────────────────────────────────────────────────
 # checkpoint_mode: explicit # explicit | continuous
-#                           #   explicit   — commit only when you run /ship or /checkpoint
+#                           #   explicit   — commit only when explicitly requested
 #                           #   continuous — auto-commit after each significant change
 #                           #                with WIP: prefix + [goldband-context] body
 #
@@ -124,12 +123,12 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 #                           # Flip back to false to be re-prompted.
 #
 # ─── Advanced ────────────────────────────────────────────────────────
-# codex_reviews: enabled    # disabled = skip Codex adversarial reviews in /ship
+# codex_reviews: enabled    # disabled = skip Codex adversarial reviews
 # goldband_contributor: false # true = file field reports when goldband misbehaves
-# skip_eng_review: false    # true = skip eng review gate in /ship (not recommended)
+# skip_eng_review: false    # true = skip the engineering review gate (not recommended)
 #
-# ─── Workspace-aware ship ────────────────────────────────────────────
-# workspace_root: $HOME/conductor/workspaces  # Where /ship looks for sibling
+# ─── Workspace-aware release ─────────────────────────────────────────
+# workspace_root: $HOME/conductor/workspaces  # Where release preparation looks for sibling
 #                           # Conductor worktrees when picking a VERSION slot.
 #                           # Set to "null" to disable sibling scanning entirely.
 #                           # Non-Conductor users can point this at any directory

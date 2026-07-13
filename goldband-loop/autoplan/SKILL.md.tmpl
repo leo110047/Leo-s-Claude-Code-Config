@@ -842,7 +842,7 @@ AskUserQuestion options:
 - E) Reject (start over)
 
 **Option handling:**
-- A: mark APPROVED, write review logs, suggest /ship
+- A: mark APPROVED, write review logs, suggest `$goldband release land`
 - B: ask which overrides, apply, re-present gate
 - C: answer freeform, re-present gate
 - D: make changes, re-run affected phases (scope→1B, design→2, test plan→3, arch→3). Max 3 cycles.
@@ -852,7 +852,7 @@ AskUserQuestion options:
 
 ## Completion: Write Review Logs
 
-On approval, write 3 separate review log entries so /ship's dashboard recognizes them.
+On approval, write 3 separate review log entries so the release-readiness dashboard recognizes them.
 Replace TIMESTAMP, STATUS, and N with actual values from each review phase.
 STATUS is "clean" if no unresolved issues, "issues_open" otherwise.
 
@@ -895,7 +895,7 @@ $GOLDBAND_BIN/goldband-review-log '{"skill":"autoplan-voices","timestamp":"'"$TI
 SOURCE = "codex+subagent", "codex-only", "subagent-only", or "unavailable".
 Replace N values with actual consensus counts from the tables.
 
-Suggest next step: `/ship` when ready to create the PR.
+Suggest next step: `$goldband release land` when ready to create the PR.
 
 ---
 

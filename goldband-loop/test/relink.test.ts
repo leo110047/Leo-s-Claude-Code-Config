@@ -78,7 +78,7 @@ afterEach(() => {
 describe('goldband-relink (#578)', () => {
   // Test 11: prefixed symlinks when skill_prefix=true
   test('creates goldband-* symlinks when skill_prefix=true', () => {
-    setupMockInstall(['qa', 'ship', 'review']);
+    setupMockInstall(['qa', 'investigate', 'review']);
     // Set config to prefix mode (pass install/skills env so auto-relink uses mock install)
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -91,14 +91,14 @@ describe('goldband-relink (#578)', () => {
     });
     // Verify goldband-* symlinks exist
     expect(fs.existsSync(path.join(skillsDir, 'goldband-qa'))).toBe(true);
-    expect(fs.existsSync(path.join(skillsDir, 'goldband-ship'))).toBe(true);
+    expect(fs.existsSync(path.join(skillsDir, 'goldband-investigate'))).toBe(true);
     expect(fs.existsSync(path.join(skillsDir, 'goldband-review'))).toBe(true);
     expect(output).toContain('goldband-');
   });
 
   // Test 12: flat symlinks when skill_prefix=false
   test('creates flat symlinks when skill_prefix=false', () => {
-    setupMockInstall(['qa', 'ship', 'review']);
+    setupMockInstall(['qa', 'investigate', 'review']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -108,7 +108,7 @@ describe('goldband-relink (#578)', () => {
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
     expect(fs.existsSync(path.join(skillsDir, 'qa'))).toBe(true);
-    expect(fs.existsSync(path.join(skillsDir, 'ship'))).toBe(true);
+    expect(fs.existsSync(path.join(skillsDir, 'investigate'))).toBe(true);
     expect(fs.existsSync(path.join(skillsDir, 'review'))).toBe(true);
     expect(output).toContain('flat');
   });
@@ -118,7 +118,7 @@ describe('goldband-relink (#578)', () => {
   // e.g., `qa -> goldband/qa` gets discovered as "goldband-qa", not "qa".
   // The fix: create real directories with SKILL.md symlinks inside.
   test('unprefixed skills are real directories with SKILL.md symlinks, not dir symlinks', () => {
-    setupMockInstall(['qa', 'ship', 'review', 'plan-ceo-review']);
+    setupMockInstall(['qa', 'investigate', 'review', 'plan-ceo-review']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -127,7 +127,7 @@ describe('goldband-relink (#578)', () => {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
-    for (const skill of ['qa', 'ship', 'review', 'plan-ceo-review']) {
+    for (const skill of ['qa', 'investigate', 'review', 'plan-ceo-review']) {
       const skillPath = path.join(skillsDir, skill);
       const skillMdPath = path.join(skillPath, 'SKILL.md');
       // Must be a real directory, NOT a symlink
@@ -145,7 +145,7 @@ describe('goldband-relink (#578)', () => {
 
   // Same invariant for prefixed mode
   test('prefixed skills are real directories with SKILL.md symlinks, not dir symlinks', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -154,7 +154,7 @@ describe('goldband-relink (#578)', () => {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
-    for (const skill of ['goldband-qa', 'goldband-ship']) {
+    for (const skill of ['goldband-qa', 'goldband-investigate']) {
       const skillPath = path.join(skillsDir, skill);
       const skillMdPath = path.join(skillPath, 'SKILL.md');
       expect(fs.lstatSync(skillPath).isDirectory()).toBe(true);
@@ -165,10 +165,10 @@ describe('goldband-relink (#578)', () => {
 
   // Upgrade: old directory symlinks get replaced with real directories
   test('upgrades old directory symlinks to real directories', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     // Simulate old behavior: create directory symlinks (the old pattern)
     fs.symlinkSync(path.join(installDir, 'qa'), path.join(skillsDir, 'qa'));
-    fs.symlinkSync(path.join(installDir, 'ship'), path.join(skillsDir, 'ship'));
+    fs.symlinkSync(path.join(installDir, 'investigate'), path.join(skillsDir, 'investigate'));
     // Verify they start as symlinks
     expect(fs.lstatSync(path.join(skillsDir, 'qa')).isSymbolicLink()).toBe(true);
 
@@ -226,7 +226,7 @@ describe('goldband-relink (#578)', () => {
 
   // FIRST INSTALL: --no-prefix must create ONLY flat names, zero goldband-* pollution
   test('first install --no-prefix: only flat names exist, zero goldband-* entries', () => {
-    setupMockInstall(['qa', 'ship', 'review', 'plan-ceo-review', 'goldband-upgrade']);
+    setupMockInstall(['qa', 'investigate', 'review', 'plan-ceo-review', 'goldband-upgrade']);
     // Simulate first install: no saved config, pass --no-prefix equivalent
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -238,16 +238,16 @@ describe('goldband-relink (#578)', () => {
     });
     // Enumerate everything in skills dir
     const entries = fs.readdirSync(skillsDir);
-    // Expected: qa, ship, review, plan-ceo-review, goldband-upgrade (its real name)
-    expect(entries.sort()).toEqual(['goldband-upgrade', 'plan-ceo-review', 'qa', 'review', 'ship']);
-    // No goldband-qa, goldband-ship, goldband-review, goldband-plan-ceo-review
+    // Expected: qa, investigate, review, plan-ceo-review, goldband-upgrade (its real name)
+    expect(entries.sort()).toEqual(['goldband-upgrade', 'investigate', 'plan-ceo-review', 'qa', 'review']);
+    // No goldband-qa, goldband-investigate, goldband-review, goldband-plan-ceo-review
     const leaked = entries.filter(e => e.startsWith('goldband-') && e !== 'goldband-upgrade');
     expect(leaked).toEqual([]);
   });
 
   // FIRST INSTALL: --prefix must create ONLY goldband-* names, zero flat-name pollution
   test('first install --prefix: only goldband-* entries exist, zero flat names', () => {
-    setupMockInstall(['qa', 'ship', 'review', 'plan-ceo-review', 'goldband-upgrade']);
+    setupMockInstall(['qa', 'investigate', 'review', 'plan-ceo-review', 'goldband-upgrade']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -257,18 +257,18 @@ describe('goldband-relink (#578)', () => {
       GOLDBAND_SKILLS_DIR: skillsDir,
     });
     const entries = fs.readdirSync(skillsDir);
-    // Expected: goldband-qa, goldband-ship, goldband-review, goldband-plan-ceo-review, goldband-upgrade
+    // Expected: goldband-qa, goldband-investigate, goldband-review, goldband-plan-ceo-review, goldband-upgrade
     expect(entries.sort()).toEqual([
-      'goldband-plan-ceo-review', 'goldband-qa', 'goldband-review', 'goldband-ship', 'goldband-upgrade',
+      'goldband-investigate', 'goldband-plan-ceo-review', 'goldband-qa', 'goldband-review', 'goldband-upgrade',
     ]);
-    // No unprefixed qa, ship, review, plan-ceo-review
+    // No unprefixed qa, investigate, review, plan-ceo-review
     const leaked = entries.filter(e => !e.startsWith('goldband-'));
     expect(leaked).toEqual([]);
   });
 
   // FIRST INSTALL: non-TTY (no saved config, piped stdin) defaults to flat names
   test('non-TTY first install defaults to flat names via relink', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     // Don't set any config — simulate fresh install
     // goldband-relink reads config; on fresh install config returns empty → defaults to false
     run(`${path.join(installDir, 'bin', 'goldband-relink')}`, {
@@ -277,12 +277,12 @@ describe('goldband-relink (#578)', () => {
     });
     const entries = fs.readdirSync(skillsDir);
     // Should be flat names (relink defaults to false when config returns empty)
-    expect(entries.sort()).toEqual(['qa', 'ship']);
+    expect(entries.sort()).toEqual(['investigate', 'qa']);
   });
 
   // SWITCH: prefix → no-prefix must clean up ALL goldband-* entries
   test('switching prefix to no-prefix removes all goldband-* entries completely', () => {
-    setupMockInstall(['qa', 'ship', 'review', 'plan-ceo-review', 'goldband-upgrade']);
+    setupMockInstall(['qa', 'investigate', 'review', 'plan-ceo-review', 'goldband-upgrade']);
     // Start in prefix mode
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -306,14 +306,14 @@ describe('goldband-relink (#578)', () => {
     });
     entries = fs.readdirSync(skillsDir);
     // Only flat names + goldband-upgrade (its real name)
-    expect(entries.sort()).toEqual(['goldband-upgrade', 'plan-ceo-review', 'qa', 'review', 'ship']);
+    expect(entries.sort()).toEqual(['goldband-upgrade', 'investigate', 'plan-ceo-review', 'qa', 'review']);
     const leaked = entries.filter(e => e.startsWith('goldband-') && e !== 'goldband-upgrade');
     expect(leaked).toEqual([]);
   });
 
   // SWITCH: no-prefix → prefix must clean up ALL flat entries
   test('switching no-prefix to prefix removes all flat entries completely', () => {
-    setupMockInstall(['qa', 'ship', 'review', 'goldband-upgrade']);
+    setupMockInstall(['qa', 'investigate', 'review', 'goldband-upgrade']);
     // Start in no-prefix mode
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -338,7 +338,7 @@ describe('goldband-relink (#578)', () => {
     entries = fs.readdirSync(skillsDir);
     // Only goldband-* names
     expect(entries.sort()).toEqual([
-      'goldband-qa', 'goldband-review', 'goldband-ship', 'goldband-upgrade',
+      'goldband-investigate', 'goldband-qa', 'goldband-review', 'goldband-upgrade',
     ]);
     const leaked = entries.filter(e => !e.startsWith('goldband-'));
     expect(leaked).toEqual([]);
@@ -346,7 +346,7 @@ describe('goldband-relink (#578)', () => {
 
   // Test 13: cleans stale symlinks from opposite mode
   test('cleans up stale symlinks from opposite mode', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     // Create prefixed symlinks first
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -384,7 +384,7 @@ describe('goldband-relink (#578)', () => {
 
   // Test: goldband-upgrade does NOT get double-prefixed
   test('does not double-prefix goldband-upgrade directory', () => {
-    setupMockInstall(['qa', 'ship', 'goldband-upgrade']);
+    setupMockInstall(['qa', 'investigate', 'goldband-upgrade']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -402,7 +402,7 @@ describe('goldband-relink (#578)', () => {
 
   // Test 15: goldband-config set skill_prefix triggers relink
   test('goldband-config set skill_prefix triggers relink', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     // Run goldband-config set which should auto-trigger relink
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -410,7 +410,7 @@ describe('goldband-relink (#578)', () => {
     });
     // If relink was triggered, symlinks should exist
     expect(fs.existsSync(path.join(skillsDir, 'goldband-qa'))).toBe(true);
-    expect(fs.existsSync(path.join(skillsDir, 'goldband-ship'))).toBe(true);
+    expect(fs.existsSync(path.join(skillsDir, 'goldband-investigate'))).toBe(true);
   });
 });
 
@@ -448,10 +448,10 @@ describe('upgrade migrations', () => {
   });
 
   test('v0.15.2.0 migration fixes stale directory symlinks', () => {
-    setupMockInstall(['qa', 'ship', 'review']);
+    setupMockInstall(['qa', 'investigate', 'review']);
     // Simulate old state: directory symlinks (pre-v0.15.2.0 pattern)
     fs.symlinkSync(path.join(installDir, 'qa'), path.join(skillsDir, 'qa'));
-    fs.symlinkSync(path.join(installDir, 'ship'), path.join(skillsDir, 'ship'));
+    fs.symlinkSync(path.join(installDir, 'investigate'), path.join(skillsDir, 'investigate'));
     fs.symlinkSync(path.join(installDir, 'review'), path.join(skillsDir, 'review'));
     // Set no-prefix mode (suppress auto-relink so symlinks stay intact for the test)
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix false`, {
@@ -467,7 +467,7 @@ describe('upgrade migrations', () => {
     });
 
     // After migration: real directories with SKILL.md symlinks
-    for (const skill of ['qa', 'ship', 'review']) {
+    for (const skill of ['qa', 'investigate', 'review']) {
       const skillPath = path.join(skillsDir, skill);
       expect(fs.lstatSync(skillPath).isSymbolicLink()).toBe(false);
       expect(fs.lstatSync(skillPath).isDirectory()).toBe(true);
@@ -485,7 +485,7 @@ describe('goldband-patch-names (#620/#578)', () => {
   }
 
   test('prefix=true patches name: field in SKILL.md', () => {
-    setupMockInstall(['qa', 'ship', 'review']);
+    setupMockInstall(['qa', 'investigate', 'review']);
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
       GOLDBAND_SKILLS_DIR: skillsDir,
@@ -496,12 +496,12 @@ describe('goldband-patch-names (#620/#578)', () => {
     });
     // Verify name: field is patched with goldband- prefix
     expect(readSkillName(path.join(installDir, 'qa'))).toBe('goldband-qa');
-    expect(readSkillName(path.join(installDir, 'ship'))).toBe('goldband-ship');
+    expect(readSkillName(path.join(installDir, 'investigate'))).toBe('goldband-investigate');
     expect(readSkillName(path.join(installDir, 'review'))).toBe('goldband-review');
   });
 
   test('prefix=false restores name: field in SKILL.md', () => {
-    setupMockInstall(['qa', 'ship']);
+    setupMockInstall(['qa', 'investigate']);
     // First, prefix them
     run(`${path.join(installDir, 'bin', 'goldband-config')} set skill_prefix true`, {
       GOLDBAND_INSTALL_DIR: installDir,
@@ -523,7 +523,7 @@ describe('goldband-patch-names (#620/#578)', () => {
     });
     // Verify name: field is restored to unprefixed
     expect(readSkillName(path.join(installDir, 'qa'))).toBe('qa');
-    expect(readSkillName(path.join(installDir, 'ship'))).toBe('ship');
+    expect(readSkillName(path.join(installDir, 'investigate'))).toBe('investigate');
   });
 
   test('goldband-upgrade name: not double-prefixed', () => {

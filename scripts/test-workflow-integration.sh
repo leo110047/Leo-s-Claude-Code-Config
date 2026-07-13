@@ -67,9 +67,6 @@ EOF_SHARED
   cat > "$loop_dir/review/findings-schema.md" <<'EOF_SCHEMA'
 # test findings schema
 EOF_SCHEMA
-  cat > "$loop_dir/review/ship-fix-first.md" <<'EOF_SHIP_FIX'
-# test ship fix first
-EOF_SHIP_FIX
   cat > "$loop_dir/review/greptile-triage.md" <<'EOF_GREPTILE'
 # test greptile triage
 EOF_GREPTILE
@@ -162,7 +159,6 @@ install_claude() {
     ln -s "$ROOT/review/shared-rubric.md" "$HOME/.claude/skills/goldband/review/shared-rubric.md"
     ln -s "$ROOT/review/findings-schema.md" "$HOME/.claude/skills/goldband/review/findings-schema.md"
     ln -s "$ROOT/review/checklist.md" "$HOME/.claude/skills/goldband/review/checklist.md"
-    ln -s "$ROOT/review/ship-fix-first.md" "$HOME/.claude/skills/goldband/review/ship-fix-first.md"
     ln -s "$ROOT/review/greptile-triage.md" "$HOME/.claude/skills/goldband/review/greptile-triage.md"
     mkdir -p "$HOME/.claude/skills/goldband/workflows/review"
     ln -s "$ROOT/review/SKILL.md" "$HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
@@ -200,7 +196,6 @@ install_codex() {
   ln -s "$ROOT/review/shared-rubric.md" "$HOME/.codex/skills/goldband/review/shared-rubric.md"
   ln -s "$ROOT/review/findings-schema.md" "$HOME/.codex/skills/goldband/review/findings-schema.md"
   ln -s "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"
-  ln -s "$ROOT/review/ship-fix-first.md" "$HOME/.codex/skills/goldband/review/ship-fix-first.md"
   ln -s "$ROOT/review/greptile-triage.md" "$HOME/.codex/skills/goldband/review/greptile-triage.md"
   printf '%s\n' "$VERSION" > "$HOME/.codex/skills/goldband/.installed-version"
   mkdir -p "$HOME/.codex/skills/goldband/workflows/review"
@@ -363,9 +358,6 @@ EOF_SHARED
   cat > "$loop_dir/review/findings-schema.md" <<'EOF_SCHEMA'
 # test findings schema
 EOF_SCHEMA
-  cat > "$loop_dir/review/ship-fix-first.md" <<'EOF_SHIP_FIX'
-# test ship fix first
-EOF_SHIP_FIX
   cat > "$loop_dir/review/design-checklist.md" <<'EOF_DESIGN'
 # test design checklist
 EOF_DESIGN
@@ -453,7 +445,6 @@ assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/shared-rubric.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/findings-schema.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
-assert_exists "$TMP_HOME/.codex/skills/goldband/review/ship-fix-first.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/greptile-triage.md"
 assert_absent "$TMP_HOME/.claude/skills/goldband-investigate"
 assert_absent "$TMP_HOME/.claude/skills/goldband-review"

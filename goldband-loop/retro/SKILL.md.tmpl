@@ -269,7 +269,7 @@ If TODOS.md doesn't exist, skip the Backlog Health row.
 **Skill Usage (if analytics exist):** Read `~/.goldband/analytics/skill-usage.jsonl` if it exists. Filter entries within the retro time window by `ts` field. Separate skill activations (no `event` field) from hook fires (`event: "hook_fire"`). Aggregate by skill name. Present as:
 
 ```
-| Skill Usage | /ship(12) /qa(8) /review(5) · 3 safety hook fires |
+| Capability Usage | release(12) qa(8) review(5) · 3 safety hook fires |
 ```
 
 If the JSONL file doesn't exist or has no entries in the window, skip the Skill Usage row.
@@ -562,7 +562,7 @@ Narrative covering:
 - If test ratio < 20%: flag as growth area — "100% test coverage is the goal. Tests make vibe coding safe."
 
 ### Plan Completion
-Check review JSONL logs for plan completion data from /ship runs this period:
+Check review JSONL logs for plan completion data from release runs this period:
 
 ```bash
 setopt +o nomatch 2>/dev/null || true  # zsh compat

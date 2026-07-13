@@ -82,7 +82,6 @@ const SCAN_PATHS = [
   'plan-eng-review/SKILL.md.tmpl',
   'plan-ceo-review/SKILL.md.tmpl',
   'review/SKILL.md.tmpl',
-  'ship/SKILL.md.tmpl',
   'test/',
 ];
 

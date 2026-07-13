@@ -28,11 +28,11 @@ When asked for coding work, pick the dispatch tier:
 
 **HEAVY:** needs a specific goldband methodology
 → sessions_spawn(runtime: "acp", prompt: "Load goldband. Run /qa https://...")
-  Skills: /cso, /review, /qa, /ship, /investigate, /design-review, /benchmark, /goldband-upgrade
+  Capabilities: review, QA, release, investigation, design, benchmark, and system maintenance
 
 **FULL:** build a complete feature, multi-day scope, needs planning + review
 → sessions_spawn(runtime: "acp", prompt: "<goldband-full content>\n\n<task>")
-  Claude Code runs: /autoplan → implement → /ship → report back
+  Claude Code runs: `$goldband plan auto` → implement → `$goldband release land` → report back
 
 **PLAN:** user wants to plan a Claude Code project, spec out a feature, or design
   something before any code is written

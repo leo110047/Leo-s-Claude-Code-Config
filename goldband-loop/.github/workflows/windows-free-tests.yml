@@ -66,9 +66,8 @@ jobs:
         shell: bash
 
       - name: Generate host SKILL.md outputs (.agents, .factory)
-        # The golden-file regression tests in test/gen-skill-docs.test.ts read
-        # .agents/skills/goldband-ship/SKILL.md and .factory/skills/goldband-ship/
-        # SKILL.md. Both are gitignored — generated on demand by gen:skill-docs.
+        # Generated-surface tests read gitignored host SKILL.md outputs, which
+        # are created on demand by gen:skill-docs.
         # On Mac/Linux CI the existing eval workflow regenerates these as part
         # of its own pipeline; the windows-free-tests lane doesn't share that
         # so it must regenerate explicitly.

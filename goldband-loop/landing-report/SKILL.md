@@ -4,7 +4,7 @@ version: 0.1.0
 description: |
   Read-only queue dashboard for workspace-aware ship. Shows which VERSION slots
   are currently claimed by open PRs, which sibling Conductor workspaces have
-  WIP work likely to ship soon, and what slot /ship would pick next. No
+  WIP work likely to release soon, and what slot the release workflow would pick next. No
   mutations — just a snapshot. Use when asked to "landing report", "what's in
   the queue", "show me open PRs", or "which version do I claim next". (goldband)
 triggers:
@@ -227,7 +227,7 @@ Key routing rules:
 - QA/testing site behavior → invoke /qa or /qa-only
 - Code review/diff check → invoke /review
 - Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Release/deploy/PR → invoke $goldband release land
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 ```
@@ -484,7 +484,7 @@ At skill END before telemetry:
 
 The following nudges are tuned for the claude model family. They are
 **subordinate** to skill workflow, STOP points, AskUserQuestion gates, plan-mode
-safety, and /ship review gates. If a nudge below conflicts with skill instructions,
+safety, and release gates. If a nudge below conflicts with skill instructions,
 the skill wins. Treat these as preferences, not rules.
 
 **Todo-list discipline.** When working through a multi-step plan, mark each task
@@ -663,7 +663,7 @@ Skill: </skill-name-if-running>
 
 Rules: stage only intentional files, NEVER `git add -A`, do not commit broken tests or mid-edit state, and push only if `CHECKPOINT_PUSH` is `"true"`. Do not announce each WIP commit.
 
-`/context-restore` reads `[goldband-context]`; `/ship` squashes WIP commits into clean commits.
+`$goldband context restore` reads `[goldband-context]`; release preparation may squash WIP commits into clean commits.
 
 If `CHECKPOINT_MODE` is `"explicit"`: ignore this section unless a skill or user asks to commit.
 
@@ -795,7 +795,7 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 ## Plan Status Footer
 
-Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
+Skills that run plan reviews include the EXIT PLAN MODE GATE blocking checklist at the end of the workflow, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Operational workflows typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
 ---
 
@@ -803,8 +803,8 @@ Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXI
 
 When you're running 5-10 parallel Conductor workspaces, it helps to see — at a
 glance — which version numbers are claimed, by whom, and what slot your next
-`/ship` would land in. This skill is a read-only call into the same
-`bin/goldband-next-version` utility `/ship` uses, but with nothing mutating.
+the release workflow would land in. This skill is a read-only call into the
+`bin/goldband-next-version` utility, but with nothing mutating.
 Think of it as `gh pr list` for VERSION numbers.
 
 ---
@@ -891,7 +891,7 @@ Sibling Conductor worktrees (<workspace_root>):
 ★ active = has VERSION ahead of base AND last commit < 24h AND no open PR.
   These are the ones likely to ship soon.
 
-If you ran /ship right now, you'd claim:
+If you ran `$goldband release land` right now, you'd claim:
   micro bump:  v1.6.3.1   (queue-advance: none)
   patch bump:  v1.7.1.0   (bumped past claimed 1.7.0.0)
   minor bump:  v1.8.0.0   (bumped past claimed 1.7.0.0)
@@ -920,14 +920,14 @@ After rendering the table, suggest ONE of:
 1. **If there are collisions in the queue** (two open PRs claim the same version):
    "⚠ Two open PRs collide on v<X>. Whoever merges second will either overwrite
    the first's CHANGELOG entry or land a duplicate. Consider asking one author
-   to rerun /ship to pick up the next free slot."
+   to rerun `$goldband release land` to pick up the next free slot."
 
 2. **If an active sibling outranks the user's branch version:**
    "Sibling worktree <path> has v<X> committed <N>h ago and hasn't PR'd yet.
    If that work ships first, your branch will need to rebump at land time."
 
 3. **If everything looks clean:**
-   "Queue is clean. Next /ship will claim a slot without conflict."
+   "Queue is clean. The next release will claim a slot without conflict."
 
 ---
 

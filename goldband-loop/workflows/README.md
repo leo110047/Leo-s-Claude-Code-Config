@@ -219,6 +219,5 @@ and `goldband-loop/CLAUDE.md`.
 - `qa/app`: typed mock convergence adapter; real browser QA remains markdown-driven.
 - `plan`: compatibility runtime.
 - `review/security`: compatibility runtime.
-- `release/ship`: compatibility runtime.
 
 See `COVERAGE.md` for the full integrated and pending list.

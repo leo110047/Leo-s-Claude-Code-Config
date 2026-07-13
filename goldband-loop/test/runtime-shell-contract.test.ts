@@ -2,16 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { TOKEN_CEILING_BYTES } from '../scripts/skill-budget';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 
 describe('generated runtime shell contracts', () => {
-  test('ship stays within the prompt byte ceiling', () => {
-    const ship = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md'), 'utf8');
-    expect(new TextEncoder().encode(ship).length).toBeLessThanOrEqual(TOKEN_CEILING_BYTES);
-  });
-
   for (const workflow of ['guard', 'freeze']) {
     test(`${workflow} resolves and persists the freeze boundary in one shell block`, () => {
       const template = fs.readFileSync(
@@ -43,21 +37,6 @@ describe('generated runtime shell contracts', () => {
           new RegExp(`(?:^|\\n)\\s*${variable}=`).test(block) || helperMode.test(block),
           `upgrade bash block ${index + 1} uses ${variable} from a sibling shell`,
         ).toBe(true);
-      }
-    }
-  });
-
-  test('ship bash blocks recompute version state instead of inheriting sibling shells', () => {
-    const template = fs.readFileSync(path.join(ROOT, 'ship', 'SKILL.md.tmpl'), 'utf8');
-    const stateVariables = ['BASE_VERSION', 'NEW_VERSION'];
-
-    for (const [index, block] of executableBashBlocks(template).entries()) {
-      for (const variable of stateVariables) {
-        if (!block.includes(`$${variable}`)) continue;
-        expect(
-          block,
-          `ship bash block ${index + 1} uses ${variable} from a sibling shell`,
-        ).toMatch(new RegExp(`(?:^|\\n)\\s*${variable}=`));
       }
     }
   });

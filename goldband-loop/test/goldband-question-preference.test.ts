@@ -45,13 +45,13 @@ function run(...args: string[]): { stdout: string; stderr: string; status: numbe
 
 describe('--check (no preference set)', () => {
   test('two-way question without preference → ASK_NORMALLY', () => {
-    const r = run('--check', 'ship-changelog-voice-polish');
+    const r = run('--check', 'review-finding-fix');
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toContain('ASK_NORMALLY');
   });
 
   test('one-way question without preference → ASK_NORMALLY', () => {
-    const r = run('--check', 'ship-test-failure-triage');
+    const r = run('--check', 'land-and-deploy-merge-confirm');
     expect(r.stdout.trim()).toContain('ASK_NORMALLY');
   });
 
@@ -72,33 +72,33 @@ describe('--check with preferences set', () => {
   }
 
   test('two-way + never-ask → AUTO_DECIDE', () => {
-    setPref('ship-changelog-voice-polish', 'never-ask');
-    const r = run('--check', 'ship-changelog-voice-polish');
+    setPref('review-finding-fix', 'never-ask');
+    const r = run('--check', 'review-finding-fix');
     expect(r.stdout.trim()).toContain('AUTO_DECIDE');
   });
 
   test('one-way + never-ask → ASK_NORMALLY with safety note', () => {
-    setPref('ship-test-failure-triage', 'never-ask');
-    const r = run('--check', 'ship-test-failure-triage');
+    setPref('land-and-deploy-merge-confirm', 'never-ask');
+    const r = run('--check', 'land-and-deploy-merge-confirm');
     expect(r.stdout).toContain('ASK_NORMALLY');
     expect(r.stdout).toContain('one-way door overrides');
   });
 
   test('two-way + always-ask → ASK_NORMALLY', () => {
-    setPref('ship-changelog-voice-polish', 'always-ask');
-    const r = run('--check', 'ship-changelog-voice-polish');
+    setPref('review-finding-fix', 'always-ask');
+    const r = run('--check', 'review-finding-fix');
     expect(r.stdout.trim()).toContain('ASK_NORMALLY');
   });
 
   test('two-way + ask-only-for-one-way → AUTO_DECIDE (it IS two-way)', () => {
-    setPref('ship-changelog-voice-polish', 'ask-only-for-one-way');
-    const r = run('--check', 'ship-changelog-voice-polish');
+    setPref('review-finding-fix', 'ask-only-for-one-way');
+    const r = run('--check', 'review-finding-fix');
     expect(r.stdout.trim()).toContain('AUTO_DECIDE');
   });
 
   test('one-way + ask-only-for-one-way → ASK_NORMALLY', () => {
-    setPref('ship-test-failure-triage', 'ask-only-for-one-way');
-    const r = run('--check', 'ship-test-failure-triage');
+    setPref('land-and-deploy-merge-confirm', 'ask-only-for-one-way');
+    const r = run('--check', 'land-and-deploy-merge-confirm');
     expect(r.stdout.trim()).toContain('ASK_NORMALLY');
   });
 });
@@ -111,7 +111,7 @@ describe('--write valid payloads', () => {
   test('inline-user source is accepted', () => {
     const r = run(
       '--write',
-      JSON.stringify({ question_id: 'ship-changelog-voice-polish', preference: 'never-ask', source: 'inline-user' }),
+      JSON.stringify({ question_id: 'review-finding-fix', preference: 'never-ask', source: 'inline-user' }),
     );
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('OK');
@@ -120,7 +120,7 @@ describe('--write valid payloads', () => {
   test('plan-tune source is accepted', () => {
     const r = run(
       '--write',
-      JSON.stringify({ question_id: 'ship-x', preference: 'always-ask', source: 'plan-tune' }),
+      JSON.stringify({ question_id: 'review-x', preference: 'always-ask', source: 'plan-tune' }),
     );
     expect(r.status).toBe(0);
   });

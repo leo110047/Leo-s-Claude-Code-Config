@@ -87,7 +87,7 @@ A/B tested: 2x time, meaningfully better output.
 1. Read CLAUDE.md and understand the project
 2. Run /autoplan (CEO + eng + design review)
 3. Implement the approved plan
-4. Run /ship to create a PR
+4. Run `$goldband release land` to create and land the PR
 5. Report back with PR URL and decisions
 
 ### goldband-plan (Plan tier)

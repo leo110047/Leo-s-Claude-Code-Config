@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // detect-bump — crude heuristic for picking a bump level from a VERSION pair.
 // Used by CI's version-gate job to re-run the util with the "same" level that
-// /ship used, without needing persisted bump-intent.
+// release preparation used, without needing persisted bump-intent.
 //
 // Input:  two VERSION strings via argv: current (base) and target (branch).
 // Output: a single word: major|minor|patch|micro

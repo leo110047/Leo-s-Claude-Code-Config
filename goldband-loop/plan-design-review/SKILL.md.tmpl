@@ -427,7 +427,7 @@ After producing the Completion Summary above, persist the review result.
 `~/.goldband/` (user config directory, not project files). The skill preamble
 already writes to `~/.goldband/sessions/` and `~/.goldband/analytics/` — this is
 the same pattern. The review dashboard depends on this data. Skipping this
-command breaks the review readiness dashboard in /ship.
+command breaks the review readiness dashboard used by release workflows.
 
 ```bash
 $GOLDBAND_BIN/goldband-review-log '{"skill":"plan-design-review","timestamp":"TIMESTAMP","status":"STATUS","initial_score":N,"overall_score":N,"unresolved":N,"decisions_made":N,"commit":"COMMIT"}'

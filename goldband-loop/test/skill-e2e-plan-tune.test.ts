@@ -90,27 +90,27 @@ describeIfSelected('PlanTune E2E', ['plan-tune-inspect'], () => {
       },
       {
         ts: '2026-04-11T10:00:00Z',
-        skill: 'ship',
-        question_id: 'ship-test-failure-triage',
-        question_summary: 'Test failed',
+        skill: 'land-and-deploy',
+        question_id: 'land-and-deploy-merge-confirm',
+        question_summary: 'Merge release PR',
         category: 'approval',
         door_type: 'one-way',
         options_count: 3,
-        user_choice: 'fix-now',
-        recommended: 'fix-now',
+        user_choice: 'merge',
+        recommended: 'merge',
         followed_recommendation: true,
         session_id: 's2',
       },
       {
         ts: '2026-04-12T10:00:00Z',
-        skill: 'ship',
-        question_id: 'ship-changelog-voice-polish',
-        question_summary: 'Polish changelog voice',
-        category: 'approval',
+        skill: 'qa',
+        question_id: 'qa-tier',
+        question_summary: 'Choose QA tier',
+        category: 'scope',
         door_type: 'two-way',
         options_count: 2,
-        user_choice: 'skip',
-        recommended: 'accept',
+        user_choice: 'smoke',
+        recommended: 'full',
         followed_recommendation: false,
         session_id: 's3',
       },
@@ -162,11 +162,11 @@ IMPORTANT:
 
     // Agent must have surfaced at least 2 of the 3 logged question_ids
     const mentionsCEO = output.includes('plan-ceo-review-mode') || output.includes('review mode');
-    const mentionsShipTest = output.includes('ship-test-failure-triage') || output.includes('test failed');
-    const mentionsChangelog = output.includes('changelog') || output.includes('ship-changelog-voice-polish');
-    const foundCount = [mentionsCEO, mentionsShipTest, mentionsChangelog].filter(Boolean).length;
+    const mentionsRelease = output.includes('land-and-deploy-merge-confirm') || output.includes('merge release');
+    const mentionsQA = output.includes('qa-tier') || output.includes('qa tier');
+    const foundCount = [mentionsCEO, mentionsRelease, mentionsQA].filter(Boolean).length;
 
-    // Agent should note override behavior (user overrode CEO review and changelog polish)
+    // Agent should note override behavior (user overrode CEO review and QA tier)
     const noticedOverride =
       output.includes('overrid') ||
       output.includes('skip') ||

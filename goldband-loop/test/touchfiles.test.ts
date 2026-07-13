@@ -105,6 +105,12 @@ describe('selectTests', () => {
     expect(result.selected).toContain('plan-ceo-finding-floor');
   });
 
+  test('review dashboard selection follows its plan-eng-review source', () => {
+    const result = selectTests(['plan-eng-review/SKILL.md'], E2E_TOUCHFILES);
+    expect(result.selected).toContain('review-dashboard-via');
+    expect(E2E_TOUCHFILES['review-dashboard-via']).toContain('plan-eng-review/**');
+  });
+
   test('global touchfile triggers ALL tests', () => {
     const result = selectTests(['test/helpers/session-runner.ts'], E2E_TOUCHFILES);
     expect(result.selected.length).toBe(Object.keys(E2E_TOUCHFILES).length);

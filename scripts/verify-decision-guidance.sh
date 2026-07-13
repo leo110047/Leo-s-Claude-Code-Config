@@ -62,7 +62,6 @@ check_contains "goldband-loop/qa/SKILL.md" "healthiest complete fix" "Goldband L
 check_contains "goldband-loop/qa/SKILL.md.tmpl" "healthiest complete fix" "Goldband Loop qa template uses healthiest complete fix wording"
 check_contains "goldband-loop/design-review/SKILL.md" "healthiest complete fix" "Goldband Loop design-review uses healthiest complete fix wording"
 check_contains "goldband-loop/design-review/SKILL.md.tmpl" "healthiest complete fix" "Goldband Loop design-review template uses healthiest complete fix wording"
-check_contains "goldband-loop/ship/SKILL.md" "healthiest complete fix" "Goldband Loop ship handoff points to the healthiest complete fix"
 check_contains "goldband-loop/scripts/resolvers/preamble.ts" "healthiest complete fix" "Goldband Loop preamble points investigate handoff to the healthiest complete fix"
 
 check_contains "commands/discuss.md" "Failure Modes:" "discuss command requires failure modes"

@@ -1,12 +1,12 @@
 # TODOS
 
-## design daemon: follow-ups (filed v1.45.0.0 via /ship review army)
+## design daemon: follow-ups (filed v1.45.0.0 via release review)
 
 ### ✅ DONE (v1.45.0.0): Tighten daemon test coverage
 
 **Resolved in commit `6b037c55` (same PR):** All 5 test gaps filled before
 landing. Per-file totals after: serve 16, daemon 34, daemon-discovery 23,
-feedback-roundtrip-daemon 4 = 77 (+10 from initial ship). Specifically:
+feedback-roundtrip-daemon 4 = 77 (+10 from the initial release review). Specifically:
 - Idle-shutdown actually fires (spawn-based, daemon process observed exiting,
   state file removed).
 - Bare GET polling doesn't reset idle (hammers `/api/progress` in background,
@@ -18,7 +18,7 @@ feedback-roundtrip-daemon 4 = 77 (+10 from initial ship). Specifically:
 - Malformed-JSON + non-object + array-body + missing-html negatives for
   `POST /api/boards` and `POST /boards/<id>/api/reload`.
 
-### P3: Minor maintainability nits from /ship review
+### P3: Minor maintainability nits from release review
 
 - `design/src/cli.ts` and `design/src/serve.ts` both have a small `openBrowser`
   helper with identical darwin/linux/else branches. Extract a shared
@@ -726,7 +726,7 @@ calibration gate is trustworthy.
 
 **Why:** A user running two Conductor worktrees (or any multi-session setup), each with its own `$B connect`, closes one browser window ... and the other worktree's sidebar-agent gets killed too. The blast radius was there before, but the v0.18.1.0 disconnect-cleanup fix makes it more reachable: every user-close now runs the full `shutdown()` path, whereas before user-close bypassed it.
 
-**Context:** Surfaced by /ship's adversarial review on v0.18.1.0. Pre-existing code, not introduced by the fix. Fix requires propagating the sidebar-agent PID from `cli.ts` spawn site (~line 885) into the server's state file so `shutdown()` can target just this session's agent. Related: `browse/src/cli.ts` spawns with `Bun.spawn(...).unref()` and already captures `agentProc.pid`.
+**Context:** Surfaced by the v0.18.1.0 release review. Pre-existing code, not introduced by the fix. Fix requires propagating the sidebar-agent PID from `cli.ts` spawn site (~line 885) into the server's state file so `shutdown()` can target just this session's agent. Related: `browse/src/cli.ts` spawns with `Bun.spawn(...).unref()` and already captures `agentProc.pid`.
 
 **Effort:** S (human: ~2h / CC: ~15min)
 **Priority:** P2
@@ -895,7 +895,7 @@ emits security_event. The content-security.ts envelope path was already
 wrapping browse-command output; this extension closes the non-browse path
 Codex flagged.
 
-During /ship for v1.4.0.0 this path got additional hardening (commit
+During the v1.4.0.0 release review this path got additional hardening (commit
 407c36b4 + 88b12c2b + c51ebdf4): transcript classifier now receives the
 tool output text (was empty before), and combineVerdict accepts a
 `toolOutput: true` opt that blocks on a single ML classifier at BLOCK
@@ -1161,86 +1161,23 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Priority:** P4
 **Completed (Linux):** v0.11.11.0 (2026-03-23)
 
-## Ship
+## Release
 
-### /ship Step 12 test harness should exec the actual template bash, not a reimplementation
+### GitLab support for `$goldband release land`
 
-**What:** `test/ship-version-sync.test.ts` currently reimplements the bash from `ship/SKILL.md.tmpl` Step 12 inside template literals. When the template changes, both sides must be updated — exactly the drift-risk pattern the Step 12 fix is meant to prevent, applied to our own testing strategy. Replace with a helper that extracts the fenced bash blocks from the template at test time and runs them verbatim (similar to the `skill-parser.ts` pattern).
+**What:** Add GitLab MR merge + CI polling support to the release workflow. The current implementation uses GitHub-specific `gh` operations and needs an explicit `glab` adapter.
 
-**Why:** Surfaced by the Claude adversarial subagent during the v1.0.1.0 ship. Today the tests would stay green while the template regresses, because the error-message strings already differ between test and template. It's a silent-drift bug waiting to happen.
-
-**Context:** The fixed test file is at `test/ship-version-sync.test.ts` (branched off project-owner/ship-version-sync). Existing precedent for extracting-from-skill-md is at `test/helpers/skill-parser.ts`. Pattern: read the template, slice from `## Step 12` to the next `---`, grep fenced bash, feed to `/bin/bash` with substituted fixtures.
-
-**Effort:** S (human: ~2h / CC: ~30min)
-**Priority:** P2
-**Depends on:** None.
-
-### /ship Step 12 BASE_VERSION silent fallback to 0.0.0.0 when git show fails
-
-**What:** `BASE_VERSION=$(git show origin/<base>:VERSION 2>/dev/null || echo "0.0.0.0")` silently defaults to `0.0.0.0` in any failure mode — detached HEAD, no origin, offline, base branch renamed. In such states, a real drift could be misclassified or silently repaired with the wrong value. Distinguish "origin/<base> unreachable" from "origin/<base>:VERSION absent" and fail loudly on the former.
-
-**Why:** Flagged as CRITICAL (confidence 8/10) by the Claude adversarial subagent during the v1.0.1.0 ship. Low practical risk because `/ship` Step 3 already fetches origin before Step 12 runs — any reachability failure would abort Step 3 long before this code runs. Still, defense in depth: if someone invokes Step 12 bash outside the full /ship pipeline (e.g., via a standalone helper), the fallback masks a real problem.
-
-**Context:** Fix: wrap with `git rev-parse --verify origin/<base>` probe; if that fails, error out rather than defaulting. Touches `ship/SKILL.md.tmpl` Step 12 idempotency block (around line 409). Tests need a case where `git show` fails.
-
-**Effort:** S (human: ~1h / CC: ~15min)
-**Priority:** P3
-**Depends on:** None.
-
-### GitLab support for /land-and-deploy
-
-**What:** Add GitLab MR merge + CI polling support to `/land-and-deploy` skill. Currently uses `gh pr view`, `gh pr checks`, `gh pr merge`, and `gh run list/view` in 15+ places — each needs a GitLab conditional path using `glab ci status`, `glab mr merge`, etc.
-
-**Why:** Without this, GitLab users can `/ship` (create MR) but can't `/land-and-deploy` (merge + verify). Completes the GitLab story end-to-end.
-
-**Context:** `/retro`, `/ship`, and `/document-release` now support GitLab via the multi-platform `BASE_BRANCH_DETECT` resolver. `/land-and-deploy` has deeper GitHub-specific semantics (merge queues, required checks via `gh pr checks`, deploy workflow polling) that have different shapes on GitLab. The `glab` CLI (v1.90.0) supports `glab mr merge`, `glab ci status`, `glab ci view` but with different output formats and no merge queue concept.
+**Why:** GitLab users need the same merge, deploy, and verification outcome without reviving a separate shipping workflow.
 
 **Effort:** L
 **Priority:** P2
-**Depends on:** None (BASE_BRANCH_DETECT multi-platform resolver is already done)
-
-### Multi-commit CHANGELOG completeness eval
-
-**What:** Add a periodic E2E eval that creates a branch with 5+ commits spanning 3+ themes (features, cleanup, infra), runs /ship's Step 5 CHANGELOG generation, and verifies the CHANGELOG mentions all themes.
-
-**Why:** The bug fixed in v0.11.22 (project-owner/ship-full-commit-coverage) showed that /ship's CHANGELOG generation biased toward recent commits on long branches. The prompt fix adds a cross-check, but no test exercises the multi-commit failure mode. The existing `ship-local-workflow` E2E only uses a single-commit branch.
-
-**Context:** Would be a `periodic` tier test (~$4/run, non-deterministic since it tests LLM instruction-following). Setup: create bare remote, clone, add 5+ commits across different themes on a feature branch, run Step 5 via `claude -p`, verify CHANGELOG output covers all themes. Pattern: `ship-local-workflow` in `test/skill-e2e-workflow.test.ts`.
-
-**Effort:** M
-**Priority:** P3
 **Depends on:** None
-
-### Ship log — persistent record of /ship runs
-
-**What:** Append structured JSON entry to `.goldband/ship-log.json` at end of every /ship run (version, date, branch, PR URL, review findings, Greptile stats, todos completed, test results).
-
-**Why:** /retro has no structured data about shipping velocity. Ship log enables: PRs-per-week trending, review finding rates, Greptile signal over time, test suite growth.
-
-**Context:** /retro already reads greptile-history.md — same pattern. Eval persistence (eval-store.ts) shows the JSON append pattern exists in the codebase. ~15 lines in ship template.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
-
-### Visual verification with screenshots in PR body
-
-**What:** /ship Step 7.5: screenshot key pages after push, embed in PR body.
-
-**Why:** Visual evidence in PRs. Reviewers see what changed without deploying locally.
-
-**Context:** Part of Phase 3.6. Needs S3 upload for image hosting.
-
-**Effort:** M
-**Priority:** P2
-**Depends on:** /setup-goldband-upload
 
 ## Review
 
 ### Inline PR annotations
 
-**What:** /ship and /review post inline review comments at specific file:line locations using `gh api` to create pull request review comments.
+**What:** Review and release actions post inline review comments at specific file:line locations using `gh api` to create pull request review comments.
 
 **Why:** Line-level annotations are more actionable than top-level comments. The PR thread becomes a line-by-line conversation between Greptile, Claude, and human reviewers.
 
@@ -1358,7 +1295,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 
 **What:** Configure S3 bucket for image hosting. One-time setup for visual PR annotations.
 
-**Why:** Prerequisite for visual PR annotations in /ship and /review.
+**Why:** Prerequisite for visual PR annotations in review and release actions.
 
 **Effort:** M
 **Priority:** P2
@@ -1505,15 +1442,15 @@ Shipped as v0.5.0 on main. Includes `/plan-design-review` (report-only design au
 
 ## Document-Release
 
-### Auto-invoke /document-release from /ship — SHIPPED
+### Auto-invoke document release from the release workflow — SHIPPED
 
-Shipped in v0.8.3. Step 8.5 added to `/ship` — after creating the PR, `/ship` automatically reads `document-release/SKILL.md` and executes the doc update workflow. Zero-friction doc updates.
+Shipped in v0.8.3. The legacy release workflow automatically ran `document-release/SKILL.md` after creating the PR. The current owner is `$goldband release document`.
 
 ### `{{DOC_VOICE}}` shared resolver
 
-**What:** Create a placeholder resolver in gen-skill-docs.ts encoding the goldband voice guide (friendly, user-forward, lead with benefits). Inject into /ship Step 5, /document-release Step 5, and reference from CLAUDE.md.
+**What:** Create a placeholder resolver in gen-skill-docs.ts encoding the goldband voice guide (friendly, user-forward, lead with benefits). Inject into release documentation and reference from CLAUDE.md.
 
-**Why:** DRY — voice rules currently live inline in 3 places (CLAUDE.md CHANGELOG style section, /ship Step 5, /document-release Step 5). When the voice evolves, all three drift.
+**Why:** DRY — voice rules currently live inline in multiple release documentation surfaces. When the voice evolves, they drift.
 
 **Context:** Same pattern as `{{QA_METHODOLOGY}}` — shared block injected into multiple templates to prevent drift. ~20 lines in gen-skill-docs.ts.
 
@@ -1617,7 +1554,7 @@ Shipped in v0.6.5. TemplateContext in gen-skill-docs.ts bakes skill name into pr
 
 **What:** Append one-line JSONL entry to `~/.goldband/projects/$SLUG/timeline.jsonl` after every skill run (timestamp, skill, branch, outcome). `/retro` renders the timeline.
 
-**Why:** Makes AI-assisted work history visible. `/retro` can show "this week: 3 /review, 2 /ship, 1 /investigate." Provides the observability layer for the session intelligence architecture.
+**Why:** Makes AI-assisted work history visible. `/retro` can show "this week: 3 review runs, 2 release runs, 1 investigation." Provides the observability layer for the session intelligence architecture.
 
 **Effort:** S (human: ~1h / CC: ~5 min)
 **Priority:** P1
@@ -1670,9 +1607,9 @@ Shipped in v0.6.5. TemplateContext in gen-skill-docs.ts bakes skill name into pr
 **Depends on:** None
 **Key files:** New `health/SKILL.md.tmpl`, `scripts/gen-skill-docs.ts`
 
-### /health as /ship gate
+### Health as a release gate
 
-**What:** If health score exists and drops below a configurable threshold, `/ship` warns before creating the PR: "Health dropped from 8/10 to 5/10 this branch — 3 new lint warnings, 1 test failure. Ship anyway?"
+**What:** If health score exists and drops below a configurable threshold, `$goldband release land` warns before creating the PR: "Health dropped from 8/10 to 5/10 this branch — 3 new lint warnings, 1 test failure. Continue?"
 
 **Why:** Quality gate that prevents shipping degraded code. Configurable threshold so it's not blocking for teams that don't use `/health`.
 
@@ -1684,16 +1621,16 @@ Shipped in v0.6.5. TemplateContext in gen-skill-docs.ts bakes skill name into pr
 
 ### Swarm primitive — reusable multi-agent dispatch
 
-**What:** Extract Review Army's dispatch pattern into a reusable resolver (`scripts/resolvers/swarm.ts`). Wire into `/ship` for parallel pre-ship checks (type-check + lint + test in parallel sub-agents). Make available to `/qa`, `/investigate`, `/health`.
+**What:** Extract Review Army's dispatch pattern into a reusable resolver (`scripts/resolvers/swarm.ts`). Wire it into release readiness for parallel checks (type-check + lint + test in parallel sub-agents). Make it available to QA, investigation, and health actions.
 
 **Why:** Review Army proved parallel sub-agents work brilliantly (5 agents = 835K tokens of working memory vs. 167K for one). The pattern is locked inside `review-army.ts`. Other skills need it too. Claude Code Agent Teams (official, Feb 2026) validates the team-lead-delegates-to-specialists pattern. Gartner: multi-agent inquiries surged 1,445% in one year.
 
-**Context:** Start with the specific `/ship` use case. Extract shared parts only after 2+ consumers reveal what config parameters are actually needed. Avoid premature abstraction. Can leverage existing WorktreeManager for isolation.
+**Context:** Start with the specific release-readiness use case. Extract shared parts only after 2+ consumers reveal what config parameters are actually needed. Avoid premature abstraction. Can leverage existing WorktreeManager for isolation.
 
 **Effort:** L (human: ~2 weeks / CC: ~2 hours)
 **Priority:** P2
 **Depends on:** None
-**Key files:** `scripts/resolvers/review-army.ts`, new `scripts/resolvers/swarm.ts`, `ship/SKILL.md.tmpl`, `lib/worktree.ts`
+**Key files:** `scripts/resolvers/review-army.ts`, new `scripts/resolvers/swarm.ts`, `land-and-deploy/SKILL.md.tmpl`, `lib/worktree.ts`
 
 ## Refactoring
 

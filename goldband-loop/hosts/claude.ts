@@ -32,7 +32,6 @@ const claude: HostConfig = {
         'shared-rubric.md',
         'findings-schema.md',
         'checklist.md',
-        'ship-fix-first.md',
         'design-checklist.md',
         'greptile-triage.md',
         'TODOS-format.md',

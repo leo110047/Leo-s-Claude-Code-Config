@@ -196,10 +196,10 @@ if [ "$SKILL_PREFIX_FLAG" -eq 0 ]; then
       echo ""
       echo "Skill naming: how should goldband skills appear?"
       echo ""
-      echo "  1) Short names: /qa, /ship, /review"
+      echo "  1) Short names: /qa, /review, /investigate"
       echo "     Recommended. Clean and fast to type."
       echo ""
-      echo "  2) Namespaced: /goldband-qa, /goldband-ship, /goldband-review"
+      echo "  2) Namespaced: /goldband-qa, /goldband-review, /goldband-investigate"
       echo "     Use this if you run other skill packs alongside goldband to avoid conflicts."
       echo ""
       printf "Choice [1/2] (default: 1, auto-selects in 10s): "
@@ -959,7 +959,7 @@ create_codex_runtime_root() {
     _link_or_copy "$goldband_dir/browse/bin" "$codex_goldband/browse/bin"
   fi
   # Review runtime assets (individual files, NOT the whole review/ dir which has SKILL.md)
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$codex_goldband/review/$f"
     fi
@@ -1012,7 +1012,7 @@ create_claude_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$claude_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
     fi
@@ -1054,7 +1054,7 @@ create_factory_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$factory_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$factory_goldband/review/$f"
     fi
@@ -1099,7 +1099,7 @@ create_opencode_runtime_root() {
   if [ -d "$goldband_dir/design/dist" ]; then
     _link_or_copy "$goldband_dir/design/dist" "$opencode_goldband/design/dist"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$opencode_goldband/review/$f"
     fi
@@ -1246,7 +1246,7 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
     _link_or_copy "$SOURCE_GOLDBAND_DIR/ETHOS.md" "$KIRO_GOLDBAND/ETHOS.md"
   fi
   # Review runtime assets (individual files, not whole dir)
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$SOURCE_GOLDBAND_DIR/review/$f" ]; then
       _link_or_copy "$SOURCE_GOLDBAND_DIR/review/$f" "$KIRO_GOLDBAND/review/$f"
     fi

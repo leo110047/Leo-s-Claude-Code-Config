@@ -18,8 +18,7 @@ Detailed guides for every goldband skill — philosophy, workflow, and examples.
 | [`/qa-only`](#qa) | **QA Reporter** | Same methodology as /qa but report only. Use when you want a pure bug report without code changes. |
 | [`/scrape`](#scrape) | **Browser Data Extractor** | Pull data from a web page. First call prototypes via `$B`; subsequent calls on a matching intent run a codified browser-skill in ~200ms. |
 | [`/skillify`](#skillify) | **Skill Codifier** | Walks back through your conversation, finds the last `/scrape` prototype, synthesizes script + test + fixture, runs the test, asks before committing. |
-| [`/ship`](#ship) | **Release Engineer** | Sync main, run tests, audit coverage, push, open PR. Bootstraps test frameworks if you don't have one. One command. |
-| [`/land-and-deploy`](#land-and-deploy) | **Release Engineer** | Merge the PR, wait for CI and deploy, verify production health. One command from "approved" to "verified in production." |
+| [`$goldband release land`](#goldband-release-land) | **Release Engineer** | Prepare or locate the PR, honor repository-owned gates, merge, deploy, and verify production health. |
 | [`/canary`](#canary) | **SRE** | Post-deploy monitoring loop. Watches for console errors, performance regressions, and page failures using the browse daemon. |
 | [`/benchmark`](#benchmark) | **Performance Engineer** | Baseline page load times, Core Web Vitals, and resource sizes. Compare before/after on every PR. Track trends over time. |
 | [`/cso`](#cso) | **Chief Security Officer** | OWASP Top 10 + STRIDE threat modeling security audit. Scans for injection, auth, crypto, and access control issues. |
@@ -632,50 +631,22 @@ Claude: [Explores 12 pages, fills 3 forms, tests 2 flows]
 
 ---
 
-## `/ship`
-
-This is my **release machine mode**.
-
-Once I have decided what to build, nailed the technical plan, and run a serious review, I do not want more talking. I want execution.
-
-`/ship` is for the final mile. It is for a ready branch, not for deciding what to build.
-
-This is where the model should stop behaving like a brainstorm partner and start behaving like a disciplined release engineer: sync with main, run the right tests, make sure the branch state is sane, update changelog or versioning if the repo expects it, push, and create or update the PR.
-
-### Test bootstrap
-
-If your project doesn't have a test framework, `/ship` sets one up — detects your runtime, researches the best framework, installs it, writes 3-5 real tests for your actual code, sets up CI/CD (GitHub Actions), and creates TESTING.md. 100% test coverage is the goal — tests make vibe coding safe instead of yolo coding.
-
-### Coverage audit
-
-Every `/ship` run builds a code path map from your diff, searches for corresponding tests, and produces an ASCII coverage diagram with quality stars. Gaps get tests auto-generated. Your PR body shows the coverage: `Tests: 42 → 47 (+5 new)`.
-
-### Review gate
-
-`/ship` checks the [Review Readiness Dashboard](#review-readiness-dashboard) before creating the PR. If the Eng Review is missing, it asks — but won't block you. Decisions are saved per-branch so you're never re-asked.
-
-A lot of branches die when the interesting work is done and only the boring release work is left. Humans procrastinate that part. AI should not.
-
----
-
-## `/land-and-deploy`
+## `$goldband release land`
 
 This is my **deploy pipeline mode**.
 
-`/ship` creates the PR. `/land-and-deploy` finishes the job: merge, deploy, verify.
-
-It merges the PR, waits for CI, waits for the deploy to finish, then runs canary checks against production. One command from "approved" to "verified in production." If the deploy breaks, it tells you what failed and whether to rollback.
+It prepares or locates the PR, follows repository-owned release gates, merges, waits for CI and deploy, then runs canary checks against production. The workflow requires explicit approval before outward-facing or irreversible actions.
 
 First run on a new project triggers a dry-run walk-through so you can verify the pipeline before it does anything irreversible. After that, it trusts the config and runs straight through.
 
 ### Setup
 
-Run `/setup-deploy` first. It detects your platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, or custom), discovers your production URL and health check endpoints, and writes the config to CLAUDE.md. One-time, 60 seconds.
+Run `$goldband release setup` first. It detects your platform, discovers the production URL and health checks, and records the project-owned deployment contract.
 
 ### Example
 
 ```
-You:   /land-and-deploy
+You:   $goldband release land
 
 Claude: Merging PR #42...
         CI: 3/3 checks passed
@@ -759,7 +730,7 @@ Claude: Running OWASP Top 10 + STRIDE security audit...
 
 This is my **technical writer mode**.
 
-After `/ship` creates the PR but before it merges, `/document-release` reads every documentation file in the project and cross-references it against the diff. It updates file paths, command lists, project structure trees, and anything else that drifted. Risky or subjective changes get surfaced as questions — everything else is handled automatically.
+Before the PR merges, `$goldband release docs` reads project documentation and cross-references it against the diff. It updates factual drift and surfaces risky or subjective changes as questions.
 
 ```
 You:   /document-release
@@ -1138,13 +1109,13 @@ Install Greptile on your GitHub repo at [greptile.com](https://greptile.com) —
 
 The problem with any automated reviewer is triage. Greptile is good, but not every comment is a real issue. Some are false positives. Some flag things you already fixed three commits ago. Without a triage layer, the comments pile up and you start ignoring them — which defeats the purpose.
 
-goldband solves this. `/review` and `/ship` are now Greptile-aware. They read Greptile's comments, classify each one, and take action:
+goldband solves this. Review and release workflows can read Greptile comments, classify each one, and take action:
 
 - **Valid issues** get added to the critical findings and fixed before shipping
 - **Already-fixed issues** get an auto-reply acknowledging the catch
 - **False positives** get pushed back — you confirm, and a reply goes out explaining why it's wrong
 
-The result is a two-layer review: Greptile catches things asynchronously on the PR, then `/review` and `/ship` triage those findings as part of the normal workflow. Nothing falls through the cracks.
+The result is a two-layer review: Greptile catches things asynchronously on the PR, then Goldband triages those findings as part of the normal workflow.
 
 ### Learning from history
 
@@ -1153,7 +1124,7 @@ Every false positive you confirm gets saved to `~/.goldband/greptile-history.md`
 ### Example
 
 ```
-You:   /ship
+You:   $goldband release land
 
 Claude: [syncs main, runs tests, pre-landing review...]
 

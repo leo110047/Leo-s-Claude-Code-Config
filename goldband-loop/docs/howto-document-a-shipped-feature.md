@@ -8,7 +8,7 @@ This is the post-ship workflow: you merged a PR, the docs are stale, and you wan
 - The branch with your shipped feature is checked out
 - A PR exists on GitHub or GitLab (recommended — the workflow updates the PR body with a coverage map)
 
-If no PR exists yet, run `/ship` first to create one; that's what `/document-release` is designed to run against.
+If no PR exists yet, run `$goldband release land` to prepare one; release documentation is designed to run against a concrete diff and PR.
 
 ## Steps
 
@@ -92,7 +92,7 @@ The skill uses an entity taxonomy to decide which quadrants matter (CLI flags wa
 Tutorials should hit a working result in 3 steps or fewer. Re-run the skill and ask it to compress, or hand-edit. The Step 8 Quality Self-Review catches some of these but not all.
 
 **You want to document a feature but no PR exists yet.**
-Run `/ship` first to create the PR, then this workflow. Without a PR, `/document-release` can still audit but skips the PR-body update.
+Run `$goldband release land` to prepare the PR, then `$goldband release docs`. Without a PR, the documentation workflow can still audit but skips the PR-body update.
 
 **A generated reference doc has hallucinated API signatures.**
 File a bug. The skill's Step 1 archaeology is supposed to read implementation files end-to-end, not just signatures, specifically to prevent this. Include the generated text and the actual code so we can trace why the archaeology missed it.

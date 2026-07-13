@@ -50,19 +50,19 @@ describe('goldband-question-log — valid payloads', () => {
   test('minimal payload writes log entry with auto ts', () => {
     const r = run(
       JSON.stringify({
-        skill: 'ship',
-        question_id: 'ship-test-failure-triage',
-        question_summary: 'tests failed',
-        user_choice: 'fix-now',
+        skill: 'land-and-deploy',
+        question_id: 'land-and-deploy-merge-confirm',
+        question_summary: 'merge release PR',
+        user_choice: 'merge',
       }),
     );
     expect(r.status).toBe(0);
     const lines = readLog();
     expect(lines.length).toBe(1);
     const rec = JSON.parse(lines[0]);
-    expect(rec.skill).toBe('ship');
-    expect(rec.question_id).toBe('ship-test-failure-triage');
-    expect(rec.user_choice).toBe('fix-now');
+    expect(rec.skill).toBe('land-and-deploy');
+    expect(rec.question_id).toBe('land-and-deploy-merge-confirm');
+    expect(rec.user_choice).toBe('merge');
     expect(rec.ts).toBeDefined();
     expect(new Date(rec.ts).toString()).not.toBe('Invalid Date');
   });

@@ -51,7 +51,7 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'qa-b8-checkout': ['qa/**', 'browse/src/**', 'browse/test/test-server.ts', 'test/helpers/llm-judge.ts', 'browse/test/fixtures/qa-eval-checkout.html', 'test/fixtures/qa-eval-checkout-ground-truth.json'],
   'qa-only-no-fix': ['qa-only/**', 'qa/templates/**'],
   'qa-fix-loop':    ['qa/**', 'browse/src/**', 'browse/test/test-server.ts'],
-  'qa-bootstrap':   ['qa/**', 'ship/**'],
+  'qa-bootstrap':   ['qa/**'],
 
   // Review
   'review-sql-injection':     ['review/**', 'test/fixtures/review-eval-vuln.rb'],
@@ -110,7 +110,6 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'ask-user-question-format-pty':              ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble/generate-completeness-section.ts', 'scripts/resolvers/preamble.ts', 'test/helpers/claude-pty-runner.ts'],
   'plan-ceo-mode-routing':       ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'test/helpers/claude-pty-runner.ts'],
   'plan-design-with-ui-scope':   ['plan-design-review/**', 'test/fixtures/plans/ui-heavy-feature.md', 'test/helpers/claude-pty-runner.ts'],
-  'ship-idempotency-pty':        ['ship/**', 'bin/goldband-next-version', 'lib/worktree.ts', 'test/helpers/claude-pty-runner.ts'],
   'autoplan-chain-pty':          ['autoplan/**', 'plan-ceo-review/**', 'plan-design-review/**', 'plan-eng-review/**', 'plan-devex-review/**', 'test/fixtures/plans/ui-heavy-feature.md', 'test/helpers/claude-pty-runner.ts'],
 
   // Per-finding AskUserQuestion count + review-report-at-bottom assertion.
@@ -167,8 +166,7 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'plan-review-prosons-hardstop-neg': ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
   'plan-review-prosons-neutral-neg':  ['plan-ceo-review/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
 
-  // Expanded coverage (CT3) — 6 non-plan-review skills inherit Pros/Cons via preamble
-  'ship-prosons-format':              ['ship/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
+  // Expanded coverage (CT3) — non-plan-review skills inherit Pros/Cons via preamble
   'office-hours-prosons-format':      ['office-hours/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
   'investigate-prosons-format':       ['investigate/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
   'qa-prosons-format':                ['qa/**', 'scripts/resolvers/preamble/generate-ask-user-format.ts', 'scripts/resolvers/preamble.ts', 'model-overlays/opus-4-7.md'],
@@ -185,12 +183,8 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   'codex-offered-design-review': ['plan-design-review/**', 'scripts/gen-skill-docs.ts'],
   'codex-offered-eng-review':    ['plan-eng-review/**', 'scripts/gen-skill-docs.ts'],
 
-  // Ship
-  'ship-base-branch': ['ship/**', 'bin/goldband-repo-mode'],
-  'ship-local-workflow': ['ship/**', 'scripts/gen-skill-docs.ts'],
-  'review-dashboard-via': ['ship/**', 'scripts/resolvers/review.ts', 'codex/**', 'autoplan/**', 'land-and-deploy/**'],
-  'ship-plan-completion': ['ship/**', 'scripts/gen-skill-docs.ts'],
-  'ship-plan-verification': ['ship/**', 'scripts/gen-skill-docs.ts'],
+  // Review dashboard source and consumers
+  'review-dashboard-via': ['plan-eng-review/**', 'scripts/resolvers/review.ts', 'codex/**', 'autoplan/**', 'land-and-deploy/**'],
 
   // Retro
   'retro':             ['retro/**'],
@@ -239,14 +233,7 @@ export const E2E_TOUCHFILES: Record<string, string[]> = {
   // Gemini E2E — smoke test only (Gemini gets lost in worktrees on complex tasks)
   'gemini-smoke':  ['.agents/skills/**', 'test/helpers/gemini-session-runner.ts', 'lib/worktree.ts'],
 
-
-  // Coverage audit (shared fixture) + triage + gates
-  'ship-coverage-audit': ['ship/**', 'test/fixtures/coverage-audit-fixture.ts', 'bin/goldband-repo-mode'],
-  'ship-triage': ['ship/**', 'bin/goldband-repo-mode'],
-
-  // Plan completion audit + verification
-  'ship-plan-completion': ['ship/**', 'scripts/gen-skill-docs.ts'],
-  'ship-plan-verification': ['ship/**', 'qa-only/**', 'scripts/gen-skill-docs.ts'],
+  // Plan completion audit
   'review-plan-completion': ['review/**', 'scripts/gen-skill-docs.ts'],
 
   // Design
@@ -432,7 +419,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'ask-user-question-format-pty':            'gate',       // ~$0.50/run, single skill probe
   'plan-ceo-mode-routing':     'periodic',   // ~$3/run, deep navigation through 8-12 prior AskUserQuestions
   'plan-design-with-ui-scope': 'gate',       // ~$0.80/run
-  'ship-idempotency-pty':      'periodic',   // ~$3/run, real /ship in plan mode
   'autoplan-chain-pty':        'periodic',   // ~$8/run, all 3 phases sequential
 
   // Per-finding count + review-report-at-bottom — periodic because each
@@ -482,7 +468,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'plan-review-prosons-neutral-neg': 'periodic',
 
   // CT3 expanded coverage — non-plan-review skills inheriting Pros/Cons (all periodic)
-  'ship-prosons-format': 'periodic',
   'office-hours-prosons-format': 'periodic',
   'investigate-prosons-format': 'periodic',
   'qa-prosons-format': 'periodic',
@@ -514,14 +499,6 @@ export const E2E_TIERS: Record<string, 'gate' | 'periodic'> = {
   'context-restore-legacy-compat': 'periodic',     // Pre-rename files still load
   'context-save-list-current-branch': 'periodic',  // Default branch filter
   'context-save-list-all-branches': 'periodic',    // --all flag
-
-  // Ship — gate (end-to-end ship path)
-  'ship-base-branch': 'gate',
-  'ship-local-workflow': 'gate',
-  'ship-coverage-audit': 'gate',
-  'ship-triage': 'gate',
-  'ship-plan-completion': 'gate',
-  'ship-plan-verification': 'gate',
 
   // Retro — gate for cheap branch detection, periodic for full Opus retro
   'retro': 'periodic',
@@ -631,11 +608,9 @@ export const LLM_JUDGE_TOUCHFILES: Record<string, string[]> = {
   'qa/SKILL.md workflow':             ['qa/SKILL.md', 'qa/SKILL.md.tmpl'],
   'qa/SKILL.md health rubric':        ['qa/SKILL.md', 'qa/SKILL.md.tmpl'],
   'qa/SKILL.md anti-refusal':         ['qa/SKILL.md', 'qa/SKILL.md.tmpl', 'qa-only/SKILL.md', 'qa-only/SKILL.md.tmpl'],
-  'cross-skill greptile consistency': ['review/SKILL.md', 'review/SKILL.md.tmpl', 'ship/SKILL.md', 'ship/SKILL.md.tmpl', 'review/greptile-triage.md', 'retro/SKILL.md', 'retro/SKILL.md.tmpl'],
   'baseline score pinning':           ['SKILL.md', 'SKILL.md.tmpl', 'test/fixtures/eval-baselines.json'],
 
-  // Ship & Release
-  'ship/SKILL.md workflow':               ['ship/SKILL.md', 'ship/SKILL.md.tmpl'],
+  // Release documentation
   'document-release/SKILL.md workflow':   ['document-release/SKILL.md', 'document-release/SKILL.md.tmpl'],
 
   // Plan Reviews

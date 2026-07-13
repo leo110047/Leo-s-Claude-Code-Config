@@ -4,7 +4,7 @@ version: 0.1.0
 description: |
   Read-only queue dashboard for workspace-aware ship. Shows which VERSION slots
   are currently claimed by open PRs, which sibling Conductor workspaces have
-  WIP work likely to ship soon, and what slot /ship would pick next. No
+  WIP work likely to release soon, and what slot the release workflow would pick next. No
   mutations — just a snapshot. Use when asked to "landing report", "what's in
   the queue", "show me open PRs", or "which version do I claim next". (goldband)
 triggers:
@@ -29,8 +29,8 @@ sensitive: false
 
 When you're running 5-10 parallel Conductor workspaces, it helps to see — at a
 glance — which version numbers are claimed, by whom, and what slot your next
-`/ship` would land in. This skill is a read-only call into the same
-`bin/goldband-next-version` utility `/ship` uses, but with nothing mutating.
+the release workflow would land in. This skill is a read-only call into the
+`bin/goldband-next-version` utility, but with nothing mutating.
 Think of it as `gh pr list` for VERSION numbers.
 
 ---
@@ -117,7 +117,7 @@ Sibling Conductor worktrees (<workspace_root>):
 ★ active = has VERSION ahead of base AND last commit < 24h AND no open PR.
   These are the ones likely to ship soon.
 
-If you ran /ship right now, you'd claim:
+If you ran `$goldband release land` right now, you'd claim:
   micro bump:  v1.6.3.1   (queue-advance: none)
   patch bump:  v1.7.1.0   (bumped past claimed 1.7.0.0)
   minor bump:  v1.8.0.0   (bumped past claimed 1.7.0.0)
@@ -146,14 +146,14 @@ After rendering the table, suggest ONE of:
 1. **If there are collisions in the queue** (two open PRs claim the same version):
    "⚠ Two open PRs collide on v<X>. Whoever merges second will either overwrite
    the first's CHANGELOG entry or land a duplicate. Consider asking one author
-   to rerun /ship to pick up the next free slot."
+   to rerun `$goldband release land` to pick up the next free slot."
 
 2. **If an active sibling outranks the user's branch version:**
    "Sibling worktree <path> has v<X> committed <N>h ago and hasn't PR'd yet.
    If that work ships first, your branch will need to rebump at land time."
 
 3. **If everything looks clean:**
-   "Queue is clean. Next /ship will claim a slot without conflict."
+   "Queue is clean. The next release will claim a slot without conflict."
 
 ---
 

@@ -21,6 +21,31 @@ const CAPABILITY_CONTRACT_PATH = path.join(
   'generated',
   'capability-actions.json',
 );
+const RETIRED_SHIP_ASSETS = [
+  'ship',
+  'review/ship-fix-first.md',
+  'scripts/resolvers/preamble/generate-test-failure-triage.ts',
+  'test/ship-version-sync.test.ts',
+  'test/skill-e2e-ship-idempotency.test.ts',
+  'test/skill-e2e-ship-triage.test.ts',
+  'docs/designs/SLOP_SCAN_FOR_REVIEW_SHIP.md',
+];
+const RETIRED_SHIP_REFERENCE_PATTERNS = [
+  /\bship\//,
+  /(?:^|\s)\/ship\b/,
+  /\bgoldband-ship\b/,
+  /\bship-(?:prosons|plan|coverage|triage|idempotency|local|base)-?/,
+  /TEST_FAILURE_TRIAGE/,
+];
+const RETIRED_SHIP_REFERENCE_ALLOWLIST = [
+  'goldband-loop/CHANGELOG.md',
+  'goldband-loop/docs/designs/',
+  'goldband-loop/docs/prompts/',
+  'goldband-loop/test/uninstall.test.ts',
+  'scripts/check-goldband-loop-inventory.mjs',
+  'scripts/test-workflow-integration.sh',
+];
+
 function main() {
   const inventory = readJson(INVENTORY_PATH);
   const capabilityContract = readJson(CAPABILITY_CONTRACT_PATH);
@@ -28,6 +53,8 @@ function main() {
   assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput();
   assertSourceSymlinksResolve(LOOP_DIR);
   assertLegacyConfigMigration();
+  assertRetiredShipAssetsAbsent();
+  assertRetiredShipReferencesAbsent();
   assertSourceInventory(inventory);
 
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-loop-home.'));
@@ -51,6 +78,54 @@ function main() {
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });
   }
+}
+
+function assertRetiredShipAssetsAbsent() {
+  const present = RETIRED_SHIP_ASSETS.filter((relativePath) =>
+    fs.existsSync(path.join(LOOP_DIR, relativePath)),
+  );
+  assert.deepEqual(
+    present,
+    [],
+    'retired ship workflow assets must not be restored',
+  );
+}
+
+function assertRetiredShipReferencesAbsent() {
+  const violations = [];
+  for (const scanRoot of [LOOP_DIR, path.join(ROOT_DIR, 'scripts')]) {
+    walkSourceTree(scanRoot, (entryPath, entry) =>
+      collectRetiredShipReferenceViolations(entryPath, entry, violations),
+    );
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    'active source contains references to the retired ship workflow',
+  );
+}
+
+function collectRetiredShipReferenceViolations(entryPath, entry, violations) {
+  if (!entry.isFile()) {
+    return;
+  }
+  const relativePath = path.relative(ROOT_DIR, entryPath);
+  if (isRetiredShipReferenceAllowlisted(relativePath)) {
+    return;
+  }
+  const content = fs.readFileSync(entryPath, 'utf8');
+  for (const pattern of RETIRED_SHIP_REFERENCE_PATTERNS) {
+    if (pattern.test(content)) {
+      violations.push(`${relativePath}: ${pattern}`);
+    }
+  }
+}
+
+function isRetiredShipReferenceAllowlisted(relativePath) {
+  return RETIRED_SHIP_REFERENCE_ALLOWLIST.some(
+    (allowedPath) =>
+      relativePath === allowedPath || relativePath.startsWith(allowedPath),
+  );
 }
 
 function assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput() {
@@ -339,7 +414,6 @@ function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
     path.join('review', 'shared-rubric.md'),
     path.join('review', 'findings-schema.md'),
     path.join('review', 'checklist.md'),
-    path.join('review', 'ship-fix-first.md'),
     path.join('review', 'greptile-triage.md'),
     path.join('cross-review', 'core.cjs'),
     path.join('cross-review', 'cli.cjs'),

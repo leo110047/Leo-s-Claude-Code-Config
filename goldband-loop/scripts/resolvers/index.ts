@@ -8,12 +8,11 @@ import { readFileSync } from 'node:fs';
 
 // Domain modules
 import { generatePreamble } from './preamble';
-import { generateTestFailureTriage } from './preamble';
 import { generateCommandReference, generateSnapshotFlags, generateBrowseSetup } from './browse';
 import { generateDesignMethodology, generateDesignHardRules, generateDesignOutsideVoices, generateDesignReviewLite, generateDesignSketch, generateDesignSetup, generateDesignMockup, generateDesignShotgunLoop, generateTasteProfile, generateUXPrinciples } from './design';
-import { generateTestBootstrap, generateTestCoverageAuditPlan, generateTestCoverageAuditShip, generateTestCoverageAuditReview } from './testing';
-import { generateReviewDashboard, generatePlanFileReviewReport, generateExitPlanModeGate, generateAntiShortcutClause, generateSpecReviewLoop, generateBenefitsFrom, generateCodexSecondOpinion, generateAdversarialStep, generateCodexPlanReview, generatePlanCompletionAuditShip, generatePlanCompletionAuditReview, generatePlanVerificationExec, generateScopeDrift, generateCrossReviewDedup } from './review';
-import { generateSlugEval, generateSlugSetup, generateRuntimeRoot, generateBaseBranchDetect, generateDeployBootstrap, generateQAMethodology, generateCoAuthorTrailer, generateChangelogWorkflow } from './utility';
+import { generateTestBootstrap, generateTestCoverageAuditPlan, generateTestCoverageAuditReview } from './testing';
+import { generateReviewDashboard, generatePlanFileReviewReport, generateExitPlanModeGate, generateAntiShortcutClause, generateSpecReviewLoop, generateBenefitsFrom, generateCodexSecondOpinion, generateAdversarialStep, generateCodexPlanReview, generatePlanCompletionAuditReview, generatePlanVerificationExec, generateScopeDrift, generateCrossReviewDedup } from './review';
+import { generateSlugEval, generateSlugSetup, generateRuntimeRoot, generateBaseBranchDetect, generateDeployBootstrap, generateQAMethodology, generateCoAuthorTrailer } from './utility';
 import { generateLearningsSearch, generateLearningsLog } from './learnings';
 import { generateConfidenceCalibration } from './confidence';
 import { generateInvokeSkill } from './composition';
@@ -48,9 +47,7 @@ export const RESOLVERS: Record<string, ResolverFn> = {
   ANTI_SHORTCUT_CLAUSE: generateAntiShortcutClause,
   TEST_BOOTSTRAP: generateTestBootstrap,
   TEST_COVERAGE_AUDIT_PLAN: generateTestCoverageAuditPlan,
-  TEST_COVERAGE_AUDIT_SHIP: generateTestCoverageAuditShip,
   TEST_COVERAGE_AUDIT_REVIEW: generateTestCoverageAuditReview,
-  TEST_FAILURE_TRIAGE: generateTestFailureTriage,
   SPEC_REVIEW_LOOP: generateSpecReviewLoop,
   DESIGN_SKETCH: generateDesignSketch,
   DESIGN_SETUP: generateDesignSetup,
@@ -62,7 +59,6 @@ export const RESOLVERS: Record<string, ResolverFn> = {
   SCOPE_DRIFT: generateScopeDrift,
   DEPLOY_BOOTSTRAP: generateDeployBootstrap,
   CODEX_PLAN_REVIEW: generateCodexPlanReview,
-  PLAN_COMPLETION_AUDIT_SHIP: generatePlanCompletionAuditShip,
   PLAN_COMPLETION_AUDIT_REVIEW: generatePlanCompletionAuditReview,
   PLAN_VERIFICATION_EXEC: generatePlanVerificationExec,
   CO_AUTHOR_TRAILER: generateCoAuthorTrailer,
@@ -70,7 +66,6 @@ export const RESOLVERS: Record<string, ResolverFn> = {
   LEARNINGS_LOG: generateLearningsLog,
   CONFIDENCE_CALIBRATION: generateConfidenceCalibration,
   INVOKE_SKILL: generateInvokeSkill,
-  CHANGELOG_WORKFLOW: generateChangelogWorkflow,
   REVIEW_ARMY: generateReviewArmy,
   CROSS_REVIEW_DEDUP: generateCrossReviewDedup,
   DX_FRAMEWORK: generateDxFramework,

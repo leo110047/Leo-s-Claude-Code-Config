@@ -231,7 +231,7 @@ Key routing rules:
 - QA/testing site behavior → invoke /qa or /qa-only
 - Code review/diff check → invoke /review
 - Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Release/deploy/PR → invoke $goldband release land
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 ```
@@ -488,7 +488,7 @@ At skill END before telemetry:
 
 The following nudges are tuned for the claude model family. They are
 **subordinate** to skill workflow, STOP points, AskUserQuestion gates, plan-mode
-safety, and /ship review gates. If a nudge below conflicts with skill instructions,
+safety, and release gates. If a nudge below conflicts with skill instructions,
 the skill wins. Treat these as preferences, not rules.
 
 **Todo-list discipline.** When working through a multi-step plan, mark each task
@@ -667,7 +667,7 @@ Skill: </skill-name-if-running>
 
 Rules: stage only intentional files, NEVER `git add -A`, do not commit broken tests or mid-edit state, and push only if `CHECKPOINT_PUSH` is `"true"`. Do not announce each WIP commit.
 
-`/context-restore` reads `[goldband-context]`; `/ship` squashes WIP commits into clean commits.
+`$goldband context restore` reads `[goldband-context]`; release preparation may squash WIP commits into clean commits.
 
 If `CHECKPOINT_MODE` is `"explicit"`: ignore this section unless a skill or user asks to commit.
 
@@ -781,7 +781,7 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 ## Plan Status Footer
 
-Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
+Skills that run plan reviews include the EXIT PLAN MODE GATE blocking checklist at the end of the workflow, which verifies the plan file ends with `## GOLDBAND REVIEW REPORT` before ExitPlanMode is called. Operational workflows typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
 ## Step 0: Detect platform and base branch
 
@@ -824,8 +824,8 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 # Document Release: Post-Ship Documentation Update
 
-You are running the `/document-release` workflow. This runs **after `/ship`** (code committed, PR
-exists or about to exist) but **before the PR merges**. Your job: ensure every documentation file
+You are running the release documentation workflow. This runs after release preparation (code
+committed, PR exists or is about to exist) but **before the PR merges**. Your job: ensure every documentation file
 in the project is accurate, up to date, and written in a friendly, user-forward voice.
 
 You are mostly automated. Make obvious factual updates directly. Stop and ask only for risky or
@@ -1011,7 +1011,7 @@ preserved them. This skill must NEVER do that.
 **Rules:**
 1. Read the entire CHANGELOG.md first. Understand what is already there.
 2. Only modify wording within existing entries. Never delete, reorder, or replace entries.
-3. Never regenerate a CHANGELOG entry from scratch. The entry was written by `/ship` from the
+3. Never regenerate a CHANGELOG entry from scratch. The entry was written during release preparation from the
    actual diff and commit history. It is the source of truth. You are polishing prose, not
    rewriting history.
 4. If an entry looks wrong or incomplete, use AskUserQuestion — do NOT silently fix it.
@@ -1051,7 +1051,7 @@ After auditing each file individually, do a cross-doc consistency pass:
 
 ## Step 7: TODOS.md Cleanup
 
-This is a second pass that complements `/ship`'s Step 5.5. Read `review/TODOS-format.md` (if
+This is a second pass over release TODOs. Read `review/TODOS-format.md` (if
 available) for the canonical TODO item format.
 
 If TODOS.md does not exist, skip this step.
@@ -1197,7 +1197,7 @@ rm -f /tmp/goldband-pr-body-$$.md
 
 **PR/MR title sync (idempotent, always-on):**
 
-PR titles must always start with `v<VERSION>` — same rule as `/ship`. If Step 8 bumped VERSION after `/ship` had already created the PR, the title is now stale. This sub-step fixes it.
+PR titles must always start with `v<VERSION>`. If Step 8 bumped VERSION after the PR was created, the title is now stale. This sub-step fixes it.
 
 1. Read the current VERSION:
 
@@ -1221,7 +1221,7 @@ CURRENT_TITLE=$(glab mr view -F json 2>/dev/null | jq -r .title 2>/dev/null || t
 
 If `CURRENT_TITLE` is empty (no open PR/MR), skip with message "No PR/MR found — skipping title sync."
 
-3. Compute the corrected title using the shared helper (single source of truth — same one `/ship` uses):
+3. Compute the corrected title using the shared helper (single source of truth):
 
 ```bash
 . "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
@@ -1263,7 +1263,7 @@ Where status is one of:
 - Current — no changes needed
 - Voice polished — wording adjusted
 - Not bumped — user chose to skip
-- Already bumped — version was set by /ship
+- Already bumped — version was set during release preparation
 - Skipped — file does not exist
 
 If the coverage map from Step 1.5 identified any gaps, append:

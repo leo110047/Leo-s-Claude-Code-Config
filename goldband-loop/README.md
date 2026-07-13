@@ -11,7 +11,7 @@ repository.
 ## What It Provides
 
 - Workflow skills such as `goldband-review`, `goldband-investigate`,
-  `goldband-qa`, `goldband-ship`, `goldband-autoplan`, and
+  `goldband-qa`, `goldband-review`, `goldband-autoplan`, and
   `goldband-document-generate`.
 - Runtime binaries under [bin/](bin/) for config, telemetry, browser control,
   memory sync, review logs, relinking, and setup helpers.

@@ -28,7 +28,7 @@ ${ctx.paths.binDir}/goldband-review-read
 
 Parse the output. Find the most recent entry for each skill (plan-ceo-review, plan-eng-review, review, plan-design-review, design-review-lite, adversarial-review, codex-review, codex-plan-review). Ignore entries with timestamps older than 7 days. For the Eng Review row, show whichever is more recent between \`review\` (diff-scoped pre-landing review) and \`plan-eng-review\` (plan-stage architecture review). Append "(DIFF)" or "(PLAN)" to the status to distinguish. For the Adversarial row, show whichever is more recent between \`adversarial-review\` (new auto-scaled) and \`codex-review\` (legacy). For Design Review, show whichever is more recent between \`plan-design-review\` (full visual audit) and \`design-review-lite\` (code-level check). Append "(FULL)" or "(LITE)" to the status to distinguish. For the Outside Voice row, show the most recent \`codex-plan-review\` entry — this captures outside voices from both /plan-ceo-review and /plan-eng-review.
 
-**Source attribution:** If the most recent entry for a skill has a \\\`"via"\\\` field, append it to the status label in parentheses. Examples: \`plan-eng-review\` with \`via:"autoplan"\` shows as "CLEAR (PLAN via /autoplan)". \`review\` with \`via:"ship"\` shows as "CLEAR (DIFF via /ship)". Entries without a \`via\` field show as "CLEAR (PLAN)" or "CLEAR (DIFF)" as before.
+**Source attribution:** If the most recent entry for a skill has a \\\`"via"\\\` field, append it to the status label in parentheses. Example: \`plan-eng-review\` with \`via:"autoplan"\` shows as "CLEAR (PLAN via /autoplan)". Entries without a \`via\` field show as "CLEAR (PLAN)" or "CLEAR (DIFF)" as before.
 
 Note: \`autoplan-voices\` and \`design-outside-voices\` entries are audit-trail-only (forensic data for cross-model consensus analysis). They do not appear in the dashboard and are not checked by any consumer.
 
@@ -409,11 +409,10 @@ SECOND OPINION (Claude subagent):
 If A: revise the premise and note the revision. If B: proceed (and note that the user defended this premise with reasoning — this is a founder signal if they articulate WHY they disagree, not just dismiss).`;
 }
 
-// ─── Scope Drift Detection (shared between /review and /ship) ────────
+// ─── Scope Drift Detection ───────────────────────────────────────────
 
 export function generateScopeDrift(ctx: TemplateContext): string {
-  const isShip = ctx.skillName === 'ship';
-  const stepNum = isShip ? '8.2' : '1.5';
+  const stepNum = '1.5';
 
   return `## Step ${stepNum}: Scope Drift Detection
 
@@ -421,7 +420,7 @@ Before reviewing code quality, check: **did they build what was requested — no
 
 1. Read \`TODOS.md\` (if it exists). Read PR description (\`gh pr view --json body --jq .body 2>/dev/null || true\`).
    Read commit messages (\`git log origin/<base>..HEAD --oneline\`).
-   **If no PR exists:** rely on commit messages and TODOS.md for stated intent — this is the common case since /review runs before /ship creates the PR.
+   **If no PR exists:** rely on commit messages and TODOS.md for stated intent.
 2. Identify the **stated intent** — what was this branch supposed to accomplish?
 3. Run \`DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE" --stat\` and compare the files changed against the stated intent.
 
@@ -793,9 +792,7 @@ done
 
 // ─── Plan Completion Audit ────────────────────────────────────────────
 
-type PlanCompletionMode = 'ship' | 'review';
-
-function generatePlanCompletionAuditInner(ctx: TemplateContext, mode: PlanCompletionMode): string {
+function generatePlanCompletionAuditInner(ctx: TemplateContext): string {
   const sections: string[] = [];
 
   // ── Plan file discovery (shared) ──
@@ -903,53 +900,8 @@ COMPLETION: 5/9 DONE, 1 PARTIAL, 1 NOT DONE, 1 CHANGED, 2 UNVERIFIABLE
 ─────────────────────────────────
 \`\`\``);
 
-  // ── Gate logic (mode-specific) ──
-  if (mode === 'ship') {
-    sections.push(`
-### Gate Logic
-
-After producing the completion checklist, evaluate in priority order:
-
-1. **Any NOT DONE items** (highest priority — known missing work). Use AskUserQuestion:
-   - Show the completion checklist above
-   - "{N} items from the plan are NOT DONE. These were part of the original plan but are missing from the implementation."
-   - RECOMMENDATION: depends on item count and severity. If 1-2 minor items (docs, config), recommend B. If core functionality is missing, recommend A.
-   - Options:
-     A) Stop — implement the missing items before shipping
-     B) Ship anyway — defer these to a follow-up (will create P1 TODOs in Step 5.5)
-     C) These items were intentionally dropped — remove from scope
-   - If A: STOP. List the missing items for the user to implement.
-   - If B: Continue. For each NOT DONE item, create a P1 TODO in Step 5.5 with "Deferred from plan: {plan file path}".
-   - If C: Continue. Note in PR body: "Plan items intentionally dropped: {list}."
-
-2. **Any UNVERIFIABLE items** (silent gaps — the diff cannot prove them either way). Only fires after NOT DONE is resolved or absent.
-
-   **Per-item confirmation is mandatory.** Do NOT use a single AskUserQuestion to blanket-confirm all UNVERIFIABLE items. Blanket confirmation is the failure mode that surfaced in VAS-449 (user clicks A without opening any file). Instead:
-
-   - Loop through UNVERIFIABLE items one at a time.
-   - For each item, use AskUserQuestion with the item's *specific* manual check (e.g., "Confirm: does \`~/Development/domain-hq/docs/dashboard.md\` exist?", not "Have you checked all items?").
-   - Options per item:
-     Y) Confirmed done — cite what you verified (free-text, embedded in PR body)
-     N) Not done — block ship; treat as NOT DONE and re-enter the priority-1 gate
-     D) Intentionally dropped — note in PR body: "Plan item intentionally dropped: {item}"
-   - RECOMMENDATION per item: Y if the item is concrete and easily verified; N if it's critical-path (auth, DNS, deliverables to other repos) and the user shows hesitation.
-
-   **Exit conditions:**
-   - Any N: STOP. Surface the missing items, suggest re-running /ship after they're addressed.
-   - All Y or D: Continue. Embed \`## Plan Completion — Manual Verifications\` section in PR body listing each Y'd item with the user's free-text evidence and each D'd item with "intentionally dropped".
-
-   **Cap.** If there are more than 5 UNVERIFIABLE items, present them as a numbered list first and ask whether the user wants to (1) confirm each individually, (2) stop and reduce scope, or (3) explicitly accept blanket-confirmation with the warning that this is the VAS-449 failure shape. Default and recommended option is (1).
-
-3. **Only PARTIAL items (no NOT DONE, no UNVERIFIABLE):** Continue with a note in the PR body. Not blocking.
-
-4. **All DONE or CHANGED:** Pass. "Plan completion: PASS — all items addressed." Continue.
-
-**No plan file found:** Skip entirely. "No plan file detected — skipping plan completion audit."
-
-**Include in PR body (Step 8):** Add a \`## Plan Completion\` section with the checklist summary.`);
-  } else {
-    // review mode — enhanced Delivery Integrity (Release 2: Review Army)
-    sections.push(`
+  // review mode — enhanced Delivery Integrity (Release 2: Review Army)
+  sections.push(`
 ### Fallback Intent Sources (when no plan file found)
 
 When no plan file is detected, use these secondary intent sources:
@@ -1027,17 +979,11 @@ Plan items: N DONE, M PARTIAL, K NOT DONE
 \`\`\`
 
 **No plan file found:** Use commit messages and TODOS.md as fallback sources (see above). If no intent sources at all, skip with: "No intent sources detected — skipping completion audit."`);
-  }
-
   return sections.join('\n');
 }
 
-export function generatePlanCompletionAuditShip(ctx: TemplateContext): string {
-  return generatePlanCompletionAuditInner(ctx, 'ship');
-}
-
 export function generatePlanCompletionAuditReview(ctx: TemplateContext): string {
-  return generatePlanCompletionAuditInner(ctx, 'review');
+  return generatePlanCompletionAuditInner(ctx);
 }
 
 // ─── Plan Verification Execution ──────────────────────────────────────
@@ -1078,10 +1024,10 @@ cat \${CLAUDE_SKILL_DIR}/../qa-only/SKILL.md
 **If unreadable:** Skip with "Could not load /qa-only — skipping plan verification."
 
 Follow the /qa-only workflow with these modifications:
-- **Skip the preamble** (already handled by /ship)
+- **Skip the preamble** (already handled by the release workflow)
 - **Use the plan's verification section as the primary test input** — treat each verification item as a test case
 - **Use the detected dev server URL** as the base URL
-- **Skip the fix loop** — this is report-only verification during /ship
+- **Skip the fix loop** — this is report-only verification during release
 - **Cap at the verification items from the plan** — do not expand into general site QA
 
 ### 4. Gate logic

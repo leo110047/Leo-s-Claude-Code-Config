@@ -100,7 +100,6 @@ goldband/
 ├── qa-only/         # /qa-only skill (report-only QA, no fixes)
 ├── plan-design-review/  # /plan-design-review skill (report-only design audit)
 ├── design-review/    # /design-review skill (design audit + fix loop)
-├── ship/            # Ship workflow skill
 ├── review/          # PR review skill
 ├── plan-ceo-review/ # /plan-ceo-review skill
 ├── plan-eng-review/ # /plan-eng-review skill
@@ -155,7 +154,7 @@ This is a "watch for feature bloat" guardrail, not a hard gate. Modern flagship
 models have 200K-1M context windows, so 40K is 4-20% of window, and prompt caching
 makes the marginal cost of larger skills small. The ceiling exists to catch runaway
 preamble/resolver growth, not to force compression on carefully-tuned big skills
-(`ship`, `plan-ceo-review`, `office-hours` legitimately pack 25-35K tokens of
+(`land-and-deploy`, `plan-ceo-review`, `office-hours` legitimately pack 20-35K tokens of
 behavior). If you blow past 40K, the right fix is usually: (1) look at WHAT grew,
 (2) if one resolver added 10K+ in a single PR, question whether it belongs inline
 or as a reference doc, (3) only compress carefully-tuned prose as a last resort —
@@ -580,7 +579,7 @@ ownership"), document it as a property, not as a fix. The shipped system is what
 the user gets; the path to that system is invisible to them.
 
 **When to write the CHANGELOG entry:**
-- At `/ship` time (Step 13), not during development or mid-branch.
+- During release preparation, not during development or mid-branch.
 - The entry covers ALL commits on this branch vs the base branch.
 - Never fold new work into an existing CHANGELOG entry from a prior version that
   already landed on main. If main has v0.10.0.0 and your branch adds features,
@@ -643,7 +642,7 @@ If the diff between the base branch version and this version has no user-facing 
 (only merges, only CHANGELOG edits, only placeholder work), the honest entry is one
 sentence: "Version bump for branch-ahead discipline. No user-facing changes yet." Stop
 there. Do not pad. Do not explain the plan that will ship eventually. Do not narrate
-the branch's history. When real work lands, the entry will replace this at /ship time.
+the branch's history. When real work lands, the entry will replace this during release preparation.
 
 ### Release-summary format (every `## [X.Y.Z]` entry)
 
@@ -737,7 +736,7 @@ that may be ready to promote to TODOs or implement.
 
 ## E2E eval failure blame protocol
 
-When an E2E eval fails during `/ship` or any other workflow, **never claim "not
+When an E2E eval fails during release or any other workflow, **never claim "not
 related to our changes" without proving it.** These systems have invisible couplings —
 a preamble text change affects agent behavior, a new helper changes timing, a
 regenerated SKILL.md shifts prompt context.
@@ -836,7 +835,7 @@ Key routing rules:
 - QA/testing site behavior → invoke /qa or /qa-only
 - Code review/diff check → invoke /review
 - Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
+- Release/deploy/PR → invoke `$goldband release land`
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
 

@@ -19,7 +19,6 @@ import type { Host, TemplateContext } from './resolvers/types';
 import { HOST_PATHS } from './resolvers/types';
 import { RESOLVERS } from './resolvers/index';
 import { externalSkillName, extractHookSafetyProse as _extractHookSafetyProse, extractNameAndDescription as _extractNameAndDescription, condenseOpenAIShortDescription as _condenseOpenAIShortDescription, generateOpenAIYaml as _generateOpenAIYaml } from './resolvers/codex-helpers';
-import { generatePlanCompletionAuditShip, generatePlanCompletionAuditReview, generatePlanVerificationExec } from './resolvers/review';
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
 import type { HostConfig } from './host-config';
 import { TOKEN_CEILING_BYTES } from './skill-budget';
@@ -569,8 +568,7 @@ for (const currentHost of hostsToRun) {
       // flagship models have 200K-1M context windows, so 40K (4-20% of window) is fine.
       // Prompt caching further reduces the marginal cost of larger skills. This ceiling
       // exists to catch a runaway preamble or resolver that's grown by 10K+ tokens in
-      // a release, not to force compression on carefully-tuned big skills (ship,
-      // plan-ceo-review, office-hours all legitimately pack 25-35K tokens of behavior).
+      // a release, not to force compression on carefully-tuned large workflows.
       if (contentBytes > TOKEN_CEILING_BYTES) {
         console.warn(`⚠️  TOKEN CEILING: ${relOutput} is ${contentBytes} bytes (~${tokens} tokens), exceeds ${TOKEN_CEILING_BYTES} byte ceiling (~40K tokens)`);
       }
@@ -605,7 +603,7 @@ Injected by the orchestrator for complete feature builds. Append to existing CLA
 1. Read CLAUDE.md and understand the project context.
 2. Run /autoplan to review your approach (CEO + eng + design review pipeline).
 3. Implement the approved plan. Follow the planning discipline above.
-4. Run /ship to create a PR with tests, changelog, and version bump.
+4. Run $goldband release land to prepare and land the release.
 5. Report back: PR URL, what shipped, decisions made, anything uncertain.
 
 Do not ask for human input until the PR is ready for review.

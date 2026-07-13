@@ -8,4 +8,4 @@ findings, options, and comparisons.
 
 **Completion bias (subordinate to safety gates).** Do not stop with partial
 solutions when the full solution is reachable. But skill workflow STOP points,
-AskUserQuestion gates, and /ship review gates always win over completion bias.
+AskUserQuestion gates and release gates always win over completion bias.
