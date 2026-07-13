@@ -81,6 +81,31 @@ describe('workflow registry', () => {
     }
   });
 
+  test('active documentation exposes only the capability interface', () => {
+    expect(existsSync(resolve(ROOT, 'docs/skills.md'))).toBe(false);
+
+    const activeDocs = ['README.md', 'AGENTS.md', 'CLAUDE.md'];
+    const retiredEntrypoints = [
+      /(?<![\w-])\/(?:review|qa|ship)(?![\w/-])/,
+      /(?<![\w-])goldband-(?:review|qa|ship)(?![\w-])/,
+    ];
+
+    for (const relativePath of activeDocs) {
+      const content = readFileSync(resolve(ROOT, relativePath), 'utf8');
+      expect(content).toContain('../docs/generated/capabilities.md');
+      expect(content).toContain('$goldband <capability> <action>');
+      expect(content).toContain('/goldband <capability> <action>');
+      for (const retiredEntrypoint of retiredEntrypoints) {
+        expect(content).not.toMatch(retiredEntrypoint);
+      }
+    }
+
+    for (const adapter of ['AGENTS.md', 'CLAUDE.md']) {
+      const lineCount = readFileSync(resolve(ROOT, adapter), 'utf8').split('\n').length;
+      expect(lineCount).toBeLessThanOrEqual(60);
+    }
+  });
+
   test('missing loop contract fields fail at definition time', () => {
     expect(() => defineWorkflow({
       capability: 'broken',

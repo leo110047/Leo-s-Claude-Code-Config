@@ -12,11 +12,7 @@
 import type { TemplateContext } from './types';
 
 function generateSpecialistSelection(ctx: TemplateContext): string {
-  const isShip = ctx.skillName === 'ship';
-  const stepSel = isShip ? '9.1' : '4.5';
-  const stepMerge = isShip ? '9.2' : '4.6';
-  const nextStep = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
-  return `## Step ${stepSel}: Review Army — Specialist Dispatch
+  return `## Step 4.5: Review Army — Specialist Dispatch
 
 ### Detect stack and scope
 
@@ -59,7 +55,7 @@ Based on the scope signals above, select which specialists to dispatch.
 1. **Testing** — read \`${ctx.paths.skillRoot}/review/specialists/testing.md\`
 2. **Maintainability** — read \`${ctx.paths.skillRoot}/review/specialists/maintainability.md\`
 
-**If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to ${nextStep}.
+**If DIFF_LINES < 50:** Skip all specialists. Print: "Small diff ($DIFF_LINES lines) — specialists skipped." Continue to Step 5 read-only findings aggregation.
 
 **Conditional (dispatch if the matching scope signal is true):**
 3. **Security** — if SCOPE_AUTH=true, OR if SCOPE_BACKEND=true AND DIFF_LINES > 100. Read \`${ctx.paths.skillRoot}/review/specialists/security.md\`
@@ -133,17 +129,8 @@ CHECKLIST:
 - If any specialist subagent fails or times out, log the failure and continue with results from successful specialists. Specialists are additive — partial results are better than no results.`;
 }
 
-function generateFindingsMerge(ctx: TemplateContext): string {
-  const isShip = ctx.skillName === 'ship';
-  const stepMerge = isShip ? '9.2' : '4.6';
-  const stepSel = isShip ? '9.1' : '4.5';
-  const nextStepRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
-  const critPassRef = isShip ? 'the checklist pass (Step 9)' : 'the core pass findings from Step 4';
-  const persistRef = isShip ? 'the review-log persist' : 'the review-log entry in Step 5.8';
-  const actionBoundary = isShip
-    ? ''
-    : '\nFor /review, do not auto-fix or ask to fix now.';
-  return `### Step ${stepMerge}: Collect and merge findings
+function generateFindingsMerge(): string {
+  return `### Step 4.6: Collect and merge findings
 
 After all specialist subagents complete, collect their outputs.
 
@@ -192,10 +179,11 @@ SPECIALIST REVIEW: N findings (X blocking, Y advisory) from Z specialists
 PR Quality Score: X/10
 \`\`\`
 
-These findings flow into ${nextStepRef} alongside ${critPassRef}.${actionBoundary}
+These findings flow into Step 5 read-only findings aggregation alongside the core pass findings from Step 4.
+For /review, do not auto-fix or ask to fix now.
 
 **Compile per-specialist stats:**
-After merging findings, compile a \`specialists\` object for ${persistRef}.
+After merging findings, compile a \`specialists\` object for the review-log entry in Step 5.8.
 For each specialist (testing, maintainability, security, performance, data-migration, api-contract, design, red-team):
 - If dispatched: \`{"dispatched": true, "findings": N, "critical": N, "informational": N}\`
 - If skipped by scope: \`{"dispatched": false, "reason": "scope"}\`
@@ -207,9 +195,6 @@ Remember these stats — you will need them for the review-log entry in Step 5.8
 }
 
 function generateRedTeam(ctx: TemplateContext): string {
-  const isShip = ctx.skillName === 'ship';
-  const stepMerge = isShip ? '9.2' : '4.6';
-  const nextStepRef = isShip ? 'the Fix-First flow (item 4)' : 'Step 5 read-only findings aggregation';
   return `### Red Team dispatch (conditional)
 
 **Activation:** Only if DIFF_LINES > 200 OR any specialist produced a CRITICAL finding.
@@ -218,7 +203,7 @@ If activated, dispatch one more subagent via the Agent tool (foreground, not bac
 
 The Red Team subagent receives:
 1. The red-team checklist from \`${ctx.paths.skillRoot}/review/specialists/red-team.md\`
-2. The merged specialist findings from Step ${stepMerge} (so it knows what was already caught)
+2. The merged specialist findings from Step 4.6 (so it knows what was already caught)
 3. The git diff command
 
 Prompt: "You are a red team reviewer. The code has already been reviewed by N specialists
@@ -229,7 +214,7 @@ concerns, integration boundary issues, and failure modes that specialist checkli
 don't cover."
 
 If the Red Team finds additional issues, merge them into the findings list before
-${nextStepRef}. Red Team findings are tagged with \`"specialist":"red-team"\`.
+Step 5 read-only findings aggregation. Red Team findings are tagged with \`"specialist":"red-team"\`.
 
 If the Red Team returns NO FINDINGS, note: "Red Team review: no additional issues found."
 If the Red Team subagent fails or times out, skip silently and continue.`;
@@ -242,7 +227,7 @@ export function generateReviewArmy(ctx: TemplateContext): string {
   const sections = [
     generateSpecialistSelection(ctx),
     generateSpecialistDispatch(ctx),
-    generateFindingsMerge(ctx),
+    generateFindingsMerge(),
     generateRedTeam(ctx),
   ];
 

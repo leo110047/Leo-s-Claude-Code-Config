@@ -34,6 +34,7 @@ const RETIRED_SHIP_REFERENCE_PATTERNS = [
   /\bship\//,
   /(?:^|\s)\/ship\b/,
   /\bgoldband-ship\b/,
+  /(?:\bctx\.skillName\s*={2,3}\s*['"]ship['"]|['"]ship['"]\s*={2,3}\s*ctx\.skillName\b)/,
   /\bship-(?:prosons|plan|coverage|triage|idempotency|local|base)-?/,
   /TEST_FAILURE_TRIAGE/,
 ];

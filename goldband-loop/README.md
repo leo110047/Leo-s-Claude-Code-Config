@@ -1,18 +1,15 @@
 # Goldband Loop
 
 Goldband Loop is goldband's first-party workflow runtime for AI coding agents.
-It provides the heavier `goldband-*` workflows used for planning, review,
-debugging, QA, browser automation, release checks, documentation, and team
-maintenance.
+It implements the capability actions used for planning, review, investigation,
+QA, browser automation, release work, documentation, and system maintenance.
 
 This directory is maintained as first-party source inside the goldband
 repository.
 
 ## What It Provides
 
-- Workflow skills such as `goldband-review`, `goldband-investigate`,
-  `goldband-qa`, `goldband-review`, `goldband-autoplan`, and
-  `goldband-document-generate`.
+- Capability routing and workflow execution behind one public selector.
 - Runtime binaries under [bin/](bin/) for config, telemetry, browser control,
   memory sync, review logs, relinking, and setup helpers.
 - Browser, PDF, design, iOS QA, benchmark, eval, and documentation tooling.
@@ -22,6 +19,15 @@ repository.
 Root goldband owns shared policy, installer behavior, hooks, rules, commands,
 and portable skills. Goldband Loop owns the runtime surface installed by the
 `workflow`, `workflow-codex`, and `all-with-workflow` install profiles.
+
+## Public Interface
+
+Use `/goldband <capability> <action>` in Claude Code or
+`$goldband <capability> <action>` in Codex. Historical flat workflow names are
+not aliases.
+
+The generated [capability catalog](../docs/generated/capabilities.md) is the
+authoritative list of supported capability/action pairs and runtime status.
 
 ## Install
 
@@ -60,20 +66,17 @@ Direct setup is mainly for runtime development or host-adapter testing:
 ```bash
 cd goldband-loop
 bun install
-./setup --host claude --prefix
-./setup --host codex --prefix
-./setup --host claude --profile standard --prefix
-./setup --host codex --profile standard --prefix
+./setup --host claude
+./setup --host codex
+./setup --host claude --profile standard
+./setup --host codex --profile standard
 ```
 
-`--prefix` exposes namespaced commands such as `goldband-review`. Without it,
-hosts that support short names may expose entries such as `review` and `qa`.
-
 `--profile standard` is the default and the only workflow discovery profile. It
-keeps only entrypoints such as `goldband` and `goldband-upgrade` visible, then
-installs host-specific workflow documents under `workflows/*.workflow.md` inside
-the runtime root. The removed fully expanded profile is intentionally not
-available because it overloaded host skill discovery.
+keeps only the `goldband` selector visible, then installs host-specific workflow
+documents under `workflows/*.workflow.md` inside the runtime root. The removed
+fully expanded profile is intentionally unavailable because it overloaded host
+skill discovery.
 
 ## Requirements
 
@@ -132,9 +135,9 @@ bash scripts/verify-decision-guidance.sh
 
 | Doc | What it covers |
 | --- | --- |
+| [Capability catalog](../docs/generated/capabilities.md) | Supported public capability/action pairs and runtime status |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Goldband Loop internals and runtime structure |
 | [BROWSER.md](BROWSER.md) | Browser command reference |
-| [docs/skills.md](docs/skills.md) | Workflow skill catalog |
 | [docs/domain-skills.md](docs/domain-skills.md) | Domain skill packaging |
 | [docs/tutorial-document-generate.md](docs/tutorial-document-generate.md) | Documentation-generation tutorial |
 | [USING_GBRAIN_WITH_GOLDBAND.md](USING_GBRAIN_WITH_GOLDBAND.md) | GBrain integration |

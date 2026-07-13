@@ -456,13 +456,7 @@ export function generateAdversarialStep(ctx: TemplateContext): string {
   // Codex host: strip entirely — Codex should never invoke itself
   if (ctx.host === 'codex') return '';
 
-  const isShip = ctx.skillName === 'ship';
-  const stepNum = isShip ? '11' : '5.7';
-  const adversarialMergeInstruction = isShip
-    ? 'Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. **FIXABLE findings** flow into the same Fix-First pipeline as the structured review. **INVESTIGATE findings** are presented as informational.'
-    : 'Present findings under an `ADVERSARIAL REVIEW (Claude subagent):` header. Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.';
-
-  return `## Step ${stepNum}: Adversarial review (always-on)
+  return `## Step 5.7: Adversarial review (always-on)
 
 Every diff gets adversarial review from both Claude and Codex. LOC is not a proxy for risk — a 5-line auth change can be critical.
 
@@ -493,7 +487,7 @@ Dispatch via the Agent tool. The subagent has fresh context — no checklist bia
 Subagent prompt:
 "Read the diff for this branch with \`DIFF_BASE=$(git merge-base origin/<base> HEAD) && git diff "$DIFF_BASE"\`. Think like an attacker and a chaos engineer. Your job is to find ways this code will fail in production. Look for: edge cases, race conditions, security holes, resource leaks, failure modes, silent data corruption, logic errors that produce wrong results silently, error handling that swallows failures, and trust boundary violations. Be adversarial. Be thorough. No compliments — just the problems. For each finding, classify as FIXABLE (you know how to fix it) or INVESTIGATE (needs human judgment). After listing findings, end your output with ONE line in the canonical format \`Recommendation: <action> because <one-line reason naming the most exploitable finding>\` — examples: \`Recommendation: Fix the unbounded retry at queue.ts:78 because it'll DoS the worker pool under sustained 429s\` or \`Recommendation: Ship as-is because the strongest finding is a theoretical race that requires conditions we can't trigger in production\`. The reason must point to a specific finding (or no-fix rationale). Generic reasons like 'because it's safer' do not qualify."
 
-${adversarialMergeInstruction}
+Present findings under an \`ADVERSARIAL REVIEW (Claude subagent):\` header. Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.
 
 If the subagent fails or times out: "Claude adversarial subagent unavailable. Continuing."
 
@@ -527,7 +521,7 @@ If Codex is NOT available: "Codex CLI not found — running Claude adversarial o
 
 ---
 
-${generateCodexStructuredReviewBlock(isShip)}
+${generateCodexStructuredReviewBlock()}
 
 ---
 
@@ -561,9 +555,8 @@ High-confidence findings (agreed on by multiple sources) should be prioritized f
 ---`;
 }
 
-function generateCodexStructuredReviewBlock(isShip: boolean): string {
-  if (!isShip) {
-    return `### Codex structured review (large diffs only, 200+ lines)
+function generateCodexStructuredReviewBlock(): string {
+  return `### Codex structured review (large diffs only, 200+ lines)
 
 If \`DIFF_TOTAL >= 200\` AND Codex is available AND \`OLD_CFG\` is NOT \`disabled\`:
 
@@ -576,37 +569,6 @@ codex exec "${CODEX_BOUNDARY}Read-only structured review. Review the changes on 
 Set the Bash tool's \`timeout\` parameter to \`300000\` (5 minutes). Do NOT use the \`timeout\` shell command — it doesn't exist on macOS. Present output under \`CODEX SAYS (read-only structured review):\` header.
 
 Merge every concrete finding into Step 5 read-only findings aggregation with evidence, recommendation, suggested verification, and blocking/advisory status. Do not fix files or ask to fix now.
-
-Read stderr for errors (same error handling as Codex adversarial above).
-
-After stderr: \`rm -f "$TMPERR"\`
-
-If \`DIFF_TOTAL < 200\`: skip this section silently. The Claude + Codex adversarial passes provide sufficient coverage for smaller diffs.`;
-  }
-
-  return `### Codex structured review (large diffs only, 200+ lines)
-
-If \`DIFF_TOTAL >= 200\` AND Codex is available AND \`OLD_CFG\` is NOT \`disabled\`:
-
-\`\`\`bash
-TMPERR=$(mktemp /tmp/codex-review-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-cd "$_REPO_ROOT"
-codex review "${CODEX_BOUNDARY}Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes." -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
-\`\`\`
-
-Set the Bash tool's \`timeout\` parameter to \`300000\` (5 minutes). Do NOT use the \`timeout\` shell command — it doesn't exist on macOS. Present output under \`CODEX SAYS (code review):\` header.
-Check for \`[P1]\` markers: found → \`GATE: FAIL\`, not found → \`GATE: PASS\`.
-
-If GATE is FAIL, use AskUserQuestion:
-\`\`\`
-Codex found N critical issues in the diff.
-
-A) Investigate and fix now (recommended)
-B) Continue — review will still complete
-\`\`\`
-
-If A: address the findings. After fixing, re-run tests (Step 5) since code has changed. Re-run \`codex review\` to verify.
 
 Read stderr for errors (same error handling as Codex adversarial above).
 
@@ -1050,14 +1012,8 @@ Add a \`## Verification Results\` section to the PR body (Step 19):
 
 // ─── Cross-Review Finding Dedup ──────────────────────────────────────
 
-export function generateCrossReviewDedup(ctx: TemplateContext): string {
-  const isShip = ctx.skillName === 'ship';
-  const stepNum = isShip ? '9.3' : '5.0';
-  const findingsRef = isShip
-    ? 'the checklist pass (Step 9) and specialist review (Step 9.1-9.2)'
-    : 'Step 4 critical pass and Step 4.5-4.6 specialists';
-
-  return `### Step ${stepNum}: Cross-review finding dedup
+export function generateCrossReviewDedup(): string {
+  return `### Step 5.0: Cross-review finding dedup
 
 Before classifying findings, check if any were previously skipped by the user in a prior review on this branch.
 
@@ -1077,7 +1033,7 @@ If skipped fingerprints exist, get the list of files changed since that review:
 git diff --name-only <prior-review-commit> HEAD
 \`\`\`
 
-For each current finding (from both ${findingsRef}), check:
+For each current finding (from both Step 4 critical pass and Step 4.5-4.6 specialists), check:
 - Does its fingerprint match a previously skipped finding?
 - Is the finding's file path NOT in the changed-files set?
 
