@@ -5,7 +5,7 @@
  * Each test creates real git worktrees in a temporary repo.
  */
 
-import { describe, test, expect, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { WorktreeManager } from '../lib/worktree';
 import type { HarvestResult } from '../lib/worktree';
 import { spawnSync } from 'child_process';
@@ -46,17 +46,34 @@ function cleanupRepo(dir: string): void {
 
 // Track repos to clean up
 const repos: string[] = [];
+let isolatedStateRoot = '';
+const originalStateEnv = {
+  GOLDBAND_HOME: process.env.GOLDBAND_HOME,
+  GOLDBAND_STATE_DIR: process.env.GOLDBAND_STATE_DIR,
+  GOLDBAND_STATE_ROOT: process.env.GOLDBAND_STATE_ROOT,
+  CLAUDE_PLUGIN_DATA: process.env.CLAUDE_PLUGIN_DATA,
+  CLAUDE_PLUGIN_ROOT: process.env.CLAUDE_PLUGIN_ROOT,
+};
 
-// Dedup index path — clear before each test to avoid cross-run contamination
-const DEDUP_PATH = path.join(os.homedir(), '.goldband-dev', 'harvests', 'dedup.json');
+beforeEach(() => {
+  isolatedStateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-state-'));
+  delete process.env.GOLDBAND_HOME;
+  delete process.env.GOLDBAND_STATE_DIR;
+  delete process.env.CLAUDE_PLUGIN_DATA;
+  delete process.env.CLAUDE_PLUGIN_ROOT;
+  process.env.GOLDBAND_STATE_ROOT = isolatedStateRoot;
+});
 
 afterEach(() => {
   for (const repo of repos) {
     try { cleanupRepo(repo); } catch { /* best effort */ }
   }
   repos.length = 0;
-  // Clear dedup index so tests are independent
-  try { fs.unlinkSync(DEDUP_PATH); } catch { /* may not exist */ }
+  fs.rmSync(isolatedStateRoot, { recursive: true, force: true });
+  for (const [name, value] of Object.entries(originalStateEnv)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 });
 
 describe('WorktreeManager', () => {
@@ -125,6 +142,31 @@ describe('WorktreeManager', () => {
     expect(fs.existsSync(result!.patchPath)).toBe(true);
 
     mgr.cleanup('test-harvest-mod');
+  });
+
+  test('harvest() stores patches under the configured Goldband state root', () => {
+    const repo = createTestRepo();
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-state-'));
+    const previousStateRoot = process.env.GOLDBAND_STATE_ROOT;
+    repos.push(repo);
+
+    try {
+      process.env.GOLDBAND_STATE_ROOT = stateRoot;
+      const mgr = new WorktreeManager(repo);
+      const worktreePath = mgr.create('test-harvest-state-root');
+      fs.writeFileSync(path.join(worktreePath, 'README.md'), '# State root\n');
+
+      const result = mgr.harvest('test-harvest-state-root');
+
+      expect(result).not.toBeNull();
+      expect(result!.patchPath).toStartWith(path.join(stateRoot, 'dev', 'harvests'));
+      expect(fs.existsSync(result!.patchPath)).toBe(true);
+      mgr.cleanup('test-harvest-state-root');
+    } finally {
+      if (previousStateRoot === undefined) delete process.env.GOLDBAND_STATE_ROOT;
+      else process.env.GOLDBAND_STATE_ROOT = previousStateRoot;
+      fs.rmSync(stateRoot, { recursive: true, force: true });
+    }
   });
 
   test('harvest() captures new untracked files (git add -A path)', () => {

@@ -182,6 +182,14 @@ bun run eval:summary         # aggregate stats + per-test efficiency averages ac
 
 Artifacts are never cleaned up — they accumulate in `~/.goldband-dev/` for post-mortem debugging and trend analysis.
 
+Worktree harvest patches and their dedup index are runtime evidence, so they
+follow Goldband's shared writable state-root precedence instead of the legacy
+developer artifact directory above. The default is
+`~/.goldband/dev/harvests/`; `GOLDBAND_HOME`, `GOLDBAND_STATE_DIR`, or
+`GOLDBAND_STATE_ROOT` relocates the whole path. Tests must point the state root
+at an isolated temporary directory and must never write harvest state into the
+developer's real HOME.
+
 ### Tier 3: LLM-as-judge (~$0.15/run)
 
 Uses Claude Sonnet to score generated SKILL.md docs on three dimensions:
