@@ -3,8 +3,6 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { getPersistentDataPath, writeFile } = require('../utils');
 
-const CONTEXT_NOTIFY_INTERVAL = 5;
-
 function parseThreshold(envName, fallback) {
   const parsed = parseInt(process.env[envName] || String(fallback), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -26,22 +24,21 @@ function getContextStateFile(sessionId) {
 function loadContextState(stateFile) {
   try {
     if (!fs.existsSync(stateFile)) {
-      return { count: 0, lastSeverity: 'none', lastNotifyCount: 0 };
+      return { count: 0, lastSeverity: 'none' };
     }
 
     const raw = fs.readFileSync(stateFile, 'utf8').trim();
     if (!raw) {
-      return { count: 0, lastSeverity: 'none', lastNotifyCount: 0 };
+      return { count: 0, lastSeverity: 'none' };
     }
 
     const parsed = JSON.parse(raw);
     return {
       count: Number(parsed.count || 0),
       lastSeverity: parsed.lastSeverity || 'none',
-      lastNotifyCount: Number(parsed.lastNotifyCount || 0),
     };
   } catch {
-    return { count: 0, lastSeverity: 'none', lastNotifyCount: 0 };
+    return { count: 0, lastSeverity: 'none' };
   }
 }
 
@@ -62,16 +59,11 @@ function evaluateContextWarning(input) {
         ? 'WARNING'
         : 'none';
 
-  const escalated = severity !== 'none' && severity !== state.lastSeverity;
-  const debounced =
-    severity !== 'none' &&
-    count - state.lastNotifyCount >= CONTEXT_NOTIFY_INTERVAL;
-  const shouldNotify = escalated || debounced;
+  const shouldNotify = severity !== 'none' && severity !== state.lastSeverity;
 
   const nextState = {
     count,
     lastSeverity: severity,
-    lastNotifyCount: shouldNotify ? count : state.lastNotifyCount,
   };
 
   try {

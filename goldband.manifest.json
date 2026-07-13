@@ -40,7 +40,7 @@
       "id": "review",
       "description": "Independent review with a selected engineering lens.",
       "defaultAction": "code",
-      "triggers": ["review", "code review", "security audit", "architecture review", "design review", "審查", "檢查"],
+      "triggers": ["review", "code review", "security audit", "architecture review", "design review", "審查"],
       "actions": [
         { "id": "code", "description": "Review a code diff.", "source": "review/SKILL.md.tmpl", "runtime": "typed", "risk": "medium" },
         { "id": "security", "description": "Review security and trust boundaries.", "source": "cso/SKILL.md.tmpl", "runtime": "compatibility", "risk": "medium" },

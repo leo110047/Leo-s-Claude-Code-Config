@@ -161,14 +161,11 @@ function checkClaudeWorkflow(homeDir, result) {
     path.join('bin', 'goldband-knowledge'),
     path.join('lib', 'knowledge.ts'),
     path.join('review', 'checklist.md'),
-    path.join('workflows', 'careful.workflow.md'),
-    path.join('workflows', 'freeze.workflow.md'),
-    path.join('workflows', 'review.workflow.md'),
-    path.join('workflows', 'qa.workflow.md'),
   ].map((relativePath) => ({
     file: relativePath,
     ok: fs.existsSync(path.join(claudeDir, relativePath)),
   }));
+  result.claudeChecks.push(...workflowProjectionChecks(claudeDir, 'claude'));
 }
 
 function checkCodexWorkflow(homeDir, result) {
@@ -177,6 +174,52 @@ function checkCodexWorkflow(homeDir, result) {
   result.codexInstalled = true;
   result.codexVersion = readWorkflowVersion(codexDir);
   result.codexChecks.push(...codexRuntimeChecks(homeDir, codexDir));
+  result.codexChecks.push(...workflowProjectionChecks(codexDir, 'codex'));
+}
+
+function workflowProjectionChecks(runtimeDir, host) {
+  const installedSourcePath = path.join(runtimeDir, '.installed-source');
+  if (!fs.existsSync(installedSourcePath)) {
+    return [{ file: '.installed-source', ok: false }];
+  }
+
+  const sourceDir = fs.readFileSync(installedSourcePath, 'utf8').trim();
+  const contractPath = path.join(
+    sourceDir,
+    'generated',
+    'capability-actions.json',
+  );
+  if (!sourceDir || !fs.existsSync(contractPath)) {
+    return [{ file: 'generated/capability-actions.json', ok: false }];
+  }
+
+  let contract;
+  try {
+    contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  } catch {
+    return [{ file: 'generated/capability-actions.json', ok: false }];
+  }
+
+  if (!Array.isArray(contract.actions)) {
+    return [{ file: 'generated/capability-actions.json', ok: false }];
+  }
+
+  return contract.actions
+    .filter(
+      (entry) =>
+        Array.isArray(entry.hostSupport) && entry.hostSupport.includes(host),
+    )
+    .map((entry) =>
+      path.join(
+        'workflows',
+        String(entry.capability || ''),
+        `${String(entry.action || '')}.workflow.md`,
+      ),
+    )
+    .map((relativePath) => ({
+      file: relativePath,
+      ok: fs.existsSync(path.join(runtimeDir, relativePath)),
+    }));
 }
 
 function codexRuntimeChecks(homeDir, codexDir) {

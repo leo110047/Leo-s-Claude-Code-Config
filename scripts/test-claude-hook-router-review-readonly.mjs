@@ -119,7 +119,7 @@ function assertStopClearsReviewReadOnly(sessionId) {
     hook_event_name: 'Stop',
   });
   assert.equal(stop.status, 0, stop.stderr);
-  assert.match(stop.stderr, /review-read-only cleared/);
+  assert.equal(stop.stderr, '');
 
   const editAfterStop = runHook(sessionId, {
     hook_event_name: 'PreToolUse',
@@ -151,16 +151,13 @@ function assertAllowedWriteHasNoHookOutput() {
   );
 }
 
-function assertRepeatedSessionStartHasNoHookOutput() {
+function assertSessionStartHasNoHookOutput() {
   const sessionId = 'session-start-output-regression';
   const firstSessionStart = runHook(sessionId, {
     hook_event_name: 'SessionStart',
   });
   assert.equal(firstSessionStart.status, 0, firstSessionStart.stderr);
-  assert.equal(
-    JSON.parse(firstSessionStart.stdout).hookSpecificOutput.hookEventName,
-    'SessionStart',
-  );
+  assert.equal(firstSessionStart.stdout, '');
 
   const repeatedSessionStart = runHook(sessionId, {
     hook_event_name: 'SessionStart',
@@ -169,7 +166,7 @@ function assertRepeatedSessionStartHasNoHookOutput() {
   assert.equal(
     repeatedSessionStart.stdout,
     '',
-    'A deduplicated SessionStart with outputJson: null must emit no hook output',
+    'SessionStart is passive and must emit no hook output',
   );
 }
 
@@ -206,7 +203,7 @@ const editAfterShip = runHook(nonReviewSession, {
 assert.equal(editAfterShip.status, 0, editAfterShip.stderr);
 
 assertAllowedWriteHasNoHookOutput();
-assertRepeatedSessionStartHasNoHookOutput();
+assertSessionStartHasNoHookOutput();
 assertInvalidHookOutputFailsLoudly();
 
 console.log('[OK] Claude /review hook read-only enforcement verified');

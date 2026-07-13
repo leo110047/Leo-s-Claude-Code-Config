@@ -56,32 +56,21 @@
     }
   },
   {
-    "id": "lifecycle-session-start-context-restore",
+    "id": "lifecycle-session-start-is-passive",
     "coverage": {
-      "category": "lifecycle-policy",
-      "policy": "session-start-context-restore",
+      "category": "router-smoke",
+      "policy": "passive-lifecycle-silence",
       "expectedDecision": "allow",
-      "variant": "positive",
-      "regressionSource": "session-start-output-json"
-    },
-    "env": {
-      "GOLDBAND_DATA_DIR": "__RUN_TMP__/lifecycle-data"
+      "variant": "negative",
+      "regressionSource": "hook-noise-policy"
     },
     "input": {
       "hook_event_name": "SessionStart",
-      "session_id": "lifecycle-session-start-context-restore-__ITERATION__"
+      "session_id": "lifecycle-session-start-is-passive-__ITERATION__"
     },
     "expect": {
       "exitCode": 0,
-      "decision": "allow",
-      "stdoutIncludes": [
-        "hookSpecificOutput",
-        "SessionStart",
-        "context restore"
-      ],
-      "stderrIncludes": [
-        "SessionStart"
-      ]
+      "decision": "allow"
     }
   },
   {

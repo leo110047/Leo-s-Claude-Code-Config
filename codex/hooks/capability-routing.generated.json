@@ -7,8 +7,7 @@
       "security audit",
       "architecture review",
       "design review",
-      "審查",
-      "檢查"
+      "審查"
     ],
     "message": "Goldband capability available: $goldband review code. Use it only when it materially matches the requested outcome."
   },

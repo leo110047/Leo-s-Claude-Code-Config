@@ -1,18 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
-            "timeout": 5
-          }
-        ],
-        "description": "Unified router lifecycle context restore hint"
-      }
-    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
@@ -71,19 +58,6 @@
         "description": "Native async typecheck worker with debounce"
       }
     ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
-            "timeout": 5
-          }
-        ],
-        "description": "Unified router failure attribution hint"
-      }
-    ],
     "Stop": [
       {
         "hooks": [
@@ -92,7 +66,7 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\""
           }
         ],
-        "description": "Unified router (console audit + desktop notifications)"
+        "description": "Unified router (cross-review gate + mode cleanup)"
       }
     ],
     "SubagentStop": [
@@ -118,45 +92,6 @@
           }
         ],
         "description": "Unified router notification handling"
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "manual|auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
-            "timeout": 5
-          }
-        ],
-        "description": "Unified router pre-compact continuity hint"
-      }
-    ],
-    "PostCompact": [
-      {
-        "matcher": "manual|auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
-            "timeout": 5
-          }
-        ],
-        "description": "Unified router post-compact verification hint"
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooks/hook-router.js\"",
-            "timeout": 2
-          }
-        ],
-        "description": "Unified router lifecycle context save hint"
       }
     ]
   }

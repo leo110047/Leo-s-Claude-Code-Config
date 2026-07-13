@@ -22,7 +22,6 @@ function readState(sessionId) {
     return {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
-      lastBaselineVersion: null,
       lastKnowledgeAdvisoryKey: null,
       filePath,
     };
@@ -33,10 +32,6 @@ function readState(sessionId) {
     const lastSuggestedSkills = Array.isArray(parsed.lastSuggestedSkills)
       ? parsed.lastSuggestedSkills.filter((item) => typeof item === 'string')
       : [];
-    const lastBaselineVersion =
-      typeof parsed.lastBaselineVersion === 'string'
-        ? parsed.lastBaselineVersion
-        : null;
     const lastKnowledgeAdvisoryKey =
       typeof parsed.lastKnowledgeAdvisoryKey === 'string'
         ? parsed.lastKnowledgeAdvisoryKey
@@ -45,7 +40,6 @@ function readState(sessionId) {
     return {
       sessionId: normalizeSessionId(parsed.sessionId || sessionId),
       lastSuggestedSkills,
-      lastBaselineVersion,
       lastKnowledgeAdvisoryKey,
       filePath,
     };
@@ -53,7 +47,6 @@ function readState(sessionId) {
     return {
       sessionId: normalizeSessionId(sessionId),
       lastSuggestedSkills: [],
-      lastBaselineVersion: null,
       lastKnowledgeAdvisoryKey: null,
       filePath,
     };
@@ -75,12 +68,6 @@ function persistState(state, updates) {
         lastSuggestedSkills: Array.isArray(updates.lastSuggestedSkills)
           ? updates.lastSuggestedSkills
           : state.lastSuggestedSkills,
-        lastBaselineVersion: Object.prototype.hasOwnProperty.call(
-          updates,
-          'lastBaselineVersion',
-        )
-          ? updates.lastBaselineVersion
-          : state.lastBaselineVersion,
         lastKnowledgeAdvisoryKey: Object.prototype.hasOwnProperty.call(
           updates,
           'lastKnowledgeAdvisoryKey',
@@ -109,20 +96,6 @@ function shouldEmitSuggestions(sessionId, skills) {
   return true;
 }
 
-function shouldEmitClaimVerificationBaseline(sessionId, baselineVersion) {
-  const state = readState(sessionId);
-
-  if (state.lastBaselineVersion === baselineVersion) {
-    return false;
-  }
-
-  persistState(state, {
-    lastBaselineVersion: baselineVersion,
-  });
-
-  return true;
-}
-
 function shouldEmitKnowledgeAdvisory(sessionId, advisoryKey) {
   const state = readState(sessionId);
   const normalizedKey = String(advisoryKey || '').trim();
@@ -141,7 +114,6 @@ function shouldEmitKnowledgeAdvisory(sessionId, advisoryKey) {
 
 module.exports = {
   normalizeSessionId,
-  shouldEmitClaimVerificationBaseline,
   shouldEmitKnowledgeAdvisory,
   shouldEmitSuggestions,
 };

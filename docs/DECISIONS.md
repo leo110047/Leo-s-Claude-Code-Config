@@ -363,3 +363,67 @@ Revisit triggers:
   than the current bounded lexical adapter.
 - Workflow projections move out of `goldband-loop/setup` into a standalone
   materializer with its own stable contract version.
+
+## 2026-07-13: Hooks Emit Only for Actionable Runtime Decisions
+
+Decision: hook output is reserved for an enforcement decision, a state
+transition that requires attention, or advice tied to the current action.
+Generic workflow reminders and durable engineering policy stay in workflow
+entrypoints, skills, and repository instructions instead of lifecycle hooks.
+
+Implementation contract:
+
+- `SessionStart`, `SessionEnd`, `PreCompact`, `PostCompact`, and generic
+  `PostToolUseFailure` reminders are not registered and emit no output when
+  evaluated directly.
+- Hook events with no implementation are not registered merely to display a
+  status message.
+- Context restore remains an explicit Goldband workflow. Starting or resuming
+  an unrelated session does not imply that restoration is needed.
+- Prompt routing requires a capability-specific trigger. Generic words such as
+  `檢查` do not activate review guidance by themselves.
+- Context saturation guidance is emitted once when entering warning severity
+  and once when entering critical severity, not every fixed number of calls.
+- Ordinary `Stop` events do not produce desktop notifications or repeat style
+  scans. Permission and elicitation notifications, immediate edit advisories,
+  and deterministic stop blockers remain active.
+
+Assumptions:
+
+- Hosts already preserve their own session and compaction continuity.
+- Durable verification policy is loaded through system, repository, and skill
+  contracts, so repeating it on the first prompt adds noise rather than safety.
+- A silent allow outcome is distinguishable from a failed hook through exit
+  status and existing verification tests.
+
+Consequences:
+
+- New sessions and compaction transitions stay quiet unless a real decision is
+  required.
+- Hook authors must justify output against an explicit action or state change.
+- Users invoke context restore when resuming handoff-sensitive work instead of
+  receiving the reminder in every session.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Deduplicate generic reminders once per session | Still interrupts unrelated sessions and requires persistent marker state for no runtime decision. |
+| Keep all reminders but shorten their text | Reduces message size without fixing frequency or ownership. |
+| Disable every advisory hook | Removes useful permission, safety, and action-specific feedback together with the noise. |
+
+Failure signals:
+
+- Starting, resuming, compacting, or ending an otherwise idle session injects
+  Goldband guidance.
+- A generic request containing `檢查` suggests an unrelated review workflow.
+- Warning-level context monitoring repeats without a severity transition.
+- An ordinary assistant stop produces a desktop notification or repeats a
+  repository-wide style advisory.
+
+Revisit triggers:
+
+- A host stops preserving required state across resume or compaction and the
+  failure cannot be solved at the state owner.
+- A lifecycle transition gains a concrete user decision or deterministic
+  enforcement contract that cannot be expressed elsewhere.

@@ -63,25 +63,6 @@ function assertNoopOutput(output) {
   assert.deepEqual(output, {});
 }
 
-function sessionStartMarkerPath(sessionId) {
-  return path.join(
-    telemetryDir,
-    'hook-router',
-    'dedupe',
-    'session-start-context-restore-hint',
-    `${sessionId}.json`,
-  );
-}
-
-function readUsageEvents() {
-  if (!fs.existsSync(usageFile)) return [];
-  return fs
-    .readFileSync(usageFile, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-}
-
 function testHighRiskBashDenied() {
   const commands = [
     ['rm -rf /', /Recursive force deletion/, 'recursive-force-delete'],
@@ -321,92 +302,12 @@ function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
   }
 }
 
-function testLifecycleContexts() {
-  const output = runHook({ hook_event_name: 'SessionStart' });
-  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(
-    output.hookSpecificOutput.additionalContext,
-    /\$goldband context restore/,
-  );
-}
-
-function testSessionStartContextIsDedupedBySession() {
-  const sessionId = 'session-start-dedupe-test';
-  const outputs = Array.from({ length: 4 }, () =>
-    runHook({
-      hook_event_name: 'SessionStart',
-      session_id: sessionId,
-      start_source: 'resume',
-    }),
-  );
-
-  assert.equal(outputs[0].hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(
-    outputs[0].hookSpecificOutput.additionalContext,
-    /\$goldband context restore/,
-  );
-  assertNoopOutput(outputs[1]);
-  assertNoopOutput(outputs[2]);
-  assertNoopOutput(outputs[3]);
-
-  const sessionStartEvents = readUsageEvents().filter(
-    (event) =>
-      event.category === 'hook-advisory' &&
-      event.name === 'SessionStart' &&
-      event.sessionId === sessionId,
-  );
-  assert.equal(sessionStartEvents.length, 1);
-  assert.equal(sessionStartEvents[0].detail.startSource, 'resume');
-}
-
-function testSessionStartContextIsNotDedupedAcrossSessions() {
-  const first = runHook({
-    hook_event_name: 'SessionStart',
-    session_id: 'session-start-dedupe-a',
-  });
-  const second = runHook({
-    hook_event_name: 'SessionStart',
-    session_id: 'session-start-dedupe-b',
-  });
-
-  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
-}
-
-function testSessionStartContextWithoutSessionIdIsNotGloballyDeduped() {
-  const first = runHook({ hook_event_name: 'SessionStart' });
-  const second = runHook({ hook_event_name: 'SessionStart' });
-
-  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
-}
-
-function testSessionStartExpiredDedupeMarkerIsCleanedUp() {
-  const sessionId = 'session-start-expired-marker';
-  const markerPath = sessionStartMarkerPath(sessionId);
-  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-  fs.writeFileSync(markerPath, '{}', 'utf8');
-  const oldDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-  fs.utimesSync(markerPath, oldDate, oldDate);
-
-  const output = runHook(
-    {
-      hook_event_name: 'SessionStart',
-      session_id: sessionId,
-    },
-    { GOLDBAND_DEDUPE_RETENTION_DAYS: '1' },
-  );
-
-  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-  assert.equal(marker.sessionId, sessionId);
-  assert.equal(marker.advisoryName, 'session-start-context-restore-hint');
-}
-
-function testCompactHooksAreNotRegistered() {
+function testPassiveLifecycleHooksAreNotRegistered() {
   const hooksConfig = JSON.parse(fs.readFileSync(hooksConfigPath, 'utf8'));
+  assert.equal(hooksConfig.hooks.SessionStart, undefined);
   assert.equal(hooksConfig.hooks.PreCompact, undefined);
   assert.equal(hooksConfig.hooks.PostCompact, undefined);
+  assertNoopOutput(runHook({ hook_event_name: 'SessionStart' }));
   assertNoopOutput(runHook({ hook_event_name: 'PreCompact' }));
   assertNoopOutput(runHook({ hook_event_name: 'PostCompact' }));
 }
@@ -579,12 +480,7 @@ testPostToolUseFailureContext();
 testRegisteredNoopHooksEmitJson();
 testPostToolUseStyleGateAdvisory();
 testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
-testLifecycleContexts();
-testSessionStartContextIsDedupedBySession();
-testSessionStartContextIsNotDedupedAcrossSessions();
-testSessionStartContextWithoutSessionIdIsNotGloballyDeduped();
-testSessionStartExpiredDedupeMarkerIsCleanedUp();
-testCompactHooksAreNotRegistered();
+testPassiveLifecycleHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testPromptWorkflowHintRequiresTriggerBoundaries();
