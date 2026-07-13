@@ -436,6 +436,7 @@
     "goldband-cross-review",
     "goldband-developer-profile",
     "goldband-diff-scope",
+    "goldband-env",
     "goldband-extension",
     "goldband-gbrain-detect",
     "goldband-gbrain-install",
@@ -477,7 +478,8 @@
     "goldband-timeline-log",
     "goldband-timeline-read",
     "goldband-uninstall",
-    "goldband-update-check"
+    "goldband-update-check",
+    "goldband-upgrade-context"
   ],
   "forbiddenLegacyEntrypoints": [
     "goldband-autoplan",

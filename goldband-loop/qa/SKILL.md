@@ -32,18 +32,7 @@ triggers:
 ## Preamble (run first)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
-GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
-GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _UPD=$($GOLDBAND_BIN/goldband-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.goldband/sessions
@@ -276,15 +265,7 @@ If B: say "OK, you're on your own to keep the vendored copy up to date."
 
 Always run (regardless of choice):
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 touch ~/.goldband/.vendoring-warned-${SLUG:-unknown}
 ```
@@ -381,15 +362,7 @@ Before calling AskUserQuestion, verify:
 ## Artifacts Sync (skill start)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 # Prefer the v1.27.0.0 artifacts file; fall back to brain file for users
 # upgrading mid-stream before the migration script runs.
@@ -508,15 +481,7 @@ If A/B and `~/.goldband/.git` is missing, ask whether to run `goldband-artifacts
 At skill END before telemetry:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 "$GOLDBAND_BIN/goldband-brain-sync" --discover-new 2>/dev/null || true
 "$GOLDBAND_BIN/goldband-brain-sync" --once 2>/dev/null || true
 ```
@@ -561,15 +526,7 @@ Bad: "I've identified a potential issue in the authentication flow that may caus
 At session start or after compaction, recover recent project context.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _PROJ="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}"
 if [ -d "$_PROJ" ]; then
@@ -729,15 +686,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-question-log '{"skill":"qa","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
@@ -747,15 +696,7 @@ User-origin gate (profile-poisoning defense): write tune events ONLY when `tune:
 
 Write (only after confirmation for free-form):
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
 ```
 
@@ -823,15 +764,7 @@ do not promote to active knowledge without explicit review.
 Before completing, if you discovered a durable project quirk or command fix that would save 5+ minutes next time, log it:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
 ```
 
@@ -847,15 +780,7 @@ After workflow completion, log telemetry. Use skill `name:` from frontmatter. OU
 Run this bash:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _TEL_END=$(date +%s)
 _TEL_DUR=$(( _TEL_END - _TEL_START ))
 rm -f ~/.goldband/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
@@ -925,15 +850,7 @@ learnings, curated local knowledge, and optional GBrain context when this host
 supports it. Read only the listed paths that look relevant.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 echo "LEARNINGS:"
 _CROSS_PROJ=$($GOLDBAND_BIN/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
@@ -1042,15 +959,7 @@ After the user chooses, execute their choice (commit or stash), then continue wi
 ## SETUP (run this check BEFORE any browse command)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 B="$GOLDBAND_BROWSE/browse"
 if [ -x "$B" ]; then
   echo "READY: $B"
@@ -1251,15 +1160,7 @@ Before falling back to git diff heuristics, check for richer test plan sources:
 
 1. **Project-scoped test plans:** Check `~/.goldband/projects/` for recent `*-test-plan-*.md` files for this repo
    ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
    setopt +o nomatch 2>/dev/null || true  # zsh compat
    eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
    ls -t ~/.goldband/projects/$SLUG/*-test-plan-*.md 2>/dev/null | head -1
@@ -1593,15 +1494,7 @@ Pick ONE keyword that names the buggy component or page. The keyword should be a
 Worked examples (qa-specific): good keywords are `checkout-button`, `signup-form`, `payment`. Bad: `tests are failing`, `<failing-test>`, `app/views/_checkout.html.erb`.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
 $GOLDBAND_BIN/goldband-knowledge search --domain qa --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
@@ -1753,15 +1646,7 @@ Write the report to both local and project-scoped locations:
 
 **Project-scoped:** Write test outcome artifact for cross-session context:
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 ```
 Write to `~/.goldband/projects/{slug}/{user}-{branch}-test-outcome-{datetime}.md`
@@ -1799,15 +1684,7 @@ insight during this session, you may log it for future sessions in addition to
 the required `Knowledge candidate` final-report field:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-log '{"skill":"qa","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
 
@@ -1831,15 +1708,7 @@ For high-value, verified material that may graduate into a skill or rule, captur
 a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 ```
 

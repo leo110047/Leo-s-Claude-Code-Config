@@ -30,18 +30,7 @@ triggers:
 ## Preamble (run first)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
-GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
-GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _UPD=$($GOLDBAND_BIN/goldband-update-check 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 mkdir -p ~/.goldband/sessions
@@ -274,15 +263,7 @@ If B: say "OK, you're on your own to keep the vendored copy up to date."
 
 Always run (regardless of choice):
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" 2>/dev/null || true
 touch ~/.goldband/.vendoring-warned-${SLUG:-unknown}
 ```
@@ -379,15 +360,7 @@ Before calling AskUserQuestion, verify:
 ## Artifacts Sync (skill start)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 # Prefer the v1.27.0.0 artifacts file; fall back to brain file for users
 # upgrading mid-stream before the migration script runs.
@@ -506,15 +479,7 @@ If A/B and `~/.goldband/.git` is missing, ask whether to run `goldband-artifacts
 At skill END before telemetry:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 "$GOLDBAND_BIN/goldband-brain-sync" --discover-new 2>/dev/null || true
 "$GOLDBAND_BIN/goldband-brain-sync" --once 2>/dev/null || true
 ```
@@ -559,15 +524,7 @@ Bad: "I've identified a potential issue in the authentication flow that may caus
 At session start or after compaction, recover recent project context.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 _PROJ="${GOLDBAND_HOME:-$HOME/.goldband}/projects/${SLUG:-unknown}"
 if [ -d "$_PROJ" ]; then
@@ -727,15 +684,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-question-log '{"skill":"ship","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
@@ -745,15 +694,7 @@ User-origin gate (profile-poisoning defense): write tune events ONLY when `tune:
 
 Write (only after confirmation for free-form):
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-question-preference --write '{"question_id":"<id>","preference":"<pref>","source":"inline-user","free_text":"<optional original words>"}'
 ```
 
@@ -821,15 +762,7 @@ do not promote to active knowledge without explicit review.
 Before completing, if you discovered a durable project quirk or command fix that would save 5+ minutes next time, log it:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-log '{"skill":"SKILL_NAME","type":"operational","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"observed"}'
 ```
 
@@ -845,15 +778,7 @@ After workflow completion, log telemetry. Use skill `name:` from frontmatter. OU
 Run this bash:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _TEL_END=$(date +%s)
 _TEL_DUR=$(( _TEL_END - _TEL_START ))
 rm -f ~/.goldband/analytics/.pending-"$_SESSION_ID" 2>/dev/null || true
@@ -924,40 +849,19 @@ branch name wherever the instructions say "the base branch" or `<default>`.
 
 # Ship: Fully Automated Ship Workflow
 
-You are running the `/ship` workflow. This is a **non-interactive, fully automated** workflow. Do NOT ask for confirmation at any step. The user said `/ship` which means DO IT. Run straight through and output the PR URL at the end.
+Run `/ship` end to end without routine confirmation and finish with the PR/MR URL.
 
-**Only stop for:**
-- On the base branch (abort)
-- Merge conflicts that can't be auto-resolved (stop, show conflicts)
-- In-branch test failures (pre-existing failures are triaged, not auto-blocking)
-- Pre-landing review finds ASK items that need user judgment
-- MINOR or MAJOR version bump needed (ask — see Step 12)
-- Greptile review comments that need user decision (complex fixes, false positives)
-- AI-assessed coverage below minimum threshold (hard gate with user override — see Step 7)
-- Plan items NOT DONE with no user override (see Step 8)
-- Plan verification failures (see Step 8.1)
-- TODOS.md missing and user wants to create one (ask — see Step 14)
-- TODOS.md disorganized and user wants to reorganize (ask — see Step 14)
+**STOP only for:** base/default branch; unresolved merge conflicts; in-branch test
+failures; review `ASK` items; MINOR/MAJOR bump approval; Greptile decisions;
+coverage override; incomplete plan items; failed plan verification; or the explicit
+TODOS create/reorganize questions in Step 14. Pre-existing failures are triaged.
 
-**Never stop for:**
-- Uncommitted changes (always include them)
-- Version bump choice (auto-pick MICRO or PATCH — see Step 12)
-- CHANGELOG content (auto-generate from diff)
-- Commit message approval (auto-commit)
-- Multi-file changesets (auto-split into bisectable commits)
-- TODOS.md completed-item detection (auto-mark)
-- Auto-fixable review findings (dead code, N+1, stale comments — fixed automatically)
-- Test coverage gaps within target threshold (auto-generate and commit, or flag in PR body)
+**Do not stop for:** uncommitted or multi-file changes; MICRO/PATCH selection;
+CHANGELOG or commit-message approval; completed-TODO detection; auto-fixable
+findings; or coverage gaps within the allowed threshold.
 
-**Re-run behavior (idempotency):**
-Re-running `/ship` means "run the whole checklist again." Every verification step
-(tests, coverage audit, plan completion, pre-landing review, adversarial review,
-VERSION/CHANGELOG check, TODOS, document-release) runs on every invocation.
-Only *actions* are idempotent:
-- Step 12: If VERSION already bumped, skip the bump but still read the version
-- Step 17: If already pushed, skip the push command
-- Step 19: If PR exists, update the body instead of creating a new PR
-Never skip a verification step because a prior `/ship` run already performed it.
+**Re-runs repeat every verification.** Only mutations are idempotent: reuse an
+existing VERSION bump, skip an already-current push, and update an existing PR/MR.
 
 ---
 
@@ -976,15 +880,7 @@ Never skip a verification step because a prior `/ship` run already performed it.
 After completing the review, read the review log and config to display the dashboard.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-review-read
 ```
 
@@ -1562,15 +1458,7 @@ Maximum 2 generation passes total. If B/C continues, record the accepted risk or
 Write a QA-consumable artifact:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 USER=$(whoami)
 DATETIME=$(date +%Y%m%d-%H%M%S)
@@ -1845,15 +1733,7 @@ Add a `## Verification Results` section to the PR body (Step 19):
 Search for relevant learnings from previous sessions:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 _CROSS_PROJ=$($GOLDBAND_BIN/goldband-config get cross_project_learnings 2>/dev/null || echo "unset")
 echo "CROSS_PROJECT: $_CROSS_PROJ"
 if [ "$_CROSS_PROJ" = "true" ]; then
@@ -2003,15 +1883,7 @@ higher confidence.
 Check if the diff touches frontend files using `goldband-diff-scope`:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null)
 ```
 
@@ -2035,15 +1907,7 @@ source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null)
 6. **Log the result** for the Review Readiness Dashboard:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":0,"commit":"COMMIT"}'
 ```
 
@@ -2079,15 +1943,7 @@ Present Codex output under a `CODEX (design):` header, merged with the checklist
 ### Detect stack and scope
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 source <($GOLDBAND_BIN/goldband-diff-scope <base> 2>/dev/null) || true
 # Detect stack for specialist context
 STACK=""
@@ -2115,15 +1971,7 @@ echo "TEST_FW: ${TEST_FW:-unknown}"
 ### Read specialist hit rates (adaptive gating)
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-specialist-stats 2>/dev/null || true
 ```
 
@@ -2174,15 +2022,7 @@ Construct the prompt for each specialist. The prompt includes:
 3. Past learnings for this domain (if any exist):
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-search --type pitfall --query "{specialist domain}" --limit 5 2>/dev/null || true
 ```
 
@@ -2312,15 +2152,7 @@ If the Red Team subagent fails or times out, skip silently and continue.
 Before classifying findings, check if any were previously skipped by the user in a prior review on this branch.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-review-read
 ```
 
@@ -2371,15 +2203,7 @@ Output a summary header: `Pre-Landing Review: N issues (X critical, Y informatio
 
 9. Persist the review result to the review log:
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-review-log '{"skill":"review","timestamp":"TIMESTAMP","status":"STATUS","issues_found":N,"critical":N,"informational":N,"quality_score":SCORE,"specialists":SPECIALISTS_JSON,"findings":FINDINGS_JSON,"commit":"'"$(git rev-parse --short HEAD)"'","via":"ship"}'
 ```
 Substitute TIMESTAMP (ISO 8601), STATUS ("clean" if no issues, "issues_found" otherwise),
@@ -2449,15 +2273,7 @@ Every diff gets adversarial review from both Claude and Codex. LOC is not a prox
 **Detect diff size and tool availability:**
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 DIFF_BASE=$(git merge-base origin/<base> HEAD)
 DIFF_INS=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' || echo "0")
 DIFF_DEL=$(git diff "$DIFF_BASE" --stat | tail -1 | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+' || echo "0")
@@ -2552,15 +2368,7 @@ If `DIFF_TOTAL < 200`: skip this section silently. The Claude + Codex adversaria
 
 After all passes complete, persist:
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-review-log '{"skill":"adversarial-review","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","status":"STATUS","source":"SOURCE","tier":"always","gate":"GATE","commit":"'"$(git rev-parse --short HEAD)"'"}'
 ```
 Substitute: STATUS = "clean" if no findings across ALL passes, "issues_found" if any pass found issues. SOURCE = "both" if Codex ran, "claude" if only Claude subagent ran. GATE = the Codex structured review gate result ("pass"/"fail"), "skipped" if diff < 200, or "informational" if Codex was unavailable. If all passes failed, do NOT persist.
@@ -2593,15 +2401,7 @@ insight during this session, you may log it for future sessions in addition to
 the required `Knowledge candidate` final-report field:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-log '{"skill":"ship","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
 
@@ -2625,15 +2425,7 @@ For high-value, verified material that may graduate into a skill or rule, captur
 a curated candidate instead of leaving it only in append-only learnings:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-knowledge capture-candidate --source-type workflow-evidence --source-evidence "workflow-runs/<workflow>.jsonl#event" --title "One-line title" --type practice --domains general --summary "One-line recall summary" --confidence N --body-file path/to/sanitized-entry.md
 ```
 
@@ -2652,15 +2444,7 @@ Pick ONE keyword that names the headline feature you're shipping. The keyword sh
 Worked examples (ship-specific): good keywords are `learnings-search`, `pacing`, `worktree-ship`. Bad: `the branch headline`, `v1.31.1.0`, `feat: token-or search`.
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 $GOLDBAND_BIN/goldband-learnings-search --query "<your-keyword>" --limit 5 2>/dev/null || true
 ```
 
@@ -2740,6 +2524,9 @@ Read the `STATE:` line and dispatch:
 3. **Queue-aware version pick (workspace-aware ship, v1.6.4.0+).** Call `bin/goldband-next-version` to see what's already claimed by open PRs + active sibling Conductor worktrees, then render the queue state to the user:
 
    ```bash
+   BASE_VERSION=$(git show origin/<base>:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "0.0.0.0")
+   [ -n "$BASE_VERSION" ] || { echo "ERROR: base VERSION is empty" >&2; exit 1; }
+   BUMP_LEVEL="<chosen-bump-level>"
    QUEUE_JSON=$(bun run bin/goldband-next-version \
      --base <base> \
      --bump "$BUMP_LEVEL" \
@@ -2763,9 +2550,27 @@ Read the `STATE:` line and dispatch:
    - If `ACTIVE_SIBLING_COUNT > 0` and any active sibling's VERSION is `>= NEW_VERSION`, use **AskUserQuestion**: "Sibling workspace <path> has v<X> committed <N>h ago but hasn't PR'd yet. Wait for them to ship first, or advance past? A) Advance past (recommended for unrelated work), B) Abort /ship and sync up with sibling first."
    - Validate `NEW_VERSION` matches `MAJOR.MINOR.PATCH.MICRO`. If util returns an empty or malformed version, fall back to local bump.
 
-4. **Validate** `NEW_VERSION` and write it to **both** `VERSION` and `package.json`. This block runs only when `STATE: FRESH`.
+4. For `STATE: FRESH`, validate `NEW_VERSION` and write both version files.
 
 ```bash
+BASE_VERSION=$(git show origin/<base>:VERSION 2>/dev/null | tr -d '\r\n[:space:]' || echo "0.0.0.0")
+BUMP_LEVEL="<chosen-bump-level>"
+QUEUE_JSON=$(bun run bin/goldband-next-version \
+  --base <base> \
+  --bump "$BUMP_LEVEL" \
+  --current-version "$BASE_VERSION" 2>/dev/null || echo '{"offline":true}')
+NEW_VERSION=$(echo "$QUEUE_JSON" | jq -r '.version // empty')
+if [ -z "$NEW_VERSION" ]; then
+  IFS=. read -r _MAJOR _MINOR _PATCH _MICRO <<< "$BASE_VERSION"
+  case "$BUMP_LEVEL" in
+    major) NEW_VERSION="$((_MAJOR + 1)).0.0.0" ;;
+    minor) NEW_VERSION="$_MAJOR.$((_MINOR + 1)).0.0" ;;
+    patch) NEW_VERSION="$_MAJOR.$_MINOR.$((_PATCH + 1)).0" ;;
+    micro) NEW_VERSION="$_MAJOR.$_MINOR.$_PATCH.$((_MICRO + 1))" ;;
+    *) echo "ERROR: invalid bump level: $BUMP_LEVEL" >&2; exit 1 ;;
+  esac
+  echo "⚠ workspace-aware ship offline — using local bump only: $NEW_VERSION"
+fi
 if ! printf '%s' "$NEW_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "ERROR: NEW_VERSION ($NEW_VERSION) does not match MAJOR.MINOR.PATCH.MICRO pattern. Aborting."
   exit 1
@@ -2859,56 +2664,17 @@ echo "Drift repaired: package.json synced to $REPAIR_VERSION. No version bump pe
 
 ## Step 14: TODOS.md (auto-update)
 
-Cross-reference the project's TODOS.md against the changes being shipped. Mark completed items automatically; prompt only if the file is missing or disorganized.
+Read the canonical format at `.claude/skills/review/TODOS-format.md`.
 
-Read `.claude/skills/review/TODOS-format.md` for the canonical format reference.
-
-**1. Check if TODOS.md exists** in the repository root.
-
-**If TODOS.md does not exist:** Use AskUserQuestion:
-- Message: "Goldband Loop recommends maintaining a TODOS.md organized by skill/component, then priority (P0 at top through P4, then Completed at bottom). See TODOS-format.md for the full format. Would you like to create one?"
-- Options: A) Create it now, B) Skip for now
-- If A: Create `TODOS.md` with a skeleton (# TODOS heading + ## Completed section). Continue to step 3.
-- If B: Skip the rest of Step 14. Continue to Step 15.
-
-**2. Check structure and organization:**
-
-Read TODOS.md and verify it follows the recommended structure:
-- Items grouped under `## <Skill/Component>` headings
-- Each item has `**Priority:**` field with P0-P4 value
-- A `## Completed` section at the bottom
-
-**If disorganized** (missing priority fields, no component groupings, no Completed section): Use AskUserQuestion:
-- Message: "TODOS.md doesn't follow the recommended structure (skill/component groupings, P0-P4 priority, Completed section). Would you like to reorganize it?"
-- Options: A) Reorganize now (recommended), B) Leave as-is
-- If A: Reorganize in-place following TODOS-format.md. Preserve all content — only restructure, never delete items.
-- If B: Continue to step 3 without restructuring.
-
-**3. Detect completed TODOs:**
-
-This step is fully automatic — no user interaction.
-
-Use the diff and commit history already gathered in earlier steps:
-- `git diff <base>...HEAD` (full diff against the base branch)
-- `git log <base>..HEAD --oneline` (all commits being shipped)
-
-For each TODO item, check if the changes in this PR complete it by:
-- Matching commit messages against the TODO title and description
-- Checking if files referenced in the TODO appear in the diff
-- Checking if the TODO's described work matches the functional changes
-
-**Be conservative:** Only mark a TODO as completed if there is clear evidence in the diff. If uncertain, leave it alone.
-
-**4. Move completed items** to the `## Completed` section at the bottom. Append: `**Completed:** vX.Y.Z (YYYY-MM-DD)`
-
-**5. Output summary:**
-- `TODOS.md: N items marked complete (item1, item2, ...). M items remaining.`
-- Or: `TODOS.md: No completed items detected. M items remaining.`
-- Or: `TODOS.md: Created.` / `TODOS.md: Reorganized.`
-
-**6. Defensive:** If TODOS.md cannot be written (permission error, disk full), warn the user and continue. Never stop the ship workflow for a TODOS failure.
-
-Save this summary — it goes into the PR body in Step 19.
+- Missing file: ask **Create now** or **Skip**. If created, add `# TODOS` and a
+  final `## Completed` section.
+- Missing component headings, P0-P4 priorities, or final Completed section: ask
+  **Reorganize** or **Leave as-is**. Reorganization preserves every item.
+- Otherwise, use `git diff <base>...HEAD` and `git log <base>..HEAD --oneline` to
+  mark only clearly completed items. Move them to `## Completed` and append
+  `**Completed:** vX.Y.Z (YYYY-MM-DD)`. Uncertain items stay untouched.
+- Report created/reorganized status or completed and remaining counts; retain the
+  summary for Step 19. Write failures warn and continue.
 
 ---
 
@@ -3104,10 +2870,10 @@ glab mr view -F json 2>/dev/null | jq -r 'if .state == "opened" then "MR_EXISTS"
 
 If an **open** PR/MR already exists: **update** the PR body using `gh pr edit --body "..."` (GitHub) or `glab mr update -d "..."` (GitLab). Always regenerate the PR body from scratch using this run's fresh results (test output, coverage audit, review findings, adversarial review, TODOS summary, documentation_section from Step 18). Never reuse stale PR body content from a prior run.
 
-**Always update the PR title to start with `v$NEW_VERSION`.** PR titles use the workspace-aware format `v<NEW_VERSION> <type>: <summary>` — version ALWAYS first, no exceptions, no "custom title kept intentionally" escape hatch. The shared helper `bin/goldband-pr-title-rewrite.sh` is the single source of truth for the rule.
+**Always update the PR title to start with the current `VERSION` file value.** PR titles use the workspace-aware format `v<NEW_VERSION> <type>: <summary>` — version ALWAYS first, no exceptions, no "custom title kept intentionally" escape hatch. The shared helper `bin/goldband-pr-title-rewrite.sh` is the single source of truth for the rule.
 
 1. Read the current title: `CURRENT=$(gh pr view --json title -q .title)` (or `glab mr view -F json | jq -r .title`).
-2. Compute the corrected title: `NEW_TITLE=$($GOLDBAND_BIN/goldband-pr-title-rewrite.sh "$NEW_VERSION" "$CURRENT")`. The helper handles three cases: title already correct (no-op), title has a different `v<X.Y.Z.W>` prefix (replace it), or title has no version prefix (prepend one).
+2. Read `NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)`, then compute the corrected title: `NEW_TITLE=$($GOLDBAND_BIN/goldband-pr-title-rewrite.sh "$NEW_VERSION" "$CURRENT")`. The helper handles three cases: title already correct (no-op), title has a different `v<X.Y.Z.W>` prefix (replace it), or title has no version prefix (prepend one).
 3. If `NEW_TITLE` differs from `CURRENT`, run `gh pr edit --title "$NEW_TITLE"` (or `glab mr update -t "$NEW_TITLE"`).
 4. **Self-check:** re-fetch the title and assert it starts with `v$NEW_VERSION `. If it does not, retry the edit once. If still wrong, surface the failure to the user.
 
@@ -3181,6 +2947,7 @@ you missed it.>
 **If GitHub:**
 
 ```bash
+NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)
 # PR title MUST start with v$NEW_VERSION — enforced on every run, no exceptions.
 # (See Step 19 idempotency block + bin/goldband-pr-title-rewrite.sh for the rule.)
 gh pr create --base <base> --title "v$NEW_VERSION <type>: <summary>" --body "$(cat <<'EOF'
@@ -3192,6 +2959,7 @@ EOF
 **If GitLab:**
 
 ```bash
+NEW_VERSION=$(tr -d '\r\n[:space:]' < VERSION)
 # MR title MUST start with v$NEW_VERSION — enforced on every run, no exceptions.
 # (See Step 19 idempotency block + bin/goldband-pr-title-rewrite.sh for the rule.)
 glab mr create -b <base> -t "v$NEW_VERSION <type>: <summary>" -d "$(cat <<'EOF'
@@ -3212,15 +2980,7 @@ Print the branch name, remote URL, and instruct the user to create the PR/MR man
 Log coverage and plan completion data so `/retro` can track trends:
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)" && mkdir -p ~/.goldband/projects/$SLUG
 ```
 

@@ -34,18 +34,7 @@ hooks:
 # /freeze — Restrict Edits to a Directory
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
-GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
-GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 ```
 
 Lock file edits to a specific directory. Any Edit or Write operation targeting
@@ -65,23 +54,13 @@ Ask the user which directory to restrict edits to. Use AskUserQuestion:
 
 Once the user provides a directory path:
 
-1. Resolve it to an absolute path:
+Resolve the path and persist the boundary in the same shell call:
 ```bash
-FREEZE_DIR=$(cd "<user-provided-path>" 2>/dev/null && pwd)
-echo "$FREEZE_DIR"
-```
-
-2. Ensure trailing slash and save to the freeze state file:
-```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
+FREEZE_DIR=$(cd "<user-provided-path>" 2>/dev/null && pwd) || {
+  echo "ERROR: cannot resolve freeze directory: <user-provided-path>" >&2
+  exit 1
+}
 FREEZE_DIR="${FREEZE_DIR%/}/"
 eval "$($GOLDBAND_BIN/goldband-paths)"
 STATE_DIR="$GOLDBAND_STATE_ROOT"

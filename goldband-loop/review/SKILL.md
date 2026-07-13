@@ -23,18 +23,7 @@ triggers:
 ## Runtime root
 
 ```bash
-# Goldband runtime contract (block-local; generated)
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
-GOLDBAND_GLOBAL_ROOT="$HOME/.claude/skills/goldband"
-GOLDBAND_LOCAL_REL=".claude/skills/goldband"
-GOLDBAND_LOCAL_ROOT=""
-[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
-GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
-[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
-GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
-GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
-GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
-GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 GOLDBAND_RULES_DIR="${GOLDBAND_RULES_DIR:-}"
 for _RULES_DIR in "${_ROOT:-}/rules" "$HOME/.claude/rules" "$HOME/.codex/rules"; do
   if [ -z "$GOLDBAND_RULES_DIR" ] && [ -f "$_RULES_DIR/semantic-review-criteria.md" ]; then

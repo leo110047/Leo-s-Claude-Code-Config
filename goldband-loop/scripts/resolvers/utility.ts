@@ -1,55 +1,12 @@
 import type { TemplateContext } from './types';
 import { getHostConfig } from '../../hosts/index';
 
-export const RUNTIME_CONTRACT_VARIABLES = [
-  'GLOBAL_ROOT',
-  'LOCAL_REL',
-  'LOCAL_ROOT',
-  'ROOT',
-  'BIN',
-  'BROWSE',
-  'DESIGN',
-  'MAKE_PDF',
-] as const;
-
-export type RuntimeContractVariable = typeof RUNTIME_CONTRACT_VARIABLES[number];
-
-export function generateRuntimeRoot(
-  ctx: TemplateContext,
-  requested: ReadonlySet<RuntimeContractVariable> = new Set(RUNTIME_CONTRACT_VARIABLES),
-): string {
+export function generateRuntimeRoot(ctx: TemplateContext): string {
   const hostConfig = getHostConfig(ctx.host);
-  const globalRoot = `$HOME/${hostConfig.globalRoot}`;
-
-  const needed = new Set(requested);
-  const derived = ['BIN', 'BROWSE', 'DESIGN', 'MAKE_PDF'] as const;
-  if (derived.some((variable) => needed.has(variable))) needed.add('ROOT');
-  if (needed.has('ROOT')) {
-    needed.add('GLOBAL_ROOT');
-    needed.add('LOCAL_ROOT');
-  }
-  if (needed.has('LOCAL_ROOT')) needed.add('LOCAL_REL');
-
-  const lines = ['# Goldband runtime contract (block-local; generated)'];
-  if (needed.has('LOCAL_ROOT')) {
-    lines.push('_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)');
-  }
-  if (needed.has('GLOBAL_ROOT')) lines.push(`GOLDBAND_GLOBAL_ROOT="${globalRoot}"`);
-  if (needed.has('LOCAL_REL')) lines.push(`GOLDBAND_LOCAL_REL="${hostConfig.localSkillRoot}"`);
-  if (needed.has('LOCAL_ROOT')) {
-    lines.push('GOLDBAND_LOCAL_ROOT=""');
-    lines.push('[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"');
-  }
-  if (needed.has('ROOT')) {
-    lines.push('GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"');
-    lines.push('[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"');
-  }
-  if (needed.has('BIN')) lines.push('GOLDBAND_BIN="$GOLDBAND_ROOT/bin"');
-  if (needed.has('BROWSE')) lines.push('GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"');
-  if (needed.has('DESIGN')) lines.push('GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"');
-  if (needed.has('MAKE_PDF')) lines.push('GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"');
-
-  return lines.join('\n');
+  const localRootArg = hostConfig.localSkillRoot === hostConfig.globalRoot
+    ? ''
+    : ` "${hostConfig.localSkillRoot}"`;
+  return `. "$HOME/${hostConfig.globalRoot}/bin/goldband-env"${localRootArg} || exit $?`;
 }
 
 export function generateSlugEval(ctx: TemplateContext): string {

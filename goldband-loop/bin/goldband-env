@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# goldband-env — source into one executable workflow block.
+# Usage: . "/installed/goldband/bin/goldband-env" [project-relative-root]
+
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && { [ -z "$1" ] || [ "${1#/}" != "$1" ]; }; }; then
+  echo "ERROR: goldband-env accepts at most one project-relative runtime root" >&2
+  return 2 2>/dev/null || exit 2
+fi
+
+_GOLDBAND_ENV_SOURCE="${BASH_SOURCE[0]}"
+case "$_GOLDBAND_ENV_SOURCE" in
+  */bin/goldband-env) ;;
+  *)
+    echo "ERROR: goldband-env must be sourced from a Goldband bin directory" >&2
+    return 2 2>/dev/null || exit 2
+    ;;
+esac
+
+_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+GOLDBAND_GLOBAL_ROOT="${_GOLDBAND_ENV_SOURCE%/bin/goldband-env}"
+if [ "$#" -eq 1 ]; then
+  GOLDBAND_LOCAL_REL="$1"
+elif [ -n "${HOME:-}" ] && [ "${GOLDBAND_GLOBAL_ROOT#"$HOME"/}" != "$GOLDBAND_GLOBAL_ROOT" ]; then
+  GOLDBAND_LOCAL_REL="${GOLDBAND_GLOBAL_ROOT#"$HOME"/}"
+else
+  echo "ERROR: goldband-env cannot infer the project-relative runtime root" >&2
+  return 2 2>/dev/null || exit 2
+fi
+GOLDBAND_LOCAL_ROOT=""
+[ -n "$_ROOT" ] && GOLDBAND_LOCAL_ROOT="$_ROOT/$GOLDBAND_LOCAL_REL"
+GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"
+[ -n "$GOLDBAND_LOCAL_ROOT" ] && [ -d "$GOLDBAND_LOCAL_ROOT" ] && GOLDBAND_ROOT="$GOLDBAND_LOCAL_ROOT"
+GOLDBAND_BIN="$GOLDBAND_ROOT/bin"
+GOLDBAND_BROWSE="$GOLDBAND_ROOT/browse/dist"
+GOLDBAND_DESIGN="$GOLDBAND_ROOT/design/dist"
+GOLDBAND_MAKE_PDF="$GOLDBAND_ROOT/make-pdf/dist"
+export GOLDBAND_GLOBAL_ROOT GOLDBAND_LOCAL_REL GOLDBAND_LOCAL_ROOT GOLDBAND_ROOT
+export GOLDBAND_BIN GOLDBAND_BROWSE GOLDBAND_DESIGN GOLDBAND_MAKE_PDF
+
+unset _GOLDBAND_ENV_SOURCE

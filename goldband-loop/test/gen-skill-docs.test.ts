@@ -23,7 +23,7 @@ const RUNTIME_CONTRACT_REFERENCE = new RegExp(
   `\\$GOLDBAND_(${RUNTIME_CONTRACT_VARIABLES.join('|')})\\b`,
   'g',
 );
-const RUNTIME_CONTRACT_MARKER = '# Goldband runtime contract (block-local; generated)';
+const RUNTIME_CONTRACT_INITIALIZER = '/bin/goldband-env';
 
 describe('generated skill contracts', () => {
   test('committed outputs are generator-fresh before any install test runs', () => {
@@ -47,11 +47,7 @@ describe('generated skill contracts', () => {
         const references = runtimeContractReferences(block);
         if (references.size > 0) {
           expect(block, `${generatedPath} uses the runtime contract without block-local initialization`)
-            .toContain(RUNTIME_CONTRACT_MARKER);
-          for (const variable of references) {
-            expect(block, `${generatedPath} does not initialize GOLDBAND_${variable}`)
-              .toContain(`GOLDBAND_${variable}=`);
-          }
+            .toContain(RUNTIME_CONTRACT_INITIALIZER);
         }
       }
     }
@@ -120,11 +116,7 @@ describe('external host generation', () => {
           const references = runtimeContractReferences(block);
           if (references.size > 0) {
             expect(block, `${skillPath} uses the runtime contract without block-local initialization`)
-              .toContain(RUNTIME_CONTRACT_MARKER);
-            for (const variable of references) {
-              expect(block, `${skillPath} does not initialize GOLDBAND_${variable}`)
-                .toContain(`GOLDBAND_${variable}=`);
-            }
+              .toContain(RUNTIME_CONTRACT_INITIALIZER);
           }
           for (const foreignHost of ALL_HOST_CONFIGS) {
             if (foreignHost.name === host.name) continue;
@@ -182,9 +174,7 @@ describe('clean Codex installation', () => {
         expect(
           content,
           `${capability}/${action} must default to the Codex global runtime root`,
-        ).toContain('GOLDBAND_GLOBAL_ROOT="$HOME/.codex/skills/goldband"');
-        expect(content).toContain('GOLDBAND_LOCAL_REL=".agents/skills/goldband"');
-        expect(content).toContain('GOLDBAND_ROOT="$GOLDBAND_GLOBAL_ROOT"');
+        ).toContain('. "$HOME/.codex/skills/goldband/bin/goldband-env" ".agents/skills/goldband" || exit $?');
         for (const block of executableBashBlocks(content)) {
           expect(block).not.toContain('$HOME/.claude/skills/goldband');
           expect(block).not.toContain('~/.claude/skills/goldband');
@@ -224,8 +214,10 @@ describe('clean Codex installation', () => {
         'utf8',
       );
       const guardBlocks = executableBashBlocks(guard);
-      const guardRuntimeBlock = guardBlocks.find((block) => block.includes('GOLDBAND_GLOBAL_ROOT='));
-      const guardConsumerBlock = guardBlocks.find((block) => block.includes('goldband-paths'));
+      const guardRuntimeBlock = guardBlocks.find((block) => block.includes(RUNTIME_CONTRACT_INITIALIZER));
+      const guardConsumerBlock = guardBlocks
+        .find((block) => block.includes('goldband-paths'))
+        ?.replaceAll('<user-provided-path>', cleanProject);
       expect(guardRuntimeBlock).toBeDefined();
       expect(guardConsumerBlock).toBeDefined();
 
@@ -240,7 +232,7 @@ describe('clean Codex installation', () => {
         ['bash', '-c', `printf 'before_block_bin=<%s>\n' "\${GOLDBAND_BIN:-}"\n${guardConsumerBlock}\nprintf 'next_call_bin=<%s>\nresolved_command=<%s/goldband-paths>\n' "$GOLDBAND_BIN" "$GOLDBAND_BIN"\ntest -x "$GOLDBAND_BIN/goldband-paths"`],
         {
           cwd: cleanProject,
-          env: { ...process.env, HOME: home, FREEZE_DIR: cleanProject },
+          env: { ...process.env, HOME: home },
           stdout: 'pipe',
           stderr: 'pipe',
         },
@@ -249,6 +241,9 @@ describe('clean Codex installation', () => {
       expect(decode(secondShell.stdout)).toContain('before_block_bin=<>');
       expect(decode(secondShell.stdout)).toContain(`next_call_bin=<${path.join(runtimeRoot, 'bin')}>`);
       expect(decode(secondShell.stdout)).toContain(`resolved_command=<${path.join(runtimeRoot, 'bin', 'goldband-paths')}>`);
+      expect(
+        fs.readFileSync(path.join(home, '.goldband', 'freeze-dir.txt'), 'utf8'),
+      ).toBe(`${cleanProject}/\n`);
 
       const init = Bun.spawnSync(['git', 'init', '--quiet'], { cwd: cleanProject });
       expect(init.exitCode).toBe(0);
