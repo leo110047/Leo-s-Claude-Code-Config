@@ -9,7 +9,13 @@
  */
 
 import { validateSkill } from '../test/helpers/skill-parser';
+import {
+  ALL_HOST_CONFIGS,
+  getExternalHosts,
+  getHostConfig,
+} from '../hosts/index';
 import { discoverTemplates, discoverSkillFiles } from './discover-skills';
+import { shouldGenerateSkill } from './host-config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
@@ -64,8 +70,14 @@ for (const file of SKILL_FILES) {
 
 console.log('\n  Templates:');
 const TEMPLATES = discoverTemplates(ROOT);
+const CLAUDE_HOST = getHostConfig('claude');
 
 for (const { tmpl, output } of TEMPLATES) {
+  const skillDir = path.basename(path.dirname(path.join(ROOT, tmpl)));
+  if (!shouldGenerateSkill(CLAUDE_HOST, skillDir)) {
+    console.log(`  -  ${tmpl.padEnd(30)} — skipped for ${CLAUDE_HOST.displayName}`);
+    continue;
+  }
   const tmplPath = path.join(ROOT, tmpl);
   const outPath = path.join(ROOT, output);
   if (!fs.existsSync(tmplPath)) {
@@ -89,8 +101,6 @@ for (const file of SKILL_FILES) {
 }
 
 // ─── External Host Skills (config-driven) ───────────────────
-
-import { getExternalHosts } from '../hosts/index';
 
 for (const hostConfig of getExternalHosts()) {
   const hostDir = path.join(ROOT, hostConfig.hostSubdir, 'skills');
@@ -129,8 +139,6 @@ for (const hostConfig of getExternalHosts()) {
 }
 
 // ─── Freshness (config-driven) ──────────────────────────────
-
-import { ALL_HOST_CONFIGS } from '../hosts/index';
 
 for (const hostConfig of ALL_HOST_CONFIGS) {
   const hostFlag = hostConfig.name === 'claude' ? '' : ` --host ${hostConfig.name}`;

@@ -103,6 +103,16 @@ export interface HostConfig {
   boundaryInstruction?: string;
 }
 
+/** Shared include/skip policy for generator and host-aware checks. */
+export function shouldGenerateSkill(
+  config: HostConfig,
+  skillDir: string,
+): boolean {
+  const included = config.generation.includeSkills;
+  if (included?.length && !included.includes(skillDir)) return false;
+  return !config.generation.skipSkills?.includes(skillDir);
+}
+
 // --- Validation ---
 
 const NAME_REGEX = /^[a-z][a-z0-9-]*$/;

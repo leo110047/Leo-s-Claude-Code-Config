@@ -20,7 +20,7 @@ import { HOST_PATHS } from './resolvers/types';
 import { RESOLVERS } from './resolvers/index';
 import { externalSkillName, extractHookSafetyProse as _extractHookSafetyProse, extractNameAndDescription as _extractNameAndDescription, condenseOpenAIShortDescription as _condenseOpenAIShortDescription, generateOpenAIYaml as _generateOpenAIYaml } from './resolvers/codex-helpers';
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
-import type { HostConfig } from './host-config';
+import { shouldGenerateSkill, type HostConfig } from './host-config';
 import { TOKEN_CEILING_BYTES } from './skill-budget';
 import { generateRuntimeRoot } from './resolvers/utility';
 
@@ -530,14 +530,7 @@ for (const currentHost of hostsToRun) {
     for (const tmplPath of findTemplates()) {
       const dir = path.basename(path.dirname(tmplPath));
 
-      // includeSkills allowlist (union logic: include minus skip)
-      if (currentHostConfig.generation.includeSkills?.length) {
-        if (!currentHostConfig.generation.includeSkills.includes(dir)) continue;
-      }
-      // skipSkills denylist (subtracts from includeSkills or full set)
-      if (currentHostConfig.generation.skipSkills?.length) {
-        if (currentHostConfig.generation.skipSkills.includes(dir)) continue;
-      }
+      if (!shouldGenerateSkill(currentHostConfig, dir)) continue;
 
       const { outputPath, content, symlinkLoop } = processTemplate(tmplPath, currentHost);
       const relOutput = path.relative(ROOT, outputPath);

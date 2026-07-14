@@ -7,7 +7,12 @@ import { describe, test, expect } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { validateHostConfig, validateAllConfigs, type HostConfig } from '../scripts/host-config';
+import {
+  shouldGenerateSkill,
+  validateHostConfig,
+  validateAllConfigs,
+  type HostConfig,
+} from '../scripts/host-config';
 import {
   ALL_HOST_CONFIGS,
   ALL_HOST_NAMES,
@@ -86,6 +91,25 @@ describe('hosts/index.ts', () => {
     const external = getExternalHosts();
     expect(external.find(c => c.name === 'claude')).toBeUndefined();
     expect(external.length).toBe(ALL_HOST_CONFIGS.length - 1);
+  });
+
+  test('host generation policy excludes explicitly skipped skills', () => {
+    expect(shouldGenerateSkill(claude, 'claude')).toBe(false);
+    expect(shouldGenerateSkill(claude, 'review')).toBe(true);
+  });
+
+  test('host generation policy applies includeSkills before skipSkills', () => {
+    const config = {
+      ...claude,
+      generation: {
+        ...claude.generation,
+        includeSkills: ['review', 'claude'],
+        skipSkills: ['claude'],
+      },
+    };
+    expect(shouldGenerateSkill(config, 'review')).toBe(true);
+    expect(shouldGenerateSkill(config, 'claude')).toBe(false);
+    expect(shouldGenerateSkill(config, 'browse')).toBe(false);
   });
 
   test('every host has a unique name', () => {
@@ -257,6 +281,25 @@ describe('HOST_PATHS derivation from configs', () => {
     for (const name of ALL_HOST_NAMES) {
       expect(HOST_PATHS[name]).toBeDefined();
     }
+  });
+});
+
+describe('skill:check host generation policy', () => {
+  test('treats a primary-host skipped template as skipped, not missing', () => {
+    const result = Bun.spawnSync(
+      [process.execPath, 'run', path.join(ROOT, 'scripts', 'skill-check.ts')],
+      {
+        cwd: ROOT,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const stdout = result.stdout.toString();
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain(
+      'claude/SKILL.md.tmpl           — skipped for Claude Code',
+    );
+    expect(stdout).not.toContain('claude/SKILL.md                — generated file missing');
   });
 });
 
