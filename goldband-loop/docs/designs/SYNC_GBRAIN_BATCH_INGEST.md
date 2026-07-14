@@ -1,6 +1,6 @@
 # /sync-gbrain batch ingest migration
 
-**Status:** Implemented on project-owner/dublin-v1 (D1-D8 decisions land in this PR)
+**Status:** Implemented — the D1-D8 batch-ingest architecture shipped; `TODOS.md` tracks only follow-up performance work.
 **Branch:** project-owner/dublin-v1
 **Owner:** project maintainer
 **Triggered by:** /investigate run, 2026-05-09

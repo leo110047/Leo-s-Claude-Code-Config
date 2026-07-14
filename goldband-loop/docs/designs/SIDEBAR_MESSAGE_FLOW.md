@@ -1,5 +1,7 @@
 # Sidebar Flow
 
+**Status:** Active — current architecture for the browser sidebar PTY, authentication, and message flow.
+
 How the Goldband Loop Browser sidebar actually works. Read this before touching
 `sidepanel.js`, `background.js`, `content.js`, `terminal-agent.ts`, or
 sidebar-related server endpoints.

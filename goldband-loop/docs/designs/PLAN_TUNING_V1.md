@@ -1,6 +1,6 @@
 # Plan Tuning v1 — Design Doc
 
-**Status:** Approved for implementation (2026-04-18)
+**Status:** Implemented — writing style, `explain_level`, and LOC receipts shipped; pacing moved to `PACING_UPDATES_V0.md`.
 **Branch:** project-owner/plan-tune-skill
 **Authors:** project maintainer (user), with AI-assisted reviews from Claude Opus 4.7 + OpenAI Codex gpt-5.4
 **Supersedes scope:** adds writing-style + LOC-receipts layer on top of [PLAN_TUNING_V0.md](./PLAN_TUNING_V0.md) (observational substrate). V0 remains in place unchanged.

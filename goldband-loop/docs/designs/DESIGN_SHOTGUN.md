@@ -2,7 +2,7 @@
 
 Generated on 2026-03-27
 Branch: project-owner/agent-design-tools
-Status: LIVING DOCUMENT — update as bugs are found and fixed
+**Status:** Active — this is the living architecture and implementation-notes document for the current feedback loop.
 
 ## What This Feature Does
 

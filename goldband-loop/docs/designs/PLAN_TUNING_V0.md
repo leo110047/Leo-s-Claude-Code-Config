@@ -1,6 +1,6 @@
 # Plan Tuning v0 — Design Doc
 
-**Status:** Approved for v1 implementation
+**Status:** Implemented — the registry, preference, and developer-profile substrate shipped; follow-on work is tracked separately.
 **Branch:** project-owner/plan-tune-skill
 **Authors:** project maintainer (user), with AI-assisted reviews from Claude Opus 4.7 + OpenAI Codex gpt-5.4
 **Date:** 2026-04-16

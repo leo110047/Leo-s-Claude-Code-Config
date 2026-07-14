@@ -1,6 +1,6 @@
 # Bun-Native Prompt Injection Classifier — Research Plan
 
-**Status:** P3 research / early prototype
+**Status:** Active — tokenizer and weight-loading work shipped, while the native forward pass remains P3 research.
 **Branch:** `project-owner/prompt-injection-guard`
 **Skeleton:** `browse/src/security-bunnative.ts`
 **TODOS anchor:** "Bun-native 5ms DeBERTa inference (XL, P3 / research)"

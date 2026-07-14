@@ -1,6 +1,6 @@
 # Fix #1671: `/office-hours` always reports SESSION_COUNT: 0
 
-**Status:** SHIPPED
+**Status:** Implemented — the profile writer migration and its regression coverage shipped.
 **Branch:** fix-1671-profile-migration
 **Date:** 2026-05-23
 **Issue:** https://github.com/project-owner/goldband/issues/1671

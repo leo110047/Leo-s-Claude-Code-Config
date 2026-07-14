@@ -1,5 +1,7 @@
 # Conductor Session Streaming API Proposal
 
+**Status:** Superseded — the sidebar uses the local PTY flow documented in `SIDEBAR_MESSAGE_FLOW.md`, not a Conductor session-stream API.
+
 ## Problem
 
 When Claude controls your real browser via CDP (goldband `$B connect`), you look at two

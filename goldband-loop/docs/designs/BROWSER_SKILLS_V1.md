@@ -1,6 +1,6 @@
 # Browser-Skills v1 — codifying repeated browser flows
 
-**Status:** Phase 1 shipped on `project-owner/browserharness`. Phases 2-4 enumerated below.
+**Status:** Active — Phases 2b-4 remain in the current roadmap; Phase 1 and 2a are implemented.
 **Last updated:** 2026-04-26
 **Authors:** project-owner (with /plan-eng-review and /codex outside-voice review)
 

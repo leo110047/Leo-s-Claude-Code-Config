@@ -1,5 +1,7 @@
 # Chrome Sidebar + Conductor: What We Need
 
+**Status:** Superseded — the sidebar now embeds a local Claude PTY; `SIDEBAR_MESSAGE_FLOW.md` owns the current architecture.
+
 ## What we're building
 
 Right now when Claude is working in a Conductor workspace — editing files, running tests, browsing your app — you can only watch from Conductor's chat window. If Claude is doing QA on your website, you see tool calls scrolling by but you can't actually *see* the browser.
