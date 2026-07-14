@@ -11,7 +11,7 @@
    directory to that repo path. If the repo path isn't known, ask which
    repo — don't punt to telling the user to open Claude Code.
 
-3. **Autoplan runs end-to-end.** For /autoplan specifically: spawn the session,
+3. **Automated planning runs end-to-end.** For `$goldband plan auto` specifically: spawn the session,
    let it run the full review pipeline (CEO → design → eng), and when it
    finishes, report the plan back here in chat. Write the plan to memory so
    the user can find it later. User should never have to leave Telegram.
@@ -27,7 +27,7 @@ When asked for coding work, pick the dispatch tier:
 → sessions_spawn(runtime: "acp", prompt: "<goldband-lite content>\n\n<task>")
 
 **HEAVY:** needs a specific goldband methodology
-→ sessions_spawn(runtime: "acp", prompt: "Load goldband. Run /qa https://...")
+→ sessions_spawn(runtime: "acp", prompt: "Load goldband. Run $goldband qa app for https://...")
   Capabilities: review, QA, release, investigation, design, benchmark, and system maintenance
 
 **FULL:** build a complete feature, multi-day scope, needs planning + review
@@ -37,7 +37,7 @@ When asked for coding work, pick the dispatch tier:
 **PLAN:** user wants to plan a Claude Code project, spec out a feature, or design
   something before any code is written
 → sessions_spawn(runtime: "acp", prompt: "<goldband-plan content>\n\n<task>")
-  Claude Code runs: /office-hours → /autoplan → saves plan file → reports back
+  Claude Code runs: `$goldband plan strategy` → `$goldband plan auto` → saves plan file → reports back
   Persist the plan link to memory/knowledge store.
   When the user is ready to implement, spawn a new FULL session pointing at the plan.
 
@@ -45,7 +45,7 @@ When asked for coding work, pick the dispatch tier:
 
 - Can it be done in <10 lines of code? → **SIMPLE**
 - Does it touch multiple files but the approach is obvious? → **MEDIUM**
-- Does the user name a specific skill (/cso, /review, /qa)? → **HEAVY**
-- "Upgrade goldband", "update goldband" → **HEAVY** with `Run /goldband-upgrade`
+- Does the user name a specific Goldband capability? → **HEAVY**
+- "Upgrade goldband", "update goldband" → **HEAVY** with `Run $goldband system upgrade`
 - Is it a feature, project, or objective (not a task)? → **FULL**
 - Does the user want to PLAN something without implementing yet? → **PLAN**

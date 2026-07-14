@@ -24,6 +24,12 @@ const RUNTIME_CONTRACT_REFERENCE = new RegExp(
   'g',
 );
 const RUNTIME_CONTRACT_INITIALIZER = '/bin/goldband-env';
+const OPENCLAW_PUBLIC_SURFACES = [
+  'openclaw/goldband-full-CLAUDE.md',
+  'openclaw/goldband-plan-CLAUDE.md',
+  'openclaw/agents-goldband-section.md',
+  'docs/OPENCLAW.md',
+] as const;
 
 describe('generated skill contracts', () => {
   test('committed outputs are generator-fresh before any install test runs', () => {
@@ -74,6 +80,30 @@ describe('generated skill contracts', () => {
     expect(rootSkill).toContain(router);
     expect(rootSkill).not.toContain('## Command Reference');
     expect(rootSkill).not.toContain('## Snapshot Flags');
+  });
+
+  test('OpenClaw public surfaces reject removed flat workflow invocations', () => {
+    const contract = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'generated', 'capability-actions.json'), 'utf8'),
+    ) as { actions: Array<{ sourceTemplate: string }> };
+    const removedFlatNames = contract.actions
+      .map(({ sourceTemplate }) => sourceTemplate.match(/^([^/]+)\/SKILL\.md\.tmpl$/)?.[1])
+      .filter((name): name is string => Boolean(name));
+    const invocationPattern = new RegExp(
+      `/(?:${removedFlatNames.join('|')})\\b`,
+      'g',
+    );
+    const violations: string[] = [];
+
+    for (const relativePath of OPENCLAW_PUBLIC_SURFACES) {
+      const content = fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
+      for (const match of content.matchAll(invocationPattern)) {
+        const line = content.slice(0, match.index).split('\n').length;
+        violations.push(`${relativePath}:${line}: ${match[0]}`);
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 
   test('browser manual is generated from browser command metadata', () => {

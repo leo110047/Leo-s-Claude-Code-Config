@@ -36,7 +36,7 @@ OpenClaw decides at spawn time which tier of goldband support to use:
 |------|------|---------------|
 | **Simple** | One-file edits, typos, config changes | No goldband context injected |
 | **Medium** | Multi-file features, refactors | goldband-lite CLAUDE.md appended |
-| **Heavy** | Specific goldband skill needed | "Load goldband. Run /X" |
+| **Heavy** | Specific goldband capability needed | "Load goldband. Run $goldband <capability> <action>" |
 | **Full** | Complete features, objectives, projects | goldband-full pipeline appended |
 | **Plan** | "Help me plan a Claude Code project" | goldband-plan pipeline appended |
 
@@ -44,7 +44,7 @@ OpenClaw decides at spawn time which tier of goldband support to use:
 
 - Can it be done in <10 lines of code? -> **Simple**
 - Does it touch multiple files but the approach is obvious? -> **Medium**
-- Does the user name a specific skill (/cso, /review, /qa)? -> **Heavy**
+- Does the user name a specific Goldband capability? -> **Heavy**
 - Is it a feature, project, or objective (not a task)? -> **Full**
 - Does the user want to PLAN something for Claude Code without implementing yet? -> **Plan**
 
@@ -59,7 +59,7 @@ Key behavioral rules (these go ABOVE the dispatch tiers):
    ALWAYS spawn a Claude Code session. Never tell the user to open Claude Code.
 2. **Resolve the repo.** If the user names a repo, set the working directory. If
    unknown, ask which repo.
-3. **Autoplan runs end-to-end.** Spawn, let it run the full pipeline, report back
+3. **Automated planning runs end-to-end.** Spawn `$goldband plan auto`, let it run the full pipeline, report back
    in chat. User should never have to leave Telegram.
 
 ### CLAUDE.md collision handling
@@ -85,15 +85,15 @@ A/B tested: 2x time, meaningfully better output.
 ### goldband-full (Full tier)
 `openclaw/goldband-full-CLAUDE.md` — chains existing goldband skills:
 1. Read CLAUDE.md and understand the project
-2. Run /autoplan (CEO + eng + design review)
+2. Run `$goldband plan auto` (CEO + eng + design review)
 3. Implement the approved plan
 4. Run `$goldband release land` to create and land the PR
 5. Report back with PR URL and decisions
 
 ### goldband-plan (Plan tier)
 `openclaw/goldband-plan-CLAUDE.md` — full review gauntlet, no implementation:
-1. Run /office-hours to produce a design doc
-2. Run /autoplan (CEO + eng + design + DX reviews + codex adversarial)
+1. Run `$goldband plan strategy` to produce a design doc
+2. Run `$goldband plan auto` (CEO + eng + design + DX reviews + codex adversarial)
 3. Save the reviewed plan to `plans/<project-slug>-plan-<date>.md`
 4. Report back: plan path, summary, key decisions, recommended next step
 
