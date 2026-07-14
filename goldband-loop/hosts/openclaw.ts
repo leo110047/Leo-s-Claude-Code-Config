@@ -46,10 +46,8 @@ const openclaw: HostConfig = {
   // Suppress Claude-specific preamble sections that don't apply to OpenClaw
   suppressedResolvers: [
     'DESIGN_OUTSIDE_VOICES',
-    'ADVERSARIAL_STEP',
     'CODEX_SECOND_OPINION',
     'CODEX_PLAN_REVIEW',
-    'REVIEW_ARMY',
     'GBRAIN_CONTEXT_LOAD',
     'GBRAIN_SAVE_RESULTS',
   ],

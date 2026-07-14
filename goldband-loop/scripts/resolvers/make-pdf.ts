@@ -1,8 +1,8 @@
 import type { TemplateContext } from './types';
 
 /**
- * {{MAKE_PDF_SETUP}} — emits the shell preamble that resolves $P to the
- * make-pdf binary. Mirrors generateBrowseSetup / generateDesignSetup.
+ * Emits the make-pdf-specific preamble section that resolves $P to the binary.
+ * Called by generatePreamble() for the make-pdf skill only.
  *
  * $P = make-pdf/dist/pdf.
  *

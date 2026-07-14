@@ -1,69 +1,6 @@
 import type { TemplateContext } from './types';
 import { AI_SLOP_BLACKLIST, OPENAI_HARD_REJECTIONS, OPENAI_LITMUS_CHECKS } from './constants';
 
-export function generateDesignReviewLite(ctx: TemplateContext): string {
-  const litmusList = OPENAI_LITMUS_CHECKS.map((item, i) => `${i + 1}. ${item}`).join(' ');
-  const rejectionList = OPENAI_HARD_REJECTIONS.map((item, i) => `${i + 1}. ${item}`).join(' ');
-  // Codex block only for Claude host
-  const codexBlock = ctx.host === 'codex' ? '' : `
-
-7. **Codex design voice** (optional, automatic if available):
-
-\`\`\`bash
-command -v codex >/dev/null 2>&1 && echo "CODEX_AVAILABLE" || echo "CODEX_NOT_AVAILABLE"
-\`\`\`
-
-If Codex is available, run a lightweight design check on the diff:
-
-\`\`\`bash
-TMPERR_DRL=$(mktemp /tmp/codex-drl-XXXXXXXX)
-_REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
-codex exec "Review the git diff on this branch. Run 7 litmus checks (YES/NO each): ${litmusList} Flag any hard rejections: ${rejectionList} 5 most important design findings only. Reference file:line." -C "$_REPO_ROOT" -s read-only -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR_DRL"
-\`\`\`
-
-Use a 5-minute timeout (\`timeout: 300000\`). After the command completes, read stderr:
-\`\`\`bash
-cat "$TMPERR_DRL" && rm -f "$TMPERR_DRL"
-\`\`\`
-
-**Error handling:** All errors are non-blocking. On auth failure, timeout, or empty response — skip with a brief note and continue.
-
-Present Codex output under a \`CODEX (design):\` header, merged with the checklist findings above.`;
-
-  return `## Design Review (conditional, diff-scoped)
-
-Check if the diff touches frontend files using \`goldband-diff-scope\`:
-
-\`\`\`bash
-source <(${ctx.paths.binDir}/goldband-diff-scope <base> 2>/dev/null)
-\`\`\`
-
-**If \`SCOPE_FRONTEND=false\`:** Skip design review silently. No output.
-
-**If \`SCOPE_FRONTEND=true\`:**
-
-1. **Check for DESIGN.md.** If \`DESIGN.md\` or \`design-system.md\` exists in the repo root, read it. All design findings are calibrated against it — patterns blessed in DESIGN.md are not flagged. If not found, use universal design principles.
-
-2. **Read \`.claude/skills/review/design-checklist.md\`.** If the file cannot be read, skip design review with a note: "Design checklist not found — skipping design review."
-
-3. **Read each changed frontend file** (full file, not just diff hunks). Frontend files are identified by the patterns listed in the checklist.
-
-4. **Apply the design checklist** against the changed files. For each item:
-   - **[HIGH] definitive issue**: report with concrete evidence, text-only recommendation, and suggested verification
-   - **[MEDIUM] heuristic issue**: report with why the pattern is risky
-   - **[LOW] intent-based detection**: present as "Possible — verify visually or run /design-review"
-
-5. **Include findings** in the review output under a "Design Review" header, following the output format in the checklist. Design findings merge with code review findings into the read-only findings aggregation.
-
-6. **Log the result** for the Review Readiness Dashboard:
-
-\`\`\`bash
-${ctx.paths.binDir}/goldband-review-log '{"skill":"design-review-lite","timestamp":"TIMESTAMP","status":"STATUS","findings":N,"auto_fixed":0,"commit":"COMMIT"}'
-\`\`\`
-
-Substitute: TIMESTAMP = ISO 8601 datetime, STATUS = "clean" if 0 findings or "issues_found", N = total findings, COMMIT = output of \`git rev-parse --short HEAD\`.${codexBlock}`;
-}
-
 // NOTE: design-checklist.md is a subset of this methodology for code-level detection.
 // When adding items here, also update review/design-checklist.md, and vice versa.
 export function generateDesignMethodology(ctx: TemplateContext): string {

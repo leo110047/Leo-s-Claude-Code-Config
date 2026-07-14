@@ -25,6 +25,7 @@ import {
   openclaw,
 } from '../hosts/index';
 import { HOST_PATHS } from '../scripts/resolvers/types';
+import { RESOLVERS } from '../scripts/resolvers';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 
@@ -442,8 +443,14 @@ describe('host config correctness', () => {
   test('codex has suppressedResolvers for self-invocation prevention', () => {
     expect(codex.suppressedResolvers).toBeDefined();
     expect(codex.suppressedResolvers).toContain('CODEX_SECOND_OPINION');
-    expect(codex.suppressedResolvers).toContain('ADVERSARIAL_STEP');
-    expect(codex.suppressedResolvers).toContain('REVIEW_ARMY');
+  });
+
+  test('every suppressed resolver exists in the registry', () => {
+    for (const config of ALL_HOST_CONFIGS) {
+      for (const resolver of config.suppressedResolvers ?? []) {
+        expect(RESOLVERS[resolver], `${config.name} suppresses unknown resolver ${resolver}`).toBeDefined();
+      }
+    }
   });
 
   test('codex has boundary instruction', () => {

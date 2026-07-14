@@ -158,34 +158,12 @@ Only commit if there are changes. Stage all bootstrap files (config, test direct
 
 // ─── Test Coverage Audit ────────────────────────────────────
 //
-// Shared methodology for codepath tracing, ASCII diagrams, and test gap analysis.
-// The shared inner covers plan and review workflows.
-//
-//   {{TEST_COVERAGE_AUDIT_PLAN}}   → plan-eng-review: adds missing tests to the plan
-//   {{TEST_COVERAGE_AUDIT_REVIEW}} → review: generates tests via Fix-First (ASK)
-//
-//   ┌────────────────────────────────────────────────┐
-//   │  generateTestCoverageAuditInner(mode)          │
-//   │                                                │
-//   │  SHARED: framework detect, codepath trace,     │
-//   │    ASCII diagram, quality rubric, E2E matrix,  │
-//   │    regression rule                             │
-//   │                                                │
-//   │  plan:   edit plan file, write artifact        │
-//   │  review: Fix-First ASK, INFORMATIONAL gaps     │
-//   └────────────────────────────────────────────────┘
-
-type CoverageAuditMode = 'plan' | 'review';
-
-function generateTestCoverageAuditInner(ctx: TemplateContext, mode: CoverageAuditMode): string {
+// Plan-review methodology for codepath tracing, ASCII diagrams, and test gap analysis.
+// {{TEST_COVERAGE_AUDIT_PLAN}} adds missing tests to the implementation plan.
+export function generateTestCoverageAuditPlan(ctx: TemplateContext): string {
   const sections: string[] = [];
 
-  // ── Intro (mode-specific) ──
-  if (mode === 'plan') {
-    sections.push(`100% coverage is the goal. Evaluate every codepath in the plan and ensure the plan includes tests for each one. If the plan is missing tests, add them — the plan should be complete enough that implementation includes full test coverage from the start.`);
-  } else {
-    sections.push(`100% coverage is the goal. Evaluate every codepath changed in the diff and identify test gaps. Gaps become INFORMATIONAL findings that follow the Fix-First flow.`);
-  }
+  sections.push(`100% coverage is the goal. Evaluate every codepath in the plan and ensure the plan includes tests for each one. If the plan is missing tests, add them — the plan should be complete enough that implementation includes full test coverage from the start.`);
 
   // ── Test framework detection (shared) ──
   sections.push(`
@@ -211,18 +189,12 @@ ls -d test/ tests/ spec/ __tests__/ cypress/ e2e/ 2>/dev/null
 
 3. **If no framework detected:** still produce the coverage diagram, but skip test generation.`);
 
-  // ── Codepath tracing methodology (shared, with mode-specific source) ──
-  const traceSource = mode === 'plan'
-    ? `**Step 1. Trace every codepath in the plan:**
+  // ── Codepath tracing methodology ──
+  const traceSource = `**Step 1. Trace every codepath in the plan:**
 
-Read the plan document. For each new feature, service, endpoint, or component described, trace how data will flow through the code — don't just list planned functions, actually follow the planned execution:`
-    : `**Step 1. Trace every codepath changed** using \`git diff origin/<base>...HEAD\`:
+Read the plan document. For each new feature, service, endpoint, or component described, trace how data will flow through the code — don't just list planned functions, actually follow the planned execution:`;
 
-Read every changed file. For each one, trace how data flows through the code — don't just list functions, actually follow the execution:`;
-
-  const traceStep1 = mode === 'plan'
-    ? `1. **Read the plan.** For each planned component, understand what it does and how it connects to existing code.`
-    : `1. **Read the diff.** For each changed file, read the full file (not just the diff hunk) to understand context.`;
+  const traceStep1 = `1. **Read the plan.** For each planned component, understand what it does and how it connects to existing code.`;
 
   sections.push(`
 ${traceSource}
@@ -305,14 +277,14 @@ When checking each branch, also determine whether a unit test or E2E/integration
   sections.push(`
 ### REGRESSION RULE (mandatory)
 
-**IRON RULE:** When the coverage audit identifies a REGRESSION — code that previously worked but the diff broke — a regression test is ${mode === 'plan' ? 'added to the plan as a critical requirement' : 'written immediately'}. No AskUserQuestion. No skipping. Regressions are the highest-priority test because they prove something broke.
+**IRON RULE:** When the coverage audit identifies a REGRESSION — code that previously worked but the diff broke — a regression test is added to the plan as a critical requirement. No AskUserQuestion. No skipping. Regressions are the highest-priority test because they prove something broke.
 
 A regression is when:
 - The diff modifies existing behavior (not new code)
 - The existing test suite (if any) doesn't cover the changed path
 - The change introduces a new failure mode for existing callers
 
-When uncertain whether a change is a regression, err on the side of writing the test.${mode !== 'plan' ? '\n\nFormat: commit as `test: regression test for {what broke}`' : ''}`);
+When uncertain whether a change is a regression, err on the side of writing the test.`);
 
   // ── ASCII coverage diagram (shared) ──
   sections.push(`
@@ -340,11 +312,9 @@ QUALITY: ★★★:2 ★★:2 ★:1  |  GAPS: 8 (2 E2E, 1 eval)
 Legend: ★★★ behavior + edge + error  |  ★★ happy path  |  ★ smoke check
 [→E2E] = needs integration test  |  [→EVAL] = needs LLM eval
 
-**Fast path:** All paths covered → "${mode === 'review' ? 'Step 4.75' : 'Test review'}: All new code paths have test coverage ✓" Continue.`);
+**Fast path:** All paths covered → "Test review: All new code paths have test coverage ✓" Continue.`);
 
-  // ── Mode-specific action section ──
-  if (mode === 'plan') {
-    sections.push(`
+  sections.push(`
 **Step 5. Add missing tests to the plan:**
 
 For each GAP identified in the diagram, add a test requirement to the plan. Be specific:
@@ -355,8 +325,8 @@ For each GAP identified in the diagram, add a test requirement to the plan. Be s
 
 The plan should be complete enough that when implementation begins, every test is written alongside the feature code — not deferred to a follow-up.`);
 
-    // ── Test plan artifact (plan + ship) ──
-    sections.push(`
+  // ── Test plan artifact ──
+  sections.push(`
 ### Test Plan Artifact
 
 After producing the coverage diagram, write a test plan artifact to the project directory so \`/qa\` and \`/qa-only\` can consume it as primary test input:
@@ -389,47 +359,6 @@ Repo: {owner/repo}
 \`\`\`
 
 This file is consumed by \`/qa\` and \`/qa-only\` as primary test input. Include only the information that helps a QA tester know **what to test and where** — not implementation details.`);
-  } else {
-    // review mode
-    sections.push(`
-**Step 5. Generate tests for gaps (Fix-First):**
-
-If test framework is detected and gaps were identified:
-- Classify each gap as AUTO-FIX or ASK per the Fix-First Heuristic:
-  - **AUTO-FIX:** Simple unit tests for pure functions, edge cases of existing tested functions
-  - **ASK:** E2E tests, tests requiring new test infrastructure, tests for ambiguous behavior
-- For AUTO-FIX gaps: generate the test, run it, commit as \`test: coverage for {feature}\`
-- For ASK gaps: include in the Fix-First batch question with the other review findings
-- For paths marked [→E2E]: always ASK (E2E tests are higher-effort and need user confirmation)
-- For paths marked [→EVAL]: always ASK (eval tests need user confirmation on quality criteria)
-
-If no test framework detected → include gaps as INFORMATIONAL findings only, no generation.
-
-**Diff is test-only changes:** Skip Step 4.75 entirely: "No new application code paths to audit."
-
-### Coverage Warning
-
-After producing the coverage diagram, check the coverage percentage. Read CLAUDE.md for a \`## Test Coverage\` section with a \`Minimum:\` field. If not found, use default: 60%.
-
-If coverage is below the minimum threshold, output a prominent warning **before** the regular review findings:
-
-\`\`\`
-⚠️ COVERAGE WARNING: AI-assessed coverage is {X}%. {N} code paths untested.
-Consider writing tests before running \`$goldband release land\`.
-\`\`\`
-
-This is INFORMATIONAL — it does not block review. It makes low coverage visible before release readiness checks.
-
-If coverage percentage cannot be determined, skip the warning silently.`);
-  }
 
   return sections.join('\n');
-}
-
-export function generateTestCoverageAuditPlan(ctx: TemplateContext): string {
-  return generateTestCoverageAuditInner(ctx, 'plan');
-}
-
-export function generateTestCoverageAuditReview(ctx: TemplateContext): string {
-  return generateTestCoverageAuditInner(ctx, 'review');
 }

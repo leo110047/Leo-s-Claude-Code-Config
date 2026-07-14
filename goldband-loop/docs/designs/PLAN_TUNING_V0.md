@@ -196,7 +196,7 @@ Power users can type shortcuts (`narrative`, `vibe`, `reset`, `stats`, `enable`,
 - `bin/goldband-developer-profile` — supersedes `bin/goldband-builder-profile`. Subcommands: `--read` (legacy compat), `--derive`, `--gap`, `--profile`.
 
 ### Resolvers
-- `scripts/resolvers/question-tuning.ts` — three generators: `generateQuestionPreferenceCheck(ctx)` (pre-question check), `generateQuestionLog(ctx)` (post-question log), `generateInlineTuneFeedback(ctx)` (post-question tune: prompt with user-origin gate instructions).
+- `scripts/resolvers/question-tuning.ts` — one combined `generateQuestionTuning(ctx)` generator injected by the shared preamble.
 
 ### Skill
 - `plan-tune/SKILL.md.tmpl` — conversational, plain-English inspection and preference tool.

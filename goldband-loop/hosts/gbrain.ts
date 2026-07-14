@@ -48,10 +48,8 @@ const gbrain: HostConfig = {
   // GBrain gets brain-aware resolvers. All other hosts suppress these.
   suppressedResolvers: [
     'DESIGN_OUTSIDE_VOICES',
-    'ADVERSARIAL_STEP',
     'CODEX_SECOND_OPINION',
     'CODEX_PLAN_REVIEW',
-    'REVIEW_ARMY',
     // NOTE: GBRAIN_CONTEXT_LOAD and GBRAIN_SAVE_RESULTS are NOT suppressed here.
     // GBrain is the only host that gets brain-first lookup and save-to-brain behavior.
   ],

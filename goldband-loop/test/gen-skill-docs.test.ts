@@ -6,6 +6,7 @@ import { COMMAND_DESCRIPTIONS } from '../browse/src/commands';
 import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
 import { ALL_HOST_CONFIGS, getExternalHosts } from '../hosts';
 import { discoverTemplates } from '../scripts/discover-skills';
+import { RESOLVERS } from '../scripts/resolvers';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
@@ -32,6 +33,23 @@ const OPENCLAW_PUBLIC_SURFACES = [
 ] as const;
 
 describe('generated skill contracts', () => {
+  test('every registered resolver is reachable from a template', () => {
+    const usedResolvers = new Set<string>();
+
+    for (const template of discoverTemplates(ROOT)) {
+      const content = fs.readFileSync(path.join(ROOT, template.tmpl), 'utf8');
+      for (const match of content.matchAll(/\{\{([A-Z][A-Z0-9_]*)(?::[^}]*)?\}\}/g)) {
+        usedResolvers.add(match[1]);
+      }
+    }
+
+    const unreachableResolvers = Object.keys(RESOLVERS)
+      .filter((name) => !usedResolvers.has(name))
+      .sort();
+
+    expect(unreachableResolvers).toEqual([]);
+  });
+
   test('committed outputs are generator-fresh before any install test runs', () => {
     const result = runGenerator(['--host', 'all', '--dry-run']);
     expect(result.exitCode, decode(result.stderr)).toBe(0);
