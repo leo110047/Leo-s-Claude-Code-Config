@@ -18,6 +18,7 @@ INSTALL_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 INSTALL_SKILLS_DIR="$(dirname "$INSTALL_GOLDBAND_DIR")"
 BROWSE_BIN="$SOURCE_GOLDBAND_DIR/browse/dist/browse"
+TASK_EMISSION_BIN="$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission"
 CODEX_SKILLS="$HOME/.codex/skills"
 CODEX_GOLDBAND="$CODEX_SKILLS/goldband"
 FACTORY_SKILLS="$HOME/.factory/skills"
@@ -282,6 +283,8 @@ migrate_direct_codex_install() {
   INSTALL_GOLDBAND_DIR="$migrated_dir"
   INSTALL_SKILLS_DIR="$(dirname "$INSTALL_GOLDBAND_DIR")"
   BROWSE_BIN="$SOURCE_GOLDBAND_DIR/browse/dist/browse"
+  TASK_EMISSION_BIN="$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission"
+  [ -x "${TASK_EMISSION_BIN}.exe" ] && TASK_EMISSION_BIN="${TASK_EMISSION_BIN}.exe"
 }
 
 if [ "$INSTALL_CODEX" -eq 1 ]; then
@@ -435,11 +438,17 @@ cleanup_copied_bun() {
 prepare_bun_for_windows_compile
 trap cleanup_copied_bun EXIT
 
-# 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
+[ -x "${TASK_EMISSION_BIN}.exe" ] && TASK_EMISSION_BIN="${TASK_EMISSION_BIN}.exe"
+
+# 1. Build runtime binaries if needed (smart rebuild: missing or stale outputs)
 NEEDS_BUILD=0
 if [ ! -x "$BROWSE_BIN" ]; then
   NEEDS_BUILD=1
+elif [ ! -x "$TASK_EMISSION_BIN" ]; then
+  NEEDS_BUILD=1
 elif [ -n "$(find "$SOURCE_GOLDBAND_DIR/browse/src" -type f -newer "$BROWSE_BIN" -print -quit 2>/dev/null)" ]; then
+  NEEDS_BUILD=1
+elif [ "$SOURCE_GOLDBAND_DIR/scripts/task-emission-schema.ts" -nt "$TASK_EMISSION_BIN" ]; then
   NEEDS_BUILD=1
 elif [ "$SOURCE_GOLDBAND_DIR/package.json" -nt "$BROWSE_BIN" ]; then
   NEEDS_BUILD=1
@@ -451,7 +460,7 @@ if [ "${GOLDBAND_SKIP_BUILD:-0}" = "1" ]; then
 fi
 
 if [ "$NEEDS_BUILD" -eq 1 ]; then
-  log "Building browse binary..."
+  log "Building runtime binaries..."
   (
     cd "$SOURCE_GOLDBAND_DIR"
     bun_cmd install --frozen-lockfile 2>/dev/null || bun_cmd install
@@ -469,7 +478,7 @@ if [ "$NEEDS_BUILD" -eq 1 ]; then
   # signature block is corrupt. This is idempotent and costs <1s.
   # See: https://github.com/leo110047/goldband/issues/997
   if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
-    for _bin in browse/dist/browse browse/dist/find-browse design/dist/design make-pdf/dist/pdf bin/goldband-global-discover; do
+    for _bin in browse/dist/browse browse/dist/find-browse design/dist/design make-pdf/dist/pdf bin/goldband-global-discover bin/goldband-task-emission; do
       _bin_path="$SOURCE_GOLDBAND_DIR/$_bin"
       [ -f "$_bin_path" ] && [ -x "$_bin_path" ] || continue
       codesign --remove-signature "$_bin_path" 2>/dev/null || true
@@ -499,6 +508,10 @@ fi
 
 if [ ! -x "$BROWSE_BIN" ]; then
   echo "goldband setup failed: browse binary missing at $BROWSE_BIN" >&2
+  exit 1
+fi
+if [ ! -x "$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission" ] && [ ! -x "$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission.exe" ]; then
+  echo "goldband setup failed: task emission binary missing" >&2
   exit 1
 fi
 

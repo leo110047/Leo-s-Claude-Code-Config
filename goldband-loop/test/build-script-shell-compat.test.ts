@@ -1,12 +1,21 @@
 import { describe, test, expect } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'fs';
+import * as os from 'node:os';
 import * as path from 'path';
 
 const ROOT = path.resolve(import.meta.dir, '..');
+const REPO_ROOT = path.resolve(ROOT, '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
   scripts: Record<string, string>;
 };
 const BUILD_SCRIPT = fs.readFileSync(path.join(ROOT, 'scripts', 'build.sh'), 'utf-8');
+const WINDOWS_WORKFLOW = fs.readFileSync(
+  path.join(REPO_ROOT, '.github', 'workflows', 'goldband-loop-windows.yml'),
+  'utf-8',
+);
+const TASK_EMISSION_WINDOWS_GUARD =
+  'test -f bin/goldband-task-emission.exe || test -f bin/goldband-task-emission || (echo "MISSING: goldband-task-emission" && exit 1)';
 
 // Strip single-quoted strings so JS code emitted as `echo '{ ... }'` doesn't
 // trip the shell-brace-group check. Conservative: only `'...'` segments.
@@ -50,5 +59,23 @@ describe('package.json build scripts — POSIX shell compat (D-1460)', () => {
     expect(build).not.toMatch(/>\s*\S+\/\.version/);
     expect(build).toBe('bash scripts/build.sh');
     expect(BUILD_SCRIPT).toContain('bash scripts/write-version-files.sh');
+  });
+
+  test('Windows setup E2E verifies the task-emission binary', () => {
+    expect(WINDOWS_WORKFLOW).toContain(TASK_EMISSION_WINDOWS_GUARD);
+  });
+
+  test('task-emission binary guard fails clearly when both names are missing', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-windows-bin-'));
+    try {
+      const result = spawnSync('bash', ['-c', TASK_EMISSION_WINDOWS_GUARD], {
+        cwd: dir,
+        encoding: 'utf-8',
+      });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('MISSING: goldband-task-emission');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

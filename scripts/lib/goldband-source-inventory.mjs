@@ -3,6 +3,7 @@ import path from 'node:path';
 
 export const GENERATED_RUNTIME_BINARY_SOURCES = new Map([
   ['goldband-global-discover', 'bin/goldband-global-discover.ts'],
+  ['goldband-task-emission', 'scripts/task-emission-schema.ts'],
 ]);
 
 export function discoverRuntimeBinaries(loopDir) {

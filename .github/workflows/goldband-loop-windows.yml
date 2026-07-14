@@ -100,6 +100,7 @@ jobs:
           test -f browse/dist/find-browse.exe || test -f browse/dist/find-browse || (echo "MISSING: find-browse" && exit 1)
           test -f design/dist/design.exe || test -f design/dist/design || (echo "MISSING: design" && exit 1)
           test -f bin/goldband-global-discover.exe || test -f bin/goldband-global-discover || (echo "MISSING: goldband-global-discover" && exit 1)
+          test -f bin/goldband-task-emission.exe || test -f bin/goldband-task-emission || (echo "MISSING: goldband-task-emission" && exit 1)
 
       - name: Verify find-browse binary resolution
         run: |

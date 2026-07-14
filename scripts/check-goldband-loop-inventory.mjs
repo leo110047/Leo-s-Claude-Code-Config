@@ -11,6 +11,7 @@ import {
   discoverRuntimeBinaries,
   GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
+import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
@@ -57,7 +58,6 @@ const REQUIRED_ROOT_CI_WORKFLOWS = [
   '.github/workflows/actionlint.yml',
   '.github/workflows/goldband-loop-windows.yml',
 ];
-
 function main() {
   const inventory = readJson(INVENTORY_PATH);
   const capabilityContract = readJson(CAPABILITY_CONTRACT_PATH);
@@ -69,7 +69,6 @@ function main() {
   assertRetiredShipReferencesAbsent();
   assertCiWorkflowOwnership();
   assertSourceInventory(inventory);
-
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-loop-home.'));
   try {
     runInstall(tmpHome, 'workflow');
@@ -87,6 +86,7 @@ function main() {
     runInstall(copyHome, 'workflow', { GOLDBAND_FORCE_COPY: '1' });
     assertInstalledKnowledgeCliRuns(copyHome);
     assertInstalledCrossReviewCliRuns(copyHome);
+    assertInstalledTaskEmissionCliRuns(copyHome);
     console.log('[OK] Goldband Loop copy fallback runtime CLI works');
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });

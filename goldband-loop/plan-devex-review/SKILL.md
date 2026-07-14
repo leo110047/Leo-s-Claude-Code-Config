@@ -1908,9 +1908,9 @@ Rules:
 
 ### JSONL artifact (always write, even if zero tasks)
 
-`/autoplan` reads this file to aggregate across phases. Build each line with
-`jq -nc` so titles and source findings containing quotes, newlines, or
-backslashes serialize cleanly — never use hand-rolled `echo` / `printf`.
+`/autoplan` reads this file to aggregate across phases. The
+`goldband-task-emission` runtime owns serialization and validation. Do not use
+`jq`, `echo`, or `printf` to construct JSONL rows.
 
 ```bash
 . "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
@@ -1918,38 +1918,28 @@ eval "$($GOLDBAND_BIN/goldband-slug 2>/dev/null)"
 TASKS_DIR="${HOME}/.goldband/projects/${SLUG:-unknown}"
 mkdir -p "$TASKS_DIR"
 TASKS_FILE="$TASKS_DIR/tasks-devex-review-$(date +%Y%m%d-%H%M%S).jsonl"
+TASK_EMISSION_BIN="$GOLDBAND_BIN/goldband-task-emission"
+[ ! -x "$TASK_EMISSION_BIN" ] && [ -x "$GOLDBAND_BIN/goldband-task-emission.exe" ] && TASK_EMISSION_BIN="$GOLDBAND_BIN/goldband-task-emission.exe"
 COMMIT=$(git rev-parse HEAD 2>/dev/null || echo unknown)
 BRANCH=$(git branch --show-current 2>/dev/null || echo unknown)
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
-# Repeat ONE jq invocation per task identified during this review.
-# Substitute the placeholders inline with shell variables you set per task:
-#   TASK_ID (T1, T2, ...), PRIORITY (P1/P2/P3), COMPONENT, TITLE,
-#   SOURCE_FINDING, EFFORT_HUMAN, EFFORT_CC, FILES_JSON (a JSON array literal
-#   like '["browse/src/sanitize.ts","browse/src/server.ts"]').
-jq -nc \
-  --arg phase 'devex-review' \
-  --arg run_id "$RUN_ID" \
-  --arg branch "$BRANCH" \
-  --arg commit "$COMMIT" \
-  --arg id "$TASK_ID" \
-  --arg priority "$PRIORITY" \
-  --arg component "$COMPONENT" \
-  --arg effort_human "$EFFORT_HUMAN" \
-  --arg effort_cc "$EFFORT_CC" \
-  --arg title "$TITLE" \
-  --arg source_finding "$SOURCE_FINDING" \
-  --argjson files "$FILES_JSON" \
-  '{phase:$phase, run_id:$run_id, branch:$branch, commit:$commit, id:$id, priority:$priority, component:$component, files:$files, effort_human:$effort_human, effort_cc:$effort_cc, title:$title, source_finding:$source_finding}' \
-  >> "$TASKS_FILE"
+if [ ! -x "$TASK_EMISSION_BIN" ]; then
+  echo "goldband task emission runtime missing: $TASK_EMISSION_BIN" >&2
+  exit 1
+fi
+
+# An empty file means "review ran with no tasks". Repeat ONE append command per
+# task identified during this review after setting TASK_ID, PRIORITY, COMPONENT,
+# TITLE, SOURCE_FINDING, EFFORT_HUMAN, EFFORT_CC, and FILES_JSON.
+: > "$TASKS_FILE"
+"$TASK_EMISSION_BIN" append   --file "$TASKS_FILE"   --phase 'devex-review'   --run-id "$RUN_ID"   --branch "$BRANCH"   --commit "$COMMIT"   --id "$TASK_ID"   --priority "$PRIORITY"   --component "$COMPONENT"   --files-json "$FILES_JSON"   --effort-human "$EFFORT_HUMAN"   --effort-cc "$EFFORT_CC"   --title "$TITLE"   --source-finding "$SOURCE_FINDING"
 ```
 
-If `jq` is not installed, fall back to skipping the JSONL write and warn
-the user to install jq for autoplan aggregation. Never hand-roll JSONL.
-
-If zero tasks were identified in this review, still touch the JSONL file
-(`: > "$TASKS_FILE"`) so the aggregator sees that the phase produced output
-this run (an empty file means "ran, no findings" — distinct from "didn't run").
+`FILES_JSON` must be a JSON array such as
+`["browse/src/sanitize.ts","browse/src/server.ts"]`. If serialization or
+validation fails, stop and report the runtime error; do not write a substitute
+row or silently skip the task.
 
 
 ### Unresolved Decisions
