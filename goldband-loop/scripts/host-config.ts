@@ -101,11 +101,6 @@ export interface HostConfig {
   learningsMode?: 'full' | 'basic';
   /** Anti-prompt-injection boundary instruction for cross-model invocations. */
   boundaryInstruction?: string;
-
-  /** Static files to copy alongside generated skills (e.g., { 'SOUL.md': 'openclaw/SOUL.md' }). */
-  staticFiles?: Record<string, string>;
-  /** Optional path to host-adapter module for complex transformations. */
-  adapter?: string;
 }
 
 // --- Validation ---

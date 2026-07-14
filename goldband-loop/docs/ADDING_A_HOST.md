@@ -16,7 +16,7 @@ hosts/
 ├── opencode.ts      # OpenCode
 ├── slate.ts         # Slate (Random Labs)
 ├── cursor.ts        # Cursor
-├── openclaw.ts      # OpenClaw (hybrid: config + adapter)
+├── openclaw.ts      # OpenClaw
 └── index.ts         # Registry: imports all, derives Host type
 ```
 
@@ -37,7 +37,6 @@ copy, and tests all read from these configs. None of them have per-host code.
 
 Copy an existing config as a starting point. `hosts/opencode.ts` is a good
 minimal example. `hosts/factory.ts` shows tool rewrites and conditional fields.
-`hosts/openclaw.ts` shows the adapter pattern for hosts with different tool models.
 
 Create `hosts/myhost.ts`:
 
@@ -162,16 +161,6 @@ Key fields:
 | `suppressedResolvers` | Resolver functions that return empty for this host |
 | `coAuthorTrailer` | Git co-author string for commits |
 | `boundaryInstruction` | Anti-prompt-injection warning for cross-model invocations |
-| `adapter` | Path to adapter module for complex transformations |
-
-## Adapter pattern (for hosts with different tool models)
-
-If string-replace tool rewrites aren't enough (the host has fundamentally
-different tool semantics), use the adapter pattern. See `hosts/openclaw.ts`
-and `scripts/host-adapters/openclaw-adapter.ts`.
-
-The adapter runs as a post-processing step after all generic rewrites. It
-exports `transform(content: string, config: HostConfig): string`.
 
 ## Validation
 

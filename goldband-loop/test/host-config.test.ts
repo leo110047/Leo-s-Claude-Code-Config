@@ -461,14 +461,6 @@ describe('host config correctness', () => {
     expect(openclaw.pathRewrites.some(r => r.from === 'CLAUDE.md' && r.to === 'AGENTS.md')).toBe(true);
   });
 
-  test('openclaw has no adapter (dead code removed)', () => {
-    expect(openclaw.adapter).toBeUndefined();
-  });
-
-  test('openclaw has no staticFiles (SOUL.md removed)', () => {
-    expect(openclaw.staticFiles).toBeUndefined();
-  });
-
   test('openclaw includeSkills is empty (native skills replaced generated ones)', () => {
     expect(openclaw.generation.includeSkills).toBeDefined();
     expect(openclaw.generation.includeSkills!.length).toBe(0);
