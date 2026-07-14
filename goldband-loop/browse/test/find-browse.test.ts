@@ -49,7 +49,7 @@ describe('locateBinary', () => {
   });
 
   test('source-checkout fallback resolves <git-root>/browse/dist/browse[.exe]', () => {
-    // The windows-setup-e2e.yml workflow builds binaries directly under
+    // The Windows Setup E2E job builds binaries directly under
     // browse/dist/ (no .claude/skills/goldband/ install layout). find-browse
     // must resolve those — otherwise every fresh build that hasn't run
     // ./setup yet looks broken. Static pin so a future refactor that

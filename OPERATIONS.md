@@ -266,10 +266,12 @@ npm run test:hook-router:coverage
 npm run test:eval-budget-cap
 ```
 
-CI runs these commands on every push and pull request. The replay dataset is
-`hooks/fixtures/router/replay-fixtures.json`; the coverage checker reads that
-dataset plus the live hook policy modules so missing secret-pattern,
-pretool-policy, careful-mode, or freeze-mode cases fail mechanically.
+The repository-root `Validate Config` workflow runs these commands on pushes to
+`dev`. The replay dataset is `hooks/fixtures/router/replay-fixtures.json`; the
+coverage checker reads that dataset plus the live hook policy modules so missing
+secret-pattern, pretool-policy, careful-mode, or freeze-mode cases fail
+mechanically. Main-branch merge enforcement is owned separately by the
+repository ruleset and its required status checks.
 
 Paid Goldband Loop evals are opt-in only through
 `.github/workflows/goldband-loop-paid-evals.yml`. They require maintainer budget

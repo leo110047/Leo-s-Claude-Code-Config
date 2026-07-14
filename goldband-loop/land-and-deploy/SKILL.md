@@ -1228,7 +1228,17 @@ OFFLINE=$(echo "$QUEUE_JSON" | jq -r '.offline // false')
 
 Behavior:
 
-1. If `OFFLINE=true` or the util fails: print `⚠ VERSION drift check unavailable (util offline) — proceeding with PR version v<BRANCH_VERSION>`. Continue to Step 3.5. CI's version-gate job is the backstop.
+1. If `BRANCH_VERSION` or `BASE_VERSION` is empty, `OFFLINE=true`,
+   `NEXT_SLOT` is empty, or the util fails: **STOP** and print exactly:
+   ```
+   ⚠ VERSION drift check unavailable.
+     This PR claims:  v<BRANCH_VERSION>
+     Base version:    v<BASE_VERSION>
+
+   Cannot verify the next free VERSION slot. Restore GitHub/GitLab access and
+   re-run $goldband release land. Do NOT merge without version-drift evidence.
+   ```
+   Exit non-zero. There is no CI fallback for an unavailable version queue.
 
 2. If `BRANCH_VERSION` is already `>=` than `NEXT_SLOT`: no drift (or our PR is ahead of the queue). Continue.
 

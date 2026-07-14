@@ -69,7 +69,7 @@ export function locateBinary(): string | null {
     // Source-checkout fallback (no installed skill layout — the binary
     // lives directly at <repo>/browse/dist/browse[.exe]). Hit by:
     // - goldband repo dev workflow before `./setup` runs
-    // - the windows-setup-e2e.yml CI workflow which builds binaries
+    // - the Windows Setup E2E job in the repository-root CI workflow
     //   in place but never installs them under a marker dir
     // - make-pdf consumers running from a sibling source checkout
     const sourceCheckout = join(root, 'browse', 'dist', 'browse');
@@ -103,7 +103,7 @@ function main() {
 // any test that imports `locateBinary` from this file would have main() fire
 // at module-load time, calling process.exit(1) when no compiled binary
 // exists — killing the test process before any test runs. Surfaced on the
-// windows-free-tests CI lane where the runner has no compiled browse
+// Windows Free Tests CI lane where the runner has no compiled browse
 // binary (intentional — that lane only builds server-node.mjs).
 if (import.meta.main) {
   main();

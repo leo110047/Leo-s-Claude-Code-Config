@@ -52,7 +52,7 @@ const PAID_EVAL_TESTS = [
 // examples in the existing free suite. We scan the test's
 // own content here so the filter stays automatic as new tests land. The
 // "Windows-incompatible APIs" patterns at the bottom were added after the
-// first windows-free-tests CI run surfaced concrete failure modes.
+// first Windows Free Tests CI run surfaced concrete failure modes.
 const WINDOWS_FRAGILE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   // Hardcoded POSIX shells / commands.
   { pattern: /['"`]\/bin\/(?:ba)?sh/, reason: 'hardcoded /bin/sh or /bin/bash' },
@@ -75,7 +75,7 @@ const WINDOWS_FRAGILE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   //   - join(import.meta.dir, '..', 'bin', 'name')   — destructured (diff-scope)
   //   - path.join(ROOT, 'bin')                       — bare BIN constant (brain-sync)
   { pattern: /,\s*['"]bin['"]\s*[,)]|['"]\.?\/?bin\/[a-z][\w-]+['"]/, reason: 'spawns bin/ shebang script (Windows CreateProcess does not parse shebangs)' },
-  // Tests that launch a real Playwright browser. The windows-free-tests CI job
+  // Tests that launch a real Playwright browser. The Windows Free Tests CI job
   // runs a curated subset that intentionally does NOT install Chromium —
   // browser bring-up on Windows is a separate concern (see PR #1238). Tests
   // matching `await foo.launch(` need Chromium and fail with "Executable

@@ -208,7 +208,11 @@ Each dimension is scored 1-5. Threshold: every dimension must score **≥ 4**. T
 
 ### CI
 
-A GitHub Action (`.github/workflows/skill-docs.yml`) runs `bun run gen:skill-docs --dry-run` on every push and PR. If the generated SKILL.md files differ from what's committed, CI fails. This catches stale docs before they merge.
+The repository-root `Validate Config` workflow runs on pushes to `dev`. Its
+Goldband Loop free suite includes `test/gen-skill-docs.test.ts`, which runs the
+all-host generator in `--dry-run` mode and fails when committed skill docs are
+stale. Repository-root `Workflow Lint` and `Goldband Loop Windows` workflows
+separately validate GitHub Actions syntax and the supported Windows paths.
 
 Tests run against the browse binary directly — they don't require dev mode.
 

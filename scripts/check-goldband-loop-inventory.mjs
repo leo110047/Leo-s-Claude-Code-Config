@@ -46,6 +46,17 @@ const RETIRED_SHIP_REFERENCE_ALLOWLIST = [
   'scripts/check-goldband-loop-inventory.mjs',
   'scripts/test-workflow-integration.sh',
 ];
+const RETIRED_LOOP_CI_ASSETS = [
+  '.github/actionlint.yaml',
+  '.github/docker/Dockerfile.ci',
+  '.gitlab-ci.yml',
+  'scripts/compare-pr-version.ts',
+  'scripts/detect-bump.ts',
+];
+const REQUIRED_ROOT_CI_WORKFLOWS = [
+  '.github/workflows/actionlint.yml',
+  '.github/workflows/goldband-loop-windows.yml',
+];
 
 function main() {
   const inventory = readJson(INVENTORY_PATH);
@@ -56,6 +67,7 @@ function main() {
   assertLegacyConfigMigration();
   assertRetiredShipAssetsAbsent();
   assertRetiredShipReferencesAbsent();
+  assertCiWorkflowOwnership();
   assertSourceInventory(inventory);
 
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-loop-home.'));
@@ -79,6 +91,85 @@ function main() {
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });
   }
+}
+
+function assertCiWorkflowOwnership() {
+  assertRetiredLoopCiAbsent();
+  assertRequiredRootCiWorkflows();
+}
+
+function assertRetiredLoopCiAbsent() {
+  const retiredPresent = RETIRED_LOOP_CI_ASSETS.filter((relativePath) =>
+    fs.existsSync(path.join(LOOP_DIR, relativePath)),
+  );
+  const nestedWorkflowDir = path.join(LOOP_DIR, '.github', 'workflows');
+  if (fs.existsSync(nestedWorkflowDir)) {
+    for (const entry of fs.readdirSync(nestedWorkflowDir, {
+      withFileTypes: true,
+    })) {
+      if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) {
+        retiredPresent.push(`.github/workflows/${entry.name}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    retiredPresent,
+    [],
+    'Goldband Loop CI must be owned by repository-root workflows',
+  );
+}
+
+function assertRequiredRootCiWorkflows() {
+  const missingRootWorkflows = REQUIRED_ROOT_CI_WORKFLOWS.filter(
+    (relativePath) => !fs.existsSync(path.join(ROOT_DIR, relativePath)),
+  );
+  assert.deepEqual(
+    missingRootWorkflows,
+    [],
+    'required repository-root CI workflows are missing',
+  );
+  if (missingRootWorkflows.length > 0) return;
+  assertActionlintWorkflowContract();
+  assertWindowsWorkflowContract();
+}
+
+function assertActionlintWorkflowContract() {
+  const actionlint = fs.readFileSync(
+    path.join(ROOT_DIR, '.github', 'workflows', 'actionlint.yml'),
+    'utf8',
+  );
+  assert.match(
+    actionlint,
+    /rhysd\/actionlint@v1\.7\.12/,
+    'root workflow lint must use the validated actionlint release',
+  );
+  assert.doesNotMatch(
+    actionlint,
+    /^\s+paths:/m,
+    'required workflow lint must emit a status on every dev commit',
+  );
+}
+
+function assertWindowsWorkflowContract() {
+  const windows = fs.readFileSync(
+    path.join(ROOT_DIR, '.github', 'workflows', 'goldband-loop-windows.yml'),
+    'utf8',
+  );
+  assert.equal(
+    windows.match(/runs-on: windows-latest/g)?.length,
+    2,
+    'Windows CI must retain unit and setup E2E jobs',
+  );
+  assert.equal(
+    windows.match(/working-directory: goldband-loop/g)?.length,
+    2,
+    'Windows jobs must execute from the monorepo Goldband Loop directory',
+  );
+  assert.doesNotMatch(
+    windows,
+    /^\s+paths:/m,
+    'required Windows CI must emit statuses on every dev commit',
+  );
 }
 
 function assertRetiredShipAssetsAbsent() {
