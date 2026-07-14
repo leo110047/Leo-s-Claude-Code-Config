@@ -20,9 +20,10 @@ process.on('exit', () => {
   fs.rmSync(telemetryDir, { recursive: true, force: true });
 });
 
-function runHook(input, extraEnv = {}) {
+function runHook(input, options = {}) {
+  const { cwd = repoDir, env: extraEnv = {} } = options;
   const result = spawnSync(process.execPath, [routerPath], {
-    cwd: repoDir,
+    cwd,
     input: JSON.stringify(input),
     encoding: 'utf8',
     env: {
@@ -259,24 +260,34 @@ function testRegisteredNoopHooksEmitJson() {
 }
 
 function testPostToolUseStyleGateAdvisory() {
-  const fixtureDir = fs.mkdtempSync(path.join(repoDir, '.tmp-style-gate-'));
-  const fixtureFile = path.join(fixtureDir, 'fixture.ts');
-  const relativeFixture = path.relative(repoDir, fixtureFile);
+  const projectDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-style-gate-'),
+  );
+  const fixtureFile = path.join(projectDir, 'fixture.ts');
+  const relativeFixture = path.relative(projectDir, fixtureFile);
   try {
-    fs.writeFileSync(fixtureFile, 'console.log("debug");\n', 'utf8');
-    const output = runHook({
-      hook_event_name: 'PostToolUse',
-      tool_name: 'apply_patch',
-      tool_input: {
-        command: [
-          '*** Begin Patch',
-          `*** Update File: ${relativeFixture}`,
-          '@@',
-          '+con' + 'sole.log("debug");',
-          '*** End Patch',
-        ].join('\n'),
-      },
+    const init = spawnSync('git', ['init', '--quiet'], {
+      cwd: projectDir,
+      encoding: 'utf8',
     });
+    assert.equal(init.status, 0, init.stderr);
+    fs.writeFileSync(fixtureFile, 'console.log("debug");\n', 'utf8');
+    const output = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'apply_patch',
+        tool_input: {
+          command: [
+            '*** Begin Patch',
+            `*** Update File: ${relativeFixture}`,
+            '@@',
+            '+con' + 'sole.log("debug");',
+            '*** End Patch',
+          ].join('\n'),
+        },
+      },
+      { cwd: projectDir },
+    );
 
     assert.equal(output.hookSpecificOutput.hookEventName, 'PostToolUse');
     assert.match(
@@ -285,15 +296,19 @@ function testPostToolUseStyleGateAdvisory() {
     );
     assert.match(output.hookSpecificOutput.additionalContext, /console-log/);
   } finally {
-    fs.rmSync(fixtureDir, { recursive: true, force: true });
+    fs.rmSync(projectDir, { recursive: true, force: true });
   }
 }
 
-function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
+function testPostToolUseStyleGateAdvisoryUsesExplicitProjectRoot() {
   const originalCwd = process.cwd();
   const externalRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-cwd-'));
   try {
-    spawnSync('git', ['init', '--quiet'], { cwd: externalRepo });
+    const init = spawnSync('git', ['init', '--quiet'], {
+      cwd: externalRepo,
+      encoding: 'utf8',
+    });
+    assert.equal(init.status, 0, init.stderr);
     process.chdir(externalRepo);
     testPostToolUseStyleGateAdvisory();
   } finally {
@@ -479,7 +494,7 @@ testGitPatchDenied();
 testPostToolUseFailureContext();
 testRegisteredNoopHooksEmitJson();
 testPostToolUseStyleGateAdvisory();
-testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
+testPostToolUseStyleGateAdvisoryUsesExplicitProjectRoot();
 testPassiveLifecycleHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
