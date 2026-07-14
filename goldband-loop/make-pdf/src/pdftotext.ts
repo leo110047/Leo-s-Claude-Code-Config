@@ -28,7 +28,6 @@
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 
 export class PdftotextUnavailableError extends Error {
@@ -150,7 +149,7 @@ function describeBinary(bin: string): PdftotextInfo {
  * Uses `-layout` by default because that's what downstream normalization
  * expects. Callers that need raw text can pass layout=false.
  */
-export function pdftotext(pdfPath: string, opts?: { layout?: boolean }): string {
+function pdftotext(pdfPath: string, opts?: { layout?: boolean }): string {
   const info = resolvePdftotext();
   const layout = opts?.layout ?? true;
   const args: string[] = [];
@@ -265,20 +264,4 @@ function collapseWhitespace(s: string): string {
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "..." : s;
-}
-
-/**
- * Emit diagnostic info to stderr — useful for CI failure debugging.
- * Call this once before running any gate in a CI log.
- */
-export function logDiagnostics(): void {
-  try {
-    const info = resolvePdftotext();
-    process.stderr.write(
-      `[pdftotext] bin=${info.bin} flavor=${info.flavor} version="${info.version}" ` +
-      `os=${os.platform()}-${os.arch()} node=${process.version}\n`,
-    );
-  } catch (err: any) {
-    process.stderr.write(`[pdftotext] unavailable: ${err.message}\n`);
-  }
 }

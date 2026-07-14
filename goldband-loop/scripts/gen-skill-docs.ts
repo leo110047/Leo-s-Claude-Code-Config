@@ -9,8 +9,6 @@
  * Used by skill:check and CI freshness checks.
  */
 
-import { COMMAND_DESCRIPTIONS } from '../browse/src/commands';
-import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
 import { discoverTemplates } from './discover-skills';
 import { writeLlmsTxt } from './gen-llms-txt';
 import * as fs from 'fs';
@@ -18,9 +16,8 @@ import * as path from 'path';
 import type { Host, TemplateContext } from './resolvers/types';
 import { HOST_PATHS } from './resolvers/types';
 import { RESOLVERS } from './resolvers/index';
-import { externalSkillName, extractHookSafetyProse as _extractHookSafetyProse, extractNameAndDescription as _extractNameAndDescription, condenseOpenAIShortDescription as _condenseOpenAIShortDescription, generateOpenAIYaml as _generateOpenAIYaml } from './resolvers/codex-helpers';
 import { ALL_HOST_CONFIGS, ALL_HOST_NAMES, resolveHostArg, getHostConfig } from '../hosts/index';
-import { shouldGenerateSkill, type HostConfig } from './host-config';
+import { shouldGenerateSkill } from './host-config';
 import { TOKEN_CEILING_BYTES } from './skill-budget';
 import { generateRuntimeRoot } from './resolvers/utility';
 
@@ -431,7 +428,7 @@ function processTemplate(tmplPath: string, host: Host = 'claude'): { outputPath:
   // Extract skill name from frontmatter early — needed for both TemplateContext and external host output paths.
   // When frontmatter name: differs from directory name (e.g., run-tests/ with name: test),
   // the frontmatter name is used for external skill naming and setup script symlinks.
-  const { name: extractedName, description: extractedDescription } = extractNameAndDescription(tmplContent);
+  const { name: extractedName } = extractNameAndDescription(tmplContent);
   const skillName = skillDir === ''
     ? (extractedName || 'goldband')
     : skillDir;

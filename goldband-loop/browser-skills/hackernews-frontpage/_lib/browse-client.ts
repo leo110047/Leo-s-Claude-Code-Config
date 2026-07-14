@@ -35,7 +35,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as cp from 'child_process';
 
-export interface BrowseClientOptions {
+interface BrowseClientOptions {
   /** Override port. Default: GOLDBAND_PORT env or state file. */
   port?: number;
   /** Override token. Default: GOLDBAND_SKILL_TOKEN env, then state file root token. */
@@ -62,7 +62,7 @@ function parseIntegerEnvValue(value: string | undefined): number | undefined {
 }
 
 /** Resolve the daemon port + token. Throws a clear error if neither path works. */
-export function resolveBrowseAuth(opts: BrowseClientOptions = {}): ResolvedAuth {
+function resolveBrowseAuth(opts: BrowseClientOptions = {}): ResolvedAuth {
   if (opts.port !== undefined && opts.token !== undefined) {
     return { port: opts.port, token: opts.token, source: 'env' };
   }
@@ -112,7 +112,7 @@ function defaultStateFile(): string | null {
   }
 }
 
-export class BrowseClientError extends Error {
+class BrowseClientError extends Error {
   constructor(
     message: string,
     public readonly status?: number,
@@ -129,7 +129,7 @@ export class BrowseClientError extends Error {
  * Convenience methods cover the common cases (goto, click, text, snapshot,
  * etc.). For anything not exposed as a method, use `command(cmd, args)`.
  */
-export class BrowseClient {
+class BrowseClient {
   readonly port: number;
   readonly token: string;
   readonly tabId?: number;

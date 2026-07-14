@@ -120,6 +120,9 @@ jobs:
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
 
+      - name: Check Goldband Loop source quality
+        run: cd goldband-loop && bun run check:source
+
       - name: Test Goldband Loop Playwright setup behavior
         run: bash scripts/test-goldband-loop-playwright-setup.sh
 

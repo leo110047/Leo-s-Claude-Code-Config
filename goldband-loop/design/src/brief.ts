@@ -2,7 +2,7 @@
  * Structured design brief — the interface between skill prose and image generation.
  */
 
-export interface DesignBrief {
+interface DesignBrief {
   goal: string;           // "Dashboard for coding assessment tool"
   audience: string;       // "Technical users, YC partners"
   style: string;          // "Dark theme, cream accents, minimal"
@@ -15,7 +15,7 @@ export interface DesignBrief {
 /**
  * Convert a structured brief to a prompt string for image generation.
  */
-export function briefToPrompt(brief: DesignBrief): string {
+function briefToPrompt(brief: DesignBrief): string {
   const lines: string[] = [
     `Generate a pixel-perfect UI mockup of a ${brief.screenType} for: ${brief.goal}.`,
     `Target audience: ${brief.audience}.`,
@@ -50,7 +50,6 @@ export function parseBrief(input: string, isFile: boolean): string {
   }
 
   // JSON file — parse and convert to prompt
-  const raw = Bun.file(input);
   // We'll read it synchronously via fs since Bun.file is async
   const fs = require("fs");
   const content = fs.readFileSync(input, "utf-8");

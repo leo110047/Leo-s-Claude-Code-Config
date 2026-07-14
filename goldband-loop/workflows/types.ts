@@ -10,10 +10,10 @@ export type HostName =
   | 'openclaw'
   | 'slate';
 
-export type EntrypointType = 'typed' | 'compatibility' | 'legacy-thin';
-export type IntegrationStatus = 'integrated' | 'registered-only';
+type EntrypointType = 'typed' | 'compatibility' | 'legacy-thin';
+type IntegrationStatus = 'integrated' | 'registered-only';
 export type RiskLevel = 'low' | 'medium' | 'high';
-export type StepKind = 'typed' | 'llm' | 'legacyPrompt';
+type StepKind = 'typed' | 'llm' | 'legacyPrompt';
 export type StepStatus = 'ok' | 'failed' | 'skipped';
 export type StopPredicateName =
   | 'target-met'
@@ -131,14 +131,14 @@ export type QaCheckResult = QaCheck & {
 
 export type SeverityCounts = Record<ReviewFinding['severity'], number>;
 
-export type ReviewFindingsSignal = {
+type ReviewFindingsSignal = {
   kind: 'review-findings';
   findingCount: number;
   severityCounts: SeverityCounts;
   blockerKey?: string;
 };
 
-export type QaChecksSignal = {
+type QaChecksSignal = {
   kind: 'qa-checks';
   checkCount: number;
   passedCount: number;
@@ -147,7 +147,7 @@ export type QaChecksSignal = {
   blockerKey?: string;
 };
 
-export type GenericSignal = {
+type GenericSignal = {
   kind: 'generic';
   score: number;
   targetMet?: boolean;
@@ -179,18 +179,18 @@ export type SignalTrailEntry = {
   signal: EvaluationSignalSnapshot;
 };
 
-export type WorkflowSignalEvaluator = (
+type WorkflowSignalEvaluator = (
   output: unknown,
   ctx: WorkflowContext,
   stepName: string,
 ) => EvaluationSignalSnapshot | undefined;
 
-export type WorkflowTargetEvaluator = (
+type WorkflowTargetEvaluator = (
   signal: EvaluationSignalSnapshot,
   ctx: IterationContext,
 ) => boolean;
 
-export type WorkflowIterationStateCapture = (
+type WorkflowIterationStateCapture = (
   output: unknown,
   ctx: WorkflowContext,
   stepName: string,

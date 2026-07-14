@@ -9,7 +9,6 @@ import { readFile, mkdir, unlink } from 'fs/promises';
 import { existsSync, openSync, writeSync, closeSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
-import { spawn } from 'child_process';
 
 export interface PidfileContents {
   pid: number;
@@ -17,7 +16,7 @@ export interface PidfileContents {
   startedAt: number;
 }
 
-export function defaultPidfilePath(): string {
+function defaultPidfilePath(): string {
   return process.env.GOLDBAND_IOS_DAEMON_PIDFILE
     ?? join(homedir(), '.goldband', 'ios-qa-daemon.pid');
 }
@@ -120,52 +119,4 @@ function isAlive(pid: number): boolean {
     const e = err as { code?: string };
     return e.code !== 'ESRCH';
   }
-}
-
-/**
- * Spawn a daemon process and wait for the READY line. Returns the port the
- * daemon claims to be listening on.
- *
- * Used by /ios-qa skill to spawn-on-demand. If another daemon is already
- * running, the spawned child detects the existing pidfile and prints a
- * READY line with the existing port (loaded from the pidfile).
- */
-export async function spawnAndWaitReady(opts: {
-  cmd: string;
-  args: string[];
-  timeoutMs?: number;
-  env?: NodeJS.ProcessEnv;
-}): Promise<{ pid: number; port: number }> {
-  const timeoutMs = opts.timeoutMs ?? 5000;
-  const child = spawn(opts.cmd, opts.args, {
-    stdio: ['ignore', 'pipe', 'inherit'],
-    detached: true,
-    env: opts.env ?? process.env,
-  });
-
-  return new Promise((resolve, reject) => {
-    let buffer = '';
-    const onTimeout = setTimeout(() => {
-      child.kill('SIGTERM');
-      reject(new Error(`daemon spawn timeout after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const match = buffer.match(/READY:\s*port=(\d+)\s+pid=(\d+)/);
-      if (match) {
-        clearTimeout(onTimeout);
-        child.unref();
-        resolve({ pid: parseInt(match[2]!, 10), port: parseInt(match[1]!, 10) });
-      }
-    });
-    child.on('error', (err) => {
-      clearTimeout(onTimeout);
-      reject(err);
-    });
-    child.on('exit', (code, signal) => {
-      clearTimeout(onTimeout);
-      reject(new Error(`daemon exited before READY (code=${code} signal=${signal})`));
-    });
-  });
 }

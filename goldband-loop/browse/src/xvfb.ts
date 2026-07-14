@@ -20,8 +20,6 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { safeKill, isProcessAlive } from './error-handling';
 
 export interface XvfbHandle {
@@ -111,7 +109,7 @@ export function readPidStartTime(pid: number): string {
     return '';
   }
   if (result.exitCode !== 0) return '';
-  return result.stdout.toString().trim();
+  return result.stdout?.toString().trim() ?? '';
 }
 
 /**

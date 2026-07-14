@@ -25,9 +25,6 @@ export const HOST_CONFIG_MAP: Record<string, HostConfig> = Object.fromEntries(
   ALL_HOST_CONFIGS.map(c => [c.name, c])
 );
 
-/** Union type of all host names, derived from configs. */
-export type Host = (typeof ALL_HOST_CONFIGS)[number]['name'];
-
 /** All host names as a string array (for CLI arg validation, etc.). */
 export const ALL_HOST_NAMES: string[] = ALL_HOST_CONFIGS.map(c => c.name);
 
@@ -65,4 +62,4 @@ export function getExternalHosts(): HostConfig[] {
 }
 
 // Re-export individual configs for direct import
-export { claude, codex, factory, kiro, opencode, slate, cursor, openclaw, hermes, gbrain };
+export { claude, codex, factory, kiro, opencode, slate, cursor, openclaw };

@@ -27,7 +27,7 @@ import * as cp from 'child_process';
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type SkillTier = 'project' | 'global' | 'bundled';
+type SkillTier = 'project' | 'global' | 'bundled';
 
 /** Required + optional fields from a browser-skill SKILL.md frontmatter. */
 export interface SkillFrontmatter {
@@ -56,7 +56,7 @@ export interface SkillFrontmatter {
   source?: 'human' | 'agent';
 }
 
-export interface SkillArg {
+interface SkillArg {
   name: string;
   description?: string;
 }

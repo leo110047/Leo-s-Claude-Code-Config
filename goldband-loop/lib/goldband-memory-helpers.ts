@@ -24,7 +24,7 @@ import { homedir } from "os";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface SecretFinding {
+interface SecretFinding {
   rule_id: string;
   description: string;
   line: number;
@@ -37,7 +37,7 @@ export interface SecretScanResult {
   scanner: "gitleaks" | "missing" | "error";
 }
 
-export type EngineTier = "pglite" | "supabase" | "unknown";
+type EngineTier = "pglite" | "supabase" | "unknown";
 
 export interface EngineDetect {
   engine: EngineTier;
@@ -67,7 +67,7 @@ export interface GbrainManifest {
   context_queries: GbrainManifestQuery[];
 }
 
-export interface ErrorContextEntry {
+interface ErrorContextEntry {
   ts: string;
   op: string;
   duration_ms: number;
@@ -179,7 +179,7 @@ export function secretScanFile(path: string): SecretScanResult {
       redacted_match: redactMatch(f.Secret || f.Match || ""),
     }));
     return { scanned: true, findings, scanner: "gitleaks" };
-  } catch (err) {
+  } catch {
     return {
       scanned: false,
       findings: [],
@@ -419,8 +419,6 @@ function extractGbrainBlock(frontmatter: string): GbrainManifest | null {
 }
 
 // ── Public: withErrorContext ──────────────────────────────────────────────
-
-const ERROR_LOG_PATH = join(goldbandHome(), ".gbrain-errors.jsonl");
 
 /**
  * Wrap an op with structured error logging. Logs success/failure + duration

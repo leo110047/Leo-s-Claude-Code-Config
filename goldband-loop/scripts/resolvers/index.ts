@@ -3,7 +3,7 @@
  * Each resolver takes a TemplateContext and returns the replacement string.
  */
 
-import type { TemplateContext, ResolverFn } from './types';
+import type { ResolverFn } from './types';
 import { readFileSync } from 'node:fs';
 
 // Domain modules

@@ -8,7 +8,7 @@ import {
 } from './review-rules';
 import type { ReviewFinding, WorkflowContext } from './types';
 
-export const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
+const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
   'critical',
   'high',
   'medium',
@@ -44,7 +44,7 @@ export type PreparedSpecialistReview = {
   }>;
 };
 
-export const SPECIALIST_CONCURRENCY = 2;
+const SPECIALIST_CONCURRENCY = 2;
 const MAX_AUTO_SPECIALISTS = 2;
 
 const SPECIALIST_GUIDANCE: Record<ReviewSpecialist, string> = {
@@ -194,7 +194,7 @@ export function aggregateReviewFindings(findings: ReviewFinding[]): ReviewFindin
   return [...byKey.values()].sort(compareFindings);
 }
 
-export function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
+function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
   const severity = normalizeSeverity(finding.severity);
   const needsEvidenceDowngrade = (severity === 'critical' || severity === 'high') && !finding.evidence;
   const nextSeverity = needsEvidenceDowngrade ? 'info' : severity;

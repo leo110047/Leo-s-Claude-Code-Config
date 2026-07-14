@@ -61,9 +61,9 @@ const VERSION = readVersionString();
 
 // ─── Per-board state ─────────────────────────────────────────────
 
-export type BoardState = "serving" | "regenerating" | "done";
+type BoardState = "serving" | "regenerating" | "done";
 
-export interface Board {
+interface Board {
   id: string;
   htmlContent: string;
   sourceDir: string; // realpath of the dir feedback files write to
@@ -533,6 +533,11 @@ export function start(): { port: number } {
     fetch: fetchHandler,
   });
   const actualPort = serverRef.port;
+  if (typeof actualPort !== "number") {
+    serverRef.stop();
+    serverRef = null;
+    throw new Error("design daemon failed to bind a TCP port");
+  }
   const state: DaemonState = {
     pid: process.pid,
     port: actualPort,

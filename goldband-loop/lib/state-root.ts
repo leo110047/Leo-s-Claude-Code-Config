@@ -1,14 +1,13 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-type StateRootEnv = Pick<
-  NodeJS.ProcessEnv,
-  | 'GOLDBAND_HOME'
-  | 'GOLDBAND_STATE_DIR'
-  | 'GOLDBAND_STATE_ROOT'
-  | 'CLAUDE_PLUGIN_DATA'
-  | 'CLAUDE_PLUGIN_ROOT'
->;
+type StateRootEnv = NodeJS.ProcessEnv & {
+  GOLDBAND_HOME?: string;
+  GOLDBAND_STATE_DIR?: string;
+  GOLDBAND_STATE_ROOT?: string;
+  CLAUDE_PLUGIN_DATA?: string;
+  CLAUDE_PLUGIN_ROOT?: string;
+};
 
 /** Resolve Goldband's writable state root using the shared runtime precedence. */
 export function resolveGoldbandStateRoot(

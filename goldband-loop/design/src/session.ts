@@ -19,7 +19,7 @@ export interface DesignSession {
 /**
  * Generate a unique session ID from PID + timestamp.
  */
-export function createSessionId(): string {
+function createSessionId(): string {
   return `${process.pid}-${Date.now()}`;
 }
 

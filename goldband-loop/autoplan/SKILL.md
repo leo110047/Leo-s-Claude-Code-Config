@@ -890,8 +890,9 @@ Execute every other section at full depth. When the loaded skill's instructions 
 
 After /office-hours completes, re-run the design doc check:
 ```bash
+. "$HOME/.claude/skills/goldband/bin/goldband-env" || exit $?
 setopt +o nomatch 2>/dev/null || true  # zsh compat
-SLUG=$(undefined/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
+SLUG=$($GOLDBAND_ROOT/browse/bin/remote-slug 2>/dev/null || basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo 'no-branch')
 DESIGN=$(ls -t ~/.goldband/projects/$SLUG/*-$BRANCH-design-*.md 2>/dev/null | head -1)
 [ -z "$DESIGN" ] && DESIGN=$(ls -t ~/.goldband/projects/$SLUG/*-design-*.md 2>/dev/null | head -1)

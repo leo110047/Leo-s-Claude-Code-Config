@@ -2,13 +2,6 @@ import type { QaCheck, QaCheckResult, ReviewFinding, SchemaValidator } from './t
 
 const severities = new Set(['critical', 'high', 'medium', 'low', 'info']);
 
-export const anySchema: SchemaValidator = {
-  name: 'any',
-  validate(value) {
-    return value;
-  },
-};
-
 export const objectSchema: SchemaValidator<Record<string, unknown>> = {
   name: 'object',
   validate(value) {
@@ -134,7 +127,7 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalLine(value: unknown): number | undefined {
   if (value === undefined || value === null) return undefined;
-  if (!Number.isInteger(value) || value < 1) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
     throw new Error('finding.line must be a positive integer');
   }
   return value;

@@ -168,11 +168,6 @@ export function stopCapture(): { count: number; sizeKB: number } {
   };
 }
 
-/** Clear the capture buffer. */
-export function clearCapture(): void {
-  captureBuffer.clear();
-}
-
 /** Export captured responses to JSONL file. */
 export function exportCapture(filePath: string): number {
   return captureBuffer.exportToFile(filePath);

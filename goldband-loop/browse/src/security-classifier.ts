@@ -207,10 +207,12 @@ export function loadTestsavant(onProgress?: (msg: string) => void): Promise<void
     testsavantLoadError = 'GOLDBAND_SECURITY_OFF=1 — ML classifier kill switch engaged';
     return Promise.resolve();
   }
-  if (testsavantState === 'loaded') return Promise.resolve();
+  if (testsavantState === 'loaded') {
+    return isDebertaEnabled() ? loadDeberta(onProgress) : Promise.resolve();
+  }
   if (loadPromise) return loadPromise;
   testsavantState = 'loading';
-  loadPromise = (async () => {
+  const testsavantLoad = (async () => {
     try {
       await ensureTestsavantStaged(onProgress);
       // Dynamic import — keeps the module boundary clean so static analyzers
@@ -243,6 +245,9 @@ export function loadTestsavant(onProgress?: (msg: string) => void): Promise<void
       console.error('[security-classifier] Failed to load TestSavantAI:', testsavantLoadError);
     }
   })();
+  loadPromise = isDebertaEnabled()
+    ? Promise.all([testsavantLoad, loadDeberta(onProgress)]).then(() => undefined)
+    : testsavantLoad;
   return loadPromise;
 }
 
@@ -331,7 +336,7 @@ async function ensureDebertaStaged(onProgress?: (msg: string) => void): Promise<
 }
 
 let debertaLoadPromise: Promise<void> | null = null;
-export function loadDeberta(onProgress?: (msg: string) => void): Promise<void> {
+function loadDeberta(onProgress?: (msg: string) => void): Promise<void> {
   if (process.env.GOLDBAND_SECURITY_OFF === '1') return Promise.resolve();
   if (!isDebertaEnabled()) return Promise.resolve();
   if (debertaState === 'loaded') return Promise.resolve();
@@ -549,6 +554,9 @@ export async function checkTranscript(params: {
       return finish({ layer: 'transcript_classifier', confidence: 0, meta: { degraded: true, reason: `spawn_throw_${err?.message ?? 'unknown'}` } });
     }
 
+    if (!p.stdout) {
+      return finish({ layer: 'transcript_classifier', confidence: 0, meta: { degraded: true, reason: 'stdout_unavailable' } });
+    }
     p.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
     p.on('exit', (code) => {
       if (code !== 0) {

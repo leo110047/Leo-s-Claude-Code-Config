@@ -176,11 +176,6 @@ async function readRows(filePath: string): Promise<DomainSkillRow[]> {
 
 // ─── Latest-wins resolution ────────────────────────────────────
 
-interface SkillKey {
-  host: string;
-  scope: SkillScope;
-}
-
 function keyOf(row: DomainSkillRow): string {
   return `${row.scope}::${row.host}`;
 }

@@ -22,7 +22,6 @@ import { spawn } from "node:child_process";
 
 import { render } from "./render";
 import type { GenerateOptions, PreviewOptions } from "./types";
-import { ExitCode } from "./types";
 import * as browseClient from "./browseClient";
 
 class ProgressReporter {
@@ -231,4 +230,3 @@ function tryOpen(pathOrUrl: string): void {
 }
 
 /** Setup-only re-export so cli.ts can dynamic-import without another file. */
-export { ExitCode };

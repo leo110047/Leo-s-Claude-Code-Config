@@ -232,33 +232,3 @@ export class BrowseClient {
  * import `browse` and immediately call `await browse.goto(...)` without
  * threading through a constructor.
  */
-class LazyBrowseClient {
-  private inner: BrowseClient | null = null;
-  private get(): BrowseClient {
-    if (!this.inner) this.inner = new BrowseClient();
-    return this.inner;
-  }
-  // Mirror the BrowseClient surface; each method delegates to a freshly resolved instance.
-  command(cmd: string, args: string[] = []) { return this.get().command(cmd, args); }
-  goto(url: string) { return this.get().goto(url); }
-  wait(arg: string) { return this.get().wait(arg); }
-  text(selector?: string) { return this.get().text(selector); }
-  html(selector?: string) { return this.get().html(selector); }
-  links() { return this.get().links(); }
-  forms() { return this.get().forms(); }
-  accessibility() { return this.get().accessibility(); }
-  attrs(selector: string) { return this.get().attrs(selector); }
-  media(...flags: string[]) { return this.get().media(...flags); }
-  data(...flags: string[]) { return this.get().data(...flags); }
-  click(selector: string) { return this.get().click(selector); }
-  fill(selector: string, value: string) { return this.get().fill(selector, value); }
-  select(selector: string, value: string) { return this.get().select(selector, value); }
-  hover(selector: string) { return this.get().hover(selector); }
-  type(text: string) { return this.get().type(text); }
-  press(key: string) { return this.get().press(key); }
-  scroll(selector?: string) { return this.get().scroll(selector); }
-  snapshot(...flags: string[]) { return this.get().snapshot(...flags); }
-  screenshot(...args: string[]) { return this.get().screenshot(...args); }
-}
-
-export const browse = new LazyBrowseClient();

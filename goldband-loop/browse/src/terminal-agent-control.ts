@@ -26,7 +26,7 @@ import { writeSecureFile, mkdirSecure } from './file-permissions';
  * exposes it relative to process.execPath. Either path must work or
  * the agent can't be spawned at all.
  */
-export function resolveTerminalAgentScript(searchHints: { metaDir?: string; execPath?: string } = {}): string | null {
+function resolveTerminalAgentScript(searchHints: { metaDir?: string; execPath?: string } = {}): string | null {
   const meta = searchHints.metaDir || __dirname;
   const exec = searchHints.execPath || process.execPath;
   const candidates = [

@@ -17,7 +17,7 @@ import * as path from 'path';
 import type { SetContentWaitUntil } from './tab-session';
 import { TEMP_DIR, isPathWithin } from './platform';
 import { SAFE_DIRECTORIES } from './path-security';
-import { modifyStyle, undoModification, resetModifications, getModificationHistory } from './cdp-inspector';
+import { modifyStyle, undoModification } from './cdp-inspector';
 
 /**
  * Aggressive page cleanup selectors and heuristics.
@@ -261,7 +261,7 @@ export async function handleWriteCommand(
       // Safe-dirs check (reuses canonical read-side policy)
       try {
         validateReadPath(absolutePath);
-      } catch (e: any) {
+      } catch {
         throw new Error(
           `load-html: ${absolutePath} must be under ${SAFE_DIRECTORIES.join(' or ')} (security policy). Copy the file into the project tree or /tmp first.`
         );

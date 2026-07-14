@@ -115,6 +115,14 @@ bun install
 
 Bun auto-loads `.env` — no extra config. Conductor workspaces inherit `.env` from the main worktree automatically (see "Conductor workspaces" below).
 
+Before running behavioral tests, run `bun run check:source`. This is the
+Goldband Loop-owned production-source gate: Biome lint, strict TypeScript, and
+Knip unused-file/export analysis. Generated outputs and test fixtures are
+excluded explicitly; generated modules can still count as consumers so live
+source exports are not reported as dead. Supabase Edge Functions still run
+through Biome and Knip, but use their Deno type environment instead of this
+Bun package's strict `tsconfig.json`.
+
 ### Test tiers
 
 | Tier | Command | Cost | What it tests |

@@ -36,7 +36,6 @@ function buildHostPaths(): Record<string, HostPaths> {
 export const HOST_PATHS: Record<string, HostPaths> = buildHostPaths();
 
 import type { Model } from '../models';
-export type { Model } from '../models';
 
 export interface TemplateContext {
   skillName: string;

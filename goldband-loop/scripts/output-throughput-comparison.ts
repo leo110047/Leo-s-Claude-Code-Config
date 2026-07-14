@@ -178,7 +178,7 @@ function enumerateCommits(year: number, repoPath: string, authorEmails: string[]
   }
 }
 
-function analyzeCommit(commit: string, repoPath: string, sccAvailable: boolean): {
+function analyzeCommit(commit: string, repoPath: string): {
   raw: number; logical: number; filesTouched: number; perLang: Record<string, number>;
 } {
   // Use --no-renames to avoid double-counting R100 renames
@@ -219,10 +219,6 @@ function analyzeCommit(commit: string, repoPath: string, sccAvailable: boolean):
   }
 
   return { raw, logical, filesTouched: files.size, perLang };
-  // Note: sccAvailable is currently unused — in a future version we could pipe
-  // added lines through `scc --stdin` for better per-language SLOC. For now the
-  // regex fallback is what ships; the output flags this honestly.
-  void sccAvailable;
 }
 
 /**
@@ -243,7 +239,7 @@ function daysElapsed(year: number, now: Date = new Date()): number {
   return Math.max(1, Math.floor(diffMs / (24 * 60 * 60 * 1000)) + 1);
 }
 
-function analyzeRepo(repoPath: string, year: number, authorEmails: string[], sccAvailable: boolean, now: Date = new Date()): PerYearResult {
+function analyzeRepo(repoPath: string, year: number, authorEmails: string[], now: Date = new Date()): PerYearResult {
   const commits = enumerateCommits(year, repoPath, authorEmails);
   const perLang: Record<string, { commits: number; logical_added: number }> = {};
   let rawTotal = 0;
@@ -252,7 +248,7 @@ function analyzeRepo(repoPath: string, year: number, authorEmails: string[], scc
   const weeks = new Set<string>();
 
   for (const commit of commits) {
-    const r = analyzeCommit(commit, repoPath, sccAvailable);
+    const r = analyzeCommit(commit, repoPath);
     rawTotal += r.raw;
     logicalTotal += r.logical;
     filesTotal += r.filesTouched;
@@ -343,7 +339,7 @@ function main() {
   // For V1, we analyze the single repo at repoRoot. Future work: enumerate
   // public repos via GitHub API + clone each into a cache dir.
   const now = new Date();
-  const years = TARGET_YEARS.map(y => analyzeRepo(repoRoot, y, authorEmails, sccAvailable, now));
+  const years = TARGET_YEARS.map(y => analyzeRepo(repoRoot, y, authorEmails, now));
 
   const y2013 = years.find(y => y.year === 2013);
   const y2026 = years.find(y => y.year === 2026);

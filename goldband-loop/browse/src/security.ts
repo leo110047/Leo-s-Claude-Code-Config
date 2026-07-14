@@ -53,7 +53,7 @@ export const THRESHOLDS = {
 
 export type Verdict = 'safe' | 'log_only' | 'warn' | 'block' | 'user_overrode';
 
-export type LayerName =
+type LayerName =
   | 'testsavant_content'
   | 'deberta_content'        // opt-in ensemble layer (GOLDBAND_SECURITY_ENSEMBLE=deberta)
   | 'transcript_classifier'
@@ -73,7 +73,7 @@ export interface SecurityResult {
   confidence: number;
 }
 
-export type SecurityStatus = 'protected' | 'degraded' | 'inactive';
+type SecurityStatus = 'protected' | 'degraded' | 'inactive';
 
 export interface StatusDetail {
   status: SecurityStatus;
@@ -175,7 +175,7 @@ export function combineVerdict(signals: LayerSignal[], opts: CombineVerdictOpts 
   for (const s of transcriptSignals) {
     const v = classifyTranscript(s);
     if (v === 'block') { transcriptVote = 'block'; break; }
-    if (v === 'warn' && transcriptVote !== 'block') transcriptVote = 'warn';
+    if (v === 'warn') transcriptVote = 'warn';
   }
 
   // Scalar-layer votes.
@@ -599,7 +599,7 @@ function decisionsDir(): string {
   return path.join(securityDir(), 'decisions');
 }
 
-export type SecurityDecision = 'allow' | 'block';
+type SecurityDecision = 'allow' | 'block';
 
 export function decisionFileForTab(tabId: number): string {
   return path.join(decisionsDir(), `tab-${tabId}.json`);

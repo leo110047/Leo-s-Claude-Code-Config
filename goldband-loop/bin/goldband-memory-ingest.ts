@@ -46,7 +46,6 @@ import {
   writeFileSync,
   statSync,
   mkdirSync,
-  appendFileSync,
   renameSync,
   openSync,
   readSync,
@@ -54,7 +53,7 @@ import {
   rmSync,
 } from "fs";
 import { join, basename, dirname } from "path";
-import { execFileSync, spawnSync, spawn, type ChildProcess } from "child_process";
+import { execFileSync, type ChildProcess } from "child_process";
 import { homedir } from "os";
 import { createHash } from "crypto";
 
@@ -62,7 +61,6 @@ import {
   canonicalizeRemote,
   secretScanFile,
   detectEngineTier,
-  withErrorContext,
 } from "../lib/goldband-memory-helpers";
 import { execGbrainText, spawnGbrainAsync } from "../lib/gbrain-exec";
 
@@ -164,8 +162,6 @@ interface BulkResult {
 const HOME = homedir();
 const GOLDBAND_HOME = process.env.GOLDBAND_HOME || join(HOME, ".goldband");
 const STATE_PATH = join(GOLDBAND_HOME, ".transcript-ingest-state.json");
-const DEFAULT_INCREMENTAL_BUDGET_MS = 50;
-
 const ALL_TYPES: MemoryType[] = [
   "transcript",
   "eureka",
@@ -280,7 +276,7 @@ function loadState(): IngestState {
       return { schema_version: 1, last_writer: "goldband-memory-ingest", sessions: {} };
     }
     return parsed;
-  } catch (err) {
+  } catch {
     console.error(`State file at ${STATE_PATH} corrupt; backing up + resetting.`);
     try {
       const raw = readFileSync(STATE_PATH, "utf-8");

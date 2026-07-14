@@ -43,13 +43,6 @@ async function ensureDir(): Promise<void> {
   }
 }
 
-export interface TunnelDenialEntry {
-  reason: string;
-  path: string;
-  method: string;
-  sourceIp: string;
-}
-
 export function logTunnelDenial(req: Request, url: URL, reason: string): void {
   const now = Date.now();
   // Drop stale timestamps
@@ -88,11 +81,4 @@ export function logTunnelDenial(req: Request, url: URL, reason: string): void {
       // us, we don't want to crash the server.
     }
   })();
-}
-
-// Test-only reset. Never called in production.
-export function __resetTunnelDenialLog(): void {
-  writeTimestamps.length = 0;
-  droppedSinceLastWrite = 0;
-  dirEnsured = false;
 }

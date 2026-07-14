@@ -141,7 +141,7 @@ export function encodeWordPiece(text: string, tok: TokenizerState, maxLength: nu
   return ids.slice(0, maxLength);
 }
 
-export function getCachedTokenizer(): TokenizerState {
+function getCachedTokenizer(): TokenizerState {
   if (cachedTokenizer) return cachedTokenizer;
   const dir = path.join(os.homedir(), '.goldband', 'models', 'testsavant-small');
   cachedTokenizer = loadHFTokenizer(dir);
@@ -150,7 +150,7 @@ export function getCachedTokenizer(): TokenizerState {
 
 // ─── Classification interface (stable API) ───────────────────
 
-export interface ClassifyResult {
+interface ClassifyResult {
   label: 'SAFE' | 'INJECTION';
   score: number;
   tokensUsed: number;
@@ -165,7 +165,7 @@ export interface ClassifyResult {
  * classifier.ts, benchmark harness) don't need to change when native
  * inference lands.
  */
-export async function classify(text: string): Promise<ClassifyResult> {
+async function classify(text: string): Promise<ClassifyResult> {
   const tok = getCachedTokenizer();
   const ids = encodeWordPiece(text, tok);
 

@@ -10,7 +10,7 @@
 
 import type { Page, Frame } from 'playwright';
 
-export interface ImageInfo {
+interface ImageInfo {
   index: number;
   src: string;
   srcset: string;
@@ -25,12 +25,12 @@ export interface ImageInfo {
   visible: boolean;
 }
 
-export interface VideoSource {
+interface VideoSource {
   src: string;
   type: string;
 }
 
-export interface VideoInfo {
+interface VideoInfo {
   index: number;
   src: string;
   currentSrc: string;
@@ -44,7 +44,7 @@ export interface VideoInfo {
   isDASH: boolean;
 }
 
-export interface AudioInfo {
+interface AudioInfo {
   index: number;
   src: string;
   currentSrc: string;
@@ -52,7 +52,7 @@ export interface AudioInfo {
   type: string;
 }
 
-export interface BackgroundImageInfo {
+interface BackgroundImageInfo {
   index: number;
   url: string;
   selector: string;

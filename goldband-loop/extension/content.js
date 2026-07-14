@@ -65,24 +65,6 @@ function clearOverlays() {
   }
 }
 
-function renderRefBadges(refs) {
-  clearOverlays();
-  if (!refs || refs.length === 0) return;
-
-  const container = ensureContainer();
-
-  for (const ref of refs) {
-    // Try to find the element using accessible name/role for positioning
-    // In CDP mode, we could use bounding boxes from the server
-    // For now, use a floating panel approach
-    const badge = document.createElement('div');
-    badge.className = 'goldband-ref-badge';
-    badge.textContent = ref.ref;
-    badge.title = `${ref.role}: "${ref.name}"`;
-    container.appendChild(badge);
-  }
-}
-
 function renderRefPanel(refs) {
   clearOverlays();
   if (!refs || refs.length === 0) return;
@@ -130,7 +112,6 @@ function renderRefPanel(refs) {
 // provides a basic element picker using getComputedStyle + CSSOM.
 
 let basicPickerActive = false;
-let basicPickerOverlay = null;
 let basicPickerLastEl = null;
 let basicPickerSavedOutline = '';
 
@@ -348,8 +329,6 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
   if (msg.type === 'refs' && msg.data) {
     const refs = msg.data.refs || [];
-    const mode = msg.data.mode;
-
     if (refs.length === 0) {
       clearOverlays();
       showStatusPill(true, 0);

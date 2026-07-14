@@ -29,8 +29,3 @@ export function getCurrentProjectSlug(): string {
   }
   return cachedSlug;
 }
-
-/** Reset cache; for tests only. */
-export function _resetProjectSlugCache(): void {
-  cachedSlug = null;
-}

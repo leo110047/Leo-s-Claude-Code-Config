@@ -487,7 +487,7 @@ function maybeSpawnPty(ws: any, session: PtySession): boolean {
 }
 
 function buildServer() {
-  return Bun.serve({
+  return Bun.serve<{ cookie: string; sessionId: string | null }>({
     hostname: '127.0.0.1',
     port: 0,
     idleTimeout: 0, // PTY connections are long-lived; default idleTimeout would kill them

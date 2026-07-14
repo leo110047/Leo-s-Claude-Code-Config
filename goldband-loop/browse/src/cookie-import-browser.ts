@@ -40,7 +40,6 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { TEMP_DIR } from './platform';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -71,7 +70,7 @@ export interface ImportResult {
   domainCounts: Record<string, number>;
 }
 
-export interface PlaywrightCookie {
+interface PlaywrightCookie {
   name: string;
   value: string;
   domain: string;

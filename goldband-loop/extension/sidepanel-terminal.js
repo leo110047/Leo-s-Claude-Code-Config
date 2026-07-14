@@ -147,16 +147,6 @@
     }
   }
 
-  /**
-   * Read auth + terminalPort from the server's /health. We don't fetch this
-   * here — sidepanel.js already polls /health for connection state and
-   * exposes the relevant fields on window.goldbandHealth (set below in init()).
-   * If terminalPort is missing, the agent isn't ready yet.
-   */
-  function getHealth() {
-    return window.goldbandHealth || {};
-  }
-
   function getServerPort() {
     return window.goldbandServerPort || null;
   }
@@ -249,7 +239,7 @@
           body: JSON.stringify({ sessionId: prevSessionId }),
           credentials: 'include',
         });
-      } catch (err) {
+      } catch {
         scheduleNextAttempt();
         return;
       }
@@ -692,21 +682,6 @@
     });
   }
 
-  function teardown() {
-    if (keepaliveInterval) {
-      clearInterval(keepaliveInterval);
-      keepaliveInterval = null;
-    }
-    try { ws && ws.close(); } catch {}
-    ws = null;
-    if (term) {
-      try { term.dispose(); } catch {}
-      term = null;
-      fitAddon = null;
-    }
-    setState(STATE.IDLE);
-  }
-
   // ─── Wiring ───────────────────────────────────────────────────
 
   /**
@@ -802,7 +777,7 @@
     // We have a fresh 4-tuple — open the new WS directly without going
     // through mintSession again. This is the explicit "no race window"
     // path the codex D8 redesign was after.
-    const { terminalPort, sessionId, attachToken, expiresAt: _expiresAt } = nextTuple;
+    const { terminalPort, sessionId, attachToken } = nextTuple;
     const token = attachToken || nextTuple.ptySessionToken;
     if (!terminalPort || !token) {
       currentSessionId = null;

@@ -371,14 +371,6 @@ inspectorPickBtn.addEventListener('click', () => {
   }
 });
 
-function inspectorShowEmpty() {
-  inspectorEmpty.style.display = '';
-  inspectorLoading.style.display = 'none';
-  inspectorError.style.display = 'none';
-  inspectorPanels.style.display = 'none';
-  inspectorSend.style.display = 'none';
-}
-
 function inspectorShowLoading(show) {
   if (show) {
     inspectorEmpty.style.display = 'none';

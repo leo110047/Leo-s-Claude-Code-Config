@@ -73,7 +73,7 @@ interface CacheEntry {
 }
 
 export const CACHE_TTL_MS = 60_000;
-export const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_TIMEOUT_MS = 5_000;
 
 /** Effective user home — respects HOME env override (used by tests). */
 function userHome(): string {
@@ -102,7 +102,7 @@ function hashPath(p: string): string {
  * call share one fork-exec (~200ms saved per skill preamble).
  */
 const _gbrainBinCache = new Map<string, string | null>();
-export function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
+function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
   const e = env ?? process.env;
   const key = e.PATH || "";
   if (_gbrainBinCache.has(key)) return _gbrainBinCache.get(key)!;
@@ -124,7 +124,7 @@ export function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
 
 /** Memoized per-process. */
 const _gbrainVersionCache = new Map<string, string>();
-export function readGbrainVersion(env?: NodeJS.ProcessEnv): string {
+function readGbrainVersion(env?: NodeJS.ProcessEnv): string {
   const e = env ?? process.env;
   const key = `${e.PATH || ""}|${resolveGbrainBin(e) || ""}`;
   if (_gbrainVersionCache.has(key)) return _gbrainVersionCache.get(key)!;

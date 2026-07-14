@@ -11,6 +11,7 @@ import {
   appendFileSync,
   readFileSync,
   readdirSync,
+  type Dirent,
 } from 'node:fs';
 import { join } from 'node:path';
 
@@ -77,10 +78,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function requireNonEmptyString(
   value: unknown,
   field: string,
-): asserts value is string {
+): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${field} must be a non-empty string`);
   }
+  return value;
 }
 
 /** Validate an untrusted JSON value and return its typed wire representation. */
@@ -113,43 +115,31 @@ export function validateImplementationTask(value: unknown): ImplementationTask {
     throw new Error(`priority must be one of ${TASK_PRIORITIES.join(', ')}`);
   }
 
-  for (const field of [
-    'run_id',
-    'branch',
-    'commit',
-    'component',
-    'effort_human',
-    'effort_cc',
-    'title',
-    'source_finding',
-  ] as const) {
-    requireNonEmptyString(value[field], field);
-  }
-  requireNonEmptyString(value.id, 'id');
-  if (!/^T[1-9]\d*$/.test(value.id)) {
+  const id = requireNonEmptyString(value.id, 'id');
+  if (!/^T[1-9]\d*$/.test(id)) {
     throw new Error('id must match T1, T2, ...');
   }
 
   if (!Array.isArray(value.files)) {
     throw new Error('files must be an array');
   }
-  value.files.forEach((file, index) => {
-    requireNonEmptyString(file, `files[${index}]`);
-  });
+  const files = value.files.map((file, index) =>
+    requireNonEmptyString(file, `files[${index}]`),
+  );
 
   return {
     phase: value.phase as TaskPhase,
-    run_id: value.run_id,
-    branch: value.branch,
-    commit: value.commit,
-    id: value.id,
+    run_id: requireNonEmptyString(value.run_id, 'run_id'),
+    branch: requireNonEmptyString(value.branch, 'branch'),
+    commit: requireNonEmptyString(value.commit, 'commit'),
+    id,
     priority: value.priority as TaskPriority,
-    component: value.component,
-    files: [...value.files] as string[],
-    effort_human: value.effort_human,
-    effort_cc: value.effort_cc,
-    title: value.title,
-    source_finding: value.source_finding,
+    component: requireNonEmptyString(value.component, 'component'),
+    files,
+    effort_human: requireNonEmptyString(value.effort_human, 'effort_human'),
+    effort_cc: requireNonEmptyString(value.effort_cc, 'effort_cc'),
+    title: requireNonEmptyString(value.title, 'title'),
+    source_finding: requireNonEmptyString(value.source_finding, 'source_finding'),
   };
 }
 
@@ -255,7 +245,7 @@ export function renderAggregatedTasks(tasks: readonly ImplementationTask[]): str
 export function aggregateTaskDirectory(
   options: AggregateTaskDirectoryOptions,
 ): string {
-  let entries: ReturnType<typeof readdirSync>;
+  let entries: Dirent<string>[];
   try {
     entries = readdirSync(options.tasksDir, { withFileTypes: true });
   } catch (error) {

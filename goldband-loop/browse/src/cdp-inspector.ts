@@ -492,11 +492,6 @@ export async function modifyStyle(
       // Modify via CSS.setStyleTexts
       const range = targetRule.range as any;
 
-      // Get current style text
-      const styleText = await session.send('CSS.getStyleSheetText', {
-        styleSheetId: targetRule.styleSheetId,
-      });
-
       // Build new style text by replacing the property value
       const currentProps = targetRule.properties;
       const newPropsText = currentProps
@@ -536,7 +531,7 @@ export async function modifyStyle(
         [selector, property, value]
       );
     }
-  } catch (err: any) {
+  } catch {
     // Full fallback: use page.evaluate for headless
     await page.evaluate(
       ([sel, prop, val]) => {

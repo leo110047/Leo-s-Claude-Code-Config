@@ -155,7 +155,7 @@ export function isProcessAlive(pid: number): boolean {
  * Read the cmdline of a running process. Returns "" on any error.
  * Linux: /proc/<pid>/cmdline (NUL-separated argv). macOS: `ps -p PID -o command=`.
  */
-export function readCmdline(pid: number): string {
+function readCmdline(pid: number): string {
   if (!isProcessAlive(pid)) return "";
   try {
     if (process.platform === "linux") {

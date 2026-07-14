@@ -60,7 +60,7 @@ function mockFinding(index: number): ReviewFinding {
   };
 }
 
-export class CodexHostAdapter implements HostAdapter {
+class CodexHostAdapter implements HostAdapter {
   name = 'codex' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
@@ -85,7 +85,7 @@ export class CodexHostAdapter implements HostAdapter {
   }
 }
 
-export class ClaudeHostAdapter implements HostAdapter {
+class ClaudeHostAdapter implements HostAdapter {
   name = 'claude' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 

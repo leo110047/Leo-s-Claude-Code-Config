@@ -239,7 +239,7 @@ export function validateRegistrySignalKeys(): {
 } {
   const registrySignalKeys = new Set<string>();
   for (const q of Object.values(QUESTIONS)) {
-    if (q.signal_key) registrySignalKeys.add(q.signal_key);
+    if ('signal_key' in q && q.signal_key) registrySignalKeys.add(q.signal_key);
   }
   const mapKeys = new Set(Object.keys(SIGNAL_MAP));
   const missing: string[] = [];
