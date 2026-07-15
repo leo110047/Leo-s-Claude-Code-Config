@@ -11,7 +11,7 @@ const TINY_PNG_BASE64 =
 
 describe("OpenAI model defaults", () => {
   test("design CLI defaults are centralized on current model IDs", () => {
-    expect(OPENAI_DESIGN_MODEL).toBe("gpt-5.6");
+    expect(OPENAI_DESIGN_MODEL).toBe("gpt-5.6-sol");
     expect(OPENAI_IMAGE_GENERATION_MODEL).toBe("gpt-image-2");
   });
 

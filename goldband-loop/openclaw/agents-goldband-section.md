@@ -1,51 +1,35 @@
 ## Coding Tasks (goldband)
 
-### Rules (non-negotiable)
+### Dispatch Policy
 
-1. **Always spawn, never redirect.** When user asks to use ANY goldband skill,
-   ALWAYS spawn a Claude Code session via sessions_spawn. Never tell user to
-   open Claude Code himself. Never say "this needs to run in Claude Code."
-   Never say "you'll need to open Claude Code for that." Just do it.
+Use Claude Code sessions for work that needs repository tools, file edits,
+workflow runtime, or long-running verification. Do not spawn a session just
+because the user mentions goldband; answer directly when the request is a
+question, explanation, or small report that can be handled in the current
+surface.
 
-2. **Resolve the repo.** If user names a repo or project, set the working
-   directory to that repo path. If the repo path isn't known, ask which
-   repo — don't punt to telling the user to open Claude Code.
+### Routing
 
-3. **Automated planning runs end-to-end.** For `$goldband plan auto` specifically: spawn the session,
-   let it run the full review pipeline (CEO → design → eng), and when it
-   finishes, report the plan back here in chat. Write the plan to memory so
-   the user can find it later. User should never have to leave Telegram.
+- **SIMPLE:** one small, obvious change or read-only lookup.
+  Use a plain `sessions_spawn(runtime: "acp", prompt: "<task>")` only if tool
+  access is actually needed.
+- **MEDIUM:** bounded multi-file work with a clear owner.
+  Spawn with the concise task plus relevant repo path and verification target.
+- **HEAVY:** the user names a Goldband capability or the work needs review, QA,
+  release, investigation, design, benchmark, or system maintenance methodology.
+  Spawn with `Run $goldband <capability> <action>` and the concrete task.
+- **FULL:** multi-day feature or release work.
+  Spawn only after the scope is clear; run planning, implementation, and release
+  verification in that session.
+- **PLAN:** the user wants planning without implementation.
+  Spawn a planning session, save the resulting plan file, and report the file
+  path and key decisions.
 
-### Dispatch Routing
+### Heuristic
 
-When asked for coding work, pick the dispatch tier:
-
-**SIMPLE:** "fix this typo," "update that config," single-file changes
-→ sessions_spawn(runtime: "acp", prompt: "<just the task>")
-
-**MEDIUM:** multi-file features, refactors, skill edits
-→ sessions_spawn(runtime: "acp", prompt: "<goldband-lite content>\n\n<task>")
-
-**HEAVY:** needs a specific goldband methodology
-→ sessions_spawn(runtime: "acp", prompt: "Load goldband. Run $goldband qa app for https://...")
-  Capabilities: review, QA, release, investigation, design, benchmark, and system maintenance
-
-**FULL:** build a complete feature, multi-day scope, needs planning + review
-→ sessions_spawn(runtime: "acp", prompt: "<goldband-full content>\n\n<task>")
-  Claude Code runs: `$goldband plan auto` → implement → `$goldband release land` → report back
-
-**PLAN:** user wants to plan a Claude Code project, spec out a feature, or design
-  something before any code is written
-→ sessions_spawn(runtime: "acp", prompt: "<goldband-plan content>\n\n<task>")
-  Claude Code runs: `$goldband plan strategy` → `$goldband plan auto` → saves plan file → reports back
-  Persist the plan link to memory/knowledge store.
-  When the user is ready to implement, spawn a new FULL session pointing at the plan.
-
-### Decision Heuristic
-
-- Can it be done in <10 lines of code? → **SIMPLE**
-- Does it touch multiple files but the approach is obvious? → **MEDIUM**
-- Does the user name a specific Goldband capability? → **HEAVY**
-- "Upgrade goldband", "update goldband" → **HEAVY** with `Run $goldband system upgrade`
-- Is it a feature, project, or objective (not a task)? → **FULL**
-- Does the user want to PLAN something without implementing yet? → **PLAN**
+- If current chat can answer safely, do that instead of spawning.
+- If a repo path is missing and materially affects the result, ask for it.
+- If the user requests a specific capability, use that capability directly.
+- If the task is reversible, local, and in scope, let the spawned session work
+  end to end; reserve user questions for real ambiguity, external effects, or
+  irreversible actions.

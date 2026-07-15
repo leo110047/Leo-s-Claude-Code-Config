@@ -191,6 +191,7 @@ function assertInstalledAssets(installPath, expected) {
   assertHookAssets(installPath, expected);
   assertRuntimeDependencies(installPath, expected);
   assertRulesAssets(installPath, expected);
+  assertGeneratedRuleSkillIndexPathsResolve(installPath);
   assertGoldbandLanguageCommandIsPluginSafe(installPath);
 }
 
@@ -202,6 +203,32 @@ function assertRulesAssets(installPath, expected) {
     assert.ok(
       fs.existsSync(path.join(installPath, rulePath)),
       `installed Rule asset missing: ${rulePath}`,
+    );
+  }
+}
+
+function assertGeneratedRuleSkillIndexPathsResolve(installPath) {
+  const ruleSkillPath = path.join(
+    installPath,
+    'skills',
+    'goldband-rules',
+    'SKILL.md',
+  );
+  const ruleSkill = fs.readFileSync(ruleSkillPath, 'utf8');
+  const indexedRulePaths = [...ruleSkill.matchAll(/^- `([^`]+)` - /gm)].map(
+    (match) => match[1],
+  );
+
+  assert.ok(
+    indexedRulePaths.length > 0,
+    'generated goldband-rules skill did not list any rule paths',
+  );
+  for (const relativeRulePath of indexedRulePaths) {
+    assert.ok(
+      fs.existsSync(
+        path.resolve(path.dirname(ruleSkillPath), relativeRulePath),
+      ),
+      `generated goldband-rules index path does not resolve from skill directory: ${relativeRulePath}`,
     );
   }
 }
