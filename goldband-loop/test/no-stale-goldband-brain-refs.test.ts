@@ -42,7 +42,7 @@ const ALLOWLIST = [
   // The bin/goldband-config comment explicitly preserves the rename note.
   'bin/goldband-config',
   // Detect script's "renamed in v1.27.0.0" comment + brain-remote-fallback path.
-  'bin/goldband-gbrain-detect',
+  'bin/goldband-gbrain-detect.ts',
   // brain-restore + source-wireup keep the old file as a migration-window fallback
   // (read both, prefer artifacts). brain-uninstall has the same fallback.
   'bin/goldband-brain-restore',

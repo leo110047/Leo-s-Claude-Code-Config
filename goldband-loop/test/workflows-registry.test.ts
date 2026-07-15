@@ -10,7 +10,12 @@ import {
 import { ALL_HOST_NAMES } from '../hosts';
 
 const ROOT = resolve(import.meta.dir, '..');
-const INACTIVE_DOC_DIRECTORIES = new Set(['designs', 'plans', 'reports']);
+const INACTIVE_DOC_DIRECTORIES = new Set([
+  'archive',
+  'designs',
+  'plans',
+  'reports',
+]);
 
 function activeDocumentationFiles(relativeDirectory: string): string[] {
   return readdirSync(resolve(ROOT, relativeDirectory), { withFileTypes: true })
@@ -98,6 +103,9 @@ describe('workflow registry', () => {
 
   test('active documentation exposes only the capability interface', () => {
     expect(existsSync(resolve(ROOT, 'docs/skills.md'))).toBe(false);
+    expect(activeDocumentationFiles('docs')).not.toContain(
+      'docs/archive/TODOS_COMPLETED.md',
+    );
 
     const activeDocs = [
       '../README.md',
