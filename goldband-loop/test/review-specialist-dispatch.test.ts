@@ -8,7 +8,7 @@ import { runParallelSpecialistReview } from '../workflows/review-engine';
 const ROOT = resolve(import.meta.dir, '..');
 
 describe('review specialist dispatch', () => {
-  test('uses bounded concurrent dispatch', async () => {
+  test('dispatches every auto-matched specialist with bounded concurrency', async () => {
     let active = 0;
     let maxActive = 0;
     let calls = 0;
@@ -35,7 +35,7 @@ describe('review specialist dispatch', () => {
       {},
     );
 
-    expect(calls).toBe(2);
+    expect(calls).toBe(4);
     expect(maxActive).toBeGreaterThan(1);
     expect(maxActive).toBeLessThanOrEqual(2);
     expect(findings.every((finding) => finding.category !== 'host-capability')).toBe(true);

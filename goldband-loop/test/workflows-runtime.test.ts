@@ -653,16 +653,23 @@ describe('workflow runtime', () => {
     ).toThrow('aggregate Rules payload exceeds budget');
   });
 
-  test('review specialist selection includes host parity for workflow and prompt diffs', () => {
+  test('review specialist selection includes every matched auto specialist', () => {
     const selection = selectReviewSpecialists([
       'diff --git a/goldband-loop/workflows/host-adapter.ts b/goldband-loop/workflows/host-adapter.ts',
       '+codex exec --sandbox read-only',
+      '+schema migration with rollback',
+      '+performance cache stampede',
       'diff --git a/goldband.manifest.json b/goldband.manifest.json',
       '+allowed-tools:',
     ].join('\n'));
 
-    expect(selection.selected).toEqual(['security', 'api-host-parity']);
-    expect(selection.selected.length).toBeLessThanOrEqual(2);
+    expect(selection.selected).toEqual([
+      'security',
+      'performance',
+      'migration-data',
+      'api-host-parity',
+    ]);
+    expect(selection.skipped.every((item) => item.reason === 'diff scope not relevant')).toBe(true);
   });
 
   test('review specialist selection supports explicit all mode', () => {
