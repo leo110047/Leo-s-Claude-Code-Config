@@ -23,7 +23,7 @@ V1 addresses #3 and #4 directly: jargon-glossing + outcome-framed writing that r
 
 ## The feature, in one paragraph
 
-goldband skill output is the product. If the prose doesn't read well for a non-technical founder, they check out of the review and click "yes yes yes." V1 adds a writing-style standard that applies to every tier ≥ 2 skill: jargon glossed on first use (from a curated ~50-term list), questions framed in outcome terms ("what breaks for your users if...") not implementation terms, short sentences, concrete nouns. Power users who want the tighter V0 prose can set `goldband-config set explain_level terse`. Binary switch, no partial modes. Plus: the README's "600,000+ lines of production code" framing — rightly called out as LOC vanity by Louise — gets replaced with a real computed 2013-vs-2026 pro-rata multiple from an `scc`-backed script, with honest caveats about public-vs-private repo visibility.
+goldband skill output is the product. If the prose doesn't read well for a non-technical founder, they check out of the review and click "yes yes yes." V1 adds a writing-style standard that applies to every tier ≥ 2 skill: jargon glossed on first use (from a curated ~50-term list), questions framed in outcome terms ("what breaks for your users if...") not implementation terms, short sentences, concrete nouns. Power users who want the tighter V0 prose can set `goldband-config set explain_level terse`. Binary switch, no partial modes. Plus: the README's "600,000+ lines of production code" framing — rightly called out as LOC vanity by Louise — gets replaced with a real computed 2013-vs-2026 pro-rata multiple from a repository-owned script, with honest caveats about regex-based line classification and public-vs-private repo visibility.
 
 ## Why we're building the smaller version
 
@@ -47,15 +47,14 @@ The through-line: every review pass correctly narrowed the ambition until the re
 4. **Host-aware preamble echo.** `_EXPLAIN_LEVEL=$(${binDir}/goldband-config get explain_level 2>/dev/null || echo "default")`. Host-portable via existing V0 `ctx.paths.binDir` pattern.
 5. **goldband-config validation.** Document `explain_level: default|terse` in header. Whitelist values. Warn on unknown with specific message + default to `default`.
 6. **LOC reframe in README.** Remove "600,000+ lines of production code" hero framing. Insert `<!-- GOLDBAND-THROUGHPUT-PLACEHOLDER -->` anchor. Build-time script replaces anchor with computed multiple + caveat.
-7. **`scc`-backed throughput script** (`scripts/output-throughput-comparison.ts`). For each of 2013 + 2026, enumerate maintainer-authored public commits, extract added lines from `git diff`, classify via `scc --stdin` (or regex fallback). Output `docs/throughput-2013-vs-2026.json` with per-language breakdown + caveats.
-8. **`scc` as standalone install script** (`scripts/setup-scc.sh`). Not a `package.json` dependency (truly optional — 95% of users never run throughput). OS-detects and runs `brew install scc` / `apt install scc` / prints GitHub releases link.
-9. **README update pipeline** (`scripts/update-readme-throughput.ts`). Reads `docs/throughput-2013-vs-2026.json` if present, replaces the anchor with computed number. If missing, writes `GOLDBAND-THROUGHPUT-PENDING` marker that CI rejects — forces contributor to run the script before commit.
-10. **/retro adds logical SLOC + weighted commits above raw LOC.** Raw LOC stays for context but is visually demoted.
-11. **Upgrade migration** (`goldband-upgrade/migrations/v<VERSION>.sh`). One-time post-upgrade interactive prompt offering to restore V0 prose via `explain_level: terse` for users who prefer it. Flag-file gated.
-12. **Documentation.** CLAUDE.md gains a Writing Style section (project convention). CHANGELOG.md gets V1 entry (user-facing narrative, mentions scope reduction + V1.1 pacing). README.md gets a Writing Style explainer section (~80 words). CONTRIBUTING.md gains a note on jargon-list maintenance (PRs to add/remove terms).
-13. **Tests.** 6 new test files + extension of existing `gen-skill-docs.test.ts`. All gate tier except LLM-judge E2E (periodic).
-14. **V0 dormancy negative tests.** Assert 5D dimension names and 8 archetype names don't appear in default-mode skill output. Prevents V0 psychographic machinery from leaking into V1.
-15. **V1 and V1.1 design docs.** PLAN_TUNING_V1.md (this file). PACING_UPDATES_V0.md (V1.1 plan, created during V1 implementation from the extracted appendix). TODOS.md P0 entry.
+7. **Regex-based throughput script** (`scripts/output-throughput-comparison.ts`). For each of 2013 + 2026, enumerate maintainer-authored public commits, extract added lines from `git diff`, and classify logical additions with a documented regex approximation. Output `docs/throughput-2013-vs-2026.json` with per-extension breakdown + caveats.
+8. **README update pipeline** (`scripts/update-readme-throughput.ts`). Reads `docs/throughput-2013-vs-2026.json` if present, replaces the anchor with computed number. If missing, writes `GOLDBAND-THROUGHPUT-PENDING` marker that CI rejects — forces contributor to run the script before commit.
+9. **/retro adds logical SLOC + weighted commits above raw LOC.** Raw LOC stays for context but is visually demoted.
+10. **Upgrade migration** (`goldband-upgrade/migrations/v<VERSION>.sh`). One-time post-upgrade interactive prompt offering to restore V0 prose via `explain_level: terse` for users who prefer it. Flag-file gated.
+11. **Documentation.** CLAUDE.md gains a Writing Style section (project convention). CHANGELOG.md gets V1 entry (user-facing narrative, mentions scope reduction + V1.1 pacing). README.md gets a Writing Style explainer section (~80 words). CONTRIBUTING.md gains a note on jargon-list maintenance (PRs to add/remove terms).
+12. **Tests.** 6 new test files + extension of existing `gen-skill-docs.test.ts`. All gate tier except LLM-judge E2E (periodic).
+13. **V0 dormancy negative tests.** Assert 5D dimension names and 8 archetype names don't appear in default-mode skill output. Prevents V0 psychographic machinery from leaking into V1.
+14. **V1 and V1.1 design docs.** PLAN_TUNING_V1.md (this file). PACING_UPDATES_V0.md (V1.1 plan, created during V1 implementation from the extracted appendix). TODOS.md P0 entry.
 
 ## Deferred
 
@@ -92,9 +91,8 @@ The through-line: every review pass correctly narrowed the ambition until the re
 
 scripts/
   jargon-list.json                  # NEW: ~50 repo-owned terms (gen-time inlined)
-  output-throughput-comparison.ts        # NEW: scc + git per-year, author-scoped
+  output-throughput-comparison.ts   # NEW: regex + git per-year, author-scoped
   update-readme-throughput.ts       # NEW: README anchor replacement
-  setup-scc.sh                      # NEW: OS-detecting scc installer
   resolvers/preamble.ts             # MODIFIED: Writing Style section + EXPLAIN_LEVEL echo
 
 docs/
@@ -150,10 +148,9 @@ bun run build
 Separately, on-demand:
 bun run scripts/output-throughput-comparison.ts
    │
-   ├── scc preflight (if missing → exit with setup-scc.sh hint)
    ├── For 2013 + 2026: enumerate maintainer-authored commits in public project-owner/* repos
-   ├── For each commit: git diff, extract ADDED lines, classify via scc --stdin
-   └── Write docs/throughput-2013-vs-2026.json (per-language + caveats)
+   ├── For each commit: git diff, extract ADDED lines, filter blanks + common comment markers
+   └── Write docs/throughput-2013-vs-2026.json (per-extension breakdown + caveats)
 ```
 
 ## Security + privacy
@@ -161,7 +158,7 @@ bun run scripts/output-throughput-comparison.ts
 - **No new user data.** V1 extends preamble prose + config key. No new personal data collected.
 - **No runtime file reads of sensitive data.** Jargon list is a repo-committed curated list.
 - **Migration script is one-shot.** Flag-file prevents re-fire.
-- **scc runs on public repos only.** No access to private work.
+- **The throughput script runs on the repository path supplied by the operator.** Its output caveats distinguish the intended public-repository comparison from excluded private work.
 
 ## Decisions log (with pros/cons)
 

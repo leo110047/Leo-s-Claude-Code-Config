@@ -18,7 +18,6 @@ export interface DaemonState {
   port: number;
   startedAt: string; // ISO 8601
   version: string;
-  serverPath: string;
   cmdlineMarker: string;
 }
 

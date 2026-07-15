@@ -543,7 +543,6 @@ export function start(): { port: number } {
     port: actualPort,
     startedAt: new Date().toISOString(),
     version: VERSION,
-    serverPath: process.argv[1] || "",
     cmdlineMarker: CMDLINE_MARKER,
   };
   writeStateFile(state);

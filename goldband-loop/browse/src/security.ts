@@ -5,8 +5,9 @@
  * Safe to import from the compiled `browse/dist/browse` binary because it
  * does not load onnxruntime-node or other native modules.
  *
- * ML classifier code lives in `security-classifier.ts`, which is only
- * imported from `sidebar-agent.ts` (runs as non-compiled bun script).
+ * ML classifier code lives in `security-classifier.ts`. The compiled server
+ * reaches it through `security-sidecar-client.ts`; `security-sidecar-entry.ts`
+ * imports the classifier in a separate plain-Node process.
  *
  * Layering (see CEO plan 2026-04-19-prompt-injection-guard.md):
  *   L1-L3: content-security.ts (existing, datamarking / DOM strip / URL blocklist)

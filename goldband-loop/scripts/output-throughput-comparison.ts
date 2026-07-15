@@ -15,13 +15,12 @@
  *      var (comma-separated), or falls back to `git config user.email`.
  *   2. For each commit, git diff <commit>^ <commit> produces a unified diff.
  *   3. Extract ADDED lines from the diff. Classify as "logical" by filtering
- *      out blank lines + single-line comments (per-language regex; imperfect
- *      but honest — better than raw LOC).
+ *      out blank lines + common comment markers (a documented regex
+ *      approximation; imperfect but more useful than raw LOC).
  *   4. Sum per year. Report raw additions + logical additions + per-language
  *      breakdown + caveats. Caveats matter: public repos only, commit-style drift,
  *      private work exclusion.
  *
- * Requires: scc (for classification when available; falls back to regex).
  * Run: bun run scripts/output-throughput-comparison.ts [--repo-root <path>] [--email <addr>...]
  *      GOLDBAND_AUTHOR_EMAILS=a@x.com,b@y.com bun run scripts/output-throughput-comparison.ts
  * Output: docs/throughput-2013-vs-2026.json
@@ -98,7 +97,6 @@ type PerYearResult = {
 
 type Output = {
   computed_at: string;
-  scc_available: boolean;
   years: PerYearResult[];
   multiples: {
     // TO-DATE: raw totals. Compares full 2013 year vs (possibly partial) 2026.
@@ -124,33 +122,11 @@ type Output = {
   version: number;
 };
 
-function hasScc(): boolean {
-  try {
-    execSync('command -v scc', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function printSccHint(): void {
-  const hint = [
-    '',
-    'scc is required for language classification of added lines.',
-    'Run: bash scripts/setup-scc.sh',
-    '  (macOS: brew install scc)',
-    '  (Linux: apt install scc, or download from github.com/boyter/scc/releases)',
-    '  (Windows: github.com/boyter/scc/releases)',
-    '',
-  ].join('\n');
-  process.stderr.write(hint);
-}
-
 /**
- * Crude per-language comment-line filter. Used only when scc is unavailable.
- * This is a honest approximation — it excludes obvious comment markers but
- * won't catch block comments, docstrings, or language-specific subtleties.
- * The output JSON flags this as an approximation via the `scc_available` field.
+ * Crude per-language comment-line filter. This is an honest approximation:
+ * it excludes obvious comment markers but won't catch block comments,
+ * docstrings, or language-specific subtleties. The output caveats describe
+ * this limitation explicitly.
  */
 function isLogicalLine(line: string): boolean {
   const trimmed = line.replace(/^\+/, '').trim();
@@ -328,12 +304,6 @@ function main() {
     process.exit(0);
   }
 
-  const sccAvailable = hasScc();
-  if (!sccAvailable) {
-    printSccHint();
-    process.stderr.write('Continuing with regex-based logical-line classification (an approximation).\n\n');
-  }
-
   const authorEmails = resolveAuthorEmails(args);
 
   // For V1, we analyze the single repo at repoRoot. Future work: enumerate
@@ -386,15 +356,12 @@ function main() {
 
   const output: Output = {
     computed_at: new Date().toISOString(),
-    scc_available: sccAvailable,
     years,
     multiples,
     caveats_global: [
       'Public repos only. Private work at both eras is excluded to make the comparison apples-to-apples.',
       '2013 and 2026 may differ in commit-style: 2013 tends toward monolithic commits, 2026 tends toward smaller AI-assisted commits. Multiples reflect this drift.',
-      sccAvailable
-        ? 'Logical-line classification uses scc-aware regex (approximate).'
-        : 'Logical-line classification uses a crude regex fallback (scc not installed). Exclude blank lines + single-line comments; does not catch block comments or docstrings. Approximate.',
+      'Logical-line classification uses a regex approximation. It excludes blank lines and common comment markers but does not fully parse block comments, docstrings, or language syntax.',
       'This script analyzes a single repo at a time. Full 2013-vs-2026 picture requires running against every public repo with commits in both years and summing results (future work).',
       'Authorship attribution relies on commit email matching. Supply historical aliases via --email flags or GOLDBAND_AUTHOR_EMAILS.',
     ],

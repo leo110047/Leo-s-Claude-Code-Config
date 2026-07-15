@@ -1,8 +1,8 @@
 /**
  * Security classifier — ML prompt injection detection.
  *
- * This module is IMPORTED ONLY BY sidebar-agent.ts (non-compiled bun script).
- * It CANNOT be imported by server.ts or any other module that ends up in the
+ * This module is imported by `security-sidecar-entry.ts`, which runs under
+ * plain Node. It CANNOT be imported by server.ts or any other module in the
  * compiled browse binary, because @huggingface/transformers requires
  * onnxruntime-node at runtime and that native module fails to dlopen from
  * Bun's compiled-binary temp extraction dir.
@@ -196,7 +196,7 @@ async function ensureTestsavantStaged(onProgress?: (msg: string) => void): Promi
  * Load the TestSavantAI classifier. Idempotent — concurrent calls share the
  * same in-flight promise. Sets state to 'loaded' on success or 'failed' on error.
  *
- * Call this at sidebar-agent startup to warm up. First call triggers the model
+ * Call this from the security sidecar to warm up. First call triggers the model
  * download (~112MB from HuggingFace). Subsequent calls reuse the cached instance.
  */
 let loadPromise: Promise<void> | null = null;

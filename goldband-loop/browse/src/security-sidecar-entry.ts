@@ -9,8 +9,8 @@
  *     security stack" section). Importing the classifier into server.ts
  *     would brick the compiled binary at startup.
  *   - sidebar-agent.ts (the previous host of the classifier) was removed
- *     when the PTY proved out. The classifier file still ships but had no
- *     caller — exactly the gap codex flagged in #1370.
+ *     when the PTY proved out. This sidecar is the classifier's current
+ *     production caller and closes the gap flagged in #1370.
  *
  * This entry runs under plain Node (resolved by find-security-sidecar.ts).
  * It reads NDJSON requests from stdin and writes NDJSON responses to stdout.
