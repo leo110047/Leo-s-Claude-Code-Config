@@ -13,168 +13,45 @@ allowed-tools:
   - Bash
 ---
 
-# Evidence-Based Coding - Eliminating AI Hallucinations
+# Evidence-Based Coding
 
-## Core Principle
-
-```
-NEVER ASSUME. ALWAYS VERIFY.
-NO CLAIMS WITHOUT EVIDENCE.
-```
-
-**Golden Rule:** If you haven't read the actual code, you don't know what it does.
+Make codebase claims only after checking current files, commands, tests, or
+logs. This entrypoint stays short because it is frequently loaded; use
+`reference/` only when detailed procedures are needed.
 
 ## When to Use This Skill
 
-**Always active.** This skill should govern ALL coding activities:
+Use before:
 
-- Before suggesting any code change
-- Before claiming "this function does X"
-- Before saying "the API expects Y"
-- Before proposing a fix
-- Before stating "file Z exists at path W"
-- Before making ANY claim about the codebase
+- Suggesting a code change.
+- Claiming behavior, API shape, config state, file existence, errors, or fixes.
+- Declaring work complete.
 
-## Priority and Conflict Rules
+## Hard Rules
 
-- **Priority**: CRITICAL - enforced globally across all skills
-- All other skills must follow evidence-based approach
-- Never assume, always verify -- no exceptions
+- Read the actual file before describing behavior.
+- Treat search results as leads; read matched context before claiming.
+- Do not reuse stale test output, logs, screenshots, or prior-agent reports.
+- Do not cite unchecked paths, APIs, configs, line numbers, or errors.
+- If behavior matters, run the relevant command or test when feasible.
+- If verification is impossible, say what is unverified and what would prove it.
+- Treat agent reports as claims until independently checked.
+- Never weaken, skip, or delete a test, assertion, type, or lint rule just to
+  make a check pass.
+- Completion claims need fresh evidence from the current turn.
 
-## Gotchas
+## References
 
-- Do not stop at a grep hit; locating code is not the same as understanding it.
-- Do not reuse stale test output, logs, or screenshots from a previous turn when making a fresh completion claim.
-- Do not treat code that "looks right" as verified behavior; run the relevant command or test.
-- Do not cite file paths, APIs, or line numbers you have not personally checked in the current task.
-- Do not turn uncertainty into hedged language; investigate until you can make a concrete claim or explicitly say it is unknown.
-
-## The Three Laws of Evidence-Based Coding
-
-### Law 1: Read Before You Speak
-
-**Never make claims about code you haven't read.**
-
-```
-BAD:  "The getUserById function probably looks like this..."
-      [generates code based on assumptions]
-
-GOOD: [Uses Grep to find getUserById, Read to examine it]
-      "I've read getUserById at src/user.service.ts:45.
-      It currently does X, and the issue is Y. Here's the fix..."
-```
-
-### Law 2: Verify Before You Claim
-
-**Every factual statement must be backed by tool evidence.**
-
-```
-BAD:  "This API endpoint expects a JSON body with userId and email fields."
-      [Assumption - no evidence]
-
-GOOD: [Read API endpoint code]
-      "Looking at src/api/user.ts:23, the endpoint expects:
-      { userId: string, email: string, role?: 'user' | 'admin' }"
-```
-
-### Law 3: Test, Don't Guess
-
-**Uncertainty requires investigation, not speculation.**
-
-```
-BAD:  "This should probably work if we change X to Y"
-
-GOOD: [Make change, run tests]
-      "I've changed X to Y. Tests show 15 passing, 1 failing:
-      'should handle null values' - we need to add null checking."
-```
-
-## Completion Verification — The Iron Law
-
-```
-NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE.
-```
-
-Before claiming ANY task is complete, follow the 5-Step Gate: **IDENTIFY → RUN → READ → VERIFY → CLAIM**.
-
-- Every "done" claim requires fresh tool output from the current turn
-- Watch for red-flag phrases: "should work", "probably fine", "Done!"
-- Agent reports must be independently verified — agents hallucinate completion
-
-See [reference/completion-verification.md](reference/completion-verification.md) for the full Iron Law, common failure patterns, rationalization prevention, and TDD red-green verification.
-
-## Mandatory Verification Workflows
-
-Step-by-step workflows for verifying code changes, function behavior, and file paths before making any claims.
-
-See [reference/verification-workflows.md](reference/verification-workflows.md) for complete workflows including:
-- Before Suggesting Code Changes (search, read, understand, then propose)
-- Before Claiming "This Function Does X" (find, read, check tests, then describe)
-- Before Claiming File Paths (glob, read, then reference)
-- Evidence Collection Workflows for understanding functions, proposing API changes, and debugging errors
-
-## Common Hallucination Patterns
-
-The five most dangerous patterns: inventing API signatures, assuming without testing, guessing at configuration, fabricating error messages, and inventing file structures.
-
-See [reference/hallucination-patterns.md](reference/hallucination-patterns.md) for all 5 patterns with full before/after examples, plus 5 red flags that indicate you are likely hallucinating.
+- `reference/completion-verification.md`: completion gate and failure patterns.
+- `reference/verification-workflows.md`: workflows for code, API, path, config,
+  and bug claims.
+- `reference/hallucination-patterns.md`: common false-claim patterns.
+- `reference/goal-verification.md`: goal-backward verification.
 
 ## Verification Checklist
 
-Before making ANY claim, verify:
+Before answering or finishing, confirm:
 
-**File/Path Claims:**
-- [ ] Used Glob to verify file exists
-- [ ] Used Read to confirm contents
-- [ ] Path is exact, not guessed
-
-**Function/API Claims:**
-- [ ] Used Grep to find function
-- [ ] Used Read to examine implementation
-- [ ] Checked tests to understand behavior
-
-**Configuration Claims:**
-- [ ] Read actual config files
-- [ ] Checked environment variable usage
-- [ ] Verified against documentation
-
-**Error/Bug Claims:**
-- [ ] Read error message completely
-- [ ] Found error source with Grep
-- [ ] Read surrounding context
-- [ ] Checked for related issues
-
-**Fix Proposals:**
-- [ ] Read code being fixed
-- [ ] Understand root cause
-- [ ] Ran tests after fix
-- [ ] Verified fix resolves issue
-
-## Anti-Hallucination Mantras
-
-Repeat these before every suggestion:
-
-1. **"Have I read the actual code?"**
-   - If no -> Use Grep + Read first
-
-2. **"Am I making assumptions?"**
-   - If yes -> Verify with tools
-
-3. **"Can I point to specific files/lines?"**
-   - If no -> You're probably hallucinating
-
-4. **"Did I test this claim?"**
-   - If no -> Run tests or verify
-
-5. **"Would this be obvious to someone who read the code?"**
-   - If no -> Read the code yourself
-
-## The Ultimate Rule
-
-```
-IF YOU HAVEN'T READ IT, YOU DON'T KNOW IT.
-IF YOU DON'T KNOW IT, DON'T CLAIM IT.
-IF YOU'RE UNCERTAIN, INVESTIGATE.
-```
-
-**NO EXCEPTIONS.**
+- The files or commands supporting the claim were checked in this turn.
+- The verification scope matches the claim's scope.
+- Any unverified behavior, skipped test, or local-only result is named plainly.
