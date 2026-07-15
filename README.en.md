@@ -162,6 +162,13 @@ npm run sync:app-support
 npm run test:app-support
 ```
 
+Use `npm test`, `npm run test:repo`, or `bun run test` as the repo-root default
+aggregate test entrypoint. It runs an explicit set of package-owned suites and
+prints a per-suite summary. Do not treat bare `bun test` at the repo root as
+full-repo evidence; it bypasses package-owned test contracts and has no
+per-package summary. Run `npm run test:cross-review` separately for
+cross-review changes.
+
 ## Cross-Review Gate
 
 For work that must be approved by the other host family before the implementer

@@ -1,6 +1,9 @@
 {
   "version": "0.1.0",
   "scripts": {
+    "test": "node scripts/test-repo.mjs",
+    "test:repo": "node scripts/test-repo.mjs",
+    "test:repo:list": "node scripts/test-repo.mjs --list",
     "generate:manifest": "node scripts/generate-goldband-surfaces.mjs",
     "check:manifest": "node scripts/generate-goldband-surfaces.mjs --check",
     "test:capability-invocations": "node scripts/test-capability-invocations.mjs",

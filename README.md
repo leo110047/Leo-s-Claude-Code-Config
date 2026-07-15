@@ -203,11 +203,19 @@ npm run test:app-support
 常用驗證：
 
 ```bash
-npm run test:hook-router
+npm test
+# or: bun run test
 npm run test:cross-review
 node scripts/check-code-style.mjs
 python3 scripts/check-json-toml-syntax.py
 ```
+
+Repo root 的預設聚合測試入口是 `npm test` / `npm run test:repo`，或用
+Bun 執行 package script：`bun run test`。它跑一組明確列出的
+package-owned suites，並在最後輸出 per-suite summary。不要把 repo root
+裸跑 `bun test` 當作完整驗證；那會繞過子專案自己的測試合約，改成讓
+Bun 遞迴掃檔，輸出也沒有 per-package summary。`test:cross-review` 是
+另外的 targeted gate，需在 cross-review 相關變更時另外跑。
 
 更多貢獻流程看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
