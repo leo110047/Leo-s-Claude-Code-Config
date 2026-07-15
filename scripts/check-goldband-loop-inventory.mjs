@@ -12,6 +12,7 @@ import {
   GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
 import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
+import { assertInstalledWorkflowDocuments } from './lib/workflow-contract-install-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
@@ -367,7 +368,7 @@ function writeLegacyMigrationFixture(tmpHome) {
 
 function assertLegacyMigrationResult(tmpHome, result) {
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, 'true');
+  assert.equal(result.stdout, 'anonymous');
   assert.equal(
     fs.readFileSync(path.join(tmpHome, '.goldband', 'config.yaml'), 'utf8'),
     'skill_prefix: true\ntelemetry: anonymous\n',
@@ -398,9 +399,9 @@ function assertLegacyMigrationSentinel(tmpHome, legacyDir) {
     path.join(legacyDir, 'projects', 'demo', 'late.jsonl'),
     '{"key":"late"}\n',
   );
-  const second = runGoldbandConfigInHome(tmpHome, ['get', 'skill_prefix']);
+  const second = runGoldbandConfigInHome(tmpHome, ['get', 'telemetry']);
   assert.equal(second.status, 0, second.stderr);
-  assert.equal(second.stdout, 'true');
+  assert.equal(second.stdout, 'anonymous');
   assert.equal(
     fs.existsSync(
       path.join(tmpHome, '.goldband', 'projects', 'demo', 'late.jsonl'),
@@ -416,7 +417,7 @@ function assertLegacyConfigMigration() {
   );
   try {
     const legacyDir = writeLegacyMigrationFixture(tmpHome);
-    const result = runGoldbandConfigInHome(tmpHome, ['get', 'skill_prefix']);
+    const result = runGoldbandConfigInHome(tmpHome, ['get', 'telemetry']);
     assertLegacyMigrationResult(tmpHome, result);
     assertLegacyMigrationSentinel(tmpHome, legacyDir);
   } finally {
@@ -440,8 +441,18 @@ function assertInstalledStandardInventory(home, inventory, capabilityContract) {
     skillDirectories(codexSkillsDir),
     ['goldband'],
   );
-  assertInstalledWorkflowDocuments('Claude', claudeRuntime, capabilityContract);
-  assertInstalledWorkflowDocuments('Codex', codexRuntime, capabilityContract);
+  assertInstalledWorkflowDocuments(
+    'Claude',
+    claudeRuntime,
+    capabilityContract,
+    LOOP_DIR,
+  );
+  assertInstalledWorkflowDocuments(
+    'Codex',
+    codexRuntime,
+    capabilityContract,
+    LOOP_DIR,
+  );
   assert.equal(
     fs
       .readFileSync(
@@ -462,42 +473,6 @@ function assertInstalledStandardInventory(home, inventory, capabilityContract) {
   );
   assertInstalledRuntimeSupportFiles(claudeRuntime, codexRuntime);
   assertNoLegacyCommands(home, inventory);
-}
-
-function assertInstalledWorkflowDocuments(
-  label,
-  runtimeRoot,
-  capabilityContract,
-) {
-  const expected = capabilityContract.actions.map(({ capability, action }) =>
-    path.join(capability, `${action}.workflow.md`),
-  );
-  const workflowRoot = path.join(runtimeRoot, 'workflows');
-  assertDeepSetEqual(
-    `${label} standard workflow documents`,
-    workflowDocuments(workflowRoot),
-    expected,
-  );
-  for (const relativePath of expected) {
-    assert.ok(
-      fs.existsSync(path.join(workflowRoot, relativePath)),
-      `${label} standard workflow document is broken: ${relativePath}`,
-    );
-  }
-}
-
-function workflowDocuments(root, current = root) {
-  if (!fs.existsSync(current)) return [];
-  const documents = [];
-  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-    const entryPath = path.join(current, entry.name);
-    if (entry.isDirectory()) {
-      documents.push(...workflowDocuments(root, entryPath));
-    } else if (entry.name.endsWith('.workflow.md')) {
-      documents.push(path.relative(root, entryPath));
-    }
-  }
-  return documents.sort();
 }
 
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {

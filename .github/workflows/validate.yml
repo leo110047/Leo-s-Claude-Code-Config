@@ -57,6 +57,9 @@ jobs:
       - name: Test capability invocation validation
         run: npm run test:capability-invocations
 
+      - name: Test thin workflow contracts
+        run: npm run test:workflow-contracts
+
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 

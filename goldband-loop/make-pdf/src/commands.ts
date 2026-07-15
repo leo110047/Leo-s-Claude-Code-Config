@@ -3,7 +3,7 @@
  *
  * Dependency graph:
  *   commands.ts ──▶ cli.ts (runtime dispatch)
- *              ──▶ gen-skill-docs.ts (generates usage table in SKILL.md)
+ *              ──▶ make-pdf CLI help and tests
  *              ──▶ tests (validation)
  *
  * Zero side effects. Safe to import from build scripts.

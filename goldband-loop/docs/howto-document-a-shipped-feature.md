@@ -101,5 +101,5 @@ File a bug. The skill's Step 1 archaeology is supposed to read implementation fi
 
 - **Tutorial: first time using `/goldband document generate`:** [tutorial-document-generate.md](./tutorial-document-generate.md)
 - **Why goldband uses the Diataxis framework:** [explanation-diataxis-in-goldband.md](./explanation-diataxis-in-goldband.md)
-- **Reference for the audit skill:** [`document-release/SKILL.md`](../document-release/SKILL.md)
-- **Reference for the generation skill:** [`document-generate/SKILL.md`](../document-generate/SKILL.md)
+- **Reference for the audit workflow:** [`release/docs` contract](../generated/workflow-contracts/release/docs.workflow.md)
+- **Reference for the generation workflow:** [`document/generate` contract](../generated/workflow-contracts/document/generate.workflow.md)

@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
-  chmodSync,
   mkdtempSync,
   readFileSync,
   rmSync,
-  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -162,75 +160,6 @@ describe('process supervisor', () => {
     spawnedPids.delete(grandchildPid);
   });
 
-  test('package eval scripts use the supervised runner', () => {
-    const pkg = JSON.parse(
-      readFileSync(resolve(import.meta.dir, '../package.json'), 'utf8'),
-    );
-    const suites = {
-      'test:evals': 'evals',
-      'test:evals:all': 'evals-all',
-      'test:e2e': 'e2e',
-      'test:e2e:all': 'e2e-all',
-      'test:gate': 'gate',
-      'test:periodic': 'periodic',
-      'test:codex': 'codex',
-      'test:codex:all': 'codex-all',
-      'test:gemini': 'gemini',
-      'test:gemini:all': 'gemini-all',
-    };
-    for (const [script, suite] of Object.entries(suites)) {
-      expect(pkg.scripts[script]).toBe(
-        `node scripts/run-eval-suite.mjs ${suite}`,
-      );
-    }
-  });
-
-  test('eval runner preserves the gate command contract', async () => {
-    if (process.platform === 'win32') return;
-    const dir = makeTempDir();
-    const argsFile = join(dir, 'args.json');
-    const fakeBun = join(dir, 'bun');
-    writeFileSync(
-      fakeBun,
-      [
-        '#!/usr/bin/env node',
-        `require('node:fs').writeFileSync(process.env.GOLDBAND_TEST_ARGS_FILE, JSON.stringify({ args: process.argv.slice(2), evals: process.env.EVALS, tier: process.env.EVALS_TIER }));`,
-        `process.stdout.write('Ran 1 test across 1 file.\\n');`,
-      ].join('\n'),
-    );
-    chmodSync(fakeBun, 0o755);
-
-    const runner = Bun.spawn(
-      [process.execPath, 'scripts/run-eval-suite.mjs', 'gate'],
-      {
-        cwd: resolve(import.meta.dir, '..'),
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: {
-          ...process.env,
-          PATH: `${dir}:${process.env.PATH ?? ''}`,
-          GOLDBAND_TEST_ARGS_FILE: argsFile,
-          GOLDBAND_EVAL_SUITE_TIMEOUT_MS: '2000',
-        },
-      },
-    );
-    const exitCode = await runner.exited;
-    const recorded = JSON.parse(readFileSync(argsFile, 'utf8'));
-
-    expect(exitCode).toBe(0);
-    expect(recorded.evals).toBe('1');
-    expect(recorded.tier).toBe('gate');
-    expect(recorded.args.slice(0, 6)).toEqual([
-      'test',
-      '--retry',
-      '2',
-      '--concurrent',
-      '--max-concurrency',
-      '15',
-    ]);
-    expect(recorded.args).toContain('test/skill-llm-eval.test.ts');
-    expect(recorded.args).toContain('test/codex-e2e.test.ts');
-  });
 });
 
 function makeTempDir(): string {

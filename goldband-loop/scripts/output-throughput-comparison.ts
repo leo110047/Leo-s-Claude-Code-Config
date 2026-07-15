@@ -9,7 +9,7 @@
  * pro-rata multiple on logical code change: non-blank, non-comment lines added
  * across authored commits in public repos, computed for 2013 and 2026.
  *
- * Algorithm (per Codex Pass 2 review in PLAN_TUNING_V1):
+ * Algorithm:
  *   1. For each year (2013, 2026), enumerate authored commits. Author filter
  *      comes from --email CLI flags (repeatable), the GOLDBAND_AUTHOR_EMAILS env
  *      var (comma-separated), or falls back to `git config user.email`.

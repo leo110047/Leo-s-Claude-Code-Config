@@ -4,6 +4,7 @@
     "generate:manifest": "node scripts/generate-goldband-surfaces.mjs",
     "check:manifest": "node scripts/generate-goldband-surfaces.mjs --check",
     "test:capability-invocations": "node scripts/test-capability-invocations.mjs",
+    "test:workflow-contracts": "node scripts/test-workflow-contracts.mjs",
     "lint:style": "node scripts/check-code-style.mjs",
     "lint:style:staged": "node scripts/check-code-style.mjs --staged",
     "test:hook-router": "node hooks/scripts/tools/replay-hook-router.js && node scripts/test-claude-hook-router-review-readonly.mjs && node scripts/test-codex-high-risk-policy.mjs && node scripts/test-codex-hook-router.mjs && node scripts/test-hook-noise-policy.mjs && node scripts/test-claude-config-verification-runtime.mjs",
@@ -19,11 +20,7 @@
     "test:project-style-gate": "node scripts/test-goldband-project-style-gate.mjs",
     "test:codex-portability": "node scripts/test-codex-portability.mjs",
     "sync:app-support": "node scripts/sync-app-support-assets.mjs && node scripts/build-claude-app-adapters.mjs",
-    "test:app-support": "node scripts/check-app-support.mjs",
-    "test:evals": "cd goldband-loop && bun run test:evals",
-    "test:e2e": "cd goldband-loop && bun run test:e2e",
-    "test:gate": "cd goldband-loop && bun run test:gate",
-    "test:periodic": "cd goldband-loop && bun run test:periodic"
+    "test:app-support": "node scripts/check-app-support.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0"

@@ -62,3 +62,4 @@ Formal interface: `$goldband <capability> <action>`. Old workflow names are not 
 - Prompt contract: goal, relevant-context, hard-boundaries, verification.
 - Model owns: semantic-reasoning, task-decomposition, tool-selection, adaptation.
 - Runtime owns: routing, authorization, side-effect-gates, typed-evidence, stop-conditions, state, observability.
+- Installed workflow documents are thin contracts generated from manifest-owned `promptContract` fields. Per-workflow `SKILL.md` and `SKILL.md.tmpl` prompt surfaces are not part of the architecture.

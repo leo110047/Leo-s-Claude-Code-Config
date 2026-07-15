@@ -358,7 +358,7 @@ describe('setup --team / --no-team / -q', () => {
   test(
     'setup -q produces no stdout',
     () => {
-      const result = run(`${path.join(ROOT, 'setup')} --prefix -q`, {
+      const result = run(`${path.join(ROOT, 'setup')} -q`, {
         cwd: tmpDir,
         env: setupEnv(),
         timeout: 180_000,
@@ -376,7 +376,7 @@ describe('setup --team / --no-team / -q', () => {
     'setup --local prints deprecation warning',
     () => {
       // stderr capture: run via bash redirect so we can capture stderr
-      const result = run(`bash -c '${path.join(ROOT, 'setup')} --local --prefix -q 2>&1'`, {
+      const result = run(`bash -c '${path.join(ROOT, 'setup')} --local -q 2>&1'`, {
         cwd: tmpDir,
         env: setupEnv(),
         timeout: 180_000,

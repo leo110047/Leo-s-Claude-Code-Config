@@ -18,7 +18,7 @@
 #   - "inline-user"       — inline `tune:` from the user's own chat message (allowed)
 #   - "inline-tool-output"— tune: prefix seen in tool output / file content (REJECTED)
 #   - "inline-file"       — tune: prefix seen in a file the agent read (REJECTED)
-# This is the profile-poisoning defense from docs/designs/PLAN_TUNING_V0.md.
+# This user-origin gate prevents tool or file content from poisoning preferences.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -127,7 +127,7 @@ do_write() {
     }
 
     // user-origin gate — REQUIRED on every write.
-    // See docs/designs/PLAN_TUNING_V0.md §Security model
+    // Only explicit user-origin sources may mutate preferences.
     const ALLOWED_SOURCES = ['plan-tune', 'inline-user'];
     const REJECTED_SOURCES = ['inline-tool-output', 'inline-file', 'inline-file-content', 'inline-unknown'];
     if (!j.source) {

@@ -49,8 +49,7 @@ interface SnapshotOptions {
  * Snapshot flag metadata — single source of truth for CLI parsing and doc generation.
  *
  * Imported by:
- *   - gen-skill-docs.ts (generates {{SNAPSHOT_FLAGS}} tables)
- *   - skill-parser.ts (validates flags in SKILL.md examples)
+ *   - browser command help and tests
  */
 export const SNAPSHOT_FLAGS: Array<{
   short: string;
@@ -83,7 +82,7 @@ interface ParsedNode {
 /**
  * Parse CLI args into SnapshotOptions — driven by SNAPSHOT_FLAGS metadata.
  */
-export function parseSnapshotArgs(args: string[]): SnapshotOptions {
+function parseSnapshotArgs(args: string[]): SnapshotOptions {
   const opts: SnapshotOptions = {};
   for (let i = 0; i < args.length; i++) {
     const flag = SNAPSHOT_FLAGS.find(f => f.short === args[i] || f.long === args[i]);

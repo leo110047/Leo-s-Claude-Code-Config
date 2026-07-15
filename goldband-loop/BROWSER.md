@@ -1237,8 +1237,7 @@ browser-skills/
     ├── fixtures/hn-2026-04-26.html
     └── script.test.ts
 
-scrape/SKILL.md.tmpl             # browser/scrape workflow — match-or-prototype entry point
-skillify/SKILL.md.tmpl           # system/skill-authoring workflow — codify last scrape into a permanent skill
+generated/workflow-contracts/    # thin browser/scrape and system/skill-authoring contracts
 ```
 
 ---
@@ -1295,15 +1294,14 @@ pages.
 1. Add the handler in `read-commands.ts` (non-mutating) or `write-commands.ts`
    (mutating), or `meta-commands.ts` (server / lifecycle).
 2. Register the route in `server.ts`.
-3. Add the entry to `COMMAND_DESCRIPTIONS` in `browse/src/commands.ts` (with
-   a clear `description` and `usage` — the `gen-skill-docs` validation
-   suite enforces no `|` characters in `description`).
+3. Add the entry to `COMMAND_DESCRIPTIONS` in `browse/src/commands.ts` with a
+   clear `description` and `usage`.
 4. Add a test case in `browse/test/commands.test.ts` with an HTML fixture
    if needed.
 5. Run `bun test` to verify.
 6. Run `bun run build` to compile.
-7. Run `bun run gen:skill-docs` to regenerate SKILL.md (the command appears
-   in the command-reference table downstream).
+7. If capability metadata changed, regenerate manifest surfaces from the repo
+   root with `node scripts/generate-goldband-surfaces.mjs`.
 
 ### Adding a new browser-skill
 
@@ -1341,8 +1339,8 @@ cp browse/dist/browse ~/.claude/skills/goldband/browse/dist/browse
 - [`CLAUDE.md`](CLAUDE.md) — project-level instructions, sidebar architecture notes, security-stack constraints
 - [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for `/goldband browser pair` (setup keys, scoped tokens, denial log)
 - [`docs/designs/BROWSER_SKILLS_V1.md`](docs/designs/BROWSER_SKILLS_V1.md) — design doc for browser-skills runtime (Phase 1 + 2a + roadmap)
-- [`scrape/SKILL.md`](scrape/SKILL.md) — `browser/scrape` workflow: match-or-prototype data extraction
-- [`skillify/SKILL.md`](skillify/SKILL.md) — `system/skill-authoring` workflow: codify the last scrape into a permanent skill
+- [`browser/scrape` workflow contract](generated/workflow-contracts/browser/scrape.workflow.md) — match-or-prototype data extraction
+- [`system/skill-authoring` workflow contract](generated/workflow-contracts/system/skill-authoring.workflow.md) — codify the last scrape into a permanent skill
 - [`TODOS.md`](TODOS.md) — remaining browser resolver, eval, and sandbox work
 
 ---

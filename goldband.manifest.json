@@ -8,6 +8,9 @@
     "runtimeOwns": ["routing", "authorization", "side-effect-gates", "typed-evidence", "stop-conditions", "state", "observability"],
     "prohibitedSharedBoilerplate": ["universal-preamble", "embedded-browser-manual", "per-workflow-tool-script", "duplicated-routing-table"]
   },
+  "manuals": [
+    { "id": "browser", "source": "manuals/browser.md", "loadFor": ["browser/*", "qa/app", "qa/report-only"] }
+  ],
   "distribution": {
     "visibleSkills": ["goldband"],
     "internalClaudeSkills": ["_goldband-command"],
@@ -41,16 +44,21 @@
       "description": "Independent review with a selected engineering lens.",
       "defaultAction": "code",
       "triggers": ["review", "code review", "security audit", "architecture review", "design review", "審查"],
+      "promptContract": {
+        "relevantContext": ["Inspect the user-selected artifact, current repository instructions, and direct evidence."],
+        "hardBoundaries": ["Review only. Do not edit, stage, commit, push, merge, deploy, or change external state."],
+        "verification": ["Validate every finding against current evidence and state clearly when no blocking issue is verified."]
+      },
       "actions": [
-        { "id": "code", "description": "Review a code diff.", "source": "review/SKILL.md.tmpl", "runtime": "typed", "risk": "medium" },
-        { "id": "security", "description": "Review security and trust boundaries.", "source": "cso/SKILL.md.tmpl", "runtime": "compatibility", "risk": "medium" },
-        { "id": "design", "description": "Review visual and product design.", "source": "design-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "devex", "description": "Review developer experience.", "source": "devex-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "opposite-host", "description": "Get an opposite-host second opinion.", "source": "codex/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "plan-ceo", "description": "Review product scope and ambition.", "source": "plan-ceo-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-design", "description": "Review a plan's design contract.", "source": "plan-design-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-devex", "description": "Review a plan's developer experience.", "source": "plan-devex-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-engineering", "description": "Review architecture and implementation plans.", "source": "plan-eng-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" }
+        { "id": "code", "description": "Review a code diff.", "runtime": "typed", "risk": "medium", "promptContract": { "relevantContext": ["Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime."] } },
+        { "id": "security", "description": "Review security and trust boundaries.", "runtime": "compatibility", "risk": "medium" },
+        { "id": "design", "description": "Review visual and product design.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "devex", "description": "Review developer experience.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "opposite-host", "description": "Get an opposite-host second opinion.", "runtime": "registered-only", "risk": "low" },
+        { "id": "plan-ceo", "description": "Review product scope and ambition.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "plan-design", "description": "Review a plan's design contract.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "plan-devex", "description": "Review a plan's developer experience.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "plan-engineering", "description": "Review architecture and implementation plans.", "runtime": "registered-only", "risk": "medium" }
       ]
     },
     {
@@ -58,8 +66,13 @@
       "description": "Find and verify the root cause of a failure.",
       "defaultAction": "code",
       "triggers": ["debug", "bug", "error", "failure", "root cause", "regression", "除錯", "錯誤", "根因"],
+      "promptContract": {
+        "relevantContext": ["Trace the reported symptom through current code, configuration, tests, and logs."],
+        "hardBoundaries": ["Find and verify the root cause before proposing a fix. Do not change code unless the user asked for implementation."],
+        "verification": ["Reproduce the symptom or provide equivalent direct evidence for the confirmed cause."]
+      },
       "actions": [
-        { "id": "code", "description": "Investigate code or runtime behavior.", "source": "investigate/SKILL.md.tmpl", "runtime": "compatibility", "risk": "medium" }
+        { "id": "code", "description": "Investigate code or runtime behavior.", "runtime": "compatibility", "risk": "medium" }
       ]
     },
     {
@@ -67,9 +80,14 @@
       "description": "Verify product behavior with explicit evidence.",
       "defaultAction": "app",
       "triggers": ["qa", "test site", "staging", "e2e", "user flow", "驗證網站", "測試流程"],
+      "promptContract": {
+        "relevantContext": ["Use the requested environment, user flow, expected behavior, and browser manual when browser work is needed."],
+        "hardBoundaries": ["Do not change the product unless the user explicitly asked to fix verified defects."],
+        "verification": ["Record direct pass/fail evidence for each tested behavior and distinguish tested, blocked, and untested scope."]
+      },
       "actions": [
-        { "id": "app", "description": "Run product QA and record evidence.", "source": "qa/SKILL.md.tmpl", "runtime": "typed", "risk": "medium" },
-        { "id": "report-only", "description": "Report QA findings without fixing.", "source": "qa-only/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" }
+        { "id": "app", "description": "Run product QA and record evidence.", "runtime": "typed", "risk": "medium" },
+        { "id": "report-only", "description": "Report QA findings without fixing.", "runtime": "registered-only", "risk": "medium", "promptContract": { "hardBoundaries": ["Do not modify files, application state, or deployment state while reporting findings."] } }
       ]
     },
     {
@@ -77,12 +95,17 @@
       "description": "Prepare, land, deploy, and verify a release.",
       "defaultAction": "land",
       "triggers": ["release", "deploy", "pull request", "land", "canary", "發布", "部署", "合併"],
+      "promptContract": {
+        "relevantContext": ["Inspect the current git state, required checks, release target, deployment path, and rollback signal."],
+        "hardBoundaries": ["Require explicit approval before merge, deploy, publish, or any other outward-facing or irreversible action."],
+        "verification": ["Verify the resulting commit, remote, deployment, and user-visible health at the layers the action changed."]
+      },
       "actions": [
-        { "id": "land", "description": "Merge, deploy, and verify.", "source": "land-and-deploy/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "setup", "description": "Configure deployment.", "source": "setup-deploy/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "canary", "description": "Monitor a deployment after release.", "source": "canary/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "report", "description": "Produce a landing report.", "source": "landing-report/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "docs", "description": "Update documentation for a release.", "source": "document-release/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "land", "description": "Merge, deploy, and verify.", "runtime": "registered-only", "risk": "high" },
+        { "id": "setup", "description": "Configure deployment.", "runtime": "registered-only", "risk": "high" },
+        { "id": "canary", "description": "Monitor a deployment after release.", "runtime": "registered-only", "risk": "high" },
+        { "id": "report", "description": "Produce a landing report.", "runtime": "registered-only", "risk": "low" },
+        { "id": "docs", "description": "Update documentation for a release.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -90,11 +113,16 @@
       "description": "Create, expand, or tune an implementation plan.",
       "defaultAction": "create",
       "triggers": ["plan", "planning", "roadmap", "scope", "strategy", "規劃", "計畫", "範圍"],
+      "promptContract": {
+        "relevantContext": ["Ground the plan in current repository files, constraints, decisions, and available verification commands."],
+        "hardBoundaries": ["Plan only. Do not implement product changes unless the user separately authorizes implementation."],
+        "verification": ["Make every task executable by naming its artifact, expected result, and proof step; identify unresolved decisions explicitly."]
+      },
       "actions": [
-        { "id": "create", "description": "Create an implementation plan.", "source": "../commands/plan.md", "runtime": "compatibility", "risk": "low", "hostSupport": ["claude"] },
-        { "id": "auto", "description": "Run the complete plan review pipeline.", "source": "autoplan/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "strategy", "description": "Explore product direction and scope.", "source": "office-hours/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "tune", "description": "Tune recurring planning questions.", "source": "plan-tune/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "create", "description": "Create an implementation plan.", "runtime": "compatibility", "risk": "low", "hostSupport": ["claude"] },
+        { "id": "auto", "description": "Run the complete plan review pipeline.", "runtime": "registered-only", "risk": "low" },
+        { "id": "strategy", "description": "Explore product direction and scope.", "runtime": "registered-only", "risk": "low" },
+        { "id": "tune", "description": "Tune recurring planning questions.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -102,12 +130,17 @@
       "description": "Operate the persistent browser and browser-backed tools.",
       "defaultAction": "session",
       "triggers": ["browser", "open browser", "scrape", "cookies", "playwright", "瀏覽器", "爬取", "cookie"],
+      "promptContract": {
+        "relevantContext": ["Read manuals/browser.md from the active Goldband runtime and use the browser state available on the active host."],
+        "hardBoundaries": ["Do not expose credentials or private session data. Get explicit approval before submissions, purchases, messages, account changes, or cookie import."],
+        "verification": ["Inspect the resulting page state and capture the smallest useful visual or textual evidence."]
+      },
       "actions": [
-        { "id": "session", "description": "Use the persistent browser for interactive work.", "source": "browse/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "open", "description": "Open a visible browser workbench.", "source": "open-goldband-browser/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "scrape", "description": "Extract content or media from a page.", "source": "scrape/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "cookies", "description": "Import browser cookies for authenticated testing.", "source": "setup-browser-cookies/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "pair", "description": "Pair another agent with the browser.", "source": "pair-agent/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" }
+        { "id": "session", "description": "Use the persistent browser for interactive work.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "open", "description": "Open a visible browser workbench.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "scrape", "description": "Extract content or media from a page.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "cookies", "description": "Import browser cookies for authenticated testing.", "runtime": "registered-only", "risk": "high" },
+        { "id": "pair", "description": "Pair another agent with the browser.", "runtime": "registered-only", "risk": "medium" }
       ]
     },
     {
@@ -115,10 +148,15 @@
       "description": "Define, explore, and prototype product design.",
       "defaultAction": "consult",
       "triggers": ["design system", "visual direction", "mockup", "prototype", "設計系統", "視覺", "原型"],
+      "promptContract": {
+        "relevantContext": ["Read DESIGN.md when present and inspect the actual product, content, constraints, and target users."],
+        "hardBoundaries": ["Do not change production UI unless the user asked for implementation; keep prototypes isolated and reversible."],
+        "verification": ["Check the result against the chosen typography, color, spacing, layout, interaction, and accessibility decisions."]
+      },
       "actions": [
-        { "id": "consult", "description": "Define a design direction and system.", "source": "design-consultation/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "prototype", "description": "Generate an HTML design prototype.", "source": "design-html/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "explore", "description": "Explore multiple design directions.", "source": "design-shotgun/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "consult", "description": "Define a design direction and system.", "runtime": "registered-only", "risk": "low" },
+        { "id": "prototype", "description": "Generate an HTML design prototype.", "runtime": "registered-only", "risk": "low" },
+        { "id": "explore", "description": "Explore multiple design directions.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -126,11 +164,16 @@
       "description": "Apply or remove workflow safety boundaries.",
       "defaultAction": "guard",
       "triggers": ["careful", "guard", "freeze", "restrict edits", "read only", "小心", "限制修改", "唯讀"],
+      "promptContract": {
+        "relevantContext": ["Inspect the current safety state and the exact scope the user wants protected or released."],
+        "hardBoundaries": ["Change only the requested safety boundary. Never silently widen permissions or edit scope."],
+        "verification": ["Read back the effective safety state and report the scope now allowed or blocked."]
+      },
       "actions": [
-        { "id": "careful", "description": "Enable careful command handling.", "source": "careful/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "guard", "description": "Enable workflow-local safety rails.", "source": "guard/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "freeze", "description": "Restrict edits to an approved scope.", "source": "freeze/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "unfreeze", "description": "Remove an active edit restriction.", "source": "unfreeze/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "careful", "description": "Enable careful command handling.", "runtime": "registered-only", "risk": "low" },
+        { "id": "guard", "description": "Enable workflow-local safety rails.", "runtime": "registered-only", "risk": "low" },
+        { "id": "freeze", "description": "Restrict edits to an approved scope.", "runtime": "registered-only", "risk": "low" },
+        { "id": "unfreeze", "description": "Remove an active edit restriction.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -138,10 +181,15 @@
       "description": "Save, restore, and summarize working context.",
       "defaultAction": "restore",
       "triggers": ["save context", "restore context", "resume", "retro", "checkpoint", "保存進度", "恢復進度", "回顧"],
+      "promptContract": {
+        "relevantContext": ["Use current git state and the newest relevant saved artifacts for this repository and branch."],
+        "hardBoundaries": ["Do not fabricate missing history or treat stale artifacts as current evidence."],
+        "verification": ["Identify the artifact used, distinguish saved context from current state, and state the next actionable step."]
+      },
       "actions": [
-        { "id": "save", "description": "Save current working context.", "source": "context-save/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "restore", "description": "Restore saved working context.", "source": "context-restore/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "retro", "description": "Summarize recent work and lessons.", "source": "retro/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "save", "description": "Save current working context.", "runtime": "registered-only", "risk": "low" },
+        { "id": "restore", "description": "Restore saved working context.", "runtime": "registered-only", "risk": "low", "promptContract": { "hardBoundaries": ["Do not modify the project while restoring context."] } },
+        { "id": "retro", "description": "Summarize recent work and lessons.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -149,10 +197,15 @@
       "description": "Recall, configure, and synchronize Goldband knowledge.",
       "defaultAction": "recall",
       "triggers": ["learn", "knowledge", "gbrain", "sync knowledge", "學習", "知識", "同步記憶"],
+      "promptContract": {
+        "relevantContext": ["Use the active repository's knowledge source, review status, and current files when checking whether recalled material is stale."],
+        "hardBoundaries": ["Treat unreviewed candidates as untrusted and never expose secrets or private source content."],
+        "verification": ["Read back the stored, recalled, or synchronized result and label anything not currently verified."]
+      },
       "actions": [
-        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "source": "learn/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "setup", "description": "Configure GBrain integration.", "source": "setup-gbrain/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "sync", "description": "Synchronize GBrain knowledge.", "source": "sync-gbrain/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" }
+        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "runtime": "registered-only", "risk": "low" },
+        { "id": "setup", "description": "Configure GBrain integration.", "runtime": "registered-only", "risk": "high" },
+        { "id": "sync", "description": "Synchronize GBrain knowledge.", "runtime": "registered-only", "risk": "high" }
       ]
     },
     {
@@ -160,9 +213,14 @@
       "description": "Measure workflow or model performance.",
       "defaultAction": "workflow",
       "triggers": ["benchmark", "performance regression", "model comparison", "效能", "基準", "模型比較"],
+      "promptContract": {
+        "relevantContext": ["Define the target, baseline, workload, environment, and metric before measuring."],
+        "hardBoundaries": ["Do not compare results collected under materially different conditions without labeling the difference."],
+        "verification": ["Run repeatable measurements, preserve raw results, and report both the result and test conditions."]
+      },
       "actions": [
-        { "id": "workflow", "description": "Benchmark product or workflow performance.", "source": "benchmark/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "models", "description": "Compare model performance.", "source": "benchmark-models/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "workflow", "description": "Benchmark product or workflow performance.", "runtime": "registered-only", "risk": "low" },
+        { "id": "models", "description": "Compare model performance.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -170,9 +228,14 @@
       "description": "Create product documentation and publication artifacts.",
       "defaultAction": "generate",
       "triggers": ["write docs", "documentation", "pdf", "document", "文件", "說明文件"],
+      "promptContract": {
+        "relevantContext": ["Use the named source material, audience, output format, and existing document conventions."],
+        "hardBoundaries": ["Do not invent product facts, citations, or implementation behavior that the sources do not support."],
+        "verification": ["Render or inspect the final artifact and verify content accuracy, structure, links, and visual layout as applicable."]
+      },
       "actions": [
-        { "id": "generate", "description": "Generate product or module documentation.", "source": "document-generate/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "pdf", "description": "Create a PDF artifact.", "source": "make-pdf/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" }
+        { "id": "generate", "description": "Generate product or module documentation.", "runtime": "registered-only", "risk": "low" },
+        { "id": "pdf", "description": "Create a PDF artifact.", "runtime": "registered-only", "risk": "medium" }
       ]
     },
     {
@@ -180,10 +243,15 @@
       "description": "Inspect or maintain the Goldband installation.",
       "defaultAction": "health",
       "triggers": ["goldband health", "upgrade goldband", "create skill", "system status", "更新 goldband", "健康檢查"],
+      "promptContract": {
+        "relevantContext": ["Inspect both repository source and the installed Goldband runtime when the distinction affects the result."],
+        "hardBoundaries": ["Do not upgrade, reinstall, or mutate shared configuration without explicit authorization."],
+        "verification": ["Read back the installed state and run the narrowest relevant health, syntax, or installation check."]
+      },
       "actions": [
-        { "id": "health", "description": "Inspect Goldband health and installation state.", "source": "health/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "upgrade", "description": "Upgrade Goldband.", "source": "goldband-upgrade/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "skill-authoring", "description": "Create or improve a Goldband workflow skill.", "source": "skillify/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" }
+        { "id": "health", "description": "Inspect Goldband health and installation state.", "runtime": "registered-only", "risk": "low", "promptContract": { "hardBoundaries": ["Health inspection is read-only unless the user separately requests maintenance."] } },
+        { "id": "upgrade", "description": "Upgrade Goldband.", "runtime": "registered-only", "risk": "high" },
+        { "id": "skill-authoring", "description": "Create or improve a Goldband workflow skill.", "runtime": "registered-only", "risk": "low" }
       ]
     },
     {
@@ -191,12 +259,17 @@
       "description": "Maintain and validate iOS-specific product behavior.",
       "defaultAction": "qa",
       "triggers": ["ios", "iphone", "ipad", "xcode", "swiftui"],
+      "promptContract": {
+        "relevantContext": ["Inspect the current Xcode project, target device or simulator, build settings, and user-visible behavior in scope."],
+        "hardBoundaries": ["Do not delete source or user data; require explicit approval before signing, publishing, or synchronizing outward."],
+        "verification": ["Use the relevant build, test, simulator, screenshot, or project-state evidence and report untested device coverage."]
+      },
       "actions": [
-        { "id": "clean", "description": "Clean iOS project state.", "source": "ios-clean/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "review", "description": "Review iOS design and behavior.", "source": "ios-design-review/SKILL.md.tmpl", "runtime": "registered-only", "risk": "medium" },
-        { "id": "fix", "description": "Repair iOS implementation issues.", "source": "ios-fix/SKILL.md.tmpl", "runtime": "registered-only", "risk": "low" },
-        { "id": "qa", "description": "Run iOS QA.", "source": "ios-qa/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" },
-        { "id": "sync", "description": "Synchronize iOS project state.", "source": "ios-sync/SKILL.md.tmpl", "runtime": "registered-only", "risk": "high" }
+        { "id": "clean", "description": "Clean iOS project state.", "runtime": "registered-only", "risk": "low" },
+        { "id": "review", "description": "Review iOS design and behavior.", "runtime": "registered-only", "risk": "medium" },
+        { "id": "fix", "description": "Repair iOS implementation issues.", "runtime": "registered-only", "risk": "low" },
+        { "id": "qa", "description": "Run iOS QA.", "runtime": "registered-only", "risk": "high" },
+        { "id": "sync", "description": "Synchronize iOS project state.", "runtime": "registered-only", "risk": "high" }
       ]
     }
   ]

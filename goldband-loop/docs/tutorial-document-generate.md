@@ -139,4 +139,4 @@ Each one is short enough to maintain. Each one has a single job. The PR body sho
 - **If you have gaps** `/goldband release docs` flagged but didn't fill: run `/goldband document generate` again, scoped to those entities specifically.
 - **If you want to understand why the four quadrants exist:** read [explanation-diataxis-in-goldband.md](./explanation-diataxis-in-goldband.md).
 - **If you want to document one specific shipped feature** (not the whole project): read [howto-document-a-shipped-feature.md](./howto-document-a-shipped-feature.md).
-- **Reference for the skill itself:** [`document-generate/SKILL.md`](../document-generate/SKILL.md).
+- **Reference for the workflow itself:** [`document/generate` contract](../generated/workflow-contracts/document/generate.workflow.md).

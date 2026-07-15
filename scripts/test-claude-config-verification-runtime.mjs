@@ -92,9 +92,7 @@ fs.writeFileSync(
   path.join(tmpDir, '.codex', 'skills', 'goldband', 'bin', 'goldband-config'),
   'fixture\n',
 );
-fs.mkdirSync(path.join(tmpDir, '.codex', 'skills', 'goldband-generated'));
-
-const healthy = checkWorkflowInstall(tmpDir);
+const healthy = checkWorkflowInstall(tmpDir, tmpDir);
 assert.equal(
   healthy.claudeChecks.every((check) => check.ok),
   true,
@@ -115,10 +113,50 @@ fs.rmSync(
     'app.workflow.md',
   ),
 );
-const stale = checkWorkflowInstall(tmpDir);
+const stale = checkWorkflowInstall(tmpDir, tmpDir);
 assert.equal(
   stale.claudeChecks.find(
     (check) => check.file === path.join('workflows', 'qa', 'app.workflow.md'),
+  )?.ok,
+  false,
+);
+
+const restoredQaWorkflow = path.join(
+  tmpDir,
+  '.claude',
+  'skills',
+  'goldband',
+  'workflows',
+  'qa',
+  'app.workflow.md',
+);
+fs.mkdirSync(path.dirname(restoredQaWorkflow), { recursive: true });
+fs.writeFileSync(restoredQaWorkflow, 'fixture\n');
+
+for (const host of ['claude', 'codex']) {
+  fs.rmSync(
+    path.join(tmpDir, `.${host}`, 'skills', 'goldband', '.installed-source'),
+  );
+}
+const directSetup = checkWorkflowInstall(tmpDir, sourceDir);
+assert.equal(
+  directSetup.claudeChecks.some((check) => check.file === '.installed-source'),
+  false,
+);
+assert.equal(
+  directSetup.claudeChecks.every((check) => check.ok),
+  true,
+);
+assert.equal(
+  directSetup.codexChecks.every((check) => check.ok),
+  true,
+);
+
+fs.mkdirSync(path.join(tmpDir, '.codex', 'skills', 'goldband-generated'));
+const legacyCodex = checkWorkflowInstall(tmpDir, tmpDir);
+assert.equal(
+  legacyCodex.codexChecks.find((check) =>
+    check.file.startsWith('legacy top-level'),
   )?.ok,
   false,
 );

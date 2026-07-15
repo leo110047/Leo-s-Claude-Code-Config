@@ -86,21 +86,30 @@ Run `npm run test:app-support` from the repo. Report ERROR if it fails.
 If Goldband Loop is installed, also check:
 
 - `~/.claude/skills/goldband`
-  - `VERSION`
-  - `setup`
-  - `investigate/SKILL.md`
-  - `review/SKILL.md`
-  - `qa/SKILL.md`
+  - `SKILL.md`
+  - `bin/goldband-config`
+  - `manuals/browser.md`
+  - `workflows/investigate/code.workflow.md`
+  - `workflows/review/code.workflow.md`
+  - `workflows/qa/app.workflow.md`
 - `~/.codex/skills/goldband`
-  - `VERSION`
-- generated Codex Goldband Loop skills under `~/.codex/skills/` (`goldband-*`)
+  - `SKILL.md`
+  - `bin/goldband-config`
+  - `manuals/browser.md`
+  - matching `workflows/<capability>/<action>.workflow.md` files
+
+When the repository source is available, read
+`goldband-loop/generated/capability-actions.json` and verify that every action
+maps to an installed
+`workflows/<capability>/<action>.workflow.md` file. Do not require historical
+per-workflow `SKILL.md` files or top-level `goldband-*` workflow entries.
 
 If Goldband Loop is not installed, report INFO and continue.
 
-If both goldband `careful-mode` / `freeze-mode` and Goldband Loop safety skills are available,
+If both goldband `careful-mode` / `freeze-mode` and Goldband Loop safety workflows are available,
 report a WARNING with integration guidance:
 - use goldband for hard global guardrails
-- use Goldband Loop skills for task-local guardrails
+- use Goldband Loop safety workflows for task-local guardrails
 
 ### 3. Hook Checks
 
@@ -200,8 +209,8 @@ Codex Install:
 
 workflow:
   [OK]      Claude install — 0.x.y
-  [OK]      careful/SKILL.md
-  [OK]      freeze/SKILL.md
+  [OK]      workflows/safety/careful.workflow.md
+  [OK]      workflows/safety/freeze.workflow.md
   [INFO]    Codex runtime not present
 
 Hooks:

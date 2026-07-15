@@ -26,7 +26,7 @@ export const WORKFLOW_REGISTRY: WorkflowDefinition[] = CAPABILITY_ACTIONS.map((e
     evaluationSignal: evaluationFor(entry.name),
     iterationCap: iterationCapFor(entry.name),
     stopConditions: stopConditionsFor(entry.name),
-    sourceTemplate: entry.sourceTemplate,
+    contractPath: entry.contractPath,
     entrypointType: entry.runtime === 'typed' ? 'typed' : entry.runtime === 'compatibility' ? 'compatibility' : 'legacy-thin',
     integrationStatus: entry.runtime === 'registered-only' ? 'registered-only' : 'integrated',
     hostSupport: entry.hostSupport,
@@ -67,15 +67,15 @@ function compatibilitySteps(name: string): WorkflowStep[] {
     produces: objectSchema,
     run(ctx) {
       if (ctx.options.mode === 'real') {
-        throw new Error(`${name} compatibility runtime only supports mock mode; use the markdown skill until typed migration is complete`);
+        throw new Error(`${name} compatibility runtime only supports mock mode until typed migration is complete`);
       }
-      const sourceTemplate = getWorkflow(name).sourceTemplate;
-      const content = readFileSync(workflowAssetPath(sourceTemplate), 'utf8');
+      const contractPath = getWorkflow(name).contractPath;
+      const content = readFileSync(workflowAssetPath(contractPath), 'utf8');
       return {
         mode: 'compatibility',
         workflow: name,
-        sourceTemplate,
-        legacyPromptDigest: promptDigest(content),
+        contractPath,
+        contractDigest: promptDigest(content),
       };
     },
   }];

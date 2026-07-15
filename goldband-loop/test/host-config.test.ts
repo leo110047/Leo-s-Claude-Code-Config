@@ -1,320 +1,75 @@
-/**
- * Host config system tests for host-config.ts, hosts/index.ts, and
- * host-config-export.ts.
- */
-
-import { describe, test, expect } from 'bun:test';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import {
-  shouldGenerateSkill,
-  validateHostConfig,
-  validateAllConfigs,
-  type HostConfig,
-} from '../scripts/host-config';
+import { describe, expect, test } from 'bun:test';
+import * as path from 'node:path';
 import {
   ALL_HOST_CONFIGS,
   ALL_HOST_NAMES,
   HOST_CONFIG_MAP,
+  getExternalHosts,
   getHostConfig,
   resolveHostArg,
-  getExternalHosts,
-  claude,
-  codex,
-  factory,
-  kiro,
-  opencode,
-  slate,
-  cursor,
-  openclaw,
-} from '../hosts/index';
-import { HOST_PATHS } from '../scripts/resolvers/types';
-import { RESOLVERS } from '../scripts/resolvers';
+} from '../hosts';
+import { type HostConfig, validateAllConfigs, validateHostConfig } from '../scripts/host-config';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 
-// ─── hosts/index.ts ─────────────────────────────────────────
+function validConfig(): HostConfig {
+  return {
+    name: 'test-host',
+    displayName: 'Test Host',
+    cliCommand: 'testcli',
+    globalRoot: '.test/skills/goldband',
+    localSkillRoot: '.test/skills/goldband',
+    hostSubdir: '.test',
+    runtimeRoot: { globalSymlinks: ['bin'] },
+  };
+}
 
-describe('hosts/index.ts', () => {
-  test('ALL_HOST_CONFIGS has 10 hosts', () => {
-    expect(ALL_HOST_CONFIGS.length).toBe(10);
-  });
-
-  test('ALL_HOST_NAMES matches config names', () => {
-    expect(ALL_HOST_NAMES).toEqual(ALL_HOST_CONFIGS.map(c => c.name));
-  });
-
-  test('HOST_CONFIG_MAP keys match names', () => {
+describe('host registry', () => {
+  test('registry is internally consistent', () => {
+    expect(ALL_HOST_CONFIGS).toHaveLength(10);
+    expect(ALL_HOST_NAMES).toEqual(ALL_HOST_CONFIGS.map((config) => config.name));
+    expect(new Set(ALL_HOST_NAMES).size).toBe(ALL_HOST_NAMES.length);
     for (const config of ALL_HOST_CONFIGS) {
       expect(HOST_CONFIG_MAP[config.name]).toBe(config);
     }
+    expect(validateAllConfigs(ALL_HOST_CONFIGS)).toEqual([]);
   });
 
-  test('individual config re-exports match registry', () => {
-    expect(claude.name).toBe('claude');
-    expect(codex.name).toBe('codex');
-    expect(factory.name).toBe('factory');
-    expect(kiro.name).toBe('kiro');
-    expect(opencode.name).toBe('opencode');
-    expect(slate.name).toBe('slate');
-    expect(cursor.name).toBe('cursor');
-    expect(openclaw.name).toBe('openclaw');
-  });
-
-  test('getHostConfig returns correct config', () => {
-    const c = getHostConfig('codex');
-    expect(c.name).toBe('codex');
-    expect(c.displayName).toBe('OpenAI Codex CLI');
-  });
-
-  test('getHostConfig throws on unknown host', () => {
-    expect(() => getHostConfig('nonexistent')).toThrow('Unknown host');
-  });
-
-  test('resolveHostArg resolves direct names', () => {
-    for (const name of ALL_HOST_NAMES) {
-      expect(resolveHostArg(name)).toBe(name);
-    }
-  });
-
-  test('resolveHostArg resolves aliases', () => {
+  test('lookup, aliases, and external hosts work', () => {
+    expect(getHostConfig('codex').displayName).toBe('OpenAI Codex CLI');
     expect(resolveHostArg('agents')).toBe('codex');
     expect(resolveHostArg('droid')).toBe('factory');
-  });
-
-  test('resolveHostArg throws on unknown alias', () => {
-    expect(() => resolveHostArg('nonexistent')).toThrow('Unknown host');
-  });
-
-  test('getExternalHosts excludes claude', () => {
-    const external = getExternalHosts();
-    expect(external.find(c => c.name === 'claude')).toBeUndefined();
-    expect(external.length).toBe(ALL_HOST_CONFIGS.length - 1);
-  });
-
-  test('host generation policy excludes explicitly skipped skills', () => {
-    expect(shouldGenerateSkill(claude, 'claude')).toBe(false);
-    expect(shouldGenerateSkill(claude, 'review')).toBe(true);
-  });
-
-  test('host generation policy applies includeSkills before skipSkills', () => {
-    const config = {
-      ...claude,
-      generation: {
-        ...claude.generation,
-        includeSkills: ['review', 'claude'],
-        skipSkills: ['claude'],
-      },
-    };
-    expect(shouldGenerateSkill(config, 'review')).toBe(true);
-    expect(shouldGenerateSkill(config, 'claude')).toBe(false);
-    expect(shouldGenerateSkill(config, 'browse')).toBe(false);
-  });
-
-  test('every host has a unique name', () => {
-    const names = new Set(ALL_HOST_NAMES);
-    expect(names.size).toBe(ALL_HOST_NAMES.length);
-  });
-
-  test('every host has a unique hostSubdir', () => {
-    const subdirs = new Set(ALL_HOST_CONFIGS.map(c => c.hostSubdir));
-    expect(subdirs.size).toBe(ALL_HOST_CONFIGS.length);
-  });
-
-  test('every host has a unique globalRoot', () => {
-    const roots = new Set(ALL_HOST_CONFIGS.map(c => c.globalRoot));
-    expect(roots.size).toBe(ALL_HOST_CONFIGS.length);
+    expect(() => resolveHostArg('missing')).toThrow('Unknown host');
+    expect(getExternalHosts().some((config) => config.name === 'claude')).toBe(false);
   });
 });
 
-// ─── validateHostConfig ─────────────────────────────────────
-
-describe('validateHostConfig', () => {
-  function makeValid(): HostConfig {
-    return {
-      name: 'test-host',
-      displayName: 'Test Host',
-      cliCommand: 'testcli',
-      globalRoot: '.test/skills/goldband',
-      localSkillRoot: '.test/skills/goldband',
-      hostSubdir: '.test',
-      frontmatter: { mode: 'allowlist', keepFields: ['name', 'description'] },
-      generation: { generateMetadata: false },
-      pathRewrites: [],
-      runtimeRoot: { globalSymlinks: ['bin'] },
-      install: { prefixable: false, linkingStrategy: 'symlink-generated' },
-    };
-  }
-
-  test('valid config passes', () => {
-    expect(validateHostConfig(makeValid())).toEqual([]);
+describe('host config validation', () => {
+  test('accepts the minimal runtime-owned contract', () => {
+    expect(validateHostConfig(validConfig())).toEqual([]);
   });
 
-  test('invalid name is caught', () => {
-    const c = makeValid();
-    c.name = 'UPPER_CASE';
-    const errors = validateHostConfig(c);
-    expect(errors.some(e => e.includes('name'))).toBe(true);
+  test('rejects unsafe names, commands, and paths', () => {
+    expect(validateHostConfig({ ...validConfig(), name: 'BAD' })).not.toEqual([]);
+    expect(validateHostConfig({ ...validConfig(), cliCommand: 'x;rm' })).not.toEqual([]);
+    expect(validateHostConfig({ ...validConfig(), globalRoot: 'has spaces' })).not.toEqual([]);
   });
 
-  test('name with special chars is caught', () => {
-    const c = makeValid();
-    c.name = 'has spaces';
-    expect(validateHostConfig(c).length).toBeGreaterThan(0);
-  });
-
-  test('empty displayName is caught', () => {
-    const c = makeValid();
-    c.displayName = '';
-    expect(validateHostConfig(c).some(e => e.includes('displayName'))).toBe(true);
-  });
-
-  test('invalid cliCommand is caught', () => {
-    const c = makeValid();
-    c.cliCommand = 'has spaces';
-    expect(validateHostConfig(c).some(e => e.includes('cliCommand'))).toBe(true);
-  });
-
-  test('invalid cliAlias is caught', () => {
-    const c = makeValid();
-    c.cliAliases = ['good', 'BAD!'];
-    expect(validateHostConfig(c).some(e => e.includes('cliAlias'))).toBe(true);
-  });
-
-  test('valid cliAliases pass', () => {
-    const c = makeValid();
-    c.cliAliases = ['alias-one', 'alias-two'];
-    expect(validateHostConfig(c)).toEqual([]);
-  });
-
-  test('invalid globalRoot is caught', () => {
-    const c = makeValid();
-    c.globalRoot = 'path with spaces';
-    expect(validateHostConfig(c).some(e => e.includes('globalRoot'))).toBe(true);
-  });
-
-  test('invalid localSkillRoot is caught', () => {
-    const c = makeValid();
-    c.localSkillRoot = 'invalid<path>';
-    expect(validateHostConfig(c).some(e => e.includes('localSkillRoot'))).toBe(true);
-  });
-
-  test('invalid hostSubdir is caught', () => {
-    const c = makeValid();
-    c.hostSubdir = 'no spaces allowed';
-    expect(validateHostConfig(c).some(e => e.includes('hostSubdir'))).toBe(true);
-  });
-
-  test('invalid frontmatter.mode is caught', () => {
-    const c = makeValid();
-    (c.frontmatter as any).mode = 'invalid';
-    expect(validateHostConfig(c).some(e => e.includes('frontmatter.mode'))).toBe(true);
-  });
-
-  test('invalid linkingStrategy is caught', () => {
-    const c = makeValid();
-    (c.install as any).linkingStrategy = 'invalid';
-    expect(validateHostConfig(c).some(e => e.includes('linkingStrategy'))).toBe(true);
-  });
-
-  test('paths with $ and ~ are valid', () => {
-    const c = makeValid();
-    c.globalRoot = '$HOME/.test/skills/goldband';
-    c.localSkillRoot = '~/.test/skills/goldband';
-    expect(validateHostConfig(c)).toEqual([]);
-  });
-
-  test('shell injection attempt in cliCommand is caught', () => {
-    const c = makeValid();
-    c.cliCommand = 'opencode;rm -rf /';
-    expect(validateHostConfig(c).some(e => e.includes('cliCommand'))).toBe(true);
+  test('rejects duplicate ownership paths', () => {
+    const first = validConfig();
+    const second = { ...validConfig(), name: 'second' };
+    const errors = validateAllConfigs([first, second]);
+    expect(errors.some((error) => error.includes('Duplicate hostSubdir'))).toBe(true);
+    expect(errors.some((error) => error.includes('Duplicate globalRoot'))).toBe(true);
   });
 });
 
-// ─── validateAllConfigs ─────────────────────────────────────
+describe('host-config-export CLI', () => {
+  const script = path.join(ROOT, 'scripts', 'host-config-export.ts');
 
-describe('validateAllConfigs', () => {
-  test('real configs all pass validation', () => {
-    const errors = validateAllConfigs(ALL_HOST_CONFIGS);
-    expect(errors).toEqual([]);
-  });
-
-  test('duplicate name detected', () => {
-    const dup = { ...codex, name: 'claude' } as HostConfig;
-    const errors = validateAllConfigs([claude, dup]);
-    expect(errors.some(e => e.includes('Duplicate name'))).toBe(true);
-  });
-
-  test('duplicate hostSubdir detected', () => {
-    const dup = { ...codex, name: 'dup-host', hostSubdir: '.claude', globalRoot: '.dup/skills/goldband' } as HostConfig;
-    const errors = validateAllConfigs([claude, dup]);
-    expect(errors.some(e => e.includes('Duplicate hostSubdir'))).toBe(true);
-  });
-
-  test('duplicate globalRoot detected', () => {
-    const dup = { ...codex, name: 'dup-host', hostSubdir: '.dup', globalRoot: '.claude/skills/goldband' } as HostConfig;
-    const errors = validateAllConfigs([claude, dup]);
-    expect(errors.some(e => e.includes('Duplicate globalRoot'))).toBe(true);
-  });
-
-  test('per-config validation errors are prefixed with host name', () => {
-    const bad = { ...codex, name: 'BAD', cliCommand: 'also bad' } as HostConfig;
-    const errors = validateAllConfigs([bad]);
-    expect(errors.every(e => e.startsWith('[BAD]'))).toBe(true);
-  });
-});
-
-// ─── HOST_PATHS derivation ──────────────────────────────────
-
-describe('HOST_PATHS derivation from configs', () => {
-  test('every host uses the shared runtime variable contract', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      expect(HOST_PATHS[config.name].skillRoot).toBe('$GOLDBAND_ROOT');
-      expect(HOST_PATHS[config.name].binDir).toBe('$GOLDBAND_BIN');
-      expect(HOST_PATHS[config.name].browseDir).toBe('$GOLDBAND_BROWSE');
-      expect(HOST_PATHS[config.name].designDir).toBe('$GOLDBAND_DESIGN');
-    }
-  });
-
-  test('HOST_PATHS has entry for every registered host', () => {
-    for (const name of ALL_HOST_NAMES) {
-      expect(HOST_PATHS[name]).toBeDefined();
-    }
-  });
-});
-
-describe('skill:check host generation policy', () => {
-  test('treats a primary-host skipped template as skipped, not missing', () => {
-    const result = Bun.spawnSync(
-      [process.execPath, 'run', path.join(ROOT, 'scripts', 'skill-check.ts')],
-      {
-        cwd: ROOT,
-        stdout: 'pipe',
-        stderr: 'pipe',
-      },
-    );
-    const stdout = result.stdout.toString();
-    expect(result.exitCode).toBe(0);
-    expect(stdout).toContain(
-      'claude/SKILL.md.tmpl           — skipped for Claude Code',
-    );
-    expect(stdout).not.toContain('claude/SKILL.md                — generated file missing');
-  });
-});
-
-// ─── host-config-export.ts CLI ──────────────────────────────
-
-describe('host-config-export.ts CLI', () => {
-  const EXPORT_SCRIPT = path.join(ROOT, 'scripts', 'host-config-export.ts');
-
-  function runWithEnv(
-    env: Record<string, string>,
-    ...args: string[]
-  ): { stdout: string; stderr: string; exitCode: number } {
-    const result = Bun.spawnSync([process.execPath, 'run', EXPORT_SCRIPT, ...args], {
+  function run(...args: string[]) {
+    const result = Bun.spawnSync([process.execPath, 'run', script, ...args], {
       cwd: ROOT,
-      env: { ...process.env, ...env },
       stdout: 'pipe',
       stderr: 'pipe',
     });
@@ -325,232 +80,16 @@ describe('host-config-export.ts CLI', () => {
     };
   }
 
-  function run(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
-    return runWithEnv({}, ...args);
-  }
-
-  test('list prints all host names', () => {
-    const { stdout, exitCode } = run('list');
-    expect(exitCode).toBe(0);
-    const names = stdout.split('\n');
-    expect(names).toEqual(ALL_HOST_NAMES);
+  test('list and get expose current runtime fields', () => {
+    expect(run('list').stdout.split('\n')).toEqual(ALL_HOST_NAMES);
+    expect(run('get', 'codex', 'globalRoot').stdout).toBe('.codex/skills/goldband');
+    expect(run('get', 'codex', 'frontmatter').exitCode).toBe(1);
   });
 
-  test('get returns string field', () => {
-    const { stdout, exitCode } = run('get', 'codex', 'globalRoot');
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe('.codex/skills/goldband');
-  });
-
-  test('get with missing args exits 1', () => {
-    const { exitCode } = run('get', 'codex');
-    expect(exitCode).toBe(1);
-  });
-
-  test('get with unknown field exits 1', () => {
-    const { exitCode } = run('get', 'codex', 'nonexistent');
-    expect(exitCode).toBe(1);
-  });
-
-  test('get with unknown host exits 1', () => {
-    const { exitCode } = run('get', 'nonexistent', 'name');
-    expect(exitCode).not.toBe(0);
-  });
-
-  test('validate passes for real configs', () => {
-    const { stdout, exitCode } = run('validate');
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain('configs valid');
-  });
-
-  test('symlinks returns asset list', () => {
-    const { stdout, exitCode } = run('symlinks', 'codex');
-    expect(exitCode).toBe(0);
-    const lines = stdout.split('\n');
-    expect(lines).toContain('bin');
-    expect(lines).toContain('ETHOS.md');
-    expect(lines).toContain('review/shared-rubric.md');
-    expect(lines).toContain('review/findings-schema.md');
-    expect(lines).toContain('review/checklist.md');
-    expect(lines).toContain('review/design-checklist.md');
-    expect(lines).toContain('review/greptile-triage.md');
-  });
-
-  test('claude symlinks include shared review runtime assets', () => {
-    const { stdout, exitCode } = run('symlinks', 'claude');
-    expect(exitCode).toBe(0);
-    const lines = stdout.split('\n');
-    expect(lines).toContain('review/shared-rubric.md');
-    expect(lines).toContain('review/findings-schema.md');
-    expect(lines).toContain('review/checklist.md');
-    expect(lines).toContain('review/design-checklist.md');
-    expect(lines).toContain('review/greptile-triage.md');
-    expect(lines).toContain('review/TODOS-format.md');
-  });
-
-  test('opencode symlinks returns nested runtime assets', () => {
-    const { stdout, exitCode } = run('symlinks', 'opencode');
-    expect(exitCode).toBe(0);
-    const lines = stdout.split('\n');
-    expect(lines).toContain('bin');
-    expect(lines).toContain('browse/dist');
-    expect(lines).toContain('browse/bin');
-    expect(lines).toContain('review/design-checklist.md');
-    expect(lines).toContain('review/greptile-triage.md');
-    expect(lines).toContain('review/specialists');
-    expect(lines).toContain('qa/templates');
-    expect(lines).toContain('qa/references');
-    expect(lines).toContain('plan-devex-review/dx-hall-of-fame.md');
-  });
-
-  test('symlinks with missing host exits 1', () => {
-    const { exitCode } = run('symlinks');
-    expect(exitCode).toBe(1);
-  });
-
-  test('detect finds a host when its CLI binary is on PATH', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-detect-test-'));
-    try {
-      const binPath = path.join(tmpDir, 'claude');
-      fs.writeFileSync(binPath, '#!/bin/sh\nexit 0\n');
-      fs.chmodSync(binPath, 0o755);
-
-      const { stdout, exitCode } = runWithEnv(
-        { PATH: `${tmpDir}${path.delimiter}${process.env.PATH || ''}` },
-        'detect',
-      );
-      expect(exitCode).toBe(0);
-      expect(stdout.split('\n')).toContain('claude');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  test('unknown command exits 1', () => {
-    const { exitCode } = run('badcommand');
-    expect(exitCode).toBe(1);
-  });
-});
-
-// ─── Individual host config correctness ─────────────────────
-
-describe('host config correctness', () => {
-  test('claude is the only prefixable host', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      if (config.name === 'claude') {
-        expect(config.install.prefixable).toBe(true);
-      } else {
-        expect(config.install.prefixable).toBe(false);
-      }
-    }
-  });
-
-  test('claude is the only host with real-dir-symlink strategy', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      if (config.name === 'claude') {
-        expect(config.install.linkingStrategy).toBe('real-dir-symlink');
-      } else {
-        expect(config.install.linkingStrategy).toBe('symlink-generated');
-      }
-    }
-  });
-
-  test('codex has 1024-char description limit with error behavior', () => {
-    expect(codex.frontmatter.descriptionLimit).toBe(1024);
-    expect(codex.frontmatter.descriptionLimitBehavior).toBe('error');
-  });
-
-  test('codex generates openai.yaml metadata', () => {
-    expect(codex.generation.generateMetadata).toBe(true);
-    expect(codex.generation.metadataFormat).toBe('openai.yaml');
-  });
-
-  test('codex has sidecar config', () => {
-    expect(codex.sidecar).toBeDefined();
-    expect(codex.sidecar!.path).toBe('.agents/skills/goldband');
-  });
-
-  test('factory has tool rewrites', () => {
-    expect(factory.toolRewrites).toBeDefined();
-    expect(Object.keys(factory.toolRewrites!).length).toBeGreaterThan(0);
-    expect(factory.toolRewrites!['use the Bash tool']).toBe('run this command');
-  });
-
-  test('factory has conditional disable-model-invocation field', () => {
-    expect(factory.frontmatter.conditionalFields).toBeDefined();
-    expect(factory.frontmatter.conditionalFields!.length).toBe(1);
-    expect(factory.frontmatter.conditionalFields![0].if).toEqual({ sensitive: true });
-    expect(factory.frontmatter.conditionalFields![0].add).toEqual({ 'disable-model-invocation': true });
-  });
-
-  test('codex has suppressedResolvers for self-invocation prevention', () => {
-    expect(codex.suppressedResolvers).toBeDefined();
-    expect(codex.suppressedResolvers).toContain('CODEX_SECOND_OPINION');
-  });
-
-  test('every suppressed resolver exists in the registry', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      for (const resolver of config.suppressedResolvers ?? []) {
-        expect(RESOLVERS[resolver], `${config.name} suppresses unknown resolver ${resolver}`).toBeDefined();
-      }
-    }
-  });
-
-  test('codex has boundary instruction', () => {
-    expect(codex.boundaryInstruction).toBeDefined();
-    expect(codex.boundaryInstruction).toContain('Do NOT read');
-  });
-
-  test('openclaw has tool rewrites for exec/read/write', () => {
-    expect(openclaw.toolRewrites).toBeDefined();
-    expect(openclaw.toolRewrites!['use the Bash tool']).toBe('use the exec tool');
-    expect(openclaw.toolRewrites!['use the Read tool']).toBe('use the read tool');
-  });
-
-  test('openclaw has CLAUDE.md→AGENTS.md path rewrite', () => {
-    expect(openclaw.pathRewrites.some(r => r.from === 'CLAUDE.md' && r.to === 'AGENTS.md')).toBe(true);
-  });
-
-  test('openclaw includeSkills is empty (native skills replaced generated ones)', () => {
-    expect(openclaw.generation.includeSkills).toBeDefined();
-    expect(openclaw.generation.includeSkills!.length).toBe(0);
-  });
-
-  test('every host has coAuthorTrailer or undefined', () => {
-    // Claude, Codex, Factory, OpenClaw have explicit trailers
-    expect(claude.coAuthorTrailer).toContain('Claude');
-    expect(codex.coAuthorTrailer).toContain('Codex');
-    expect(factory.coAuthorTrailer).toContain('Factory');
-    expect(openclaw.coAuthorTrailer).toContain('OpenClaw');
-  });
-
-  test('every external host skips the codex skill', () => {
-    for (const config of getExternalHosts()) {
-      expect(config.generation.skipSkills).toContain('codex');
-    }
-  });
-
-  test('every host has at least one pathRewrite (except claude)', () => {
-    for (const config of getExternalHosts()) {
-      expect(config.pathRewrites.length).toBeGreaterThan(0);
-    }
-    expect(claude.pathRewrites.length).toBe(0);
-  });
-
-  test('host path rewrites do not own the Goldband runtime root contract', () => {
-    for (const config of getExternalHosts()) {
-      expect(config.pathRewrites.some((rewrite) =>
-        rewrite.from === '~/.claude/skills/goldband'
-        || rewrite.from === '.claude/skills/goldband'
-      )).toBe(false);
-    }
-  });
-
-  test('every host has runtimeRoot.globalSymlinks', () => {
-    for (const config of ALL_HOST_CONFIGS) {
-      expect(config.runtimeRoot.globalSymlinks.length).toBeGreaterThan(0);
-      expect(config.runtimeRoot.globalSymlinks).toContain('bin');
-      expect(config.runtimeRoot.globalSymlinks).toContain('ETHOS.md');
-    }
+  test('validate and symlinks use the slim config', () => {
+    expect(run('validate').exitCode).toBe(0);
+    const links = run('symlinks', 'codex').stdout.split('\n');
+    expect(links).toContain('bin');
+    expect(links).toContain('review/checklist.md');
   });
 });

@@ -1,6 +1,7 @@
 # Design Review Checklist (Lite)
 
-> **Subset of DESIGN_METHODOLOGY** — when adding items here, also update `generateDesignMethodology()` in `scripts/gen-skill-docs.ts`, and vice versa.
+> Runtime-owned design review checklist. Workflow prompts reference this asset
+> on demand instead of embedding a copy.
 
 ## Instructions
 

@@ -298,7 +298,7 @@ function buildSkillChecks(rootDir) {
 function buildRuntimeChecks(rootDir, homeDir, args) {
   return {
     hookCheck: checkHookReferences(rootDir),
-    workflowInstall: checkWorkflowInstall(homeDir),
+    workflowInstall: checkWorkflowInstall(homeDir, rootDir),
     shellLaunchers: checkShellLaunchers(homeDir),
     replay: args.routerReplay ? runRouterReplay(rootDir) : null,
   };

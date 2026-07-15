@@ -54,6 +54,10 @@ describe('setup: _link_or_copy invariant (D7)', () => {
     const fnEnd = SETUP_SRC.indexOf('\n}\n', fnStart);
     const fnBody = SETUP_SRC.slice(fnStart, fnEnd);
     expect(fnBody).toContain('_print_windows_copy_note_once');
+    expect(fnBody).toContain('a.contractPath');
+    expect(fnBody).not.toContain('a.sourceTemplate');
+    expect(fnBody).toContain('missing contractPath');
+    expect(fnBody).toContain('missing workflow contract');
   });
 });
 

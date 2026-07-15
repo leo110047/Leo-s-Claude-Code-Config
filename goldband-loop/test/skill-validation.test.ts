@@ -9,20 +9,10 @@ import {
   WRITE_COMMANDS,
 } from '../browse/src/commands';
 import { SNAPSHOT_FLAGS } from '../browse/src/snapshot';
-import { discoverSkillFiles } from '../scripts/discover-skills';
-import { validateSkill } from './helpers/skill-parser';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 
 describe('skill command contracts', () => {
-  test('all generated Claude skills use registered browser commands and flags', () => {
-    for (const relativePath of discoverSkillFiles(ROOT)) {
-      const result = validateSkill(path.join(ROOT, relativePath));
-      expect(result.invalid, relativePath).toEqual([]);
-      expect(result.snapshotFlagErrors, relativePath).toEqual([]);
-    }
-  });
-
   test('command registry sets and descriptions have identical membership', () => {
     const union = new Set([
       ...READ_COMMANDS,

@@ -3,9 +3,7 @@
  *
  * Dependency graph:
  *   commands.ts ──▶ server.ts (runtime dispatch)
- *                ──▶ gen-skill-docs.ts (doc generation)
- *                ──▶ skill-parser.ts (validation)
- *                ──▶ skill-check.ts (health reporting)
+ *                ──▶ browser command implementations and tests
  *
  * Zero side effects. Safe to import from build scripts and tests.
  */

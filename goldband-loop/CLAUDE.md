@@ -18,8 +18,8 @@ rules.
 
 ## Editing Contract
 
-- Edit `SKILL.md.tmpl` sources, then regenerate `SKILL.md`; do not hand-edit
-  generated skill files.
+- Edit workflow prompt contracts in `../goldband.manifest.json`; the root
+  `SKILL.md.tmpl` only owns the small capability router.
 - Change capability metadata in `../goldband.manifest.json`, then regenerate all
   derived surfaces.
 - Put runtime details in `ARCHITECTURE.md`, workflow contracts, tests, or design

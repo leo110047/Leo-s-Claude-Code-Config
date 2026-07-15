@@ -23,7 +23,7 @@ case "$(uname -s)" in
 esac
 
 "$BUN_CMD" run vendor:xterm
-"$BUN_CMD" run gen:skill-docs --host all
+"$BUN_CMD" run gen:surfaces
 "$BUN_CMD" build --compile browse/src/cli.ts --outfile browse/dist/browse
 "$BUN_CMD" build --compile browse/src/find-browse.ts --outfile browse/dist/find-browse
 "$BUN_CMD" build --compile design/src/cli.ts --outfile design/dist/design

@@ -15,9 +15,9 @@ uses only `active` entries.
 | Capability | Claude exposure | Codex exposure | Test/readback |
 | --- | --- | --- | --- |
 | `goldband-knowledge` add/search/validate/reindex | Runtime CLI under `~/.claude/skills/goldband/bin` | Runtime CLI under `~/.codex/skills/goldband/bin` | `goldband-loop/test/goldband-knowledge.test.ts`; `node scripts/check-goldband-loop-inventory.mjs` |
-| Deterministic candidate capture | CLI and generated workflow `Knowledge Capture Check` guidance | CLI and generated workflow `Knowledge Capture Check` guidance | `goldband-loop/test/goldband-knowledge.test.ts`; `goldband-loop/test/gen-skill-docs.test.ts` |
+| Deterministic candidate capture | Runtime CLI and explicit knowledge capability | Runtime CLI and explicit knowledge capability | `goldband-loop/test/goldband-knowledge.test.ts`; workflow contract tests |
 | Candidate review/promotion | `goldband-knowledge-review` runtime binary | `goldband-knowledge-review` runtime binary | direct wrapper smoke; `./install.sh status` readback |
-| `{{PRIOR_KNOWLEDGE}}` recall | `review` and `qa` workflow docs generated with `status active` search | same generated workflow docs through `$GOLDBAND_BIN` | `goldband-loop/test/gen-skill-docs.test.ts`; `bun run gen:skill-docs --dry-run` |
+| Active knowledge recall | Explicit `knowledge/recall` contract and runtime CLI | Same capability contract and runtime CLI | `goldband-loop/test/goldband-knowledge.test.ts`; `node scripts/test-workflow-contracts.mjs` |
 | Telemetry-derived candidates | Offline miner writes local candidate files only when run | same offline miner | `node scripts/test-telemetry-miner.mjs`; `npm run test:telemetry` |
 | MCP `knowledge-query` | Available through first-party MCP server when enabled by host | Available through first-party MCP server when enabled by host | `mcp/server/test/knowledge-query.test.ts`; `npm test` in `mcp/server` |
 | Prompt-time knowledge advisory | Claude UserPromptSubmit advisory for active entries | Not equivalent; Codex has workflow/MCP recall only. Codex `Stop` hooks do not prompt knowledge capture. | `npm run test:hook-router`; `node scripts/test-codex-hook-router.mjs` |

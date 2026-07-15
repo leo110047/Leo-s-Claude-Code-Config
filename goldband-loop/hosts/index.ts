@@ -55,11 +55,8 @@ export function resolveHostArg(arg: string): string {
 
 /**
  * Get hosts that are NOT the primary host (Claude).
- * These are the hosts that need generated skill docs.
+ * These are the non-primary hosts that share the portable root skill.
  */
 export function getExternalHosts(): HostConfig[] {
   return ALL_HOST_CONFIGS.filter(c => c.name !== 'claude');
 }
-
-// Re-export individual configs for direct import
-export { claude, codex, factory, kiro, opencode, slate, cursor, openclaw };

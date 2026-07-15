@@ -53,7 +53,7 @@ export type WorkflowDefinition = {
   evaluationSignal: string;
   iterationCap: number;
   stopConditions: string[];
-  sourceTemplate: string;
+  contractPath: string;
   entrypointType: EntrypointType;
   integrationStatus: IntegrationStatus;
   hostSupport: HostName[];

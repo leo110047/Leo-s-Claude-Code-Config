@@ -1,9 +1,8 @@
 /**
  * bin/goldband-question-preference — preference storage + user-origin gate.
  *
- * The user-origin gate (profile-poisoning defense from
- * docs/designs/PLAN_TUNING_V0.md §Security model) is THE critical safety
- * contract. Any payload without source, or with a source that indicates
+ * The user-origin gate is the critical profile-poisoning defense. Any payload
+ * without source, or with a source that indicates
  * tool output or file content, must be rejected.
  */
 

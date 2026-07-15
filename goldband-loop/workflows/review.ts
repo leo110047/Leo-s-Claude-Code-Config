@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import { adapterFor, workflowLabelFromTemplate } from './host-adapter';
+import { adapterFor } from './host-adapter';
 import { evidencePath, stateRoot } from './evidence';
 import { workflowAssetPath } from './paths';
 import {
@@ -336,10 +336,8 @@ export function buildReviewPrompt(
   diff: string,
   rules = coreReviewRules(ctx.cwd, diff),
 ): string {
-  const template = readFileSync(workflowAssetPath(ctx.workflow.sourceTemplate), 'utf8');
-  const label = workflowLabelFromTemplate(template);
   return [
-    `${label}`,
+    `$goldband ${ctx.workflow.capability} ${ctx.workflow.action}`,
     reviewIterationPromptContext(ctx),
     readReviewAsset('shared-rubric.md'),
     readReviewAsset('findings-schema.md'),

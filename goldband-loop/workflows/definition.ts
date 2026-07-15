@@ -8,7 +8,7 @@ export function defineWorkflow(input: WorkflowInput): WorkflowDefinition {
   assertText(input.name, 'name');
   assertText(input.target, 'target');
   assertText(input.evaluationSignal, 'evaluationSignal');
-  assertText(input.sourceTemplate, 'sourceTemplate');
+  assertText(input.contractPath, 'contractPath');
   if (!Number.isInteger(input.iterationCap) || input.iterationCap < 1) {
     throw new Error(`${input.name}: iterationCap must be a positive integer`);
   }

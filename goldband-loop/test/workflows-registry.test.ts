@@ -7,7 +7,6 @@ import {
   WORKFLOW_REGISTRY,
   registeredOnlyWorkflows,
 } from '../workflows/registry';
-import { ALL_HOST_NAMES } from '../hosts';
 
 const ROOT = resolve(import.meta.dir, '..');
 const INACTIVE_DOC_DIRECTORIES = new Set([
@@ -45,7 +44,7 @@ describe('workflow registry', () => {
     expect(registryNames.size).toBe(names.length);
   });
 
-  test('all entries have contract fields and valid source pointers', () => {
+  test('all entries have loop fields and valid thin contract pointers', () => {
     for (const entry of WORKFLOW_REGISTRY) {
       expect(entry.target.length).toBeGreaterThan(0);
       expect(entry.evaluationSignal.length).toBeGreaterThan(0);
@@ -53,7 +52,7 @@ describe('workflow registry', () => {
       expect(entry.stopConditions.length).toBeGreaterThan(0);
       expect(entry.hostSupport.length).toBeGreaterThan(0);
       expect(entry.evidencePolicy).toContain('JSONL');
-      expect(existsSync(resolve(ROOT, entry.sourceTemplate))).toBe(true);
+      expect(existsSync(resolve(ROOT, entry.contractPath))).toBe(true);
     }
   });
 
@@ -66,13 +65,17 @@ describe('workflow registry', () => {
     expect(registeredOnlyWorkflows().length).toBeGreaterThan(40);
   });
 
-  test('integrated workflows expose their capability action CLI in source guidance', () => {
+  test('integrated workflows expose only the thin prompt contract', () => {
     for (const name of CORE_WORKFLOWS) {
       const entry = WORKFLOW_REGISTRY.find((item) => item.name === name);
       expect(entry).toBeDefined();
       if (!entry) continue;
-      const source = readFileSync(resolve(ROOT, entry.sourceTemplate), 'utf8');
-      expect(source).toContain(`workflows/run.ts ${entry.capability} ${entry.action}`);
+      const contract = readFileSync(resolve(ROOT, entry.contractPath), 'utf8');
+      expect(contract).toContain(`# $goldband ${entry.capability} ${entry.action}`);
+      expect(contract).toContain('## Goal');
+      expect(contract).toContain('## Relevant context');
+      expect(contract).toContain('## Hard boundaries');
+      expect(contract).toContain('## Verification');
     }
   });
 
@@ -133,7 +136,7 @@ describe('workflow registry', () => {
     ) as {
       capabilities: Array<{
         id: string;
-        actions: Array<{ id: string; source: string }>;
+        actions: Array<{ id: string }>;
       }>;
     };
     const validActions = new Set(
@@ -141,15 +144,7 @@ describe('workflow registry', () => {
         capability.actions.map((action) => `${capability.id}/${action.id}`),
       ),
     );
-    const retiredFlatCommands = new Set([
-      ...manifest.capabilities.flatMap((capability) =>
-        capability.actions
-          .map((action) => action.source.match(/^([^/]+)\/SKILL\.md\.tmpl$/)?.[1])
-          .filter((command): command is string => Boolean(command)),
-      ),
-      'automate',
-      'ship',
-    ]);
+    const retiredFlatCommands = new Set(['automate', 'ship']);
     const staleReferences: string[] = [];
 
     for (const relativePath of activeDocs) {
@@ -187,17 +182,6 @@ describe('workflow registry', () => {
     }
     expect(staleReferences).toEqual([]);
 
-    const contributing = readFileSync(resolve(ROOT, 'CONTRIBUTING.md'), 'utf8');
-    expect(contributing).toContain(`for ${ALL_HOST_NAMES.length} hosts`);
-    expect(contributing).toContain(`All ${ALL_HOST_NAMES.length} hosts`);
-    const supportedHosts = contributing
-      .split('\n')
-      .find((line) => line.startsWith('**Supported hosts:**'))
-      ?.toLowerCase() ?? '';
-    for (const host of ALL_HOST_NAMES) {
-      expect(supportedHosts).toContain(host);
-    }
-
     for (const relativePath of ['README.md', 'AGENTS.md', 'CLAUDE.md']) {
       const content = readFileSync(resolve(ROOT, relativePath), 'utf8');
       expect(content).toContain('../docs/generated/capabilities.md');
@@ -223,7 +207,7 @@ describe('workflow registry', () => {
       evaluationSignal: 'x',
       iterationCap: 0,
       stopConditions: ['target-met'],
-      sourceTemplate: 'README.md',
+      contractPath: 'README.md',
       entrypointType: 'legacy-thin',
       integrationStatus: 'registered-only',
       hostSupport: ['claude'],
@@ -241,7 +225,7 @@ describe('workflow registry', () => {
       evaluationSignal: 'x',
       iterationCap: 1,
       stopConditions: [],
-      sourceTemplate: 'README.md',
+      contractPath: 'README.md',
       entrypointType: 'legacy-thin',
       integrationStatus: 'registered-only',
       hostSupport: ['claude'],

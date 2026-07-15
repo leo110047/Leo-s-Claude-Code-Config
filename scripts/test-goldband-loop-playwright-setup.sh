@@ -46,7 +46,7 @@ run_required_missing_browser_fails() {
     GOLDBAND_SKIP_GENERATE=1 \
     GOLDBAND_SKIP_COREUTILS=1 \
     GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=1 \
-    "$SETUP_SCRIPT" --host claude --prefix > "$log_file" 2>&1
+    "$SETUP_SCRIPT" --host claude > "$log_file" 2>&1
   rc=$?
   set -e
 
@@ -113,7 +113,7 @@ run_sandbox_launch_block_skips_install() {
     GOLDBAND_SKIP_BUILD=1 \
     GOLDBAND_SKIP_GENERATE=1 \
     GOLDBAND_SKIP_COREUTILS=1 \
-    "$SETUP_SCRIPT" --host claude --prefix > "$log_file" 2>&1
+    "$SETUP_SCRIPT" --host claude > "$log_file" 2>&1
   rc=$?
   set -e
 
@@ -148,7 +148,7 @@ run_unwritable_cache_skips_install() {
     GOLDBAND_SKIP_BUILD=1 \
     GOLDBAND_SKIP_GENERATE=1 \
     GOLDBAND_SKIP_COREUTILS=1 \
-    "$SETUP_SCRIPT" --host claude --prefix > "$log_file" 2>&1
+    "$SETUP_SCRIPT" --host claude > "$log_file" 2>&1
   rc=$?
   set -e
 
@@ -177,7 +177,7 @@ run_explicit_skip_succeeds() {
     GOLDBAND_SKIP_GENERATE=1 \
     GOLDBAND_SKIP_PLAYWRIGHT=1 \
     GOLDBAND_SKIP_COREUTILS=1 \
-    "$SETUP_SCRIPT" --host claude --prefix > "$log_file" 2>&1
+    "$SETUP_SCRIPT" --host claude > "$log_file" 2>&1
 
   grep -q "Skipping Playwright Chromium install" "$log_file"
   grep -q "Browser workflows will be unavailable" "$log_file"

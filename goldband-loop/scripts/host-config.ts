@@ -8,10 +8,10 @@
  * Architecture:
  *   hosts/*.ts  →  hosts/index.ts  →  host-config.ts (this file)
  *        │                                    │
- *        └── typed configs ──────────────────→ consumed by gen-skill-docs.ts,
- *                                              setup (via host-config-export.ts),
- *                                              skill-check.ts, worktree.ts,
- *                                              platform-detect, uninstall
+ *        └── typed configs ──────────────────→ consumed by setup
+ *                                              (via host-config-export.ts),
+ *                                              worktree.ts, platform detection,
+ *                                              and uninstall
  */
 
 export interface HostConfig {
@@ -29,47 +29,8 @@ export interface HostConfig {
   globalRoot: string;
   /** Project-local skill path relative to repo root (e.g., '.opencode/skills/goldband'). */
   localSkillRoot: string;
-  /** Gitignored directory under repo root for generated docs (e.g., '.opencode'). */
+  /** Host-specific project directory (e.g., '.opencode'). */
   hostSubdir: string;
-  // --- Frontmatter Transformation ---
-  frontmatter: {
-    /** 'allowlist': ONLY keepFields survive. 'denylist': strip listed fields. */
-    mode: 'allowlist' | 'denylist';
-    /** Fields to preserve (allowlist mode only). */
-    keepFields?: string[];
-    /** Fields to remove (denylist mode only). */
-    stripFields?: string[];
-    /** Max chars for description field. null = no limit. */
-    descriptionLimit?: number | null;
-    /** What to do when description exceeds limit. Default: 'error'. */
-    descriptionLimitBehavior?: 'error' | 'truncate' | 'warn';
-    /** Additional frontmatter fields to inject (host-wide). */
-    extraFields?: Record<string, unknown>;
-    /** Rename fields from template (e.g., { 'voice-triggers': 'triggers' }). */
-    renameFields?: Record<string, string>;
-    /** Conditionally add fields based on template frontmatter values. */
-    conditionalFields?: Array<{ if: Record<string, unknown>; add: Record<string, unknown> }>;
-  };
-
-  // --- Generation ---
-  generation: {
-    /** Whether to create sidecar metadata file (e.g., openai.yaml for Codex). */
-    generateMetadata: boolean;
-    /** Metadata file format (e.g., 'openai.yaml'). */
-    metadataFormat?: string | null;
-    /** Skill directories to exclude from generation for this host. */
-    skipSkills?: string[];
-    /** Skill directories to include (allowlist). Union logic: include minus skip. */
-    includeSkills?: string[];
-  };
-
-  // --- Content Rewrites ---
-  /** Literal string replacements on generated SKILL.md content. Order matters, replaceAll. */
-  pathRewrites: Array<{ from: string; to: string }>;
-  /** Tool name string replacements on content. */
-  toolRewrites?: Record<string, string>;
-  /** Resolver functions that return empty string for this host. */
-  suppressedResolvers?: string[];
 
   // --- Runtime Root ---
   runtimeRoot: {
@@ -78,22 +39,6 @@ export interface HostConfig {
     /** Dir → explicit file list for selective file linking. */
     globalFiles?: Record<string, string[]>;
   };
-  /** Optional repo-local sidecar config (e.g., Codex uses .agents/skills/goldband). */
-  sidecar?: {
-    /** Sidecar path relative to repo root (e.g., '.agents/skills/goldband'). */
-    path: string;
-    /** Assets to symlink into sidecar (different set than global). */
-    symlinks: string[];
-  };
-
-  // --- Install Behavior ---
-  install: {
-    /** Whether goldband-config skill_prefix applies (Claude only). */
-    prefixable: boolean;
-    /** How skills are linked into the host dir. */
-    linkingStrategy: 'real-dir-symlink' | 'symlink-generated';
-  };
-
   // --- Host-Specific Behavioral Config ---
   /** Git co-author trailer string. */
   coAuthorTrailer?: string;
@@ -101,16 +46,6 @@ export interface HostConfig {
   learningsMode?: 'full' | 'basic';
   /** Anti-prompt-injection boundary instruction for cross-model invocations. */
   boundaryInstruction?: string;
-}
-
-/** Shared include/skip policy for generator and host-aware checks. */
-export function shouldGenerateSkill(
-  config: HostConfig,
-  skillDir: string,
-): boolean {
-  const included = config.generation.includeSkills;
-  if (included?.length && !included.includes(skillDir)) return false;
-  return !config.generation.skipSkills?.includes(skillDir);
 }
 
 // --- Validation ---
@@ -147,13 +82,6 @@ export function validateHostConfig(config: HostConfig): string[] {
   if (!PATH_REGEX.test(config.hostSubdir)) {
     errors.push(`hostSubdir '${config.hostSubdir}' contains invalid characters`);
   }
-  if (!['allowlist', 'denylist'].includes(config.frontmatter.mode)) {
-    errors.push(`frontmatter.mode must be 'allowlist' or 'denylist'`);
-  }
-  if (!['real-dir-symlink', 'symlink-generated'].includes(config.install.linkingStrategy)) {
-    errors.push(`install.linkingStrategy must be 'real-dir-symlink' or 'symlink-generated'`);
-  }
-
   return errors;
 }
 

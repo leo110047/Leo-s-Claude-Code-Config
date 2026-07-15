@@ -1,5 +1,37 @@
 # Goldband Decisions
 
+## 2026-07-15: Installed Workflow Prompts Are Thin Manifest Contracts
+
+Decision: generate every installed
+`workflows/<capability>/<action>.workflow.md` from manifest-owned prompt contract
+fields. Do not install generated legacy `SKILL.md` files as workflow prompts.
+
+Implementation contract:
+
+- Each capability owns concise relevant context, hard boundaries, and
+  verification in `goldband.manifest.json`; the action description is its goal.
+- `scripts/lib/workflow-contracts.mjs` validates and renders the prompt contract.
+  Missing fields or prohibited shared boilerplate fail generation.
+- `goldband-loop/generated/capability-actions.json` records `contractPath`.
+  `goldband-loop/setup` installs only that path and fails when it is absent.
+- Browser guidance is a separate on-demand manual selected by manifest-owned
+  routing. It is not embedded in every workflow.
+- The old per-workflow `SKILL.md`/`SKILL.md.tmpl`, resolver preamble, model
+  overlays, and `sourceTemplate` field are retired. Programmatic runtime and
+  installation both resolve the manifest-owned `contractPath`.
+- Generator tests enforce a 2 KiB per-contract limit and 64 KiB aggregate limit.
+  Clean-install tests compare installed content byte-for-byte with generated
+  contracts and reject executable shell blocks or universal preamble sections.
+
+Why:
+
+- Current frontier models need a clear outcome and boundaries, not repeated
+  onboarding, tool-selection scripts, telemetry prose, or writing-style manuals.
+- Runtime-owned state and safety behavior should not be approximated by copying
+  the same prose into every prompt.
+- A small migration cleanup list lets setup remove Goldband-managed legacy
+  entries without retaining their prompt sources or generator architecture.
+
 ## 2026-07-12: Remove the Unity-Specific Skill Pack
 
 Decision: remove `skills/projects/unity/` and its installer surfaces completely.

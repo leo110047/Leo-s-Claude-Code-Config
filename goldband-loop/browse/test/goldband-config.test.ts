@@ -160,7 +160,6 @@ describe('goldband-config', () => {
     expect(content).toContain('proactive:');
     expect(content).toContain('telemetry:');
     expect(content).toContain('auto_upgrade:');
-    expect(content).toContain('skill_prefix:');
     expect(content).toContain('routing_declined:');
     expect(content).toContain('codex_reviews:');
     expect(content).toContain('skip_eng_review:');
@@ -222,14 +221,14 @@ describe('goldband-config', () => {
     mkdirSync(join(legacyDir, 'analytics'), { recursive: true });
     writeFileSync(join(legacyDir, 'analytics', 'skill-usage.jsonl'), '{"skill":"old"}\n');
 
-    const { exitCode, stdout } = run(['get', 'skill_prefix'], {
+    const { exitCode, stdout } = run(['get', 'telemetry'], {
       HOME: homeDir,
       GOLDBAND_HOME: '',
       GOLDBAND_STATE_DIR: '',
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toBe('true');
+    expect(stdout).toBe('community');
     expect(readFileSync(join(homeDir, '.goldband', 'config.yaml'), 'utf-8')).toContain(
       'telemetry: community',
     );
@@ -242,13 +241,13 @@ describe('goldband-config', () => {
     expect(existsSync(join(homeDir, '.goldband', '.legacy-migrated'))).toBe(true);
 
     writeFileSync(join(legacyDir, 'projects', 'demo', 'late.jsonl'), '{"key":"late"}\n');
-    const second = run(['get', 'skill_prefix'], {
+    const second = run(['get', 'telemetry'], {
       HOME: homeDir,
       GOLDBAND_HOME: '',
       GOLDBAND_STATE_DIR: '',
     });
     expect(second.exitCode).toBe(0);
-    expect(second.stdout).toBe('true');
+    expect(second.stdout).toBe('community');
     expect(existsSync(join(homeDir, '.goldband', 'projects', 'demo', 'late.jsonl'))).toBe(false);
   });
 

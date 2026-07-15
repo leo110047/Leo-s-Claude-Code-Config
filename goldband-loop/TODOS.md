@@ -154,57 +154,9 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 
 ---
 
-## Browser-skills follow-on (Phases 2-4)
+## Browser skills
 
-### P1: Browser-skills Phase 2 — `/scrape` and `/skillify` skill templates
-
-**What:** Phase 2a of the browser-skills design (`docs/designs/BROWSER_SKILLS_V1.md`). Two new goldband skills: `/scrape <intent>` (read-only) is the single entry point for pulling page data — first call prototypes via `$B` primitives, subsequent calls on a matching intent route to a codified browser-skill in ~200ms. `/skillify` codifies the most recent successful prototype into a permanent browser-skill on disk: synthesizes `script.ts` + `script.test.ts` + fixture from the agent's own context (final-attempt $B calls only), runs the test in a temp dir, asks before committing, atomic rename to `~/.goldband/browser-skills/<name>/`. The mutating-flow sibling `/automate` is split out as its own P0 (below) — same skillify pattern, different trust profile.
-
-**Why:** Phase 1 shipped the runtime — humans can hand-write deterministic browser scripts that goldband runs. Phase 2a unlocks the productivity gain: an agent that gets a flow right once via 20+ `$B` commands says `/skillify` and the script becomes a 200ms call forever after. Same skillify pattern the maintainer's articles describe, applied to the read-only browser activity (scraping) most amenable to deterministic compression. Mutating actions ship next as `/automate` because the failure mode (unintended writes) needs stronger gates.
-
-**Pros:** The 100x productivity gain lives here. Closes the loop: agents prototype, codify, then reach for the codified skill in future sessions instead of re-exploring. Replaces the original "self-authoring `$B` commands" P1 — same user-visible goal, no in-daemon isolation problem (skill scripts run as standalone Bun processes, never imported into the daemon). Synthesis question (Codex finding #6) is resolved by re-prompting from the agent's own conversation context (option b in the design doc), bounded to final-attempt `$B` calls per `/plan-eng-review` D2.
-
-**Cons:** **Bun runtime distribution** (Codex finding #7). Phase 1 sidesteps this because the bundled reference skill ships inside the goldband install. User-authored skills land on machines without Bun unless we ship a runtime alongside, compile to a self-contained binary, or use Node + the existing `cli.ts` pattern. Deferred to Phase 4 — `/skillify` documents the assumption that goldband is installed (which means Bun is on PATH).
-
-**Context:** The Phase 1 architecture (3-tier lookup, scoped tokens, sibling SDK, frontmatter contract) is locked and exercised by the bundled `hackernews-frontpage` reference skill. Phase 2a plugs `/scrape` and `/skillify` into that runtime via two skill templates plus one new helper (`browse/src/browser-skill-write.ts` for atomic temp-dir-then-rename per `/plan-eng-review` D3) — no new storage primitives.
-
-**Effort:** M (human: ~1 week / CC: ~1 day)
-**Priority:** P1 (this branch — `project-owner/browserharness` shipping as v1.19.0.0)
-**Depends on:** Phase 1 shipped (this branch).
-
----
-
-### P2: Browser-skills Phase 3 — resolver injection at session start
-
-**What:** Mirror the domain-skill resolver at `browse/src/server.ts:722-743`. When a sidebar-agent session starts on a host with matching browser-skills, inject a list block telling the agent which skills exist for that host and how to invoke them (`$B skill run <name> --arg ...`). UNTRUSTED-wrapped via the existing L1-L6 security stack. Add `goldband-config browser_skillify_prompts` knob (default `off`) controlling end-of-task nudges in `/qa`, `/design-review`, etc. when activity feed shows ≥N commands on a single host AND no skill exists yet for that host+intent.
-
-**Why:** Without the resolver, browser-skills only work when the user explicitly types `$B skill run <name>`. With the resolver, agents auto-discover existing skills for the current host and reach for them instead of re-exploring. Same compounding pattern as domain-skills.
-
-**Pros:** Closes the discoverability gap. Agents that wouldn't know a skill exists now see it in their system prompt automatically. End-of-task nudges (opt-in via knob) catch the moments where skillify is most valuable.
-
-**Cons:** The resolver block lives in the system prompt and competes with other resolver blocks for prompt budget. Need to gate carefully so it doesn't fire on every host with a skill — only when the skill is plausibly relevant to the current task. v1.8.0.0 domain-skills handles this by only firing for the active tab's hostname; same pattern here.
-
-**Effort:** S (human: ~3 days / CC: ~4 hours)
-**Priority:** P2
-**Depends on:** Phase 2.
-
----
-
-### P2: Browser-skills Phase 4 — eval infrastructure + fixture staleness + OS sandbox
-
-**What:** Three loosely-coupled extensions: (a) LLM-judge eval ("did the agent reach for the skill instead of re-exploring?"), classified `periodic` per `test/helpers/touchfiles.ts`. (b) Fixture-staleness detection — periodic comparison of bundled fixtures against live pages, flagging mismatches before they break tests silently. (c) OS-level FS sandbox for untrusted spawns: `sandbox-exec` profile on macOS, namespaces / seccomp on Linux. Drops in cleanly behind the existing trusted/untrusted contract (Phase 1 just stripped env; Phase 4 adds real FS isolation).
-
-**Why:** Phase 1's trust model has the daemon-side capability boundary right (scoped tokens) but the process-side env scrub is hygiene, not a sandbox (Codex finding #1). For genuinely untrusted skills (Phase 2 agent-authored), real FS isolation matters. Eval + fixture staleness keep the skill quality bar honest as flows drift.
-
-**Pros:** Closes the last credible attack surface from Codex finding #1 (FS read of `~/.ssh/id_rsa` etc.). Eval data tells us whether the resolver injection is actually working. Fixture staleness catches HTML drift before users.
-
-**Cons:** Three different concerns, three different design passes. Tempting to bundle. Resist: each can ship independently. OS sandbox is the hardest piece (macOS `sandbox-exec` is Apple-private but stable; Linux requires namespaces + bind mounts).
-
-**Effort:** L (human: ~2-3 weeks / CC: ~3-5 days)
-**Priority:** P2
-**Depends on:** Phase 2 (need agent-authored skills to motivate sandbox); Phase 3 (eval needs resolver injection).
-
----
+Browser-skill runtime, fixture staleness, and OS sandbox follow-ups must be implemented in browser runtime code and deterministic tests. Workflow discovery stays behind the manifest capability interface; do not inject skill lists into a universal prompt.
 
 ### P2: Migrate `/learn` to SQLite
 
@@ -224,25 +176,7 @@ made opt-in. Lower priority than the gbrain-side perf issue above.
 
 ---
 
-### P2: Remove plan-mode handshake from `/plan-devex-review` SKILL.md.tmpl
-
-**What:** `/plan-devex-review` has a "Plan Mode Handshake" section at the top that contradicts the preamble's "Skill Invocation During Plan Mode" contract (which says AskUserQuestion satisfies plan mode's end-of-turn requirement). The handshake forces an extra exit-plan-mode step that no other interactive review skill needs. `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review` all run fine in plan mode without it.
-
-**Why:** Found during the v1.8.0.0 DevEx review. The inconsistency cost a turn and confused the flow. Either remove the handshake from `plan-devex-review` (clean fix, recommended) OR add it to every interactive skill for consistency.
-
-**Pros:** Fixes a real DX bug for anyone running `/plan-devex-review` in plan mode. Five-minute change.
-
-**Cons:** Need to think about WHY it was added in the first place — there may be context this TODO is missing.
-
-**Context:** The handshake section in `plan-devex-review/SKILL.md.tmpl` says it's needed because plan mode's "this supersedes any other instructions" warning could otherwise bypass the skill's per-finding STOP gates. But the same warning exists for the other review skills, and they all work fine because AskUserQuestion satisfies the end-of-turn contract.
-
-**Effort:** S (human: ~15 min / CC: ~5 min)
-**Priority:** P2
-**Depends on:** Nothing.
-
----
-
-### P2: Bump gbrain install-pin in lockstep with goldband memory-feature releases (#1305 part 2)
+ ### P2: Bump gbrain install-pin in lockstep with goldband memory-feature releases (#1305 part 2)
 
 **What:** `bin/goldband-gbrain-install` pins gbrain to commit `08b3698` (v0.18.2). When goldband ships features that depend on newer gbrain ops or schema (e.g. v1.26.0 manifests + `code-def`/`code-refs`/`reindex-code`), the pin doesn't move with it. Fresh `/setup-gbrain` installs an old gbrain that fails `gbrain doctor` schema_version checks (24 vs latest 32+) until the user manually upgrades.
 
@@ -401,74 +335,7 @@ scope of that PR; deliberately deferred to keep PTY-import small.
 
 ---
 
-## Testing
-
-## P2: Per-finding AskUserQuestion count assertion for /plan-ceo-review
-
-**What:** PTY E2E test that drives /plan-ceo-review through Step 0 with a stable fixture diff containing N known findings, asserts that exactly N distinct AskUserQuestions fire (one per finding) before plan_ready.
-
-**Why:** The skill template repeats "One issue = one AskUserQuestion call. Never combine multiple issues into one question." at every review checkpoint. No test enforces it. The current `skill-e2e-plan-ceo-plan-mode.test.ts` smoke (post-v1.21.1.0) only catches "agent skipped Step 0 entirely." Batching findings into one question slips through silently.
-
-**Pros:** Locks in the strongest contract the skill mandates. Catches a real failure mode (the original attachment showed 2 findings batched as 0 questions).
-**Cons:** Needs a stable fixture diff to keep finding count deterministic (~1 day human / ~30 min CC). Opus may reasonably consolidate two related findings, so the assertion needs a forgiving lower bound (e.g., `>= ceil(N * 0.6)`) rather than strict equality.
-
-**Context:** The PTY harness (`runPlanSkillObservation`) returns at first terminal outcome — for V2 we need a streaming variant that counts AskUserQuestions across the whole session up to `plan_ready`. Probably a new helper alongside `runPlanSkillObservation`.
-
-**Depends on:** Stable fixture diff (`test/fixtures/plans/multi-finding.diff` or similar) with a small known set of issues that triggers all 4 review sections.
-
-**Priority:** P2.
-**Effort:** S (CC: ~30 min once fixture exists). Captured from v1.21.1.0 plan-eng-review D2.
-
----
-
-## P3: Honor env vars in goldband-config (so QUESTION_TUNING/EXPLAIN_LEVEL actually isolate tests)
-
-**What:** `goldband-config get <key>` reads `~/.goldband/config.yaml`. `runPlanSkillObservation` plumbs `env: { QUESTION_TUNING: 'false', EXPLAIN_LEVEL: 'default' }` through to the spawned `claude` process — but the skill preamble bash uses `goldband-config get question_tuning`, which never looks at env. The env passthrough is theater on current code.
-
-**Why:** Without env honoring, the v1.21.1.0 plan-ceo-review smoke is still flaky on machines with `question_tuning: true` set in YAML. AUTO_DECIDE preferences would skip the rendered AskUserQuestion list, masking the regression we want to catch.
-
-**Pros:** Makes the gate test hermetic across machines. The env wiring is already in place — only `goldband-config` needs to read env first, fall back to YAML.
-**Cons:** Touches the goldband-config binary across all 3 platforms (linux/darwin/windows). Cross-binary refactor.
-
-**Context:** Captured from v1.21.1.0 adversarial review. Documented honestly in the test docstring as a known limitation.
-
-**Priority:** P3.
-**Effort:** S. Single-file edit to `bin/goldband-config` (~10 LOC for env-first lookup).
-
----
-
-## P3: Path-confusion hardening on SANCTIONED_WRITE_SUBSTRINGS
-
-**What:** `runPlanSkillObservation`'s silent-write detector uses substring matching on a few sanctioned paths (`.goldband/`, `CHANGELOG.md`, `TODOS.md`, etc). A write to `node_modules/some-pkg/CHANGELOG.md` or `src/foo/.goldband/leak.ts` is currently sanctioned because the substring matches anywhere in the path.
-
-**Why:** Defensive — no current bug exploits this, but a malicious skill or fixture could write to a path that happens to contain `.goldband/` or `CHANGELOG.md` and slip past silent-write detection.
-
-**Pros:** Hardens the harness against future skill misbehavior. Aligns substring rules with their intent.
-**Cons:** Need to anchor against absolute prefixes (`os.homedir() + '/.goldband/'`, worktree root) which makes the test less portable across machines.
-
-**Context:** Captured from v1.21.1.0 adversarial review (HIGH/FIXABLE finding, pre-existing). Refactored into a `SANCTIONED_WRITE_SUBSTRINGS` constant in v1.21.1.0 but the substring-includes logic is unchanged from before.
-
-**Priority:** P3.
-**Effort:** S.
-
----
-
-## P1: Structural STOP-Ask forcing function across all skills
-
-**What:** Design and implement a structural forcing function that catches when a skill mandates per-issue AskUserQuestion but the model silently substitutes batch-synthesis. Candidate mechanisms: question-count assertion (skill declares expected question count in frontmatter; post-run audit logs if model fired <N), typed question templates (skill hands the model pre-built AskUserQuestion payloads rather than prose instructions), or a canUseTool-based post-run audit that compares declared-gates-fired vs expected.
-
-**Why:** The authoritative "Skill Invocation During Plan Mode" rule (hoisted to preamble position 1) tells the model AskUserQuestion satisfies plan mode's end-of-turn requirement. That fixes plan-mode entry, but NOT the broader class of failures: the model silently substitutes batch-synthesis for STOP-Ask loops whenever the skill's interactive contract collides with any other rule surface (auto mode, tool-count anxiety, cognitive load). Without structural enforcement, every skill with STOP-per-issue contracts remains vulnerable.
-
-**Pros:** Catches a class-of-bug, not an instance. Applies to every skill that declares STOP gates. Builds on `canUseTool` primitive in `test/helpers/agent-sdk-runner.ts`.
-
-**Cons:** Real design work. How does a skill declare expected question count — static value in frontmatter, or dynamic based on number of review sections that surface findings? Is the audit inline (blocking, same-turn) or post-hoc (after skill completion)? Calibration of expected-vs-actual thresholds depends on real V0 question-log data across skills.
-
-**Context:** Relevant files — `scripts/question-registry.ts` (typed question catalog), `scripts/resolvers/question-tuning.ts` (preference classification), `bin/goldband-question-log` (event log), `bin/goldband-question-preference` (read/write preferences), `test/helpers/agent-sdk-runner.ts` (canUseTool harness). Existing question-log already captures fire events; the gap is declaring expected counts and auditing against them.
-
-**Effort:** L (human: ~1-2 weeks / CC+goldband: ~2-3 hours for design doc + first-pass implementation).
-**Priority:** P1 if interactive-skill volume is growing; P2 otherwise.
-**Depends on / blocked by:** design doc — likely its own `docs/designs/STOP_ASK_ENFORCEMENT_V0.md`.
-## Context skills
+ ## Context skills
 
 ### `/context-save --lane` + `/context-restore --lane` for parallel workstreams
 
@@ -480,211 +347,15 @@ scope of that PR; deliberately deferred to keep PTY-import small.
 
 **Cons:** Net-new functionality (not a port from the old `/checkpoint` skill). The "spawn new Conductor windows" part needs research into whether Conductor has a spawn CLI. Also requires lane-tagging discipline in the save step (manual or extracted).
 
-**Context:** Source of the lane data model is `plan-eng-review/SKILL.md.tmpl:240-249` (the "Parallelization Strategy" output with Lane A/B/C dependency tables and conflict flags). Deferred from the v0.18.5.0 rename PR so the rename could land as a tight, low-risk fix. Saved files currently live at `~/.goldband/projects/$SLUG/checkpoints/YYYYMMDD-HHMMSS-<title>.md` with YAML frontmatter (branch, timestamp, etc.). The lane feature would add a `lane:` field to frontmatter and a `--lane` filter to both skills.
+**Context:** The lane data model should be owned by the `plan/engineering-review` runtime contract (the "Parallelization Strategy" output with Lane A/B/C dependency tables and conflict flags). Deferred from the v0.18.5.0 rename PR so the rename could land as a tight, low-risk fix. Saved files currently live at `~/.goldband/projects/$SLUG/checkpoints/YYYYMMDD-HHMMSS-<title>.md` with YAML frontmatter (branch, timestamp, etc.). The lane feature would add a `lane:` field to frontmatter and a `--lane` filter to both skills.
 
 **Effort:** M (human: ~1-2 days / CC: ~45-60 min)
 **Priority:** P3 (nice-to-have, not blocking anyone yet)
 **Depends on:** `/context-save` + `/context-restore` rename stable in production (v1.0.1.0+). Research: does Conductor expose a spawn-workspace CLI?
 
-## P0: Browser-skills Phase 2 follow-up — `/automate` skill
+## Personalization follow-up
 
-**What:** The mutating-flow sibling of `/scrape` (Phase 2b). `/automate <intent>` codifies form fills, click sequences, and multi-step interactions into permanent browser-skills. Reuses Phase 2a's skillify machinery (`/skillify` is shared) and the D3 atomic-write helper. Adds: per-mutating-step UNTRUSTED-wrapped summary + `AskUserQuestion` confirmation gate when running non-codified (codified skills run unattended after the initial human approval). Defaults to `trusted: false` per Phase 1 — env-scrubbed spawn, scoped-token capability, no admin scope.
-
-**Why:** Read-only scraping is the safer wedge to validate the skillify pattern (failure mode: wrong data = benign). Mutating actions are the other half of the 100x productivity gain — agents that codify "log into example.com → click Settings → toggle X" save real time on every future session. Splitting from Phase 2a means we ship the productivity loop first, validate the architecture, then add the higher-trust surface with confidence.
-
-**Pros:** Unlocks deterministic automation authoring without self-authoring safety concerns — Phase 1's scoped-token model applies equally to mutating skills. The codified script enumerates exactly which `$B click`/`$B fill`/`$B type` calls run; nothing else is possible at runtime. Reuses 100% of `/skillify`, the D3 helper, and the storage tier. Per-step confirmation gate surfaces the actions to the user before they run for the first time.
-
-**Cons:** Mutating intents have higher blast radius (the wrong selector clicks "Delete Account" instead of "Delete Comment"). Phase 4 OS-level FS sandbox is a stronger answer; until then, the user trust burden is real. Confirmation-gate UX needs care — too many prompts and users hit "yes" reflexively. Mitigation: only gate first-run; after `/skillify` codifies, the skill runs unattended.
-
-**Context:** Original Phase 2 plan in `docs/designs/BROWSER_SKILLS_V1.md` bundled `/scrape` + `/automate`. Split during the v1.19.0.0 plan review (`/plan-eng-review` on `project-owner/browserharness`) — the user's source doc framed both as primary, but in practice scraping is where users start because the failure mode is benign. Ship `/scrape` + `/skillify` first (this branch), validate the skillify pattern works, then `/automate` lands on top of the same machinery.
-
-**Effort:** M (human: ~3-5 days / CC: ~1 day)
-**Priority:** P0 (next branch after v1.19.0.0)
-**Depends on:** Phase 2a (`/scrape` + `/skillify`) shipped at v1.19.0.0. The D3 atomic-write helper (`browse/src/browser-skill-write.ts`) and the bundled SDK pattern are reused as-is.
-
----
-
-## P0: PACING_UPDATES_V0 — Louise's fatigue root cause (V1.1)
-
-**What:** Implement the pacing overhaul extracted from PLAN_TUNING_V1. Full design in `docs/designs/PACING_UPDATES_V0.md`. Requires: session-state model, `phase` field in question-log schema, registry extension for dynamic findings, pacing as skill-template control flow (not preamble prose), `bin/goldband-flip-decision` command, migration-prompt budget rule, first-run preamble audit, ranking threshold calibration from real V0 data, one-way-door uncapped rule, concrete verification values.
-
-**Why:** Louise de Sadeleer's "yes yes yes" during `/autoplan` was pacing + agency, not (only) jargon density. V1 addresses jargon (ELI10 writing). V1.1 addresses the interruption-volume half. Without this, V1 only gets halfway to the HOLY SHIT outcome.
-
-**Pros:** End-to-end answer to Louise's feedback. Ships real calibration data from V1 usage. Completes the V0 → V2 pacing arc started in PLAN_TUNING_V0.
-
-**Cons:** Substantial scope (10 items in `docs/designs/PACING_UPDATES_V0.md`). Needs its own CEO + Codex + DX + Eng review cycle. Calibration depends on real V0 question-log distribution.
-
-**Context:** PLAN_TUNING_V1 attempted to bundle pacing. Three eng-review passes + two Codex passes surfaced 10 structural gaps unfixable via plan-text editing. Extracted to V1.1 as a dedicated plan.
-
-**Depends on / blocked by:** V1 shipping (provides Louise's baseline transcript for calibration).
-
-## Plan Tune (v2 deferrals from v0.19.0.0 rollback)
-
-All six items are gated on v1 dogfood results and the acceptance criteria in
-`docs/designs/PLAN_TUNING_V0.md`. They were explicitly deferred after Codex's
-outside-voice review drove a scope rollback from the CEO EXPANSION plan. v1
-ships the observational substrate only; v2 adds behavior adaptation.
-
-### E1 — Substrate wiring (5 skills consume profile)
-
-**What:** Add `{{PROFILE_ADAPTATION:<skill>}}` placeholder to ship, review,
-office-hours, plan-ceo-review, plan-eng-review SKILL.md.tmpl files. Implement
-`scripts/resolvers/profile-consumer.ts` with a per-skill adaptation registry
-(`scripts/profile-adaptations/{skill}.ts`). Each consumer reads
-`~/.goldband/developer-profile.json` on preamble and adapts skill-specific
-defaults (verbosity, mode selection, severity thresholds, pushback intensity).
-
-**Why:** v1 observational profile writes a file nobody reads. The substrate
-claim only becomes real when skills actually consume it. Without this, /plan-tune
-is a fancy config page.
-
-**Pros:** goldband feels personal. Every skill adapts to the user's steering
-style instead of defaulting to middle-of-the-road.
-
-**Cons:** Risk of psychographic drift if profile is noisy. Requires calibrated
-profile (v1 acceptance criteria: 90+ days stable across 3+ skills).
-
-**Context:** See `docs/designs/PLAN_TUNING_V0.md` §Deferred to v2. v1 ships the
-signal map + inferred computation; it's displayed in /plan-tune but no skill
-reads it yet.
-
-**Effort:** L (human: ~1 week / CC: ~4h)
-**Priority:** P0
-**Depends on:** 2+ weeks of v1 dogfood, profile diversity check passing.
-
-### E3 — `/plan-tune narrative` + `/plan-tune vibe`
-
-**What:** Event-anchored narrative ("You accepted 7 scope expansions, overrode
-test_failure_triage 4 times, called every PR 'ship the complete version'") + one-word vibe
-archetype (Cathedral Builder, Ship-It Pragmatist, Deep Craft, etc).
-scripts/archetypes.ts is ALREADY SHIPPED in v1 (8 archetypes + Polymath
-fallback). v2 work is the narrative generator + /plan-tune skill wiring.
-
-**Why:** Makes profile tangible and shareable. Screenshot-able.
-
-**Pros:** Killer delight feature. Social surface for goldband. Concrete, specific
-output anchored in real events (not generic AI slop).
-
-**Cons:** Requires stable inferred profile — without calibration it produces
-generic paragraphs. Gen-tests need to validate no-slop.
-
-**Context:** Archetypes already defined. Just need the /plan-tune narrative
-subcommand + slop-check test.
-
-**Effort:** S+ (human: ~1 day / CC: ~1h)
-**Priority:** P0
-**Depends on:** Calibrated profile (>= 20 events, 3+ skills, 7+ days span).
-
-### E4 — Blind-spot coach
-
-**What:** Preamble injection that surfaces the OPPOSITE of the user's profile
-once per session per tier >= 2 skill. High-scope user gets challenged on
-scope ("what's the 80% version?"); small-scope user gets challenged on ambition.
-`scripts/resolvers/blind-spot-coach.ts`. Marker file for session dedup. Opt-out
-via `goldband-config set blind_spot_coach false`.
-
-**Why:** Makes goldband a coach (challenges you) instead of a mirror (reflects
-you). The killer differentiation vs. a settings menu.
-
-**Pros:** The feature that makes goldband feel distinct. Surfaces assumptions
-the user hasn't challenged.
-
-**Cons:** Logically conflicts with E1 (which adapts TO profile) and E6 (which
-flags mismatch). Requires interaction-budget design: global session budget +
-escalation rules + explicit exclusion from mismatch detection. Risk of feeling
-like a nag if fires wrong.
-
-**Context:** v2 must redesign to resolve the E1/E4/E6 composition issue Codex
-caught. Dogfood required to calibrate frequency.
-
-**Effort:** M (human: ~3 days / CC: ~2h design + ~1h impl)
-**Priority:** P0
-**Depends on:** E1 shipped + interaction-budget design spec.
-
-### E5 — LANDED celebration HTML page
-
-**What:** When a PR authored by the user is newly merged to the base branch,
-open an animated HTML celebration page in the browser. Confetti + typewriter
-headline + stats counter. Shows: what we built (PR stats + CHANGELOG entry),
-road traveled (scope decisions from CEO plan), road not traveled (deferred
-items), where we're going (next TODOs), who you are as a builder (vibe +
-narrative + profile delta for this ship). Self-contained HTML (CSS animations
-only, no JS deps).
-
-**CRITICAL REVISION from v0 plan:** Passive detection must NOT live in the
-preamble (Codex #9). When promoted, moves to explicit `/plan-tune show-landed`
-OR post-ship hook — not passive detection in the hot path.
-
-**Why:** Biggest personality moment in goldband. The "one-word thing that makes
-you remember why you built this."
-
-**Pros:** Screenshot-worthy. Shareable. The kind of dopamine hit that turns
-power users into evangelists.
-
-**Cons:** Product theater if the substrate isn't solid. Needs /design-shotgun
-→ /design-html for the visual direction. Requires E2 unified profile for
-narrative/vibe data.
-
-**Context:** /land-and-deploy trust/adoption is low, so passive detection is
-the right trigger shape. Dedup marker per PR in `~/.goldband/.landed-celebrated-*`.
-E2E tests for squash/merge-commit/rebase/co-author/fresh-clone/dedup variants.
-
-**Effort:** M+ (human: ~1 week / CC: ~3h total)
-**Priority:** P0
-**Depends on:** E3 narrative/vibe shipped. /design-shotgun run on real PR data
-to pick a visual direction, then /design-html to finalize.
-
-### E6 — Auto-adjustment based on declared ↔ inferred mismatch
-
-**What:** Currently `/plan-tune` shows the gap between declared and inferred
-(v1 observational). v2 auto-suggests declaration updates when the gap exceeds
-a threshold ("Your profile says hands-off but you've overridden 40% of
-recommendations — you're actually taste-driven. Update declared autonomy from
-0.8 to 0.5?"). Requires explicit user confirmation before any mutation (Codex
-trust-boundary #15 already baked into v1).
-
-**Why:** Profile drifts silently without correction. Self-correcting profile
-stays honest.
-
-**Pros:** Profile becomes more accurate over time. User sees the gap and
-decides.
-
-**Cons:** Requires stable inferred profile (diversity check). False positives
-nag the user.
-
-**Context:** v1 has `--check-mismatch` that flags > 0.3 gaps but doesn't
-suggest fixes. v2 adds the suggestion UX + per-dimension threshold tuning from
-real data.
-
-**Effort:** S (human: ~1 day / CC: ~45min)
-**Priority:** P0
-**Depends on:** Calibrated profile + real mismatch data from v1 dogfood.
-
-### E7 — Psychographic auto-decide
-
-**What:** When inferred profile is calibrated AND a question is two-way AND
-the user's dimensions strongly favor one option, auto-choose without asking
-(visible annotation: "Auto-decided via profile. Change with /plan-tune."). v1
-only auto-decides via EXPLICIT per-question preferences; v2 adds profile-driven
-auto-decide.
-
-**Why:** The whole point of the psychographic. Silent, correct defaults based
-on who the user IS, not just what they've said.
-
-**Pros:** Friction-free skill invocation for calibrated power users. Over time,
-goldband feels like it's reading your mind.
-
-**Cons:** Highest-risk deferral. Wrong auto-decides are costly. Requires very
-high confidence in the signal map AND calibration gate.
-
-**Context:** v1 diversity gate is `sample_size >= 20 AND skills_covered >= 3
-AND question_ids_covered >= 8 AND days_span >= 7`. v2 must prove this gate
-actually catches noisy profiles before shipping.
-
-**Effort:** M (human: ~3 days / CC: ~2h)
-**Priority:** P0
-**Depends on:** E1 (skills consuming profile) + real observed data showing
-calibration gate is trustworthy.
+Any future personalization must be an explicit, inspectable runtime or user-config feature. Do not inject psychographic adaptation, blind-spot coaching, or pacing policy into every workflow prompt.
 
 ## Browse
 
@@ -791,21 +462,7 @@ Remaining work (XL, multi-week):
   * Full forward pass + weight loader + correctness regression fixtures
   * Production swap in security-bunnative.ts `classify()` body
 
-## Builder Ethos
-
-### First-time Search Before Building intro
-
-**What:** Add a `generateSearchIntro()` function (like `generateLakeIntro()`) that introduces the Search Before Building principle on first use, with a link to the blog essay.
-
-**Why:** Completeness Principle has an intro flow that links to the essay and marks `.completeness-intro-seen`. Search Before Building should have the same pattern for discoverability.
-
-**Context:** Blocked on a blog post to link to. When the essay exists, add the intro flow with a `.search-intro-seen` marker file. Pattern: `generateLakeIntro()` at gen-skill-docs.ts:176.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** Blog post about Search Before Building
-
-## Chrome DevTools MCP Integration
+ ## Chrome DevTools MCP Integration
 
 ### Real Chrome session access
 
@@ -1250,21 +907,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Priority:** P3
 **Depends on:** Design outside voices shipped (v0.11.3.0)
 
-## Document-Release
-
-### `{{DOC_VOICE}}` shared resolver
-
-**What:** Create a placeholder resolver in gen-skill-docs.ts encoding the goldband voice guide (friendly, user-forward, lead with benefits). Inject into release documentation and reference from CLAUDE.md.
-
-**Why:** DRY — voice rules currently live inline in multiple release documentation surfaces. When the voice evolves, they drift.
-
-**Context:** Same pattern as `{{QA_METHODOLOGY}}` — shared block injected into multiple templates to prevent drift. ~20 lines in gen-skill-docs.ts.
-
-**Effort:** S
-**Priority:** P2
-**Depends on:** None
-
-## Ship Confidence Dashboard
+ ## Ship Confidence Dashboard
 
 ### Smart review relevance detection — PARTIALLY SHIPPED
 
@@ -1279,21 +922,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Depends on:** goldband-diff-scope (shipped)
 
 
-## Codex
-
-### Codex→Claude reverse buddy check skill
-
-**What:** A Codex-native skill (`.agents/skills/goldband-claude/SKILL.md`) that runs `claude -p` to get an independent second opinion from Claude — the reverse of what `/codex` does today from Claude Code.
-
-**Why:** Codex users deserve the same cross-model challenge that Claude users get via `/codex`. Currently the flow is one-way (Claude→Codex). Codex users have no way to get a Claude second opinion.
-
-**Context:** The `/codex` skill template (`codex/SKILL.md.tmpl`) shows the pattern — it wraps `codex exec` with JSONL parsing, timeout handling, and structured output. The reverse skill would wrap `claude -p` with similar infrastructure. Would be generated into `.agents/skills/goldband-claude/` by `gen-skill-docs --host codex`.
-
-**Effort:** M (human: ~2 weeks / CC: ~30 min)
-**Priority:** P1
-**Depends on:** None
-
-## Completeness
+ ## Completeness
 
 ### Completeness metrics dashboard
 
@@ -1307,44 +936,9 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Priority:** P3
 **Depends on:** Completeness Principle shipped (v0.6.1)
 
-## Safety & Observability
+ ## Context Intelligence
 
-### /investigate scoped debugging enhancements (gated on telemetry)
-
-**What:** Six enhancements to /investigate auto-freeze, contingent on telemetry showing the freeze hook actually fires in real debugging sessions.
-
-**Why:** /investigate v0.7.1 auto-freezes edits to the module being debugged. If telemetry shows the hook fires often, these enhancements make the experience smarter. If it never fires, the problem wasn't real and these aren't worth building.
-
-**Context:** All items are prose additions to `investigate/SKILL.md.tmpl`. No new scripts.
-
-**Items:**
-1. Stack trace auto-detection for freeze directory (parse deepest app frame)
-2. Freeze boundary widening (ask to widen instead of hard-block when hitting boundary)
-3. Post-fix auto-unfreeze + full test suite run
-4. Debug instrumentation cleanup (tag with DEBUG-TEMP, remove before commit)
-5. Debug session persistence (~/.goldband/investigate-sessions/ — save investigation for reuse)
-6. Investigation timeline in debug report (hypothesis log with timing)
-
-**Effort:** M (all 6 combined)
-**Priority:** P3
-**Depends on:** Telemetry data showing freeze hook fires in real /investigate sessions
-
-## Context Intelligence
-
-### Context recovery preamble
-
-**What:** Add ~10 lines of prose to the preamble telling the agent to re-read goldband artifacts (CEO plans, design reviews, eng reviews, checkpoints) after compaction or context degradation.
-
-**Why:** goldband skills produce valuable artifacts stored at `~/.goldband/projects/$SLUG/`. When Claude's auto-compaction fires, it preserves a generic summary but doesn't know these artifacts exist. The plans and reviews that shaped the current work silently vanish from context, even though they're still on disk. This is the thing nobody else in the Claude Code ecosystem is solving, because nobody else has goldband's artifact architecture.
-
-**Context:** Inspired by Anthropic's `claude-progress.txt` pattern for long-running agents. Also informed by claude-mem's "progressive disclosure" approach. See `docs/designs/SESSION_INTELLIGENCE.md` for the broader vision. CEO plan: `~/.goldband/projects/project-owner-goldband/ceo-plans/2026-03-31-session-intelligence-layer.md`.
-
-**Effort:** S (human: ~30 min / CC: ~5 min)
-**Priority:** P1
-**Depends on:** None
-**Key files:** `scripts/resolvers/preamble.ts`
-
-### Session timeline
+ ### Session timeline
 
 **What:** Append one-line JSONL entry to `~/.goldband/projects/$SLUG/timeline.jsonl` after every skill run (timestamp, skill, branch, outcome). `/retro` renders the timeline.
 
@@ -1353,19 +947,9 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Effort:** S (human: ~1h / CC: ~5 min)
 **Priority:** P1
 **Depends on:** None
-**Key files:** `scripts/resolvers/preamble.ts`, `retro/SKILL.md.tmpl`
+**Key files:** workflow evidence runtime and `retro/weekly` contract
 
-### Cross-session context injection
-
-**What:** When a new goldband session starts on a branch with recent checkpoints or plans, the preamble prints a one-line summary: "Last session: implemented JWT auth, 3/5 tasks done." Agent knows where you left off before reading any files.
-
-**Why:** Claude starts every session fresh. This one-liner orients the agent immediately. Similar to claude-mem's SessionStart hook pattern but simpler and integrated.
-
-**Effort:** S (human: ~2h / CC: ~10 min)
-**Priority:** P2
-**Depends on:** Context recovery preamble
-
-### /checkpoint skill
+ ### /checkpoint skill
 
 **What:** Manual skill to snapshot current working state: what's being done and why, files being edited, decisions made (and rationale), what's done vs. remaining, critical types/signatures. Saved to `~/.goldband/projects/$SLUG/checkpoints/<timestamp>.md`.
 
@@ -1373,8 +957,8 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 
 **Effort:** M (human: ~1 week / CC: ~30 min)
 **Priority:** P2
-**Depends on:** Context recovery preamble
-**Key files:** New `checkpoint/SKILL.md.tmpl`, `scripts/gen-skill-docs.ts`
+**Depends on:** Runtime-owned context artifact format
+**Key files:** `goldband.manifest.json`, context runtime, and contract tests
 
 ### Session Intelligence Layer design doc
 
@@ -1399,7 +983,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Effort:** M (human: ~1 week / CC: ~30 min)
 **Priority:** P1
 **Depends on:** None
-**Key files:** New `health/SKILL.md.tmpl`, `scripts/gen-skill-docs.ts`
+**Key files:** `goldband.manifest.json`, health runtime, and contract tests
 
 ### Health as a release gate
 
@@ -1415,7 +999,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 
 ### Swarm primitive — reusable multi-agent dispatch
 
-**What:** Extract Review Army's dispatch pattern into a reusable resolver (`scripts/resolvers/swarm.ts`). Wire it into release readiness for parallel checks (type-check + lint + test in parallel sub-agents). Make it available to QA, investigation, and health actions.
+**What:** Extract bounded parallel dispatch into a runtime-owned helper after a second typed consumer proves the shared contract. Wire it into release readiness for parallel checks (type-check + lint + test in parallel sub-agents). Make it available to QA, investigation, and health actions.
 
 **Why:** Review Army proved parallel sub-agents work brilliantly (5 agents = 835K tokens of working memory vs. 167K for one). The pattern is locked inside `review-army.ts`. Other skills need it too. Claude Code Agent Teams (official, Feb 2026) validates the team-lead-delegates-to-specialists pattern. Gartner: multi-agent inquiries surged 1,445% in one year.
 
@@ -1424,7 +1008,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Effort:** L (human: ~2 weeks / CC: ~2 hours)
 **Priority:** P2
 **Depends on:** None
-**Key files:** `scripts/resolvers/review-army.ts`, new `scripts/resolvers/swarm.ts`, `land-and-deploy/SKILL.md.tmpl`, `lib/worktree.ts`
+**Key files:** typed workflow runtime, host adapter, and `lib/worktree.ts`
 
 ## Refactoring
 
@@ -1437,7 +1021,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Effort:** M (human: ~1 week / CC: ~30 min)
 **Priority:** P2
 **Depends on:** None
-**Key files:** New `refactor-prep/SKILL.md.tmpl`, `scripts/gen-skill-docs.ts`
+**Key files:** `goldband.manifest.json`, typed runtime, and contract tests
 
 ## Factory Droid
 
@@ -1453,17 +1037,7 @@ Linux cookie import shipped in v0.11.11.0 (Wave 3). Supports Chrome, Chromium, B
 **Priority:** P1
 **Depends on:** --host factory (Option A, shipping in v0.13.4.0)
 
-### .agent/skills/ dual output for cross-agent compatibility
-
-**What:** Factory also reads from `<repo>/.agent/skills/` as a cross-agent compatibility path. Could output there in addition to `.factory/skills/` for broader reach across other agents that use the `.agent` convention.
-
-**Why:** Multiple AI agents beyond Factory may adopt the `.agent/skills/` convention. Outputting there too would give free compatibility.
-
-**Effort:** S
-**Priority:** P3
-**Depends on:** --host factory
-
-### Custom Droid definitions alongside skills
+ ### Custom Droid definitions alongside skills
 
 **What:** Factory has "custom droids" (subagents with tool restrictions, model selection, autonomy levels). Could ship `goldband-qa.md` droid configs alongside skills that restrict tools to read-only + execute for safety.
 

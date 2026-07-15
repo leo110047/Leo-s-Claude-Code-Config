@@ -246,73 +246,30 @@ Console messages, network requests, and dialog events each have their own buffer
 
 The `console`, `network`, and `dialog` commands read from the in-memory buffers, not disk. Disk files are for post-mortem debugging.
 
-## SKILL.md template system
+## Workflow prompt architecture
 
-### The problem
-
-SKILL.md files tell Claude how to use the browse commands. If the docs list a flag that doesn't exist, or miss a command that was added, the agent hits errors. Hand-maintained docs always drift from code.
-
-### The solution
+`goldband.manifest.json` owns every workflow's goal, relevant context, hard
+boundaries, and verification contract. The root `SKILL.md.tmpl` is only a small
+capability router. `scripts/generate-goldband-surfaces.mjs` renders:
 
 ```
-SKILL.md.tmpl          (human-written prose + placeholders)
-       ↓
-gen-skill-docs.ts      (template-expansion orchestrator)
-       ↓
-scripts/resolvers/     (placeholder ownership + source metadata)
-       ↓
-SKILL.md               (committed, auto-generated sections)
+goldband.manifest.json
+  ├── goldband-loop/SKILL.md
+  ├── goldband-loop/generated/capability-actions.json
+  ├── goldband-loop/generated/workflow-contracts/<capability>/<action>.workflow.md
+  ├── goldband-loop/workflows/capability-registry.generated.ts
+  └── docs/generated/capabilities.md
 ```
 
-Templates contain the workflows, tips, and examples that require human judgment. Placeholders are filled from source code at build time:
+The installer copies or links the same root router and thin contracts for each
+supported host. It does not generate host-specific workflow prompts. The model
+owns decomposition, tool selection, and adaptation; runtime code owns
+deterministic state, validation, safety gates, and evidence.
 
-| Placeholder | Source | What it generates |
-|-------------|--------|-------------------|
-| `{{COMMAND_REFERENCE}}` | `scripts/resolvers/browse.ts` + `browse/src/commands.ts` | Categorized command table |
-| `{{SNAPSHOT_FLAGS}}` | `scripts/resolvers/browse.ts` + `browse/src/snapshot.ts` | Flag reference with examples |
-| `{{PREAMBLE}}` | `scripts/resolvers/preamble.ts` | Startup block: update check, session tracking, contributor mode, AskUserQuestion format |
-| `{{BROWSE_SETUP}}` | `scripts/resolvers/browse.ts` | Binary discovery + setup instructions |
-| `{{BASE_BRANCH_DETECT}}` | `scripts/resolvers/utility.ts` | Dynamic base branch detection for PR-targeting workflows |
-| `{{QA_METHODOLOGY}}` | `scripts/resolvers/utility.ts` | Shared QA methodology for `qa/app` and `qa/report-only` |
-| `{{DESIGN_METHODOLOGY}}` | `scripts/resolvers/design.ts` | Shared design audit methodology for design-related capability actions |
-| `{{REVIEW_DASHBOARD}}` | `scripts/resolvers/review.ts` | Review Readiness Dashboard |
-| `{{TEST_BOOTSTRAP}}` | `scripts/resolvers/testing.ts` | Test framework detection, bootstrap, CI/CD setup for QA and design review |
-| `{{CODEX_PLAN_REVIEW}}` | `scripts/resolvers/review.ts` | Optional cross-model plan review for `review/plan-ceo` and `review/plan-engineering` |
-| `{{DESIGN_SETUP}}` | `scripts/resolvers/design.ts` | Discovery pattern for `$D` design binary, mirrors `{{BROWSE_SETUP}}` |
-| `{{DESIGN_SHOTGUN_LOOP}}` | `scripts/resolvers/design.ts` | Shared comparison-board feedback loop for design capability actions |
-| `{{UX_PRINCIPLES}}` | `scripts/resolvers/design.ts` | User behavioral foundations for design capability actions |
-| `{{GBRAIN_CONTEXT_LOAD}}` | `scripts/resolvers/gbrain.ts` | Brain-first context search with keyword extraction, health awareness, and data-research routing. Injected into brain-aware workflows and suppressed on non-brain hosts. |
-| `{{GBRAIN_SAVE_RESULTS}}` | `scripts/resolvers/gbrain.ts` | Post-workflow brain persistence with entity enrichment, throttle handling, and workflow-specific save instructions. |
-
-This is structurally sound — if a command exists in code, it appears in docs. If it doesn't exist, it can't appear.
-
-### The preamble
-
-Every skill starts with a `{{PREAMBLE}}` block that runs before the skill's own logic. It handles five things in a single bash command:
-
-1. **Update check** — calls `goldband-update-check`, reports if an upgrade is available.
-2. **Session tracking** — touches `~/.goldband/sessions/$PPID` and counts active sessions (files modified in the last 2 hours). When 3+ sessions are running, all skills enter "ELI16 mode" — every question re-grounds the user on context because they're juggling windows.
-3. **Operational self-improvement** — at the end of every skill session, the agent reflects on failures (CLI errors, wrong approaches, project quirks) and logs operational learnings to the project's JSONL file for future sessions.
-4. **AskUserQuestion format** — universal format: context, question, `RECOMMENDATION: Choose X because ___`, lettered options. Consistent across all skills.
-5. **Search Before Building** — before building infrastructure or unfamiliar patterns, search first. Three layers of knowledge: tried-and-true (Layer 1), new-and-popular (Layer 2), first-principles (Layer 3). When first-principles reasoning reveals conventional wisdom is wrong, the agent names the "eureka moment" and logs it. See `ETHOS.md` for the full builder philosophy.
-
-### Why committed, not generated at runtime?
-
-Three reasons:
-
-1. **The capability router reads generated workflow documents at invocation time.** There's no user-side build step when someone invokes `/goldband browser session`. The generated file must already exist and be correct.
-2. **CI can validate freshness.** `gen:skill-docs --dry-run` + `git diff --exit-code` catches stale docs before merge.
-3. **Git blame works.** You can see when a command was added and in which commit.
-
-### Template test tiers
-
-| Tier | What | Cost | Speed |
-|------|------|------|-------|
-| 1 — Static validation | Parse every `$B` command in SKILL.md, validate against registry | Free | <2s |
-| 2 — E2E via `claude -p` | Spawn real Claude session, run each skill, check for errors | ~$3.85 | ~20min |
-| 3 — LLM-as-judge | Sonnet scores docs on clarity/completeness/actionability | ~$0.15 | ~30s |
-
-Tier 1 runs on every `bun test`. Tiers 2+3 are gated behind `EVALS=1`. The idea is: catch 95% of issues for free, use LLMs only for judgment calls.
+Per-workflow `SKILL.md`/`SKILL.md.tmpl`, universal preamble injection, model
+overlays, and resolver-driven prompt assembly are retired. Contract generation
+fails when prohibited boilerplate appears or when size limits are exceeded.
+`scripts/test-workflow-contracts.mjs` also rejects their reintroduction.
 
 ## Command dispatch
 

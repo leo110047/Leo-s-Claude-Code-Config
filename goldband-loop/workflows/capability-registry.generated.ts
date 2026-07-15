@@ -6,7 +6,7 @@ export type CapabilityActionRecord = {
   action: string;
   name: string;
   description: string;
-  sourceTemplate: string;
+  contractPath: string;
   runtime: 'typed' | 'compatibility' | 'registered-only';
   riskLevel: RiskLevel;
   hostSupport: HostName[];
@@ -18,7 +18,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "code",
     "name": "review/code",
     "description": "Review a code diff.",
-    "sourceTemplate": "review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/code.workflow.md",
     "runtime": "typed",
     "riskLevel": "medium",
     "hostSupport": [
@@ -39,7 +39,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "security",
     "name": "review/security",
     "description": "Review security and trust boundaries.",
-    "sourceTemplate": "cso/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/security.workflow.md",
     "runtime": "compatibility",
     "riskLevel": "medium",
     "hostSupport": [
@@ -60,7 +60,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "design",
     "name": "review/design",
     "description": "Review visual and product design.",
-    "sourceTemplate": "design-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/design.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -81,7 +81,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "devex",
     "name": "review/devex",
     "description": "Review developer experience.",
-    "sourceTemplate": "devex-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/devex.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -102,7 +102,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "opposite-host",
     "name": "review/opposite-host",
     "description": "Get an opposite-host second opinion.",
-    "sourceTemplate": "codex/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/opposite-host.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -123,7 +123,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "plan-ceo",
     "name": "review/plan-ceo",
     "description": "Review product scope and ambition.",
-    "sourceTemplate": "plan-ceo-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/plan-ceo.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -144,7 +144,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "plan-design",
     "name": "review/plan-design",
     "description": "Review a plan's design contract.",
-    "sourceTemplate": "plan-design-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/plan-design.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -165,7 +165,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "plan-devex",
     "name": "review/plan-devex",
     "description": "Review a plan's developer experience.",
-    "sourceTemplate": "plan-devex-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/plan-devex.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -186,7 +186,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "plan-engineering",
     "name": "review/plan-engineering",
     "description": "Review architecture and implementation plans.",
-    "sourceTemplate": "plan-eng-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/review/plan-engineering.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -207,7 +207,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "code",
     "name": "investigate/code",
     "description": "Investigate code or runtime behavior.",
-    "sourceTemplate": "investigate/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/investigate/code.workflow.md",
     "runtime": "compatibility",
     "riskLevel": "medium",
     "hostSupport": [
@@ -228,7 +228,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "app",
     "name": "qa/app",
     "description": "Run product QA and record evidence.",
-    "sourceTemplate": "qa/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/qa/app.workflow.md",
     "runtime": "typed",
     "riskLevel": "medium",
     "hostSupport": [
@@ -249,7 +249,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "report-only",
     "name": "qa/report-only",
     "description": "Report QA findings without fixing.",
-    "sourceTemplate": "qa-only/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/qa/report-only.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -270,7 +270,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "land",
     "name": "release/land",
     "description": "Merge, deploy, and verify.",
-    "sourceTemplate": "land-and-deploy/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/release/land.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -291,7 +291,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "setup",
     "name": "release/setup",
     "description": "Configure deployment.",
-    "sourceTemplate": "setup-deploy/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/release/setup.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -312,7 +312,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "canary",
     "name": "release/canary",
     "description": "Monitor a deployment after release.",
-    "sourceTemplate": "canary/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/release/canary.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -333,7 +333,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "report",
     "name": "release/report",
     "description": "Produce a landing report.",
-    "sourceTemplate": "landing-report/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/release/report.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -354,7 +354,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "docs",
     "name": "release/docs",
     "description": "Update documentation for a release.",
-    "sourceTemplate": "document-release/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/release/docs.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -375,7 +375,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "create",
     "name": "plan/create",
     "description": "Create an implementation plan.",
-    "sourceTemplate": "../commands/plan.md",
+    "contractPath": "generated/workflow-contracts/plan/create.workflow.md",
     "runtime": "compatibility",
     "riskLevel": "low",
     "hostSupport": [
@@ -387,7 +387,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "auto",
     "name": "plan/auto",
     "description": "Run the complete plan review pipeline.",
-    "sourceTemplate": "autoplan/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/plan/auto.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -408,7 +408,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "strategy",
     "name": "plan/strategy",
     "description": "Explore product direction and scope.",
-    "sourceTemplate": "office-hours/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/plan/strategy.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -429,7 +429,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "tune",
     "name": "plan/tune",
     "description": "Tune recurring planning questions.",
-    "sourceTemplate": "plan-tune/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/plan/tune.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -450,7 +450,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "session",
     "name": "browser/session",
     "description": "Use the persistent browser for interactive work.",
-    "sourceTemplate": "browse/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/browser/session.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -471,7 +471,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "open",
     "name": "browser/open",
     "description": "Open a visible browser workbench.",
-    "sourceTemplate": "open-goldband-browser/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/browser/open.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -492,7 +492,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "scrape",
     "name": "browser/scrape",
     "description": "Extract content or media from a page.",
-    "sourceTemplate": "scrape/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/browser/scrape.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -513,7 +513,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "cookies",
     "name": "browser/cookies",
     "description": "Import browser cookies for authenticated testing.",
-    "sourceTemplate": "setup-browser-cookies/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/browser/cookies.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -534,7 +534,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "pair",
     "name": "browser/pair",
     "description": "Pair another agent with the browser.",
-    "sourceTemplate": "pair-agent/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/browser/pair.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -555,7 +555,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "consult",
     "name": "design/consult",
     "description": "Define a design direction and system.",
-    "sourceTemplate": "design-consultation/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/design/consult.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -576,7 +576,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "prototype",
     "name": "design/prototype",
     "description": "Generate an HTML design prototype.",
-    "sourceTemplate": "design-html/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/design/prototype.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -597,7 +597,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "explore",
     "name": "design/explore",
     "description": "Explore multiple design directions.",
-    "sourceTemplate": "design-shotgun/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/design/explore.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -618,7 +618,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "careful",
     "name": "safety/careful",
     "description": "Enable careful command handling.",
-    "sourceTemplate": "careful/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/safety/careful.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -639,7 +639,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "guard",
     "name": "safety/guard",
     "description": "Enable workflow-local safety rails.",
-    "sourceTemplate": "guard/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/safety/guard.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -660,7 +660,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "freeze",
     "name": "safety/freeze",
     "description": "Restrict edits to an approved scope.",
-    "sourceTemplate": "freeze/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/safety/freeze.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -681,7 +681,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "unfreeze",
     "name": "safety/unfreeze",
     "description": "Remove an active edit restriction.",
-    "sourceTemplate": "unfreeze/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/safety/unfreeze.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -702,7 +702,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "save",
     "name": "context/save",
     "description": "Save current working context.",
-    "sourceTemplate": "context-save/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/context/save.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -723,7 +723,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "restore",
     "name": "context/restore",
     "description": "Restore saved working context.",
-    "sourceTemplate": "context-restore/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/context/restore.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -744,7 +744,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "retro",
     "name": "context/retro",
     "description": "Summarize recent work and lessons.",
-    "sourceTemplate": "retro/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/context/retro.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -765,7 +765,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "recall",
     "name": "knowledge/recall",
     "description": "Inspect Goldband learnings and knowledge.",
-    "sourceTemplate": "learn/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/knowledge/recall.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -786,7 +786,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "setup",
     "name": "knowledge/setup",
     "description": "Configure GBrain integration.",
-    "sourceTemplate": "setup-gbrain/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/knowledge/setup.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -807,7 +807,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "sync",
     "name": "knowledge/sync",
     "description": "Synchronize GBrain knowledge.",
-    "sourceTemplate": "sync-gbrain/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/knowledge/sync.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -828,7 +828,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "workflow",
     "name": "benchmark/workflow",
     "description": "Benchmark product or workflow performance.",
-    "sourceTemplate": "benchmark/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/benchmark/workflow.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -849,7 +849,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "models",
     "name": "benchmark/models",
     "description": "Compare model performance.",
-    "sourceTemplate": "benchmark-models/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/benchmark/models.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -870,7 +870,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "generate",
     "name": "document/generate",
     "description": "Generate product or module documentation.",
-    "sourceTemplate": "document-generate/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/document/generate.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -891,7 +891,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "pdf",
     "name": "document/pdf",
     "description": "Create a PDF artifact.",
-    "sourceTemplate": "make-pdf/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/document/pdf.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -912,7 +912,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "health",
     "name": "system/health",
     "description": "Inspect Goldband health and installation state.",
-    "sourceTemplate": "health/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/system/health.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -933,7 +933,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "upgrade",
     "name": "system/upgrade",
     "description": "Upgrade Goldband.",
-    "sourceTemplate": "goldband-upgrade/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/system/upgrade.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -954,7 +954,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "skill-authoring",
     "name": "system/skill-authoring",
     "description": "Create or improve a Goldband workflow skill.",
-    "sourceTemplate": "skillify/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/system/skill-authoring.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -975,7 +975,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "clean",
     "name": "ios/clean",
     "description": "Clean iOS project state.",
-    "sourceTemplate": "ios-clean/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/ios/clean.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -996,7 +996,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "review",
     "name": "ios/review",
     "description": "Review iOS design and behavior.",
-    "sourceTemplate": "ios-design-review/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/ios/review.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "medium",
     "hostSupport": [
@@ -1017,7 +1017,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "fix",
     "name": "ios/fix",
     "description": "Repair iOS implementation issues.",
-    "sourceTemplate": "ios-fix/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/ios/fix.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "low",
     "hostSupport": [
@@ -1038,7 +1038,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "qa",
     "name": "ios/qa",
     "description": "Run iOS QA.",
-    "sourceTemplate": "ios-qa/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/ios/qa.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
@@ -1059,7 +1059,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "action": "sync",
     "name": "ios/sync",
     "description": "Synchronize iOS project state.",
-    "sourceTemplate": "ios-sync/SKILL.md.tmpl",
+    "contractPath": "generated/workflow-contracts/ios/sync.workflow.md",
     "runtime": "registered-only",
     "riskLevel": "high",
     "hostSupport": [
