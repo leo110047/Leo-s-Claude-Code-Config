@@ -283,6 +283,13 @@ plant_legacy_workflow_entries() {
   ln -s "$source_dir/qa/SKILL.md" "$home_dir/.claude/skills/goldband-qa/SKILL.md"
   ln -s "$source_dir/review/SKILL.md" "$home_dir/.codex/skills/goldband-review/SKILL.md"
   ln -s "$source_dir/qa/SKILL.md" "$home_dir/.codex/skills/goldband-qa/SKILL.md"
+
+  # Historical installers also materialized these aliases as standalone
+  # copies. Their deleted source files cannot be used for provenance checks.
+  write_skill "$home_dir/.claude/skills/goldband-open-browser" "goldband-open-browser"
+  write_skill "$home_dir/.claude/skills/goldband-workflow-upgrade" "goldband-workflow-upgrade"
+  write_skill "$home_dir/.codex/skills/goldband-open-browser" "goldband-open-browser"
+  write_skill "$home_dir/.codex/skills/goldband-workflow-upgrade" "goldband-workflow-upgrade"
 }
 
 write_fake_bun_bin() {
@@ -487,6 +494,8 @@ assert_absent "$COPY_HOME/.claude/skills/_goldband-command"
 assert_absent "$COPY_HOME/.claude/skills/goldband-review"
 assert_absent "$COPY_HOME/.claude/skills/goldband-qa"
 assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
+assert_absent "$COPY_HOME/.claude/skills/goldband-open-browser"
+assert_absent "$COPY_HOME/.claude/skills/goldband-workflow-upgrade"
 assert_exists "$COPY_HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
 
 CODEX_LEGACY_HOME="$TMP_ROOT/codex-legacy-home"
@@ -496,6 +505,8 @@ plant_legacy_workflow_entries "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE"
 run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host codex --profile standard --quiet >/tmp/goldband-loop-codex-legacy-cleanup.log
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-open-browser"
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-workflow-upgrade"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
 
 for HOST_CASE in factory opencode kiro; do

@@ -715,7 +715,15 @@ cleanup_manifest_entries_for_standard() {
   fi
 }
 
-LEGACY_WORKFLOW_ENTRY_NAMES="autoplan benchmark benchmark-models browse canary careful codex context-restore context-save cso design-consultation design-html design-review design-shotgun devex-review document-generate document-release freeze goldband-upgrade guard health investigate ios-clean ios-design-review ios-fix ios-qa ios-sync land-and-deploy landing-report learn make-pdf office-hours open-goldband-browser pair-agent plan-ceo-review plan-design-review plan-devex-review plan-eng-review plan-tune qa qa-only retro review scrape setup-browser-cookies setup-deploy setup-gbrain skillify sync-gbrain unfreeze"
+LEGACY_WORKFLOW_ENTRY_NAMES="autoplan benchmark benchmark-models browse canary careful codex context-restore context-save cso design-consultation design-html design-review design-shotgun devex-review document-generate document-release freeze goldband-upgrade guard health investigate ios-clean ios-design-review ios-fix ios-qa ios-sync land-and-deploy landing-report learn make-pdf office-hours open-browser open-goldband-browser pair-agent plan-ceo-review plan-design-review plan-devex-review plan-eng-review plan-tune qa qa-only retro review scrape setup-browser-cookies setup-deploy setup-gbrain skillify sync-gbrain unfreeze workflow-upgrade"
+
+retired_goldband_namespace_entry() {
+  local target="$1"
+  case "$(basename "$target")" in
+    goldband-*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 legacy_symlink_points_to_source() {
   local target="$1"
@@ -753,7 +761,8 @@ cleanup_legacy_full_workflow_entries_for_standard() {
   for skill_name in $LEGACY_WORKFLOW_ENTRY_NAMES; do
     for target in "$skills_dir/$skill_name" "$skills_dir/goldband-$skill_name"; do
       [ -e "$target" ] || [ -L "$target" ] || continue
-      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
+      if retired_goldband_namespace_entry "$target" || \
+          goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
           legacy_symlink_points_to_source "$target" "$goldband_dir"; then
         rm -rf "$target"
         removed+=("$(basename "$target")")
