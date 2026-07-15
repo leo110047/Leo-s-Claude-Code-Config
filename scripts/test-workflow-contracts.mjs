@@ -5,6 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assertPromptSurfaceBudget,
+  assertPromptSurfaceTotal,
+  PROMPT_SURFACE_BUDGETS,
+} from './lib/prompt-surface-budget.mjs';
+import {
   buildWorkflowContracts,
   validatePromptArchitecture,
   validateSharedPromptContent,
@@ -53,8 +58,33 @@ for (const installedContract of [
 
 validatePromptArchitecture(manifest);
 
+assert.throws(
+  () =>
+    assertPromptSurfaceBudget(
+      'oversized contract fixture',
+      'x'.repeat(PROMPT_SURFACE_BUDGETS.workflowContractBytes + 1),
+      PROMPT_SURFACE_BUDGETS.workflowContractBytes,
+    ),
+  /exceeds prompt surface budget/,
+);
+assert.throws(
+  () =>
+    assertPromptSurfaceTotal(
+      'oversized runtime fixture',
+      [
+        {
+          label: 'oversized runtime fixture',
+          bytes: PROMPT_SURFACE_BUDGETS.installedRuntimeMarkdownTotalBytes + 1,
+        },
+      ],
+      PROMPT_SURFACE_BUDGETS.installedRuntimeMarkdownTotalBytes,
+    ),
+  /exceeds prompt surface budget/,
+);
+
 const retiredArchitecturePaths = [
   'goldband-loop/scripts/gen-skill-docs.ts',
+  'goldband-loop/scripts/skill-budget.ts',
   'goldband-loop/scripts/resolvers',
   'goldband-loop/model-overlays',
   'goldband-loop/scripts/skill-check.ts',
@@ -176,14 +206,18 @@ for (const [relativePath, content] of contracts) {
     retiredQuestionFormatPattern,
     `${relativePath} reintroduced retired question-format boilerplate`,
   );
-  const bytes = Buffer.byteLength(content);
-  assert.ok(bytes <= 2_048, `${relativePath} exceeds 2 KiB: ${bytes}`);
+  const bytes = assertPromptSurfaceBudget(
+    relativePath,
+    content,
+    PROMPT_SURFACE_BUDGETS.workflowContractBytes,
+  );
   totalBytes += bytes;
 }
 
-assert.ok(
-  totalBytes <= 64 * 1_024,
-  `workflow contracts exceed 64 KiB: ${totalBytes}`,
+assertPromptSurfaceTotal(
+  'workflow contracts',
+  [{ label: 'workflow contracts', bytes: totalBytes }],
+  PROMPT_SURFACE_BUDGETS.workflowContractsTotalBytes,
 );
 
 const review = contracts.get(
@@ -222,6 +256,11 @@ const rootSkill = fs.readFileSync(
   path.join(root, 'goldband-loop', 'SKILL.md'),
   'utf8',
 );
+assertPromptSurfaceBudget(
+  'goldband-loop/SKILL.md',
+  rootSkill,
+  PROMPT_SURFACE_BUDGETS.rootRouterSkillBytes,
+);
 assert.match(rootSkill, /## Human decisions/);
 assert.match(
   rootSkill,
@@ -247,11 +286,38 @@ for (const manual of manifest.manuals) {
   validateSharedPromptContent(content, manifest.promptArchitecture, {
     relativePath: manual.source,
   });
-  assert.ok(
-    Buffer.byteLength(content) <= 4_096,
-    `${manual.source} exceeds 4 KiB`,
+  assertPromptSurfaceBudget(
+    manual.source,
+    content,
+    PROMPT_SURFACE_BUDGETS.manualBytes,
   );
 }
+
+const runtimePromptEntries = [
+  promptSurfaceEntry('goldband-loop/SKILL.md'),
+  promptSurfaceEntry('goldband-loop/ETHOS.md'),
+  ...markdownEntries('goldband-loop/manuals', { recursive: false }),
+  ...markdownEntries('goldband-loop/review', { recursive: false }),
+  ...markdownEntries('goldband-loop/cross-review', { recursive: false }),
+  ...markdownEntries('goldband-loop/generated/workflow-contracts', {
+    recursive: true,
+  }),
+];
+
+for (const entry of runtimePromptEntries) {
+  if (entry.label.includes('/generated/workflow-contracts/')) continue;
+  if (entry.label === 'goldband-loop/SKILL.md') continue;
+  const budget = entry.label.includes('/manuals/')
+    ? PROMPT_SURFACE_BUDGETS.manualBytes
+    : PROMPT_SURFACE_BUDGETS.runtimeReferenceBytes;
+  assertPromptSurfaceBudget(entry.label, entry.content, budget);
+}
+
+assertPromptSurfaceTotal(
+  'installed Goldband runtime markdown prompt surface',
+  runtimePromptEntries,
+  PROMPT_SURFACE_BUDGETS.installedRuntimeMarkdownTotalBytes,
+);
 
 for (const relativeDirectory of ['goldband-loop', 'goldband-loop/docs']) {
   const directory = path.join(root, relativeDirectory);
@@ -271,3 +337,29 @@ for (const relativeDirectory of ['goldband-loop', 'goldband-loop/docs']) {
 console.log(
   `[OK] ${contracts.size} thin workflow contracts validated (${totalBytes} bytes)`,
 );
+
+function promptSurfaceEntry(relativePath) {
+  const content = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  return {
+    label: relativePath,
+    content,
+    bytes: Buffer.byteLength(content, 'utf8'),
+  };
+}
+
+function markdownEntries(relativeDirectory, { recursive }) {
+  const directory = path.join(root, relativeDirectory);
+  if (!fs.existsSync(directory)) return [];
+  const entries = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const relativePath = path.posix.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) {
+      if (recursive) {
+        entries.push(...markdownEntries(relativePath, { recursive }));
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      entries.push(promptSurfaceEntry(relativePath));
+    }
+  }
+  return entries;
+}

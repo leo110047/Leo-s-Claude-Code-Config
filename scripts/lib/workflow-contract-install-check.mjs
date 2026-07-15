@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  assertPromptSurfaceBudget,
+  PROMPT_SURFACE_BUDGETS,
+} from './prompt-surface-budget.mjs';
+import {
   validateSharedPromptContent,
   validateWorkflowContractContent,
 } from './workflow-contracts.mjs';
@@ -12,6 +16,7 @@ export function assertInstalledWorkflowDocuments(
   capabilityContract,
   loopDir,
 ) {
+  assertInstalledRootSkill(label, runtimeRoot);
   const expected = capabilityContract.actions.map(({ capability, action }) =>
     path.join(capability, `${action}.workflow.md`),
   );
@@ -63,9 +68,20 @@ function assertInstalledWorkflowDocument({
     capabilityContract.promptArchitecture,
     { relativePath: `${label}:${relativePath}` },
   );
-  assert.ok(
-    Buffer.byteLength(installedContent) <= 2_048,
-    `${label} workflow exceeds 2 KiB: ${relativePath}`,
+  assertPromptSurfaceBudget(
+    `${label} workflow ${relativePath}`,
+    installedContent,
+    PROMPT_SURFACE_BUDGETS.workflowContractBytes,
+  );
+}
+
+function assertInstalledRootSkill(label, runtimeRoot) {
+  const rootSkillPath = path.join(runtimeRoot, 'SKILL.md');
+  assert.ok(fs.existsSync(rootSkillPath), `${label} root SKILL.md missing`);
+  assertPromptSurfaceBudget(
+    `${label} root SKILL.md`,
+    fs.readFileSync(rootSkillPath, 'utf8'),
+    PROMPT_SURFACE_BUDGETS.rootRouterSkillBytes,
   );
 }
 
@@ -88,6 +104,11 @@ function assertInstalledManuals(
       content,
       capabilityContract.promptArchitecture,
       { relativePath: `${label}:manuals/${manual.id}.md` },
+    );
+    assertPromptSurfaceBudget(
+      `${label} manual ${manual.id}`,
+      content,
+      PROMPT_SURFACE_BUDGETS.manualBytes,
     );
   }
 }

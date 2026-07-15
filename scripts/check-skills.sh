@@ -3,6 +3,14 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXIT_CODE=0
+if [ -n "${GOLDBAND_SKILL_MAX_BYTES:-}" ]; then
+  MAX_SKILL_BYTES="$GOLDBAND_SKILL_MAX_BYTES"
+else
+  MAX_SKILL_BYTES="$(
+    cd "$ROOT_DIR"
+    node --input-type=module -e "import('./scripts/lib/prompt-surface-budget.mjs').then((m) => process.stdout.write(String(m.PROMPT_SURFACE_BUDGETS.portableSkillBytes)))"
+  )"
+fi
 
 check_skill_file() {
   local skill_file="$1"
@@ -15,7 +23,7 @@ check_skill_file() {
     return
   fi
 
-  warn_large_skill_file "$skill_file" "$rel"
+  enforce_skill_file_budget "$skill_file" "$rel"
 
   if ! grep -q '^---$' "$skill_file"; then
     echo "[FAIL] $rel missing frontmatter"
@@ -32,13 +40,14 @@ check_skill_file() {
   check_skill_references "$skill_file" "$rel"
 }
 
-warn_large_skill_file() {
+enforce_skill_file_budget() {
   local skill_file="$1"
   local rel="$2"
-  local line_count
-  line_count="$(wc -l < "$skill_file" | tr -d ' ')"
-  if [ "$line_count" -gt 500 ]; then
-    echo "[WARN] $rel over 500 lines ($line_count)"
+  local byte_count
+  byte_count="$(wc -c < "$skill_file" | tr -d ' ')"
+  if [ "$byte_count" -gt "$MAX_SKILL_BYTES" ]; then
+    echo "[FAIL] $rel exceeds prompt surface budget ${MAX_SKILL_BYTES} bytes ($byte_count)"
+    EXIT_CODE=1
   fi
 }
 

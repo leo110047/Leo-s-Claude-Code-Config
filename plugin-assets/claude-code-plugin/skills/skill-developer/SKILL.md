@@ -54,6 +54,6 @@ workflow is not installed.
 1. Read the target skill's current `SKILL.md` before editing.
 2. Confirm the `name` matches the directory.
 3. Confirm the `description` names when to use and when to defer.
-4. Keep the main file under 500 lines.
+4. Keep the main file at or below the `portableSkillBytes` prompt surface budget in `scripts/lib/prompt-surface-budget.mjs` (16 KiB by default); run `./scripts/check-skills.sh` to verify the hard gate.
 5. Verify referenced files exist.
 6. Run `./scripts/check-skills.sh`.
