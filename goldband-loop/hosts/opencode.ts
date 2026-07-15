@@ -10,33 +10,11 @@ const opencode: HostConfig = {
   localSkillRoot: '.opencode/skills/goldband',
   hostSubdir: '.opencode',
 
-  frontmatter: {
-    mode: 'allowlist',
-    keepFields: ['name', 'description'],
-    descriptionLimit: null,
-  },
-
-  generation: {
-    generateMetadata: false,
-    skipSkills: ['codex'],
-  },
-
-  pathRewrites: [
-    { from: '.claude/skills', to: '.opencode/skills' },
-  ],
-
-  suppressedResolvers: ['GBRAIN_CONTEXT_LOAD', 'GBRAIN_SAVE_RESULTS'],
-
   runtimeRoot: {
     globalSymlinks: ['bin', 'browse/dist', 'browse/bin', 'design/dist', 'goldband-upgrade', 'ETHOS.md', 'review/specialists', 'qa/templates', 'qa/references', 'plan-devex-review/dx-hall-of-fame.md'],
     globalFiles: {
       'review': ['checklist.md', 'design-checklist.md', 'greptile-triage.md', 'TODOS-format.md'],
     },
-  },
-
-  install: {
-    prefixable: false,
-    linkingStrategy: 'symlink-generated',
   },
 
   learningsMode: 'basic',

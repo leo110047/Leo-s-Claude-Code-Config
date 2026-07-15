@@ -133,7 +133,6 @@
           s => s.tagName === current.tagName
         );
         if (siblings.length > 1) {
-          const idx = siblings.indexOf(current) + 1;
           part += `:nth-child(${Array.from(parent.children).indexOf(current) + 1})`;
         }
       }

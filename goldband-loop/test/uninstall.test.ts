@@ -137,7 +137,7 @@ describe('goldband-uninstall', () => {
     });
 
     test('upgrade path: prefixed install + uninstall cleans both old and new symlinks', () => {
-      // Simulate the state after setup --no-prefix followed by setup (with prefix):
+      // Simulate legacy flat and prefixed workflow entries from old installers:
       // Both old unprefixed and new prefixed symlinks exist
       // (mockHome already has both 'review' and 'goldband-ship' symlinks)
 

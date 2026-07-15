@@ -1,28 +1,15 @@
-const fs = require('fs');
 const os = require('os');
-const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
-const { getGitModifiedFiles, isGitRepo } = require('../utils');
+const { execFileSync } = require('child_process');
 const { evaluateCrossReviewGate } = require('./cross-review-gate');
 const { isModeActive, setModeActive } = require('./mode-state');
 
 const NOTIFICATION_TITLE = 'Claude Code';
 const NOTIFICATION_MESSAGES = {
-  Stop: '等待下一步指示',
   permission_prompt: '需要你的同意才能繼續',
   elicitation_dialog: '有問題想問你',
 };
 const SKIP_NOTIFICATION_TYPES = ['auth_success', 'idle_prompt'];
 const REVIEW_READ_ONLY_MODE = 'review-read-only';
-
-const EXCLUDED_PATTERNS = [
-  /\.test\.[jt]sx?$/,
-  /\.spec\.[jt]sx?$/,
-  /\.config\.[jt]s$/,
-  /scripts\//,
-  /__tests__\//,
-  /__mocks__\//,
-];
 
 function isTrueFlag(value) {
   const normalized = String(value || '').toLowerCase();
@@ -110,6 +97,16 @@ function sendNotification(message) {
   }
 }
 
+function notificationMessageForInput(input) {
+  const notificationType = input.notification_type;
+  const hookEventName = input.hook_event_name;
+  return (
+    NOTIFICATION_MESSAGES[notificationType] ||
+    NOTIFICATION_MESSAGES[hookEventName] ||
+    null
+  );
+}
+
 function notifyIfNeeded(input) {
   if (isTrueFlag(process.env.HOOK_DISABLE_DESKTOP_NOTIFY)) {
     return;
@@ -120,91 +117,27 @@ function notifyIfNeeded(input) {
     return;
   }
 
-  if (isTerminalFocused()) {
+  const message = notificationMessageForInput(input);
+  if (!message) {
     return;
   }
 
-  const hookEventName = input.hook_event_name;
-  const message =
-    NOTIFICATION_MESSAGES[notificationType] ||
-    NOTIFICATION_MESSAGES[hookEventName];
-
-  if (!message) {
+  if (isTerminalFocused()) {
     return;
   }
 
   sendNotification(message);
 }
 
-function repoRootFromPolicy() {
-  return path.resolve(__dirname, '../../../..');
-}
-
-function formatStyleGateIssue(issue) {
-  const location = issue.file
-    ? `${issue.file}${issue.line ? `:${issue.line}` : ''}`
-    : 'repo';
-  return `[${issue.rule}] ${location}: ${issue.message}`;
-}
-
-function getStyleGateWarningsInGitDiff() {
-  if (!isGitRepo()) return [];
-
-  const files = getGitModifiedFiles(['\\.tsx?$', '\\.jsx?$'])
-    .filter((file) => fs.existsSync(file))
-    .filter((file) => !EXCLUDED_PATTERNS.some((pattern) => pattern.test(file)));
-  if (files.length === 0) return [];
-
-  const scriptPath = path.join(
-    repoRootFromPolicy(),
-    'scripts',
-    'check-code-style.mjs',
-  );
-  if (!fs.existsSync(scriptPath)) return [];
-
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--files', ...files, '--format', 'json'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-      maxBuffer: 5 * 1024 * 1024,
-      env: { ...process.env, GOLDBAND_STYLE_GATE_HOST: '1' },
-    },
-  );
-
-  if (result.status === 2) {
-    return [
-      '[Hook] WARNING: style gate advisory could not run',
-      result.stderr.trim(),
-    ].filter(Boolean);
-  }
-  if (!result.stdout.trim()) return [];
-
-  try {
-    const parsed = JSON.parse(result.stdout);
-    const issues = [...(parsed.violations || []), ...(parsed.advisories || [])];
-    if (issues.length === 0) return [];
-    return [
-      '[Hook] WARNING: goldband style gate advisory for modified files',
-      ...issues.slice(0, 8).map(formatStyleGateIssue),
-      '[Hook] These warnings are advisory here; pre-commit enforces blocking rules.',
-    ];
-  } catch {
-    return ['[Hook] WARNING: style gate advisory returned invalid JSON'];
-  }
-}
-
 function clearReviewReadOnlyMode(input) {
   const sessionId =
     input.session_id || process.env.CLAUDE_SESSION_ID || 'default';
-  if (!isModeActive(sessionId, REVIEW_READ_ONLY_MODE)) return [];
+  if (!isModeActive(sessionId, REVIEW_READ_ONLY_MODE)) return;
 
   setModeActive(sessionId, REVIEW_READ_ONLY_MODE, false, {
     source: 'stop-policy',
     reason: 'review workflow turn ended',
   });
-  return ['[Hook] review-read-only cleared for this session'];
 }
 
 function evaluateStop(input) {
@@ -214,14 +147,13 @@ function evaluateStop(input) {
     return crossReviewResult;
   }
 
-  const warnings = getStyleGateWarningsInGitDiff();
-  const reviewReadOnlyLogs = clearReviewReadOnlyMode(input);
+  clearReviewReadOnlyMode(input);
   notifyIfNeeded(input);
 
   return {
     decision: 'allow',
     blockedBy: null,
-    logs: [...reviewReadOnlyLogs, ...warnings],
+    logs: [],
   };
 }
 
@@ -238,4 +170,5 @@ function evaluateNotification(input) {
 module.exports = {
   evaluateStop,
   evaluateNotification,
+  notificationMessageForInput,
 };

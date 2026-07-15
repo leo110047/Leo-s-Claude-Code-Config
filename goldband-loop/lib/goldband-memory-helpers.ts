@@ -5,7 +5,6 @@
  *   - bin/goldband-memory-ingest.ts (Lane A)
  *   - bin/goldband-gbrain-sync.ts   (Lane B)
  *   - bin/goldband-brain-context-load.ts (Lane C)
- *   - scripts/gen-skill-docs.ts (manifest validation)
  *
  * Design refs in the plan:
  *   §"Eng review additions" — DRY refactor (Section 1A)
@@ -24,7 +23,7 @@ import { homedir } from "os";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface SecretFinding {
+interface SecretFinding {
   rule_id: string;
   description: string;
   line: number;
@@ -37,7 +36,7 @@ export interface SecretScanResult {
   scanner: "gitleaks" | "missing" | "error";
 }
 
-export type EngineTier = "pglite" | "supabase" | "unknown";
+type EngineTier = "pglite" | "supabase" | "unknown";
 
 export interface EngineDetect {
   engine: EngineTier;
@@ -67,7 +66,7 @@ export interface GbrainManifest {
   context_queries: GbrainManifestQuery[];
 }
 
-export interface ErrorContextEntry {
+interface ErrorContextEntry {
   ts: string;
   op: string;
   duration_ms: number;
@@ -179,7 +178,7 @@ export function secretScanFile(path: string): SecretScanResult {
       redacted_match: redactMatch(f.Secret || f.Match || ""),
     }));
     return { scanned: true, findings, scanner: "gitleaks" };
-  } catch (err) {
+  } catch {
     return {
       scanned: false,
       findings: [],
@@ -329,13 +328,11 @@ function freshDetectEngineTier(): EngineDetect {
 // ── Public: parseSkillManifest ────────────────────────────────────────────
 
 /**
- * Parse the `gbrain:` section out of a SKILL.md.tmpl frontmatter block.
+ * Parse the optional `gbrain:` section from an explicit skill manifest.
  * Returns null if no manifest is declared OR if the file has no frontmatter.
  *
- * Schema validation (full kind/required-fields check) lives in
- * scripts/gen-skill-docs.ts and runs at generation time. This parser is the
- * runtime read path used by goldband-brain-context-load; it tolerates extra
- * fields and relies on validation having already happened upstream.
+ * This is the runtime read path used by goldband-brain-context-load. Callers
+ * validate the returned fields before dispatch.
  */
 export function parseSkillManifest(skillFilePath: string): GbrainManifest | null {
   if (!existsSync(skillFilePath)) return null;
@@ -356,8 +353,7 @@ function extractFrontmatter(content: string): string | null {
 
 function extractGbrainBlock(frontmatter: string): GbrainManifest | null {
   // Naive YAML extraction — finds the `gbrain:` key and parses its sub-tree.
-  // Real YAML parsing avoided to keep zero-deps; gen-skill-docs validates the
-  // shape strictly at build time.
+  // Real YAML parsing is avoided to keep this standalone runtime zero-deps.
   const lines = frontmatter.split("\n");
   const start = lines.findIndex((l) => /^gbrain\s*:/.test(l));
   if (start === -1) return null;
@@ -419,8 +415,6 @@ function extractGbrainBlock(frontmatter: string): GbrainManifest | null {
 }
 
 // ── Public: withErrorContext ──────────────────────────────────────────────
-
-const ERROR_LOG_PATH = join(goldbandHome(), ".gbrain-errors.jsonl");
 
 /**
  * Wrap an op with structured error logging. Logs success/failure + duration

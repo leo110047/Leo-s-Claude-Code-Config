@@ -10,12 +10,12 @@ import type { AuditRow, AttemptRow } from './types';
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_GENS = 5;
 
-export function defaultAuditPath(): string {
+function defaultAuditPath(): string {
   return process.env.GOLDBAND_IOS_AUDIT_PATH
     ?? join(homedir(), '.goldband', 'security', 'ios-qa-audit.jsonl');
 }
 
-export function defaultAttemptsPath(): string {
+function defaultAttemptsPath(): string {
   return process.env.GOLDBAND_IOS_ATTEMPTS_PATH
     ?? join(homedir(), '.goldband', 'security', 'attempts.jsonl');
 }

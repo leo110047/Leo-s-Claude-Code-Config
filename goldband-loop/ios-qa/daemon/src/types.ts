@@ -2,7 +2,7 @@
 
 export type Capability = 'observe' | 'interact' | 'mutate' | 'restore';
 
-export const CAPABILITY_ORDER: Record<Capability, number> = {
+const CAPABILITY_ORDER: Record<Capability, number> = {
   observe: 0,
   interact: 1,
   mutate: 2,
@@ -61,7 +61,7 @@ export interface WhoIsResult {
 
 // Path allowlist for tailnet listener — by capability tier.
 // Each endpoint is mapped to the MINIMUM tier required.
-export const TAILNET_ENDPOINT_TIERS: Record<string, Capability> = {
+const TAILNET_ENDPOINT_TIERS: Record<string, Capability> = {
   'GET /healthz': 'observe',
   'POST /auth/mint': 'observe', // any allowlisted caller can attempt; daemon then filters by tier
   'POST /auth/revoke': 'observe', // own-session revoke

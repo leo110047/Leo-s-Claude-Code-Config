@@ -1,7 +1,6 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractNameAndDescription } from '../scripts/resolvers/codex-helpers';
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import type { ReviewFinding } from './types';
 
@@ -60,7 +59,7 @@ function mockFinding(index: number): ReviewFinding {
   };
 }
 
-export class CodexHostAdapter implements HostAdapter {
+class CodexHostAdapter implements HostAdapter {
   name = 'codex' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
@@ -85,7 +84,7 @@ export class CodexHostAdapter implements HostAdapter {
   }
 }
 
-export class ClaudeHostAdapter implements HostAdapter {
+class ClaudeHostAdapter implements HostAdapter {
   name = 'claude' as const;
   capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
 
@@ -109,10 +108,6 @@ export function adapterFor(name: string | undefined): HostAdapter {
   throw new Error(`unsupported workflow host adapter: ${name}`);
 }
 
-export function workflowLabelFromTemplate(content: string): string {
-  const { name, description } = extractNameAndDescription(content);
-  return [name, description.split('\n')[0]].filter(Boolean).join(': ');
-}
 
 export function codexRunJsonArgs(prompt: string, schemaFile: string, outputFile: string): string[] {
   return [

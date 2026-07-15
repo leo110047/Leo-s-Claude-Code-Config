@@ -46,7 +46,7 @@ export type BootstrapResult =
   | { ok: true; tunnel: DeviceTunnel }
   | { ok: false; error: BootstrapErrorReason; detail?: string };
 
-export type BootstrapErrorReason =
+type BootstrapErrorReason =
   | 'no_devices'
   | 'no_paired_device'
   | 'device_not_found'

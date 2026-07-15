@@ -63,7 +63,7 @@ jobs:
           node -e '
             const value = process.argv[1];
             if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
-              console.error(`max_cost_usd must be a non-negative decimal, got: ${value}`);
+              console.error("max_cost_usd must be a non-negative decimal, got: " + value);
               process.exit(1);
             }
           ' "$max_cost_usd"

@@ -18,22 +18,20 @@ import { handleReadCommand } from './read-commands';
 import { handleWriteCommand } from './write-commands';
 import { handleMetaCommand } from './meta-commands';
 import { handleCookiePickerRoute, hasActivePicker } from './cookie-picker-routes';
-import { sanitizeExtensionUrl } from './sidebar-utils';
 import { COMMAND_DESCRIPTIONS, PAGE_CONTENT_COMMANDS, DOM_CONTENT_COMMANDS, wrapUntrustedContent, canonicalizeCommand, buildUnknownCommandError, ALL_COMMANDS } from './commands';
 import {
   wrapUntrustedPageContent, datamarkContent,
   runContentFilters, type ContentFilterResult,
   markHiddenElements, getCleanTextWithStripping, cleanupHiddenMarkers,
 } from './content-security';
-import { generateCanary, injectCanary, getStatus as getSecurityStatus, writeDecision } from './security';
+import { getStatus as getSecurityStatus } from './security';
 import { isSidecarAvailable, scanWithSidecar } from './security-sidecar-client';
 import { writeSecureFile, mkdirSecure } from './file-permissions';
 import { handleSnapshot, SNAPSHOT_FLAGS } from './snapshot';
 import {
   initRegistry, validateToken as validateScopedToken, checkScope, checkDomain,
-  checkRate, createToken, createSetupKey, exchangeSetupKey, revokeToken,
-  rotateRoot, listTokens, serializeRegistry, restoreRegistry, recordCommand,
-  isRootToken, checkConnectRateLimit, type TokenInfo,
+  checkRate, createToken, createSetupKey, exchangeSetupKey, revokeToken,listTokens, recordCommand,
+  isRootToken, checkConnectRateLimit, type ScopeCategory, type TokenInfo,
 } from './token-registry';
 import { validateTempPath } from './path-security';
 import { resolveConfig, ensureStateDir, readVersionHash, resolveChromiumProfile, cleanSingletonLocks } from './config';
@@ -42,8 +40,8 @@ import { initAuditLog, writeAuditEntry } from './audit';
 import { inspectElement, modifyStyle, resetModifications, getModificationHistory, detachSession, type InspectorResult } from './cdp-inspector';
 // Bun.spawn used instead of child_process.spawn (compiled bun binaries
 // fail posix_spawn on all executables including /bin/bash)
-import { safeUnlink, safeUnlinkQuiet, safeKill } from './error-handling';
-import { readAgentRecord, killAgentByRecord, clearAgentRecord, agentRecordPath, spawnTerminalAgent } from './terminal-agent-control';
+import { safeUnlink, safeUnlinkQuiet } from './error-handling';
+import { readAgentRecord, killAgentByRecord, agentRecordPath, spawnTerminalAgent } from './terminal-agent-control';
 import { isProcessAlive } from './error-handling';
 import { sanitizeBody, stripLoneSurrogateEscapes } from './sanitize';
 import { startSocksBridge, testUpstream, type BridgeHandle } from './socks-bridge';
@@ -844,10 +842,6 @@ function checkPortAvailable(port: number, hostname: string = '127.0.0.1'): Promi
       finish(normalizePortError(err));
     }
   });
-}
-
-function isPortAvailable(port: number, hostname: string = '127.0.0.1'): Promise<boolean> {
-  return checkPortAvailable(port, hostname).then((result) => result.available);
 }
 
 // Find port: explicit BROWSE_PORT, or random in 10000-60000
@@ -1850,7 +1844,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
         let body: any;
         try { body = await req.json(); } catch { body = null; }
         const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : null;
-        const v = sessionId ? validateLease(sessionId) : { ok: false };
+        const v = validateLease(sessionId);
         if (!v.ok) {
           // 410 Gone — session window has closed (lease expired or never
           // existed). Client must fall back to /pty-session for a brand-new
@@ -1974,7 +1968,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
         let body: any;
         try { body = await req.json(); } catch { body = null; }
         const sessionId = typeof body?.sessionId === 'string' ? body.sessionId : null;
-        const r = sessionId ? refreshLease(sessionId) : { ok: false };
+        const r = refreshLease(sessionId);
         if (!r.ok) {
           return new Response(JSON.stringify({ error: 'lease expired or unknown' }), {
             status: 410, headers: { 'Content-Type': 'application/json' },
@@ -2019,7 +2013,6 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
           );
         }
         const text = typeof body.text === 'string' ? body.text : '';
-        const origin = typeof body.origin === 'string' ? body.origin : 'unknown';
         if (text.length === 0) {
           return new Response(
             JSON.stringify({ error: 'missing-text' }, sanitizeReplacer),
@@ -2220,9 +2213,9 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
           // Default: full access (read+write+admin+meta). The trust boundary is
           // the pairing ceremony itself, not the scope. --control adds browser-wide
           // destructive commands (stop, restart, disconnect). --restrict limits scope.
-          const scopes = pairBody.control || pairBody.admin
-            ? ['read', 'write', 'admin', 'meta', 'control'] as const
-            : (pairBody.scopes || ['read', 'write', 'admin', 'meta']) as const;
+          const scopes: ScopeCategory[] = pairBody.control || pairBody.admin
+            ? ['read', 'write', 'admin', 'meta', 'control']
+            : (pairBody.scopes || ['read', 'write', 'admin', 'meta']);
           const setupKey = createSetupKey({
             clientId: pairBody.clientId,
             scopes: [...scopes],
@@ -2712,7 +2705,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
       // POST /inspector/pick — receive element pick from extension, run CDP inspection
       if (url.pathname === '/inspector/pick' && req.method === 'POST') {
         const body = await req.json();
-        const { selector, activeTabUrl } = body;
+        const { selector } = body;
         if (!selector) {
           return new Response(JSON.stringify({ error: 'Missing selector' }), {
             status: 400, headers: { 'Content-Type': 'application/json' },
@@ -2849,7 +2842,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
             req.signal.addEventListener('abort', () => {
               clearInterval(heartbeat);
               inspectorSubscribers.delete(notify);
-              try { controller.close(); } catch (err: any) {
+              try { controller.close(); } catch {
                 // Expected: stream already closed
               }
             });
@@ -3019,7 +3012,7 @@ export async function start() {
     ownsTerminalAgent: true, // CLI spawns terminal-agent.ts itself (see cli.ts:1037-1063)
   });
 
-  const server = Bun.serve({
+  Bun.serve({
     port,
     hostname: '127.0.0.1',
     fetch: handle.fetchLocal,

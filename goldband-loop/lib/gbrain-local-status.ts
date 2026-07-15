@@ -73,7 +73,7 @@ interface CacheEntry {
 }
 
 export const CACHE_TTL_MS = 60_000;
-export const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_TIMEOUT_MS = 5_000;
 
 /** Effective user home — respects HOME env override (used by tests). */
 function userHome(): string {

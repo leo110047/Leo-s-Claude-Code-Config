@@ -42,15 +42,12 @@ const ALLOWLIST = [
   // The bin/goldband-config comment explicitly preserves the rename note.
   'bin/goldband-config',
   // Detect script's "renamed in v1.27.0.0" comment + brain-remote-fallback path.
-  'bin/goldband-gbrain-detect',
+  'bin/goldband-gbrain-detect.ts',
   // brain-restore + source-wireup keep the old file as a migration-window fallback
   // (read both, prefer artifacts). brain-uninstall has the same fallback.
   'bin/goldband-brain-restore',
   'bin/goldband-gbrain-source-wireup',
   'bin/goldband-brain-uninstall',
-  // The preamble resolver reads the legacy file as a fallback during the
-  // migration window — same pattern.
-  'scripts/resolvers/preamble/generate-brain-sync-block.ts',
   // goldband-upgrade.test.ts may exercise old migration behavior.
   'test/goldband-upgrade.test.ts',
   // This test itself references the patterns to grep for.
@@ -64,8 +61,6 @@ const ALLOWLIST = [
   'bin/goldband-artifacts-init',
   // The replacement test mirrors the pattern of the old test (lineage note).
   'test/goldband-artifacts-init.test.ts',
-  // Generated docs that include the preamble bash (which has the fallback).
-  // We grep template sources, not generated output, by limiting scan paths.
 ];
 
 const FORBIDDEN_PATTERNS = [
@@ -76,13 +71,7 @@ const FORBIDDEN_PATTERNS = [
 const SCAN_PATHS = [
   'bin/',
   'scripts/',
-  'setup-gbrain/SKILL.md.tmpl',
-  'sync-gbrain/SKILL.md.tmpl',
-  'health/SKILL.md.tmpl',
-  'plan-eng-review/SKILL.md.tmpl',
-  'plan-ceo-review/SKILL.md.tmpl',
-  'review/SKILL.md.tmpl',
-  'ship/SKILL.md.tmpl',
+  'generated/workflow-contracts/',
   'test/',
 ];
 

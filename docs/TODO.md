@@ -49,7 +49,8 @@
 
 - [ ] 補完整驗證紀錄：
   至少包含 focused runtime tests、`node scripts/check-code-style.mjs`、
-  必要時 `cd goldband-loop && bun run gen:skill-docs` 與 dry-run freshness check。
+  必要時執行 `node scripts/generate-goldband-surfaces.mjs --check` 與
+  `node scripts/test-workflow-contracts.mjs`。
 
 ### 驗收標準
 
@@ -57,7 +58,7 @@
 - [ ] `review/code` 與 `qa/app` 的 mock 多輪整合測試都有逐輪 evidence。
 - [ ] real-mode 驗證結果被誠實標記為 pass、blocked、或 not verified。
 - [ ] 文件描述、registry 狀態、runtime 行為三者一致。
-- [ ] 沒有直接編輯 generated `SKILL.md`。
+- [ ] 沒有直接編輯 generated workflow contracts 或 root `SKILL.md`。
 
 ## P1 - Workflow runtime migration
 
@@ -67,8 +68,9 @@
 ### 背景
 
 `goldband-loop/workflows/COVERAGE.md` 是 runtime 覆蓋清單，不是一般 TODO 檔。
-後續真正要做的是依照 registry 的分級，把這些 workflow 從「只登記、仍靠
-markdown prompt」推進到 `compatibility` 或 `typed` runtime。
+後續真正要做的是依照 registry 的分級，把這些 workflow 從「只登記、執行時
+由 manifest-generated thin contract 交給模型」推進到 `compatibility` 或
+`typed` runtime。
 
 ### 優先順序
 

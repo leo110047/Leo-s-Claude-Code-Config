@@ -61,4 +61,12 @@ Formal interface: `$goldband <capability> <action>`. Old workflow names are not 
 
 - Prompt contract: goal, relevant-context, hard-boundaries, verification.
 - Model owns: semantic-reasoning, task-decomposition, tool-selection, adaptation.
-- Runtime owns: routing, authorization, side-effect-gates, typed-evidence, stop-conditions, state, observability.
+- Runtime owns: routing, authorization, side-effect-gates, typed-evidence, stop-conditions, state, observability, interaction-schema.
+- Installed workflow documents are thin contracts generated from manifest-owned `promptContract` fields. Per-workflow `SKILL.md` and `SKILL.md.tmpl` prompt surfaces are not part of the architecture.
+
+## Human decisions
+
+- Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.
+- Batch related decisions when they can be answered together; split only when an earlier answer changes the next question, risk level, or required evidence.
+- Tool schemas and UI own question shape, option labels, validation, and persistence. Prompts should provide only concise decision context.
+- Avoid prompt-owned formats: prompt-owned formatting rubrics, scores, word-count rules, per-finding question rules.

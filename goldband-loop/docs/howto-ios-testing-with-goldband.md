@@ -32,7 +32,7 @@ The iOS `StateServer` is loopback-only **always**, even in remote mode. Identity
 
 ## Step 1: Add the DebugBridge templates to your iOS app
 
-The templates live at `~/.claude/skills/goldband/ios-qa/templates/` after `./setup`. The fastest install is to invoke the `/ios-qa` skill in Claude Code from your app's root — it reads your Swift source, codegens typed `@Observable` state accessors, and lays down the templates with your bundle ID. Or do it by hand:
+The templates live at `~/.claude/skills/goldband/ios-qa/templates/` after `./setup`. The fastest install is to invoke `/goldband ios qa` in Claude Code from your app's root — it reads your Swift source, codegens typed `@Observable` state accessors, and lays down the templates with your bundle ID. Or do it by hand:
 
 1. Copy these into a `DebugBridge/` SPM package inside your app workspace:
    - `Sources/DebugBridgeCore/StateServer.swift` (from `StateServer.swift.template`)
@@ -89,7 +89,7 @@ If the phone is locked you'll get `FBSOpenApplicationServiceErrorDomain error 1 
 
 Two options.
 
-**Option A — let the skill spawn it.** Run `/ios-qa` in Claude Code from anywhere; the skill spawns the daemon on demand, bootstraps the tunnel, rotates the boot token, and exposes the device through the proxy. Cleanest path for local-USB use.
+**Option A — let the workflow spawn it.** Run `/goldband ios qa` in Claude Code from anywhere; the workflow spawns the daemon on demand, bootstraps the tunnel, rotates the boot token, and exposes the device through the proxy. Cleanest path for local-USB use.
 
 **Option B — start it yourself.** Run:
 
@@ -157,7 +157,7 @@ The remote agent then hits `POST /auth/mint` against the daemon's tailnet listen
 
 ## Step 6: Ship a release build
 
-Before you ship to TestFlight or the App Store, run `/ios-clean`. It removes the `DebugBridge` SPM dependency and strips the `#if DEBUG` wiring from your `@main` App. The structural guard in `Package.swift` (`condition: .when(configuration: .debug)`) means a Release build wouldn't link the bridge even if you forgot to clean up, but `/ios-clean` gives you a tidy diff to review and ship.
+Before you ship to TestFlight or the App Store, run `/goldband ios clean`. It removes the `DebugBridge` SPM dependency and strips the `#if DEBUG` wiring from your `@main` App. The structural guard in `Package.swift` (`condition: .when(configuration: .debug)`) means a Release build wouldn't link the bridge even if you forgot to clean up, but `/goldband ios clean` gives you a tidy diff to review and ship.
 
 ## Common failures
 
@@ -175,6 +175,6 @@ Before you ship to TestFlight or the App Store, run `/ios-clean`. It removes the
 
 ## What this gets you
 
-You can write an agent loop in any language that speaks HTTP. Take a screenshot, ask a model what to do, send a tap. Capture state snapshots before and after to record deterministic fixtures for `/ios-fix` regression tests. Add a colleague to the allowlist and they drive your iPhone from their laptop over Tailscale without ever touching the hardware. Plug the same daemon into CI by minting a `tag:ci` session token with mutate-tier capability and a 24-hour TTL.
+You can write an agent loop in any language that speaks HTTP. Take a screenshot, ask a model what to do, send a tap. Capture state snapshots before and after to record deterministic fixtures for `/goldband ios fix` regression tests. Add a colleague to the allowlist and they drive your iPhone from their laptop over Tailscale without ever touching the hardware. Plug the same daemon into CI by minting a `tag:ci` session token with mutate-tier capability and a 24-hour TTL.
 
 The whole stack is a Mac you already own, an iPhone you already own, a free Apple developer account, and goldband. No paid testing service. No simulator drift. The thing the user sees is what the agent drives.

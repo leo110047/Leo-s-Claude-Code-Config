@@ -75,7 +75,7 @@ describe('gen-llms-txt — shape', () => {
 describe('gen-llms-txt — strict mode', () => {
   test('does NOT throw on the live skill set (every goldband skill has name + description)', async () => {
     // The point of strict mode: catch missing-frontmatter skills before they
-    // sneak past gen-skill-docs. The current repo state should pass strict.
+    // bypass the manifest surface generator. The current repo should pass strict.
     await expect(generateLlmsTxt({ root: ROOT, strict: true })).resolves.toBeDefined();
   });
 

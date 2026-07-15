@@ -54,6 +54,12 @@ jobs:
       - name: Check generated capability surfaces
         run: npm run check:manifest
 
+      - name: Test capability invocation validation
+        run: npm run test:capability-invocations
+
+      - name: Test thin workflow contracts
+        run: npm run test:workflow-contracts
+
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
@@ -116,6 +122,9 @@ jobs:
 
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Check Goldband Loop source quality
+        run: cd goldband-loop && bun run check:source
 
       - name: Test Goldband Loop Playwright setup behavior
         run: bash scripts/test-goldband-loop-playwright-setup.sh

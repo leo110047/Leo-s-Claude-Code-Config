@@ -94,8 +94,29 @@ install_codex_profile_configs() {
     local profile_file
     for profile_file in "$profile_dir"/*.config.toml; do
         [ -f "$profile_file" ] || continue
-        link_component "$profile_file" "$CODEX_DIR/$(basename "$profile_file")" "Codex profile $(basename "$profile_file")"
+        install_codex_profile_config_file "$profile_file" "$CODEX_DIR/$(basename "$profile_file")"
     done
+}
+
+install_codex_profile_config_file() {
+    local src="$1"
+    local dest="$2"
+    local label="Codex profile $(basename "$src")"
+
+    if [ ! -e "$src" ]; then
+        echo -e "  ${YELLOW}[跳過] $label — 來源不存在${NC}"
+        return
+    fi
+
+    if [ -L "$dest" ]; then
+        rm "$dest"
+    elif [ -e "$dest" ] && ! cmp -s "$src" "$dest" 2>/dev/null; then
+        backup_existing_path "$dest"
+    fi
+
+    materialize_file_copy "$src" "$dest" || return 1
+    chmod 0644 "$dest"
+    echo -e "  ${GREEN}[安裝] $label (materialized copy)${NC}"
 }
 
 install_codex_requirements_file() {

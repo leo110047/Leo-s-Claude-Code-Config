@@ -11,6 +11,8 @@ import {
   discoverRuntimeBinaries,
   GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
+import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
+import { assertInstalledWorkflowDocuments } from './lib/workflow-contract-install-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
@@ -21,6 +23,42 @@ const CAPABILITY_CONTRACT_PATH = path.join(
   'generated',
   'capability-actions.json',
 );
+const RETIRED_SHIP_ASSETS = [
+  'ship',
+  'review/ship-fix-first.md',
+  'scripts/resolvers/preamble/generate-test-failure-triage.ts',
+  'test/ship-version-sync.test.ts',
+  'test/skill-e2e-ship-idempotency.test.ts',
+  'test/skill-e2e-ship-triage.test.ts',
+  'docs/designs/SLOP_SCAN_FOR_REVIEW_SHIP.md',
+];
+const RETIRED_SHIP_REFERENCE_PATTERNS = [
+  /\bship\//,
+  /(?:^|\s)\/ship\b/,
+  /\bgoldband-ship\b/,
+  /(?:\bctx\.skillName\s*={2,3}\s*['"]ship['"]|['"]ship['"]\s*={2,3}\s*ctx\.skillName\b)/,
+  /\bship-(?:prosons|plan|coverage|triage|idempotency|local|base)-?/,
+  /TEST_FAILURE_TRIAGE/,
+];
+const RETIRED_SHIP_REFERENCE_ALLOWLIST = [
+  'goldband-loop/CHANGELOG.md',
+  'goldband-loop/docs/designs/',
+  'goldband-loop/docs/prompts/',
+  'goldband-loop/test/uninstall.test.ts',
+  'scripts/check-goldband-loop-inventory.mjs',
+  'scripts/test-workflow-integration.sh',
+];
+const RETIRED_LOOP_CI_ASSETS = [
+  '.github/actionlint.yaml',
+  '.github/docker/Dockerfile.ci',
+  '.gitlab-ci.yml',
+  'scripts/compare-pr-version.ts',
+  'scripts/detect-bump.ts',
+];
+const REQUIRED_ROOT_CI_WORKFLOWS = [
+  '.github/workflows/actionlint.yml',
+  '.github/workflows/goldband-loop-windows.yml',
+];
 function main() {
   const inventory = readJson(INVENTORY_PATH);
   const capabilityContract = readJson(CAPABILITY_CONTRACT_PATH);
@@ -28,8 +66,10 @@ function main() {
   assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput();
   assertSourceSymlinksResolve(LOOP_DIR);
   assertLegacyConfigMigration();
+  assertRetiredShipAssetsAbsent();
+  assertRetiredShipReferencesAbsent();
+  assertCiWorkflowOwnership();
   assertSourceInventory(inventory);
-
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-loop-home.'));
   try {
     runInstall(tmpHome, 'workflow');
@@ -47,10 +87,138 @@ function main() {
     runInstall(copyHome, 'workflow', { GOLDBAND_FORCE_COPY: '1' });
     assertInstalledKnowledgeCliRuns(copyHome);
     assertInstalledCrossReviewCliRuns(copyHome);
+    assertInstalledTaskEmissionCliRuns(copyHome);
     console.log('[OK] Goldband Loop copy fallback runtime CLI works');
   } finally {
     fs.rmSync(copyHome, { recursive: true, force: true });
   }
+}
+
+function assertCiWorkflowOwnership() {
+  assertRetiredLoopCiAbsent();
+  assertRequiredRootCiWorkflows();
+}
+
+function assertRetiredLoopCiAbsent() {
+  const retiredPresent = RETIRED_LOOP_CI_ASSETS.filter((relativePath) =>
+    fs.existsSync(path.join(LOOP_DIR, relativePath)),
+  );
+  const nestedWorkflowDir = path.join(LOOP_DIR, '.github', 'workflows');
+  if (fs.existsSync(nestedWorkflowDir)) {
+    for (const entry of fs.readdirSync(nestedWorkflowDir, {
+      withFileTypes: true,
+    })) {
+      if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) {
+        retiredPresent.push(`.github/workflows/${entry.name}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    retiredPresent,
+    [],
+    'Goldband Loop CI must be owned by repository-root workflows',
+  );
+}
+
+function assertRequiredRootCiWorkflows() {
+  const missingRootWorkflows = REQUIRED_ROOT_CI_WORKFLOWS.filter(
+    (relativePath) => !fs.existsSync(path.join(ROOT_DIR, relativePath)),
+  );
+  assert.deepEqual(
+    missingRootWorkflows,
+    [],
+    'required repository-root CI workflows are missing',
+  );
+  if (missingRootWorkflows.length > 0) return;
+  assertActionlintWorkflowContract();
+  assertWindowsWorkflowContract();
+}
+
+function assertActionlintWorkflowContract() {
+  const actionlint = fs.readFileSync(
+    path.join(ROOT_DIR, '.github', 'workflows', 'actionlint.yml'),
+    'utf8',
+  );
+  assert.match(
+    actionlint,
+    /rhysd\/actionlint@v1\.7\.12/,
+    'root workflow lint must use the validated actionlint release',
+  );
+  assert.doesNotMatch(
+    actionlint,
+    /^\s+paths:/m,
+    'required workflow lint must emit a status on every dev commit',
+  );
+}
+
+function assertWindowsWorkflowContract() {
+  const windows = fs.readFileSync(
+    path.join(ROOT_DIR, '.github', 'workflows', 'goldband-loop-windows.yml'),
+    'utf8',
+  );
+  assert.equal(
+    windows.match(/runs-on: windows-latest/g)?.length,
+    2,
+    'Windows CI must retain unit and setup E2E jobs',
+  );
+  assert.equal(
+    windows.match(/working-directory: goldband-loop/g)?.length,
+    2,
+    'Windows jobs must execute from the monorepo Goldband Loop directory',
+  );
+  assert.doesNotMatch(
+    windows,
+    /^\s+paths:/m,
+    'required Windows CI must emit statuses on every dev commit',
+  );
+}
+
+function assertRetiredShipAssetsAbsent() {
+  const present = RETIRED_SHIP_ASSETS.filter((relativePath) =>
+    fs.existsSync(path.join(LOOP_DIR, relativePath)),
+  );
+  assert.deepEqual(
+    present,
+    [],
+    'retired ship workflow assets must not be restored',
+  );
+}
+
+function assertRetiredShipReferencesAbsent() {
+  const violations = [];
+  for (const scanRoot of [LOOP_DIR, path.join(ROOT_DIR, 'scripts')]) {
+    walkSourceTree(scanRoot, (entryPath, entry) =>
+      collectRetiredShipReferenceViolations(entryPath, entry, violations),
+    );
+  }
+  assert.deepEqual(
+    violations,
+    [],
+    'active source contains references to the retired ship workflow',
+  );
+}
+
+function collectRetiredShipReferenceViolations(entryPath, entry, violations) {
+  if (!entry.isFile()) {
+    return;
+  }
+  const relativePath = path.relative(ROOT_DIR, entryPath);
+  if (isRetiredShipReferenceAllowlisted(relativePath)) {
+    return;
+  }
+  const content = fs.readFileSync(entryPath, 'utf8');
+  for (const pattern of RETIRED_SHIP_REFERENCE_PATTERNS) {
+    if (pattern.test(content)) {
+      violations.push(`${relativePath}: ${pattern}`);
+    }
+  }
+}
+
+function isRetiredShipReferenceAllowlisted(relativePath) {
+  return RETIRED_SHIP_REFERENCE_ALLOWLIST.some(
+    (allowedPath) =>
+      relativePath === allowedPath || relativePath.startsWith(allowedPath),
+  );
 }
 
 function assertGeneratedRuntimeDiscoveryDoesNotRequireBuildOutput() {
@@ -200,7 +368,7 @@ function writeLegacyMigrationFixture(tmpHome) {
 
 function assertLegacyMigrationResult(tmpHome, result) {
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, 'true');
+  assert.equal(result.stdout, 'anonymous');
   assert.equal(
     fs.readFileSync(path.join(tmpHome, '.goldband', 'config.yaml'), 'utf8'),
     'skill_prefix: true\ntelemetry: anonymous\n',
@@ -231,9 +399,9 @@ function assertLegacyMigrationSentinel(tmpHome, legacyDir) {
     path.join(legacyDir, 'projects', 'demo', 'late.jsonl'),
     '{"key":"late"}\n',
   );
-  const second = runGoldbandConfigInHome(tmpHome, ['get', 'skill_prefix']);
+  const second = runGoldbandConfigInHome(tmpHome, ['get', 'telemetry']);
   assert.equal(second.status, 0, second.stderr);
-  assert.equal(second.stdout, 'true');
+  assert.equal(second.stdout, 'anonymous');
   assert.equal(
     fs.existsSync(
       path.join(tmpHome, '.goldband', 'projects', 'demo', 'late.jsonl'),
@@ -249,7 +417,7 @@ function assertLegacyConfigMigration() {
   );
   try {
     const legacyDir = writeLegacyMigrationFixture(tmpHome);
-    const result = runGoldbandConfigInHome(tmpHome, ['get', 'skill_prefix']);
+    const result = runGoldbandConfigInHome(tmpHome, ['get', 'telemetry']);
     assertLegacyMigrationResult(tmpHome, result);
     assertLegacyMigrationSentinel(tmpHome, legacyDir);
   } finally {
@@ -273,8 +441,18 @@ function assertInstalledStandardInventory(home, inventory, capabilityContract) {
     skillDirectories(codexSkillsDir),
     ['goldband'],
   );
-  assertInstalledWorkflowDocuments('Claude', claudeRuntime, capabilityContract);
-  assertInstalledWorkflowDocuments('Codex', codexRuntime, capabilityContract);
+  assertInstalledWorkflowDocuments(
+    'Claude',
+    claudeRuntime,
+    capabilityContract,
+    LOOP_DIR,
+  );
+  assertInstalledWorkflowDocuments(
+    'Codex',
+    codexRuntime,
+    capabilityContract,
+    LOOP_DIR,
+  );
   assert.equal(
     fs
       .readFileSync(
@@ -297,49 +475,12 @@ function assertInstalledStandardInventory(home, inventory, capabilityContract) {
   assertNoLegacyCommands(home, inventory);
 }
 
-function assertInstalledWorkflowDocuments(
-  label,
-  runtimeRoot,
-  capabilityContract,
-) {
-  const expected = capabilityContract.actions.map(({ capability, action }) =>
-    path.join(capability, `${action}.workflow.md`),
-  );
-  const workflowRoot = path.join(runtimeRoot, 'workflows');
-  assertDeepSetEqual(
-    `${label} standard workflow documents`,
-    workflowDocuments(workflowRoot),
-    expected,
-  );
-  for (const relativePath of expected) {
-    assert.ok(
-      fs.existsSync(path.join(workflowRoot, relativePath)),
-      `${label} standard workflow document is broken: ${relativePath}`,
-    );
-  }
-}
-
-function workflowDocuments(root, current = root) {
-  if (!fs.existsSync(current)) return [];
-  const documents = [];
-  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-    const entryPath = path.join(current, entry.name);
-    if (entry.isDirectory()) {
-      documents.push(...workflowDocuments(root, entryPath));
-    } else if (entry.name.endsWith('.workflow.md')) {
-      documents.push(path.relative(root, entryPath));
-    }
-  }
-  return documents.sort();
-}
-
 function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
   const requiredFiles = [
     path.join('lib', 'knowledge.ts'),
     path.join('review', 'shared-rubric.md'),
     path.join('review', 'findings-schema.md'),
     path.join('review', 'checklist.md'),
-    path.join('review', 'ship-fix-first.md'),
     path.join('review', 'greptile-triage.md'),
     path.join('cross-review', 'core.cjs'),
     path.join('cross-review', 'cli.cjs'),

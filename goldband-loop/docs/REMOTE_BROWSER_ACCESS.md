@@ -32,13 +32,13 @@ Goldband Loop Browser Server                 Any AI agent
 
 The daemon binds two HTTP sockets. The **local listener** serves the full command surface to 127.0.0.1 only and is never forwarded. The **tunnel listener** is bound lazily on `/tunnel/start` (and torn down on `/tunnel/stop`) with a locked path allowlist. ngrok forwards only the tunnel port.
 
-A caller who stumbles onto your ngrok URL cannot reach `/health`, `/cookie-picker`, `/inspector/*`, or `/welcome` — those paths don't exist on that TCP socket. Root tokens sent over the tunnel get 403. The tunnel listener accepts only `/connect`, `/command` (with a scoped token + the 26-command browser-driving allowlist), and `/sidebar-chat`.
+A caller who stumbles onto your ngrok URL cannot reach `GET /health`, `/cookie-picker`, `/inspector/*`, or `/welcome` — those paths don't exist on that TCP socket. Root tokens sent over the tunnel get 403. The tunnel listener accepts only `/connect`, `/command` (with a scoped token + the 26-command browser-driving allowlist), and `/sidebar-chat`.
 
 See [ARCHITECTURE.md](../ARCHITECTURE.md#dual-listener-tunnel-architecture-v1600) for the full endpoint table.
 
 ## Connection Flow
 
-1. **User runs** `$B pair-agent` (or `/pair-agent` in Claude Code)
+1. **User runs** `$B pair-agent` (or `/goldband browser pair` in Claude Code)
 2. **Server creates** a one-time setup key (expires in 5 minutes)
 3. **User copies** the instruction block into the other agent's chat
 4. **Remote agent runs** `POST /connect` with the setup key
@@ -56,7 +56,7 @@ All command endpoints require a Bearer token:
 Authorization: Bearer gsk_sess_...
 ```
 
-`/connect` is unauthenticated (rate-limited) — it's how a remote agent exchanges a setup key for a scoped session token. `/health` is unauthenticated on the local listener (bootstrap) but does NOT exist on the tunnel listener (404).
+`/connect` is unauthenticated (rate-limited) — it's how a remote agent exchanges a setup key for a scoped session token. `GET /health` is unauthenticated on the local listener (bootstrap) but does NOT exist on the tunnel listener (404).
 
 SSE endpoints (`/activity/stream`, `/inspector/events`) accept either a Bearer token or the HttpOnly `goldband_sse` cookie (minted via `POST /sse-session`, 30-minute TTL, stream-scope only — cannot be used against `/command`). As of v1.6.0.0 the `?token=<ROOT>` query-string auth is no longer accepted.
 
@@ -158,7 +158,7 @@ Each agent owns the tabs it creates. Rules:
 
 | Code | Meaning | What to do |
 |------|---------|------------|
-| 401 | Token invalid, expired, or revoked | Ask user to run /pair-agent again |
+| 401 | Token invalid, expired, or revoked | Ask user to run `/goldband browser pair` again |
 | 403 | Command not in scope, or tab not yours | Use newtab, or ask for --admin |
 | 429 | Rate limit exceeded (>10 req/s) | Wait for Retry-After header |
 

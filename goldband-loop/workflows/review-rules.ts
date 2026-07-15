@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ReviewSpecialist } from './review-engine';
 
-export type RuleRecord = {
+type RuleRecord = {
   id: string;
   sourceFile: string;
   content: string;

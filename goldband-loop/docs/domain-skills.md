@@ -67,7 +67,8 @@ unrelated work.
 Skills live in two places:
 
 - **Per-project**: `~/.goldband/projects/<slug>/learnings.jsonl` — same JSONL
-  file the `/learn` skill uses. Domain skills are `type:"domain"` rows.
+  file the `/goldband knowledge recall` workflow uses. Domain skills are
+  `type:"domain"` rows.
 - **Global**: `~/.goldband/global-domain-skills.jsonl` — only `state:"global"`
   rows.
 

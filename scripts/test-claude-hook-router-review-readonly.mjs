@@ -119,7 +119,7 @@ function assertStopClearsReviewReadOnly(sessionId) {
     hook_event_name: 'Stop',
   });
   assert.equal(stop.status, 0, stop.stderr);
-  assert.match(stop.stderr, /review-read-only cleared/);
+  assert.equal(stop.stderr, '');
 
   const editAfterStop = runHook(sessionId, {
     hook_event_name: 'PreToolUse',
@@ -151,16 +151,13 @@ function assertAllowedWriteHasNoHookOutput() {
   );
 }
 
-function assertRepeatedSessionStartHasNoHookOutput() {
+function assertSessionStartHasNoHookOutput() {
   const sessionId = 'session-start-output-regression';
   const firstSessionStart = runHook(sessionId, {
     hook_event_name: 'SessionStart',
   });
   assert.equal(firstSessionStart.status, 0, firstSessionStart.stderr);
-  assert.equal(
-    JSON.parse(firstSessionStart.stdout).hookSpecificOutput.hookEventName,
-    'SessionStart',
-  );
+  assert.equal(firstSessionStart.stdout, '');
 
   const repeatedSessionStart = runHook(sessionId, {
     hook_event_name: 'SessionStart',
@@ -169,7 +166,7 @@ function assertRepeatedSessionStartHasNoHookOutput() {
   assert.equal(
     repeatedSessionStart.stdout,
     '',
-    'A deduplicated SessionStart with outputJson: null must emit no hook output',
+    'SessionStart is passive and must emit no hook output',
   );
 }
 
@@ -188,25 +185,25 @@ assertReviewReadOnlyActivation('skill-name-field', { skill_name: '/review' });
 assertReviewReadOnlyActivation('skillName-field', { skillName: 'review' });
 
 const nonReviewSession = 'review-readonly-regression-non-review';
-const invokeShip = runHook(nonReviewSession, {
+const invokeQa = runHook(nonReviewSession, {
   hook_event_name: 'PreToolUse',
   tool_name: 'Skill',
-  tool_input: { name: 'goldband-ship' },
+  tool_input: { name: 'goldband-qa' },
 });
-assert.equal(invokeShip.status, 0, invokeShip.stderr);
-const editAfterShip = runHook(nonReviewSession, {
+assert.equal(invokeQa.status, 0, invokeQa.stderr);
+const editAfterQa = runHook(nonReviewSession, {
   hook_event_name: 'PreToolUse',
   tool_name: 'Edit',
   tool_input: {
-    file_path: 'ship-mutates.txt',
+    file_path: 'qa-mutates.txt',
     old_string: 'before',
     new_string: 'after',
   },
 });
-assert.equal(editAfterShip.status, 0, editAfterShip.stderr);
+assert.equal(editAfterQa.status, 0, editAfterQa.stderr);
 
 assertAllowedWriteHasNoHookOutput();
-assertRepeatedSessionStartHasNoHookOutput();
+assertSessionStartHasNoHookOutput();
 assertInvalidHookOutputFailsLoudly();
 
 console.log('[OK] Claude /review hook read-only enforcement verified');

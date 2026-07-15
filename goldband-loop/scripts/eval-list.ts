@@ -7,7 +7,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { getProjectEvalDir } from '../test/helpers/eval-store';
 
 const EVAL_DIR = getProjectEvalDir();

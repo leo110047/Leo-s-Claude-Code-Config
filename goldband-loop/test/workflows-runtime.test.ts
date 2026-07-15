@@ -77,8 +77,8 @@ describe('workflow runtime', () => {
       if (workflow.entrypointType === 'compatibility') {
         const output = result.output as Record<string, unknown>;
         expect(output.mode).toBe('compatibility');
-        expect(typeof output.sourceTemplate).toBe('string');
-        expect(typeof output.legacyPromptDigest).toBe('string');
+        expect(typeof output.contractPath).toBe('string');
+        expect(typeof output.contractDigest).toBe('string');
       }
     }
     expect(integratedWorkflows().map((entry) => entry.name).sort())
@@ -236,7 +236,7 @@ describe('workflow runtime', () => {
       evaluationSignal: 'Runtime throws explicit schema error.',
       iterationCap: 1,
       stopConditions: ['target-met'],
-      sourceTemplate: 'README.md',
+      contractPath: 'README.md',
       entrypointType: 'typed',
       integrationStatus: 'integrated',
       hostSupport: ['claude'],
@@ -577,6 +577,7 @@ describe('workflow runtime', () => {
       '+provider permission installer change',
     ].join('\n');
     const core = buildReviewPrompt(ctx, diff);
+    expect(core.split('\n')[0]).toBe('$goldband review code');
     expect(core).toContain('# Shared Review Rubric');
     expect(core).toContain('# Shared Finding Shape');
     expect(core).toContain('# Read-Only Review Checklist');
@@ -593,6 +594,16 @@ describe('workflow runtime', () => {
     const hostParity = buildSpecialistPrompt(ctx, diff, 'api-host-parity');
     expect(hostParity).toContain('# Git Workflow');
     expect(hostParity).toContain('# Security Boundaries');
+  });
+
+  test('real review prompt uses the formal capability interface header', () => {
+    const ctx = {
+      ...workflowContext(),
+      options: { mode: 'real' as const, host: 'codex' as const },
+    };
+    const prompt = buildReviewPrompt(ctx, 'diff --git a/a.ts b/a.ts');
+    expect(prompt.split('\n')[0]).toBe('$goldband review code');
+    expect(prompt.split('\n')[0]).not.toContain('review/code');
   });
 
   test('review Rules payload budgets use measured headroom and fail closed on aggregate fan-out', () => {
@@ -642,16 +653,23 @@ describe('workflow runtime', () => {
     ).toThrow('aggregate Rules payload exceeds budget');
   });
 
-  test('review specialist selection includes host parity for workflow and prompt diffs', () => {
+  test('review specialist selection includes every matched auto specialist', () => {
     const selection = selectReviewSpecialists([
       'diff --git a/goldband-loop/workflows/host-adapter.ts b/goldband-loop/workflows/host-adapter.ts',
       '+codex exec --sandbox read-only',
-      'diff --git a/goldband-loop/review/SKILL.md.tmpl b/goldband-loop/review/SKILL.md.tmpl',
+      '+schema migration with rollback',
+      '+performance cache stampede',
+      'diff --git a/goldband.manifest.json b/goldband.manifest.json',
       '+allowed-tools:',
     ].join('\n'));
 
-    expect(selection.selected).toEqual(['security', 'api-host-parity']);
-    expect(selection.selected.length).toBeLessThanOrEqual(2);
+    expect(selection.selected).toEqual([
+      'security',
+      'performance',
+      'migration-data',
+      'api-host-parity',
+    ]);
+    expect(selection.skipped.every((item) => item.reason === 'diff scope not relevant')).toBe(true);
   });
 
   test('review specialist selection supports explicit all mode', () => {
@@ -925,7 +943,7 @@ function signalWorkflow(input: {
     evaluationSignal: 'Generic score.',
     iterationCap: input.iterationCap ?? 2,
     stopConditions: input.stopConditions ?? ['target-met', 'iteration-cap'],
-    sourceTemplate: 'README.md',
+    contractPath: 'README.md',
     entrypointType: 'typed',
     integrationStatus: 'integrated',
     hostSupport: ['claude'],

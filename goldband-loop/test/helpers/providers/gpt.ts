@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+const DEFAULT_GPT_MODEL = 'gpt-5.6-sol';
+
 /**
  * GPT adapter — wraps the OpenAI `codex` CLI (codex exec with --json output).
  *
@@ -53,7 +55,7 @@ export class GptAdapter implements ProviderAdapter {
         tokens: parsed.tokens,
         durationMs: Date.now() - start,
         toolCalls: parsed.toolCalls,
-        modelUsed: parsed.modelUsed || opts.model || 'gpt-5.4',
+        modelUsed: parsed.modelUsed || opts.model || DEFAULT_GPT_MODEL,
       };
     } catch (err: unknown) {
       const durationMs = Date.now() - start;
@@ -73,7 +75,7 @@ export class GptAdapter implements ProviderAdapter {
   }
 
   estimateCost(tokens: { input: number; output: number; cached?: number }, model?: string): number {
-    return estimateCostUsd(tokens, model ?? 'gpt-5.4');
+    return estimateCostUsd(tokens, model ?? DEFAULT_GPT_MODEL);
   }
 
   /**
@@ -120,7 +122,7 @@ export class GptAdapter implements ProviderAdapter {
       tokens: { input: 0, output: 0 },
       durationMs,
       toolCalls: 0,
-      modelUsed: model ?? 'gpt-5.4',
+      modelUsed: model ?? DEFAULT_GPT_MODEL,
       error,
     };
   }

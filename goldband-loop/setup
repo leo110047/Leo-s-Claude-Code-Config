@@ -18,6 +18,7 @@ INSTALL_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 INSTALL_SKILLS_DIR="$(dirname "$INSTALL_GOLDBAND_DIR")"
 BROWSE_BIN="$SOURCE_GOLDBAND_DIR/browse/dist/browse"
+TASK_EMISSION_BIN="$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission"
 CODEX_SKILLS="$HOME/.codex/skills"
 CODEX_GOLDBAND="$CODEX_SKILLS/goldband"
 FACTORY_SKILLS="$HOME/.factory/skills"
@@ -110,8 +111,6 @@ log() { [ "$QUIET" -eq 0 ] && echo "$@" || true; }
 HOST="claude"
 WORKFLOW_PROFILE="${GOLDBAND_WORKFLOW_PROFILE:-standard}"
 LOCAL_INSTALL=0
-SKILL_PREFIX=1
-SKILL_PREFIX_FLAG=0
 TEAM_MODE=0
 NO_TEAM_MODE=0
 while [ $# -gt 0 ]; do
@@ -121,8 +120,6 @@ while [ $# -gt 0 ]; do
     --profile) [ -z "$2" ] && echo "Missing value for --profile (expected standard)" >&2 && exit 1; WORKFLOW_PROFILE="$2"; shift 2 ;;
     --profile=*) WORKFLOW_PROFILE="${1#--profile=}"; shift ;;
     --local) LOCAL_INSTALL=1; shift ;;
-    --prefix)    SKILL_PREFIX=1; SKILL_PREFIX_FLAG=1; shift ;;
-    --no-prefix) SKILL_PREFIX=0; SKILL_PREFIX_FLAG=1; shift ;;
     --team)    TEAM_MODE=1; shift ;;
     --no-team) NO_TEAM_MODE=1; shift ;;
     -q|--quiet) QUIET=1; shift ;;
@@ -140,8 +137,7 @@ case "$HOST" in
     echo ""
     echo "To integrate goldband with OpenClaw:"
     echo "  1. Tell your OpenClaw agent: 'install goldband for openclaw'"
-    echo "  2. Or generate artifacts: bun run gen:skill-docs --host openclaw"
-    echo "  3. See docs/OPENCLAW.md for the full architecture"
+    echo "  2. See docs/OPENCLAW.md for the tracked integration assets"
     echo ""
     exit 0 ;;
   hermes)
@@ -151,19 +147,13 @@ case "$HOST" in
     echo ""
     echo "To integrate goldband with Hermes:"
     echo "  1. Tell your Hermes agent: 'install goldband for hermes'"
-    echo "  2. Or generate artifacts: bun run gen:skill-docs --host hermes"
+    echo "  2. Use the shared goldband capability interface from the session"
     echo ""
     exit 0 ;;
   gbrain)
     echo ""
     echo "GBrain is a mod for goldband — it makes coding skills brain-aware."
-    echo "GBrain generates brain-enhanced skill variants that search your brain"
-    echo "for context before starting and save results after finishing."
-    echo ""
-    echo "To generate brain-aware skills:"
-    echo "  bun run gen:skill-docs --host gbrain"
-    echo ""
-    echo "GBrain setup and brain skills ship from the GBrain repo."
+    echo "GBrain setup and brain integration ship from the GBrain repo."
     echo ""
     exit 0 ;;
   *) echo "Unknown --host value: $HOST (expected claude, codex, kiro, factory, opencode, openclaw, hermes, gbrain, or auto)" >&2; exit 1 ;;
@@ -177,47 +167,6 @@ case "$WORKFLOW_PROFILE" in
   standard) ;;
   *) echo "Unknown --profile value: $WORKFLOW_PROFILE (expected standard)" >&2; exit 1 ;;
 esac
-
-# ─── Resolve skill prefix preference ─────────────────────────
-# Priority: CLI flag > saved config > interactive prompt (or flat default for non-TTY)
-GOLDBAND_CONFIG="$SOURCE_GOLDBAND_DIR/bin/goldband-config"
-export GOLDBAND_SETUP_RUNNING=1  # Prevent goldband-config post-set hook from triggering relink mid-setup
-if [ "$SKILL_PREFIX_FLAG" -eq 0 ]; then
-  _saved_prefix="$("$GOLDBAND_CONFIG" get skill_prefix 2>/dev/null || true)"
-  if [ "$_saved_prefix" = "true" ]; then
-    SKILL_PREFIX=1
-  elif [ "$_saved_prefix" = "false" ]; then
-    SKILL_PREFIX=0
-  else
-    # No saved preference — prompt interactively (or default flat for non-TTY/quiet)
-    if [ "$QUIET" -eq 1 ]; then
-      SKILL_PREFIX=0
-    elif [ -t 0 ]; then
-      echo ""
-      echo "Skill naming: how should goldband skills appear?"
-      echo ""
-      echo "  1) Short names: /qa, /ship, /review"
-      echo "     Recommended. Clean and fast to type."
-      echo ""
-      echo "  2) Namespaced: /goldband-qa, /goldband-ship, /goldband-review"
-      echo "     Use this if you run other skill packs alongside goldband to avoid conflicts."
-      echo ""
-      printf "Choice [1/2] (default: 1, auto-selects in 10s): "
-      read -t 10 -r _prefix_choice </dev/tty 2>/dev/null || _prefix_choice=""
-      case "$_prefix_choice" in
-        2) SKILL_PREFIX=1 ;;
-        *) SKILL_PREFIX=0 ;;
-      esac
-    else
-      SKILL_PREFIX=0
-    fi
-    # Save the choice for future runs
-    "$GOLDBAND_CONFIG" set skill_prefix "$([ "$SKILL_PREFIX" -eq 1 ] && echo true || echo false)" 2>/dev/null || true
-  fi
-else
-  # Flag was passed explicitly — persist the choice
-  "$GOLDBAND_CONFIG" set skill_prefix "$([ "$SKILL_PREFIX" -eq 1 ] && echo true || echo false)" 2>/dev/null || true
-fi
 
 # --local: install to .claude/skills/ in the current working directory (deprecated)
 if [ "$LOCAL_INSTALL" -eq 1 ]; then
@@ -282,6 +231,8 @@ migrate_direct_codex_install() {
   INSTALL_GOLDBAND_DIR="$migrated_dir"
   INSTALL_SKILLS_DIR="$(dirname "$INSTALL_GOLDBAND_DIR")"
   BROWSE_BIN="$SOURCE_GOLDBAND_DIR/browse/dist/browse"
+  TASK_EMISSION_BIN="$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission"
+  [ -x "${TASK_EMISSION_BIN}.exe" ] && TASK_EMISSION_BIN="${TASK_EMISSION_BIN}.exe"
 }
 
 if [ "$INSTALL_CODEX" -eq 1 ]; then
@@ -364,8 +315,8 @@ handle_playwright_unavailable_without_install() {
   if playwright_required; then
     echo "goldband setup failed: $reason" >&2
     echo "  Playwright Chromium install was not attempted because this environment cannot run or update the browser runtime safely." >&2
-    echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
-    echo "  To make browser workflows optional in this environment: GOLDBAND_REQUIRE_PLAYWRIGHT=0 ./setup --host $HOST --prefix" >&2
+    echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST" >&2
+    echo "  To make browser workflows optional in this environment: GOLDBAND_REQUIRE_PLAYWRIGHT=0 ./setup --host $HOST" >&2
     return 1
   fi
 
@@ -435,11 +386,17 @@ cleanup_copied_bun() {
 prepare_bun_for_windows_compile
 trap cleanup_copied_bun EXIT
 
-# 1. Build browse binary if needed (smart rebuild: stale sources, package.json, lock)
+[ -x "${TASK_EMISSION_BIN}.exe" ] && TASK_EMISSION_BIN="${TASK_EMISSION_BIN}.exe"
+
+# 1. Build runtime binaries if needed (smart rebuild: missing or stale outputs)
 NEEDS_BUILD=0
 if [ ! -x "$BROWSE_BIN" ]; then
   NEEDS_BUILD=1
+elif [ ! -x "$TASK_EMISSION_BIN" ]; then
+  NEEDS_BUILD=1
 elif [ -n "$(find "$SOURCE_GOLDBAND_DIR/browse/src" -type f -newer "$BROWSE_BIN" -print -quit 2>/dev/null)" ]; then
+  NEEDS_BUILD=1
+elif [ "$SOURCE_GOLDBAND_DIR/scripts/task-emission-schema.ts" -nt "$TASK_EMISSION_BIN" ]; then
   NEEDS_BUILD=1
 elif [ "$SOURCE_GOLDBAND_DIR/package.json" -nt "$BROWSE_BIN" ]; then
   NEEDS_BUILD=1
@@ -451,7 +408,7 @@ if [ "${GOLDBAND_SKIP_BUILD:-0}" = "1" ]; then
 fi
 
 if [ "$NEEDS_BUILD" -eq 1 ]; then
-  log "Building browse binary..."
+  log "Building runtime binaries..."
   (
     cd "$SOURCE_GOLDBAND_DIR"
     bun_cmd install --frozen-lockfile 2>/dev/null || bun_cmd install
@@ -469,7 +426,7 @@ if [ "$NEEDS_BUILD" -eq 1 ]; then
   # signature block is corrupt. This is idempotent and costs <1s.
   # See: https://github.com/leo110047/goldband/issues/997
   if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
-    for _bin in browse/dist/browse browse/dist/find-browse design/dist/design make-pdf/dist/pdf bin/goldband-global-discover; do
+    for _bin in browse/dist/browse browse/dist/find-browse design/dist/design make-pdf/dist/pdf bin/goldband-global-discover bin/goldband-task-emission; do
       _bin_path="$SOURCE_GOLDBAND_DIR/$_bin"
       [ -f "$_bin_path" ] && [ -x "$_bin_path" ] || continue
       codesign --remove-signature "$_bin_path" 2>/dev/null || true
@@ -501,45 +458,9 @@ if [ ! -x "$BROWSE_BIN" ]; then
   echo "goldband setup failed: browse binary missing at $BROWSE_BIN" >&2
   exit 1
 fi
-
-# 1b. Generate .agents/ Codex skill docs — always regenerate to prevent stale descriptions.
-# .agents/ is no longer committed — generated at setup time from .tmpl templates.
-# bun run build already does this, but we need it when NEEDS_BUILD=0 (binary is fresh).
-# Always regenerate: generation is fast (<2s) and mtime-based staleness checks are fragile
-# (miss stale files when timestamps match after clone/checkout/upgrade).
-AGENTS_DIR="$SOURCE_GOLDBAND_DIR/.agents/skills"
-NEEDS_AGENTS_GEN=1
-if [ "${GOLDBAND_SKIP_GENERATE:-0}" = "1" ]; then
-  NEEDS_AGENTS_GEN=0
-fi
-
-if [ "$NEEDS_AGENTS_GEN" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
-  log "Generating .agents/ skill docs..."
-  (
-    cd "$SOURCE_GOLDBAND_DIR"
-    bun_cmd install --frozen-lockfile 2>/dev/null || bun_cmd install
-    bun_cmd run gen:skill-docs --host codex
-  )
-fi
-
-# 1c. Generate .factory/ Factory Droid skill docs
-if [ "$INSTALL_FACTORY" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
-  log "Generating .factory/ skill docs..."
-  (
-    cd "$SOURCE_GOLDBAND_DIR"
-    bun_cmd install --frozen-lockfile 2>/dev/null || bun_cmd install
-    bun_cmd run gen:skill-docs --host factory
-  )
-fi
-
-# 1d. Generate .opencode/ OpenCode skill docs
-if [ "$INSTALL_OPENCODE" -eq 1 ] && [ "$NEEDS_BUILD" -eq 0 ]; then
-  log "Generating .opencode/ skill docs..."
-  (
-    cd "$SOURCE_GOLDBAND_DIR"
-    bun_cmd install --frozen-lockfile 2>/dev/null || bun_cmd install
-    bun_cmd run gen:skill-docs --host opencode
-  )
+if [ ! -x "$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission" ] && [ ! -x "$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission.exe" ]; then
+  echo "goldband setup failed: task emission binary missing" >&2
+  exit 1
 fi
 
 # 2. Ensure Playwright's Chromium is available
@@ -562,8 +483,8 @@ elif ! ensure_playwright_browser; then
       if playwright_required; then
         echo "goldband setup failed: Playwright Chromium install did not finish successfully within ${PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS}s" >&2
         echo "  Re-run manually for details: cd $SOURCE_GOLDBAND_DIR && bunx playwright install chromium" >&2
-        echo "  Or increase the timeout: GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST --prefix" >&2
-        echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST --prefix" >&2
+        echo "  Or increase the timeout: GOLDBAND_PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS=600 ./setup --host $HOST" >&2
+        echo "  To install without browser workflows: GOLDBAND_SKIP_PLAYWRIGHT=1 ./setup --host $HOST" >&2
         exit 1
       fi
       PLAYWRIGHT_READY=0
@@ -794,6 +715,35 @@ cleanup_manifest_entries_for_standard() {
   fi
 }
 
+LEGACY_WORKFLOW_ENTRY_NAMES="autoplan benchmark benchmark-models browse canary careful codex context-restore context-save cso design-consultation design-html design-review design-shotgun devex-review document-generate document-release freeze goldband-upgrade guard health investigate ios-clean ios-design-review ios-fix ios-qa ios-sync land-and-deploy landing-report learn make-pdf office-hours open-browser open-goldband-browser pair-agent plan-ceo-review plan-design-review plan-devex-review plan-eng-review plan-tune qa qa-only retro review scrape setup-browser-cookies setup-deploy setup-gbrain skillify sync-gbrain unfreeze workflow-upgrade"
+
+retired_goldband_namespace_entry() {
+  local target="$1"
+  case "$(basename "$target")" in
+    goldband-*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+legacy_symlink_points_to_source() {
+  local target="$1"
+  local source_root="$2"
+  local link_target
+
+  if [ -L "$target" ]; then
+    link_target="$(readlink "$target" 2>/dev/null || true)"
+  elif [ -L "$target/SKILL.md" ]; then
+    link_target="$(readlink "$target/SKILL.md" 2>/dev/null || true)"
+  else
+    return 1
+  fi
+
+  case "$link_target" in
+    "$source_root"|"$source_root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 cleanup_legacy_full_workflow_entries_for_standard() {
   local goldband_dir="$1"
   local skills_dir="$2"
@@ -806,14 +756,14 @@ cleanup_legacy_full_workflow_entries_for_standard() {
     cleanup_manifest_entries_for_standard "$host" "$skills_dir"
   fi
 
-  for skill_dir in "$goldband_dir"/*/; do
-    [ -f "$skill_dir/SKILL.md" ] || continue
-    skill_name="$(basename "$skill_dir")"
-    case "$skill_name" in connect-chrome|node_modules) continue ;; esac
-
+  # The prompt sources are intentionally gone, so keep only this migration
+  # inventory to identify names owned by pre-thin-contract installers.
+  for skill_name in $LEGACY_WORKFLOW_ENTRY_NAMES; do
     for target in "$skills_dir/$skill_name" "$skills_dir/goldband-$skill_name"; do
       [ -e "$target" ] || [ -L "$target" ] || continue
-      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root"; then
+      if retired_goldband_namespace_entry "$target" || \
+          goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
+          legacy_symlink_points_to_source "$target" "$goldband_dir"; then
         rm -rf "$target"
         removed+=("$(basename "$target")")
       fi
@@ -841,45 +791,32 @@ cleanup_legacy_full_workflow_entries_for_standard() {
 }
 
 create_internal_workflow_docs() {
-  local generated_root="$1"
-  local runtime_root="$2"
-  local host="${3:-}"
+  local runtime_root="$1"
   local workflow_root="$runtime_root/workflows"
   local capability_contract="$SOURCE_GOLDBAND_DIR/generated/capability-actions.json"
   local linked=()
-  local capability action source source_dir skill_dir target
+  local capability action contract_path contract_file target manual_id manual_source
 
   rm -rf "$workflow_root"
   mkdir -p "$workflow_root"
   [ -f "$capability_contract" ] || { echo "goldband setup failed: missing generated capability contract: $capability_contract" >&2; exit 1; }
 
-  while IFS=$'\t' read -r capability action source; do
-    source_dir="${source%%/*}"
-    if [ "$source" = "../commands/plan.md" ]; then
-      skill_dir="$SOURCE_GOLDBAND_DIR/../commands/plan.md"
-    elif [ "$source_dir" = "codex" ] && [ -f "$generated_root/goldband-claude/SKILL.md" ]; then
-      skill_dir="$generated_root/goldband-claude/SKILL.md"
-    elif [ -f "$generated_root/goldband-$source_dir/SKILL.md" ]; then
-      skill_dir="$generated_root/goldband-$source_dir/SKILL.md"
-    else
-      skill_dir="$generated_root/$source_dir/SKILL.md"
-    fi
-    [ -f "$skill_dir" ] || { echo "goldband setup failed: missing capability source for $capability/$action: $skill_dir" >&2; exit 1; }
+  while IFS=$'\t' read -r capability action contract_path; do
+    [ -n "$contract_path" ] || { echo "goldband setup failed: missing contractPath for $capability/$action" >&2; exit 1; }
+    contract_file="$SOURCE_GOLDBAND_DIR/$contract_path"
+    [ -f "$contract_file" ] || { echo "goldband setup failed: missing workflow contract for $capability/$action: $contract_file" >&2; exit 1; }
     mkdir -p "$workflow_root/$capability"
     target="$workflow_root/$capability/$action.workflow.md"
-    if [ "$host" = "kiro" ]; then
-      sed -e 's|\$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
-          -e 's|~/.codex/skills/goldband|~/.kiro/skills/goldband|g' \
-          -e 's|~/.claude/skills/goldband|~/.kiro/skills/goldband|g' \
-          "$skill_dir" > "$target"
-    else
-      _link_or_copy "$skill_dir" "$target"
-    fi
+    _link_or_copy "$contract_file" "$target"
     linked+=("$capability/$action")
-  done < <(node -e 'const c=require(process.argv[1]); for (const a of c.actions) console.log([a.capability,a.action,a.sourceTemplate].join("\t"))' "$capability_contract")
+  done < <(node -e 'const c=require(process.argv[1]); for (const a of c.actions) console.log([a.capability,a.action,a.contractPath].join("\t"))' "$capability_contract")
 
   mkdir -p "$runtime_root/manuals"
-  _link_or_copy "$SOURCE_GOLDBAND_DIR/browse/SKILL.md" "$runtime_root/manuals/browser.md"
+  while IFS=$'\t' read -r manual_id manual_source; do
+    [ -n "$manual_id" ] && [ -n "$manual_source" ] || { echo "goldband setup failed: invalid manual contract" >&2; exit 1; }
+    [ -f "$SOURCE_GOLDBAND_DIR/$manual_source" ] || { echo "goldband setup failed: missing manual source: $manual_source" >&2; exit 1; }
+    _link_or_copy "$SOURCE_GOLDBAND_DIR/$manual_source" "$runtime_root/manuals/$manual_id.md"
+  done < <(node -e 'const c=require(process.argv[1]); for (const m of c.manuals || []) console.log([m.id,m.source].join("\t"))' "$capability_contract")
 
   if [ ${#linked[@]} -gt 0 ]; then
     echo "  internal workflows: ${#linked[@]}"
@@ -887,46 +824,13 @@ create_internal_workflow_docs() {
   fi
 }
 
-# ─── Helper: create .agents/skills/goldband/ sidecar symlinks ──────────
-# Codex/Gemini/Cursor read skills from .agents/skills/. We link runtime
-# assets (bin/, lib/, browse/dist/, review/, qa/, etc.) so skill templates can
-# resolve paths like $SKILL_ROOT/review/design-checklist.md.
-create_agents_sidecar() {
-  local repo_root="$1"
-  local agents_goldband="$repo_root/.agents/skills/goldband"
-  mkdir -p "$agents_goldband"
-
-  # Sidecar directories that skills reference at runtime
-  for asset in bin lib browse review qa cross-review; do
-    local src="$SOURCE_GOLDBAND_DIR/$asset"
-    local dst="$agents_goldband/$asset"
-    if [ -d "$src" ] || [ -f "$src" ]; then
-      if [ -L "$dst" ] || [ ! -e "$dst" ]; then
-        _link_or_copy "$src" "$dst"
-      fi
-    fi
-  done
-
-  # Sidecar files that skills reference at runtime
-  for file in ETHOS.md; do
-    local src="$SOURCE_GOLDBAND_DIR/$file"
-    local dst="$agents_goldband/$file"
-    if [ -f "$src" ]; then
-      if [ -L "$dst" ] || [ ! -e "$dst" ]; then
-        _link_or_copy "$src" "$dst"
-      fi
-    fi
-  done
-}
-
 # ─── Helper: create a minimal ~/.codex/skills/goldband runtime root ───────────
 # Codex scans ~/.codex/skills recursively. Exposing the whole repo here causes
-# duplicate skills because source SKILL.md files and generated Codex skills are
-# both discoverable. Keep this directory limited to runtime assets + root skill.
+# duplicate skills when old per-workflow entries remain discoverable. Keep this
+# directory limited to runtime assets, thin contracts, and the root skill.
 create_codex_runtime_root() {
   local goldband_dir="$1"
   local codex_goldband="$2"
-  local agents_dir="$goldband_dir/.agents/skills"
 
   if [ -L "$codex_goldband" ]; then
     rm -f "$codex_goldband"
@@ -938,10 +842,10 @@ create_codex_runtime_root() {
 
   mkdir -p "$codex_goldband" "$codex_goldband/browse" "$codex_goldband/review" "$codex_goldband/workflows"
 
-  if [ -f "$agents_dir/goldband/SKILL.md" ]; then
+  if [ -f "$goldband_dir/SKILL.md" ]; then
     # Codex discovers skills from SKILL.md files. Keep the root selector as a
     # materialized file; symlinked SKILL.md files can be skipped by the scanner.
-    _materialize_codex_skill_file "$agents_dir/goldband/SKILL.md" "$codex_goldband/SKILL.md"
+    _materialize_codex_skill_file "$goldband_dir/SKILL.md" "$codex_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$codex_goldband/bin"
@@ -959,7 +863,7 @@ create_codex_runtime_root() {
     _link_or_copy "$goldband_dir/browse/bin" "$codex_goldband/browse/bin"
   fi
   # Review runtime assets (individual files, NOT the whole review/ dir which has SKILL.md)
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$codex_goldband/review/$f"
     fi
@@ -968,7 +872,7 @@ create_codex_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$codex_goldband/ETHOS.md"
   fi
-  create_internal_workflow_docs "$agents_dir" "$codex_goldband"
+  create_internal_workflow_docs "$codex_goldband"
 }
 
 create_claude_runtime_root() {
@@ -977,7 +881,7 @@ create_claude_runtime_root() {
 
   if [ ! -L "$claude_goldband" ] && same_dir_path "$goldband_dir" "$claude_goldband"; then
     mkdir -p "$claude_goldband/workflows"
-    create_internal_workflow_docs "$goldband_dir" "$claude_goldband"
+    create_internal_workflow_docs "$claude_goldband"
     return 0
   fi
 
@@ -1012,7 +916,7 @@ create_claude_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$claude_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
     fi
@@ -1020,13 +924,12 @@ create_claude_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$claude_goldband/ETHOS.md"
   fi
-  create_internal_workflow_docs "$goldband_dir" "$claude_goldband"
+  create_internal_workflow_docs "$claude_goldband"
 }
 
 create_factory_runtime_root() {
   local goldband_dir="$1"
   local factory_goldband="$2"
-  local factory_dir="$goldband_dir/.factory/skills"
 
   if [ -L "$factory_goldband" ]; then
     rm -f "$factory_goldband"
@@ -1036,8 +939,8 @@ create_factory_runtime_root() {
 
   mkdir -p "$factory_goldband" "$factory_goldband/browse" "$factory_goldband/review"
 
-  if [ -f "$factory_dir/goldband/SKILL.md" ]; then
-    _link_or_copy "$factory_dir/goldband/SKILL.md" "$factory_goldband/SKILL.md"
+  if [ -f "$goldband_dir/SKILL.md" ]; then
+    _link_or_copy "$goldband_dir/SKILL.md" "$factory_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$factory_goldband/bin"
@@ -1054,7 +957,7 @@ create_factory_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$factory_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$factory_goldband/review/$f"
     fi
@@ -1062,13 +965,12 @@ create_factory_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$factory_goldband/ETHOS.md"
   fi
-  create_internal_workflow_docs "$factory_dir" "$factory_goldband"
+  create_internal_workflow_docs "$factory_goldband"
 }
 
 create_opencode_runtime_root() {
   local goldband_dir="$1"
   local opencode_goldband="$2"
-  local opencode_dir="$goldband_dir/.opencode/skills"
 
   if [ -L "$opencode_goldband" ]; then
     rm -f "$opencode_goldband"
@@ -1078,8 +980,8 @@ create_opencode_runtime_root() {
 
   mkdir -p "$opencode_goldband" "$opencode_goldband/browse" "$opencode_goldband/design" "$opencode_goldband/review" "$opencode_goldband/qa" "$opencode_goldband/plan-devex-review"
 
-  if [ -f "$opencode_dir/goldband/SKILL.md" ]; then
-    _link_or_copy "$opencode_dir/goldband/SKILL.md" "$opencode_goldband/SKILL.md"
+  if [ -f "$goldband_dir/SKILL.md" ]; then
+    _link_or_copy "$goldband_dir/SKILL.md" "$opencode_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$opencode_goldband/bin"
@@ -1099,7 +1001,7 @@ create_opencode_runtime_root() {
   if [ -d "$goldband_dir/design/dist" ]; then
     _link_or_copy "$goldband_dir/design/dist" "$opencode_goldband/design/dist"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$opencode_goldband/review/$f"
     fi
@@ -1119,7 +1021,7 @@ create_opencode_runtime_root() {
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$opencode_goldband/ETHOS.md"
   fi
-  create_internal_workflow_docs "$opencode_dir" "$opencode_goldband"
+  create_internal_workflow_docs "$opencode_goldband"
 }
 
 write_workflow_profile_marker() {
@@ -1139,7 +1041,6 @@ fi
 
 if [ "$INSTALL_CLAUDE" -eq 1 ]; then
   if [ "$SKILLS_BASENAME" = "skills" ]; then
-    "$SOURCE_GOLDBAND_DIR/bin/goldband-patch-names" "$SOURCE_GOLDBAND_DIR" "$SKILL_PREFIX"
     INSTALL_GOLDBAND_DIR="$INSTALL_SKILLS_DIR/goldband"
     create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
     cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
@@ -1192,7 +1093,6 @@ if [ "$INSTALL_CLAUDE" -eq 1 ]; then
     else
       mkdir -p "$CLAUDE_SKILLS_DIR"
       INSTALL_SKILLS_DIR="$CLAUDE_SKILLS_DIR"
-      "$SOURCE_GOLDBAND_DIR/bin/goldband-patch-names" "$SOURCE_GOLDBAND_DIR" "$SKILL_PREFIX"
       INSTALL_GOLDBAND_DIR="$CLAUDE_GOLDBAND_LINK"
       create_claude_runtime_root "$SOURCE_GOLDBAND_DIR" "$INSTALL_GOLDBAND_DIR"
       cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$INSTALL_SKILLS_DIR" "" "claude"
@@ -1217,7 +1117,7 @@ if [ "$INSTALL_CODEX" -eq 1 ]; then
   if [ "$CODEX_REPO_LOCAL" -eq 0 ]; then
     create_codex_runtime_root "$SOURCE_GOLDBAND_DIR" "$CODEX_GOLDBAND"
   else
-    create_internal_workflow_docs "$SOURCE_GOLDBAND_DIR/.agents/skills" "$CODEX_GOLDBAND"
+    create_internal_workflow_docs "$CODEX_GOLDBAND"
   fi
   cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$CODEX_SKILLS" "$SOURCE_GOLDBAND_DIR/.agents/skills" "codex"
 
@@ -1227,10 +1127,9 @@ if [ "$INSTALL_CODEX" -eq 1 ]; then
   write_workflow_profile_marker "codex" "$WORKFLOW_PROFILE"
 fi
 
-# 6. Install for Kiro CLI (copy from .agents/skills, rewrite paths)
+# 6. Install for Kiro CLI
 if [ "$INSTALL_KIRO" -eq 1 ]; then
   KIRO_SKILLS="$HOME/.kiro/skills"
-  AGENTS_DIR="$SOURCE_GOLDBAND_DIR/.agents/skills"
   mkdir -p "$KIRO_SKILLS"
 
   # Create goldband dir with symlinks for runtime assets, copy+sed for SKILL.md
@@ -1246,7 +1145,7 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
     _link_or_copy "$SOURCE_GOLDBAND_DIR/ETHOS.md" "$KIRO_GOLDBAND/ETHOS.md"
   fi
   # Review runtime assets (individual files, not whole dir)
-  for f in shared-rubric.md findings-schema.md checklist.md ship-fix-first.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$SOURCE_GOLDBAND_DIR/review/$f" ]; then
       _link_or_copy "$SOURCE_GOLDBAND_DIR/review/$f" "$KIRO_GOLDBAND/review/$f"
     fi
@@ -1258,15 +1157,11 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
       -e "s|\.claude/skills|.kiro/skills|g" \
       "$SOURCE_GOLDBAND_DIR/SKILL.md" > "$KIRO_GOLDBAND/SKILL.md"
 
-  if [ ! -d "$AGENTS_DIR" ]; then
-    echo "  warning: no .agents/skills/ directory found — run 'bun run build' first" >&2
-  else
-    create_internal_workflow_docs "$AGENTS_DIR" "$KIRO_GOLDBAND" "kiro"
-    cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$KIRO_SKILLS" "$AGENTS_DIR" "kiro"
-    echo "goldband ready (kiro)."
-    echo "  browse: $BROWSE_BIN"
-    echo "  kiro skills: $KIRO_SKILLS"
-  fi
+  create_internal_workflow_docs "$KIRO_GOLDBAND"
+  cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$KIRO_SKILLS" "$SOURCE_GOLDBAND_DIR/.agents/skills" "kiro"
+  echo "goldband ready (kiro)."
+  echo "  browse: $BROWSE_BIN"
+  echo "  kiro skills: $KIRO_SKILLS"
 fi
 
 # 6b. Install for Factory Droid
@@ -1289,14 +1184,7 @@ if [ "$INSTALL_OPENCODE" -eq 1 ]; then
   echo "  opencode skills: $OPENCODE_SKILLS"
 fi
 
-# 7. Create .agents/ sidecar symlinks for the real Codex skill target.
-# The root Codex skill ends up pointing at $SOURCE_GOLDBAND_DIR/.agents/skills/goldband,
-# so the runtime assets must live there for both global and repo-local installs.
-if [ "$INSTALL_CODEX" -eq 1 ]; then
-  create_agents_sidecar "$SOURCE_GOLDBAND_DIR"
-fi
-
-# 8. Run pending version migrations
+# 7. Run pending version migrations
 # Migrations handle state fixes that ./setup alone can't cover (stale config,
 # orphaned files, directory structure changes). Each migration is idempotent.
 MIGRATIONS_DIR="$SOURCE_GOLDBAND_DIR/goldband-upgrade/migrations"

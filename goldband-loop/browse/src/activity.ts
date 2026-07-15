@@ -45,7 +45,6 @@ const subscribers = new Set<ActivitySubscriber>();
 
 // ─── Privacy Filtering ─────────────────────────────────────────
 
-const SENSITIVE_COMMANDS = new Set(['fill', 'type', 'cookie', 'header']);
 const SENSITIVE_PARAM_PATTERN = /\b(password|token|secret|key|auth|bearer|api[_-]?key)\b/i;
 
 /**

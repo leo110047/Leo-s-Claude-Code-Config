@@ -117,9 +117,9 @@ describe('question-registry schema', () => {
 
 describe('question-registry helpers', () => {
   test('getQuestion returns entry for known id', () => {
-    const q = getQuestion('ship-test-failure-triage');
+    const q = getQuestion('land-and-deploy-merge-confirm');
     expect(q).toBeDefined();
-    expect(q?.skill).toBe('ship');
+    expect(q?.skill).toBe('land-and-deploy');
     expect(q?.door_type).toBe('one-way');
   });
 
@@ -129,11 +129,10 @@ describe('question-registry helpers', () => {
 
   test('getOneWayDoorIds returns Set of one-way ids', () => {
     const ids = getOneWayDoorIds();
-    expect(ids.has('ship-test-failure-triage')).toBe(true);
     expect(ids.has('review-sql-safety')).toBe(true);
     expect(ids.has('land-and-deploy-merge-confirm')).toBe(true);
     // And does NOT include a known two-way door:
-    expect(ids.has('ship-changelog-voice-polish')).toBe(false);
+    expect(ids.has('qa-tier')).toBe(false);
   });
 
   test('getAllRegisteredIds count matches QUESTIONS keys', () => {
@@ -159,7 +158,6 @@ describe('one-way door safety', () => {
   test('every destructive/security question is declared one-way', () => {
     // Safety-critical question ids must exist and be one-way.
     const mustBeOneWay = [
-      'ship-test-failure-triage',         // shipping broken tests
       'review-sql-safety',                 // SQL injection path
       'review-llm-trust-boundary',         // LLM trust boundary
       'cso-global-scan-approval',          // scans outside branch
@@ -194,7 +192,6 @@ describe('registry breadth', () => {
   test('high-volume skills have at least one registered question', () => {
     const stats = getRegistryStats();
     const highVolume = [
-      'ship',
       'review',
       'office-hours',
       'plan-ceo-review',
@@ -362,11 +359,11 @@ describe('archetypes', () => {
 
 describe('one-way-doors classifier', () => {
   test('registry lookup wins when question_id is known', () => {
-    const result = classifyQuestion({ question_id: 'ship-test-failure-triage' });
+    const result = classifyQuestion({ question_id: 'land-and-deploy-merge-confirm' });
     expect(result.oneWay).toBe(true);
     expect(result.reason).toBe('registry');
 
-    const safeResult = classifyQuestion({ question_id: 'ship-changelog-voice-polish' });
+    const safeResult = classifyQuestion({ question_id: 'qa-tier' });
     expect(safeResult.oneWay).toBe(false);
     expect(safeResult.reason).toBe('registry');
   });

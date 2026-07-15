@@ -144,7 +144,6 @@ describe("ensureDaemon", () => {
       port: 1, // bogus port — /health will fail fast
       startedAt: "2020-01-01T00:00:00Z",
       version: "ancient",
-      serverPath: "/nope",
       cmdlineMarker: CMDLINE_MARKER,
     }));
 
@@ -177,7 +176,6 @@ describe("ensureDaemon", () => {
       port: 1,
       startedAt: "2020-01-01T00:00:00Z",
       version: "ancient",
-      serverPath: "/nope",
       cmdlineMarker: CMDLINE_MARKER,
     }));
 

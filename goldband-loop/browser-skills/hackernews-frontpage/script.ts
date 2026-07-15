@@ -10,7 +10,7 @@
  * exercise it against bundled HTML fixtures without spinning up the daemon.
  */
 
-import { browse } from './_lib/browse-client';
+import { BrowseClient } from './_lib/browse-client';
 
 export interface Story {
   /** 1-based rank as displayed on HN. */
@@ -124,6 +124,7 @@ if (import.meta.main) {
 }
 
 async function main(): Promise<void> {
+  const browse = new BrowseClient();
   await browse.goto(FRONT_PAGE_URL);
   const html = await browse.html();
   const stories = parseStoriesFromHtml(html);

@@ -57,11 +57,6 @@ export interface PdfOptions {
   toc?: boolean;
 }
 
-export interface JsOptions {
-  tabId: number;
-  expression: string;             // JS expression to evaluate
-}
-
 /**
  * Resolve an absolute or PATH-resolvable command via Bun.which-style semantics,
  * with a Windows .exe/.cmd/.bat extension probe for absolute paths. Mirrors
@@ -266,45 +261,6 @@ export function loadHtml(opts: LoadHtmlOptions): void {
   } finally {
     cleanupPayloadFile(payloadFile);
   }
-}
-
-/**
- * Evaluate a JS expression in a tab. Returns the serialized result as string.
- */
-export function js(opts: JsOptions): string {
-  return runBrowse([
-    "js",
-    opts.expression,
-    "--tab-id", String(opts.tabId),
-  ]).trim();
-}
-
-/**
- * Poll a boolean JS expression until it evaluates to true, or timeout.
- * Returns true if it succeeded, false if timed out.
- */
-export function waitForExpression(opts: {
-  expression: string;
-  tabId: number;
-  timeoutMs: number;
-  pollIntervalMs?: number;
-}): boolean {
-  const poll = opts.pollIntervalMs ?? 200;
-  const deadline = Date.now() + opts.timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const result = js({ expression: opts.expression, tabId: opts.tabId });
-      if (result === "true") return true;
-    } catch {
-      // Tab may still be loading; keep polling
-    }
-    const wait = Math.min(poll, Math.max(0, deadline - Date.now()));
-    if (wait <= 0) break;
-    // Synchronous sleep is fine — this only runs once per PDF render
-    const end = Date.now() + wait;
-    while (Date.now() < end) { /* busy wait */ }
-  }
-  return false;
 }
 
 /**

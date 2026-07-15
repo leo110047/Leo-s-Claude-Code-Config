@@ -5,7 +5,7 @@
 // X-Session-Id from the caller.
 
 import { request as httpRequest } from 'http';
-import type { ServerResponse, IncomingMessage } from 'http';
+import type { IncomingMessage } from 'http';
 import { sanitizeReplacer } from './audit';
 import { tierForRoute } from './types';
 
@@ -16,11 +16,6 @@ export interface DeviceTunnel {
   ipv6Addr: string;
   port: number;
   bootTokenRotated: string; // the rotated bearer the daemon uses to talk to StateServer
-}
-
-export interface ProxyError {
-  status: number;
-  body: Record<string, unknown>;
 }
 
 /**

@@ -67,7 +67,7 @@ result against a machine-readable inventory.
 
 ### goldband-loop owns
 
-- workflow runtime source and generated host skill surfaces
+- workflow runtime source, the shared root capability router, and thin contracts
 - programmatic workflow contracts under `goldband-loop/workflows/`
 - workflow-native docs, build metadata, tests, browser/PDF/design/iOS tooling
 - runtime binaries under `goldband-loop/bin/goldband-*`
@@ -167,11 +167,22 @@ entries, extra entries, legacy commands, or old runtime prefixes.
 ## Programmatic Workflow Runtime
 
 `goldband-loop/workflows/` is the runtime contract layer for workflow execution.
-Markdown skills and `.tmpl` files remain the user-facing entrypoints and human
-guidance, but they are no longer the only source of truth for migrated workflows.
 The registry records the executable contract: target, evaluation signal,
 iteration cap, stop conditions, risk level, integration status, and evidence
 policy.
+
+The installed model prompt is a separate projection. Capability-level
+`promptContract` fields in `goldband.manifest.json` plus each action description
+generate
+`goldband-loop/generated/workflow-contracts/<capability>/<action>.workflow.md`.
+The installer uses the generated `contractPath` and fails closed when it is
+missing. Legacy `.tmpl` files remain runtime-migration inputs; they are not
+installed as workflow prompts.
+
+On-demand manuals follow the same ownership rule. The manifest declares which
+actions may load each manual, the root router receives generated routing text,
+and the installer places the standalone manual under the runtime root. Browser
+instructions therefore load only for browser-backed work.
 
 This layer deliberately does not replace the existing inventory or usage
 telemetry:

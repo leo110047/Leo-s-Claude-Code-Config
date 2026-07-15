@@ -3,7 +3,7 @@
  *
  * Dependency graph:
  *   commands.ts ──▶ cli.ts (runtime dispatch)
- *              ──▶ gen-skill-docs.ts (doc generation)
+ *              ──▶ design CLI help and tests
  *              ──▶ tests (validation)
  *
  * Zero side effects. Safe to import from build scripts and tests.

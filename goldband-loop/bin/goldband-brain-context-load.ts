@@ -34,11 +34,10 @@
  *   goldband-brain-context-load --quiet
  */
 
-import { existsSync, readFileSync, statSync, readdirSync } from "fs";
-import { join, dirname, basename, resolve } from "path";
+import { existsSync, statSync, readdirSync } from "fs";
+import { join, basename, resolve } from "path";
 import { execFileSync, spawnSync } from "child_process";
 import { homedir } from "os";
-
 import { parseSkillManifest, type GbrainManifest, type GbrainManifestQuery, withErrorContext } from "../lib/goldband-memory-helpers";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -67,7 +66,6 @@ interface QueryResult {
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const HOME = homedir();
-const GOLDBAND_HOME = process.env.GOLDBAND_HOME || join(HOME, ".goldband");
 const MCP_TIMEOUT_MS = 500;
 const PAGE_SIZE_CAP = 10 * 1024; // 10KB per query result before truncation
 

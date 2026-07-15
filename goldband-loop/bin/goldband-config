@@ -88,13 +88,9 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 # auto_upgrade: false       # true = silently upgrade on session start
 # update_check: true        # false = suppress version check notifications
 #
-# ─── Skill naming ────────────────────────────────────────────────────
-# skill_prefix: false       # true = namespace skills as /goldband-qa, /goldband-ship
-#                           # false = short names /qa, /ship
-#
 # ─── Checkpoint ──────────────────────────────────────────────────────
 # checkpoint_mode: explicit # explicit | continuous
-#                           #   explicit   — commit only when you run /ship or /checkpoint
+#                           #   explicit   — commit only when explicitly requested
 #                           #   continuous — auto-commit after each significant change
 #                           #                with WIP: prefix + [goldband-context] body
 #
@@ -108,7 +104,6 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 #                           # terse   = V0 prose style, no glosses, no outcome-framing layer
 #                           #           (for power users who know the terms)
 #                           # Unknown values default to "default" with a warning.
-#                           # See docs/designs/PLAN_TUNING_V1.md for rationale.
 #
 # ─── Artifacts sync (renamed from gbrain_sync_mode in v1.27.0.0) ─────
 # artifacts_sync_mode: off  # off | artifacts-only | full
@@ -124,12 +119,12 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 #                           # Flip back to false to be re-prompted.
 #
 # ─── Advanced ────────────────────────────────────────────────────────
-# codex_reviews: enabled    # disabled = skip Codex adversarial reviews in /ship
+# codex_reviews: enabled    # disabled = skip Codex adversarial reviews
 # goldband_contributor: false # true = file field reports when goldband misbehaves
-# skip_eng_review: false    # true = skip eng review gate in /ship (not recommended)
+# skip_eng_review: false    # true = skip the engineering review gate (not recommended)
 #
-# ─── Workspace-aware ship ────────────────────────────────────────────
-# workspace_root: $HOME/conductor/workspaces  # Where /ship looks for sibling
+# ─── Workspace-aware release ─────────────────────────────────────────
+# workspace_root: $HOME/conductor/workspaces  # Where release preparation looks for sibling
 #                           # Conductor worktrees when picking a VERSION slot.
 #                           # Set to "null" to disable sibling scanning entirely.
 #                           # Non-Conductor users can point this at any directory
@@ -147,7 +142,6 @@ lookup_default() {
     telemetry) echo "off" ;;
     auto_upgrade) echo "false" ;;
     update_check) echo "true" ;;
-    skill_prefix) echo "false" ;;
     checkpoint_mode) echo "explicit" ;;
     checkpoint_push) echo "false" ;;
     explain_level) echo "default" ;;
@@ -207,11 +201,6 @@ case "${1:-}" in
     else
       echo "${KEY}: ${VALUE}" >> "$CONFIG_FILE"
     fi
-    # Auto-relink skills when prefix setting changes (skip during setup to avoid recursive call)
-    if [ "$KEY" = "skill_prefix" ] && [ -z "${GOLDBAND_SETUP_RUNNING:-}" ]; then
-      GOLDBAND_RELINK="$(dirname "$0")/goldband-relink"
-      [ -x "$GOLDBAND_RELINK" ] && "$GOLDBAND_RELINK" || true
-    fi
     ;;
   list)
     if [ -f "$CONFIG_FILE" ]; then
@@ -220,7 +209,7 @@ case "${1:-}" in
     echo ""
     echo "# ─── Active values (including defaults for unset keys) ───"
     for KEY in proactive routing_declined telemetry auto_upgrade update_check \
-               skill_prefix checkpoint_mode checkpoint_push explain_level \
+               checkpoint_mode checkpoint_push explain_level \
                codex_reviews goldband_contributor skip_eng_review workspace_root \
                artifacts_sync_mode artifacts_sync_mode_prompted; do
       VALUE=$(grep -E "^${KEY}:" "$CONFIG_FILE" 2>/dev/null | tail -1 | awk '{print $2}' | tr -d '[:space:]' || true)
@@ -236,7 +225,7 @@ case "${1:-}" in
   defaults)
     echo "# goldband-config defaults"
     for KEY in proactive routing_declined telemetry auto_upgrade update_check \
-               skill_prefix checkpoint_mode checkpoint_push explain_level \
+               checkpoint_mode checkpoint_push explain_level \
                codex_reviews goldband_contributor skip_eng_review workspace_root \
                artifacts_sync_mode artifacts_sync_mode_prompted; do
       printf '  %-24s %s\n' "$KEY:" "$(lookup_default "$KEY")"

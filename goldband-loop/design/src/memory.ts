@@ -1,7 +1,7 @@
 /**
  * Design Memory — extract visual language from approved mockups into DESIGN.md.
  *
- * After a mockup is approved, uses GPT-4o vision to extract:
+ * After a mockup is approved, uses the configured OpenAI design model to extract:
  * - Color palette (hex values)
  * - Typography (font families, sizes, weights)
  * - Spacing patterns (padding, margins, gaps)
@@ -14,6 +14,7 @@
 import fs from "fs";
 import path from "path";
 import { requireApiKey } from "./auth";
+import { OPENAI_DESIGN_MODEL } from "./models";
 
 export interface ExtractedDesign {
   colors: { name: string; hex: string; usage: string }[];
@@ -41,7 +42,7 @@ export async function extractDesignLanguage(imagePath: string): Promise<Extracte
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_DESIGN_MODEL,
         messages: [{
           role: "user",
           content: [

@@ -127,10 +127,10 @@ function fileContainsAll(filePath, fragments) {
   return fragments.every((fragment) => raw.includes(fragment));
 }
 
-function checkWorkflowInstall(homeDir) {
+function checkWorkflowInstall(homeDir, sourceRoot = process.cwd()) {
   const result = emptyWorkflowResult();
-  checkClaudeWorkflow(homeDir, result);
-  checkCodexWorkflow(homeDir, result);
+  checkClaudeWorkflow(homeDir, sourceRoot, result);
+  checkCodexWorkflow(homeDir, sourceRoot, result);
   checkWorkflowState(homeDir, result);
   checkGoldbandWorkflowOverlap(homeDir, result);
   return result;
@@ -150,7 +150,7 @@ function emptyWorkflowResult() {
   };
 }
 
-function checkClaudeWorkflow(homeDir, result) {
+function checkClaudeWorkflow(homeDir, sourceRoot, result) {
   const claudeDir = path.join(homeDir, '.claude', 'skills', 'goldband');
   if (!fs.existsSync(claudeDir)) return;
   result.claudeInstalled = true;
@@ -161,22 +161,91 @@ function checkClaudeWorkflow(homeDir, result) {
     path.join('bin', 'goldband-knowledge'),
     path.join('lib', 'knowledge.ts'),
     path.join('review', 'checklist.md'),
-    path.join('workflows', 'careful.workflow.md'),
-    path.join('workflows', 'freeze.workflow.md'),
-    path.join('workflows', 'review.workflow.md'),
-    path.join('workflows', 'qa.workflow.md'),
   ].map((relativePath) => ({
     file: relativePath,
     ok: fs.existsSync(path.join(claudeDir, relativePath)),
   }));
+  result.claudeChecks.push(
+    ...workflowProjectionChecks(claudeDir, 'claude', sourceRoot),
+  );
 }
 
-function checkCodexWorkflow(homeDir, result) {
+function checkCodexWorkflow(homeDir, sourceRoot, result) {
   const codexDir = path.join(homeDir, '.codex', 'skills', 'goldband');
   if (!fs.existsSync(codexDir)) return;
   result.codexInstalled = true;
   result.codexVersion = readWorkflowVersion(codexDir);
   result.codexChecks.push(...codexRuntimeChecks(homeDir, codexDir));
+  result.codexChecks.push(
+    ...workflowProjectionChecks(codexDir, 'codex', sourceRoot),
+  );
+}
+
+function workflowProjectionChecks(runtimeDir, host, sourceRoot) {
+  const installedSourcePath = path.join(runtimeDir, '.installed-source');
+  const installedSource = fs.existsSync(installedSourcePath)
+    ? fs.readFileSync(installedSourcePath, 'utf8').trim()
+    : '';
+  const contractPath = workflowContractInventoryPath(
+    installedSource,
+    sourceRoot,
+  );
+  if (!contractPath) return coreWorkflowChecks(runtimeDir);
+
+  let contract;
+  try {
+    contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  } catch {
+    return [{ file: 'generated/capability-actions.json', ok: false }];
+  }
+
+  if (!Array.isArray(contract.actions)) {
+    return [{ file: 'generated/capability-actions.json', ok: false }];
+  }
+
+  return contract.actions
+    .filter(
+      (entry) =>
+        Array.isArray(entry.hostSupport) && entry.hostSupport.includes(host),
+    )
+    .map((entry) =>
+      path.join(
+        'workflows',
+        String(entry.capability || ''),
+        `${String(entry.action || '')}.workflow.md`,
+      ),
+    )
+    .map((relativePath) => ({
+      file: relativePath,
+      ok: fs.existsSync(path.join(runtimeDir, relativePath)),
+    }));
+}
+
+function workflowContractInventoryPath(installedSource, sourceRoot) {
+  const candidates = [
+    installedSource &&
+      path.join(installedSource, 'generated', 'capability-actions.json'),
+    sourceRoot &&
+      path.join(
+        sourceRoot,
+        'goldband-loop',
+        'generated',
+        'capability-actions.json',
+      ),
+    sourceRoot && path.join(sourceRoot, 'generated', 'capability-actions.json'),
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function coreWorkflowChecks(runtimeDir) {
+  return [
+    path.join('workflows', 'investigate', 'code.workflow.md'),
+    path.join('workflows', 'review', 'code.workflow.md'),
+    path.join('workflows', 'qa', 'app.workflow.md'),
+  ].map((relativePath) => ({
+    file: relativePath,
+    ok: fs.existsSync(path.join(runtimeDir, relativePath)),
+  }));
 }
 
 function codexRuntimeChecks(homeDir, codexDir) {
@@ -188,18 +257,18 @@ function codexRuntimeChecks(homeDir, codexDir) {
     file: relativePath,
     ok: fs.existsSync(path.join(codexDir, relativePath)),
   }));
-  return [...required, generatedCodexSkillCheck(homeDir)];
+  return [...required, legacyCodexSkillCheck(homeDir)];
 }
 
-function generatedCodexSkillCheck(homeDir) {
+function legacyCodexSkillCheck(homeDir) {
   const codexSkillsRoot = path.join(homeDir, '.codex', 'skills');
-  const generatedSkills = fs.existsSync(codexSkillsRoot)
+  const legacySkills = fs.existsSync(codexSkillsRoot)
     ? fs.readdirSync(codexSkillsRoot).filter((name) => /^goldband-/.test(name))
     : [];
   return {
-    file: '~/.codex/skills/goldband-*',
-    ok: generatedSkills.length > 0,
-    detail: `${generatedSkills.length} generated skills`,
+    file: 'legacy top-level ~/.codex/skills/goldband-* entries absent',
+    ok: legacySkills.length === 0,
+    detail: `${legacySkills.length} legacy entries`,
   };
 }
 
@@ -224,7 +293,7 @@ function checkGoldbandWorkflowOverlap(homeDir, result) {
     .filter(Boolean);
   if (hasSafetyOverlap(installedSkills)) {
     result.warnings.push(
-      'goldband careful-mode/freeze-mode and Goldband Loop safety skills are both available; use goldband for hard global guardrails, Goldband Loop skills for task-local guardrails.',
+      'goldband careful-mode/freeze-mode and Goldband Loop safety workflows are both available; use goldband for hard global guardrails, Goldband Loop safety workflows for task-local guardrails.',
     );
   }
 }

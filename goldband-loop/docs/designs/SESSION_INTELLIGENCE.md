@@ -1,5 +1,7 @@
 # Session Intelligence Layer
 
+**Status:** Implemented — context recovery, timeline, and context save/restore layers are present in the current runtime and tests.
+
 ## The Problem
 
 Claude Code's context window is ephemeral. Every session starts fresh. When

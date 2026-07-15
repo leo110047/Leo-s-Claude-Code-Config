@@ -5,7 +5,7 @@
 // dns.lookup('<host>.coredevice.local'). Tests inject stubs.
 
 import { spawnSync, type SpawnSyncReturns } from 'child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -183,7 +183,7 @@ export function startTunnelKeepalive(
  * resolved address looks like `fd72:8347:2ead::1` — RFC 4193 ULA, regenerated
  * per session.
  */
-export async function getDeviceTunnelIPv6(
+async function getDeviceTunnelIPv6(
   deviceName: string,
   resolve: ResolveImpl = defaultResolve,
 ): Promise<string | null> {
@@ -312,18 +312,4 @@ export function copyFileFromAppContainer(opts: {
   } finally {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
-}
-
-/**
- * Install an .app bundle on the device. The bundle must be signed with a
- * dev/distribution profile that includes the device.
- */
-export function installApp(
-  udid: string,
-  appBundlePath: string,
-  spawn: SpawnImpl = defaultSpawn,
-): { ok: boolean; error?: string } {
-  const r = spawn('xcrun', ['devicectl', 'device', 'install', 'app', '--device', udid, appBundlePath]);
-  if (r.status === 0) return { ok: true };
-  return { ok: false, error: (r.stderr?.toString() ?? r.stdout?.toString() ?? 'unknown').split('\n')[0] };
 }

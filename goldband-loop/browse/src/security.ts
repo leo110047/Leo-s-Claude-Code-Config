@@ -5,8 +5,9 @@
  * Safe to import from the compiled `browse/dist/browse` binary because it
  * does not load onnxruntime-node or other native modules.
  *
- * ML classifier code lives in `security-classifier.ts`, which is only
- * imported from `sidebar-agent.ts` (runs as non-compiled bun script).
+ * ML classifier code lives in `security-classifier.ts`. The compiled server
+ * reaches it through `security-sidecar-client.ts`; `security-sidecar-entry.ts`
+ * imports the classifier in a separate plain-Node process.
  *
  * Layering (see CEO plan 2026-04-19-prompt-injection-guard.md):
  *   L1-L3: content-security.ts (existing, datamarking / DOM strip / URL blocklist)
@@ -30,7 +31,7 @@ import { writeSecureFile, appendSecureFile, mkdirSecure } from './file-permissio
 
 /**
  * Confidence thresholds for classifier output. Calibrated against BrowseSafe-Bench
- * smoke (200 cases) + benign corpus (50 pages). BLOCK is intentionally conservative.
+ * smoke (500 cases) + benign corpus (50 pages). BLOCK is intentionally conservative.
  * See plan §"Threshold Spec" for calibration methodology.
  */
 export const THRESHOLDS = {
@@ -53,7 +54,7 @@ export const THRESHOLDS = {
 
 export type Verdict = 'safe' | 'log_only' | 'warn' | 'block' | 'user_overrode';
 
-export type LayerName =
+type LayerName =
   | 'testsavant_content'
   | 'deberta_content'        // opt-in ensemble layer (GOLDBAND_SECURITY_ENSEMBLE=deberta)
   | 'transcript_classifier'
@@ -73,7 +74,7 @@ export interface SecurityResult {
   confidence: number;
 }
 
-export type SecurityStatus = 'protected' | 'degraded' | 'inactive';
+type SecurityStatus = 'protected' | 'degraded' | 'inactive';
 
 export interface StatusDetail {
   status: SecurityStatus;
@@ -175,7 +176,7 @@ export function combineVerdict(signals: LayerSignal[], opts: CombineVerdictOpts 
   for (const s of transcriptSignals) {
     const v = classifyTranscript(s);
     if (v === 'block') { transcriptVote = 'block'; break; }
-    if (v === 'warn' && transcriptVote !== 'block') transcriptVote = 'warn';
+    if (v === 'warn') transcriptVote = 'warn';
   }
 
   // Scalar-layer votes.
@@ -599,7 +600,7 @@ function decisionsDir(): string {
   return path.join(securityDir(), 'decisions');
 }
 
-export type SecurityDecision = 'allow' | 'block';
+type SecurityDecision = 'allow' | 'block';
 
 export function decisionFileForTab(tabId: number): string {
   return path.join(decisionsDir(), `tab-${tabId}.json`);

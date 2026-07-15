@@ -282,6 +282,6 @@ token), the helper says: "rotate token on the brain host, re-run
 gbrain access-token rotate    # invalidates old, issues new
 ```
 
-(See `goldband/setup-gbrain/SKILL.md.tmpl` for the full Path 4 flow plus
+(See the GBrain integration repository for the current Path 4 flow plus
 the gbrain enhancement requests around scoped tokens that would let
 goldband auto-rotate in V2.)

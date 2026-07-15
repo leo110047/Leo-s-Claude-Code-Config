@@ -91,7 +91,7 @@ describe('test-free-shards: Windows curation', () => {
     const files = collectFreeTestFiles(ROOT);
     const result = curateWindowsSafe(files, ROOT);
     expect(result.safe.length + result.excluded.length).toBe(files.length);
-    // Sanity: at least one excluded entry, since we know test/ship-version-sync.test.ts uses /bin/bash
+    // Sanity: at least one excluded entry exercises a POSIX-only API.
     expect(result.excluded.length).toBeGreaterThan(0);
     // Every excluded entry has a non-empty reason
     for (const { reason } of result.excluded) {

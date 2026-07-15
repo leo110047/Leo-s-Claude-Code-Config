@@ -313,9 +313,9 @@ show_codex_profiles_status() {
     done
     if [ "$profile_total" -gt 0 ] && [ "$profile_installed" -eq "$profile_total" ]; then
         if [ "$profile_copy_count" -gt 0 ]; then
-            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total}, copy fallback)"
+            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total}, materialized copies)"
         else
-            echo -e "  ${GREEN}[OK]${NC} codex profiles (${profile_installed}/${profile_total})"
+            echo -e "  ${YELLOW}[legacy symlink]${NC} codex profiles (${profile_installed}/${profile_total}) — 建議重跑 ./install.sh codex-config"
         fi
     elif [ "$profile_installed" -gt 0 ]; then
         echo -e "  ${YELLOW}[部分安裝]${NC} codex profiles (${profile_installed}/${profile_total}) — 建議重跑 ./install.sh codex-config"

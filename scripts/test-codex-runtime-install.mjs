@@ -7,9 +7,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-codex-install-'));
+const env = { ...process.env, HOME: home };
 const result = spawnSync('./install.sh', ['codex-hooks'], {
   cwd: process.cwd(),
-  env: { ...process.env, HOME: home },
+  env,
   encoding: 'utf8',
 });
 assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -19,6 +20,100 @@ assert.equal(
   ),
   true,
   'codex-hooks install must materialize the review Rules resolver outside the hook directory symlink',
+);
+
+const profileSourceRoot = path.join(process.cwd(), 'codex', 'profiles');
+const legacyAutoReviewSource = path.join(
+  profileSourceRoot,
+  'auto_review_experiment.config.toml',
+);
+const legacyAutoReviewDest = path.join(
+  home,
+  '.codex',
+  'auto_review_experiment.config.toml',
+);
+fs.mkdirSync(path.dirname(legacyAutoReviewDest), { recursive: true });
+fs.symlinkSync(legacyAutoReviewSource, legacyAutoReviewDest);
+
+const configResult = spawnSync('./install.sh', ['codex-config'], {
+  cwd: process.cwd(),
+  env,
+  encoding: 'utf8',
+});
+assert.equal(
+  configResult.status,
+  0,
+  configResult.stderr || configResult.stdout,
+);
+
+const profileFiles = fs
+  .readdirSync(profileSourceRoot)
+  .filter((entry) => entry.endsWith('.config.toml'));
+assert.ok(profileFiles.length > 0, 'codex profile fixture inventory is empty');
+
+const installedConfig = fs.readFileSync(
+  path.join(home, '.codex', 'config.toml'),
+  'utf8',
+);
+assert.match(
+  installedConfig,
+  /model = "gpt-5\.6-sol"/,
+  'codex-config install must use the shared GPT-5.6 Sol default',
+);
+assert.doesNotMatch(
+  installedConfig,
+  /model = "gpt-5\.5"/,
+  'codex-config install must not retain the previous GPT-5.5 default',
+);
+assert.match(
+  installedConfig,
+  /status_line = \["model-with-reasoning", "current-dir", "project-root", "git-branch"\]/,
+  'codex-config install must use the context-neutral TUI status line',
+);
+assert.doesNotMatch(
+  installedConfig,
+  /context-remaining|context-used|five-hour-limit/,
+  'codex-config install must not expose context or rate-limit countdowns in the TUI status line',
+);
+
+for (const profile of profileFiles) {
+  const sourcePath = path.join(profileSourceRoot, profile);
+  const installedPath = path.join(home, '.codex', profile);
+  assert.equal(
+    fs.existsSync(installedPath),
+    true,
+    `codex profile was not installed: ${profile}`,
+  );
+  assert.equal(
+    fs.lstatSync(installedPath).isSymbolicLink(),
+    false,
+    `codex profile must be a materialized copy, not a symlink: ${profile}`,
+  );
+  assert.equal(
+    fs.readFileSync(installedPath, 'utf8'),
+    fs.readFileSync(sourcePath, 'utf8'),
+    `codex profile copy differs from source: ${profile}`,
+  );
+}
+
+const autoReviewSource = path.join(
+  profileSourceRoot,
+  'auto_review_experiment.config.toml',
+);
+const autoReviewInstalled = path.join(
+  home,
+  '.codex',
+  'auto_review_experiment.config.toml',
+);
+const originalSource = fs.readFileSync(autoReviewSource, 'utf8');
+fs.appendFileSync(
+  autoReviewInstalled,
+  '\n[tui.model_availability_nux]\n"runtime-state-test" = 1\n',
+);
+assert.equal(
+  fs.readFileSync(autoReviewSource, 'utf8'),
+  originalSource,
+  'runtime writes to installed Codex profile must not modify the repo source profile',
 );
 
 console.log('[OK] Codex runtime install tests passed');

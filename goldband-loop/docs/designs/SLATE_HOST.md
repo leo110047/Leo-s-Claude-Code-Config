@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-02
 **Branch:** project-owner/slate-agent-support
-**Status:** Research complete, blocked on host config refactor
+**Status:** Implemented — Slate is a first-class host in `hosts/slate.ts` and the generated host surfaces.
 **Supersedes:** None
 
 ## What is Slate

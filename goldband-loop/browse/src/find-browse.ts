@@ -6,7 +6,7 @@
  */
 
 import { accessSync, constants } from 'fs';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { homedir } from 'os';
 
 // ─── Binary Discovery ───────────────────────────────────────────
@@ -53,6 +53,37 @@ function findExecutable(base: string): string | null {
   return null;
 }
 
+export function findSourceCheckoutBinary(
+  root: string | null,
+  metaDir: string = import.meta.dir,
+  execPath: string = process.execPath,
+): string | null {
+  const candidates: string[] = [];
+
+  // Source execution: browse/src/find-browse.ts -> browse/dist/browse.
+  // This stays correct when goldband-loop is nested below a larger git root.
+  if (!metaDir.includes('$bunfs')) {
+    candidates.push(resolve(metaDir, '..', 'dist', 'browse'));
+  }
+
+  // Compiled execution: browse/dist/find-browse -> browse/dist/browse.
+  if (metaDir.includes('$bunfs') && execPath) {
+    candidates.push(join(dirname(execPath), 'browse'));
+  }
+
+  // Standalone checkout fallback retained for callers running from a source
+  // tree whose git root is the goldband-loop package itself.
+  if (root) {
+    candidates.push(join(root, 'browse', 'dist', 'browse'));
+  }
+
+  for (const candidate of new Set(candidates)) {
+    const found = findExecutable(candidate);
+    if (found) return found;
+  }
+  return null;
+}
+
 export function locateBinary(): string | null {
   const root = getGitRoot();
   const home = homedir();
@@ -65,17 +96,12 @@ export function locateBinary(): string | null {
       const found = findExecutable(local);
       if (found) return found;
     }
-
-    // Source-checkout fallback (no installed skill layout — the binary
-    // lives directly at <repo>/browse/dist/browse[.exe]). Hit by:
-    // - goldband repo dev workflow before `./setup` runs
-    // - the windows-setup-e2e.yml CI workflow which builds binaries
-    //   in place but never installs them under a marker dir
-    // - make-pdf consumers running from a sibling source checkout
-    const sourceCheckout = join(root, 'browse', 'dist', 'browse');
-    const sourceFound = findExecutable(sourceCheckout);
-    if (sourceFound) return sourceFound;
   }
+
+  // Source-checkout fallback (no installed skill layout). The resolver owns
+  // both nested-repo source execution and compiled sibling discovery.
+  const sourceFound = findSourceCheckoutBinary(root);
+  if (sourceFound) return sourceFound;
 
   // Global fallback
   for (const m of markers) {
@@ -103,7 +129,7 @@ function main() {
 // any test that imports `locateBinary` from this file would have main() fire
 // at module-load time, calling process.exit(1) when no compiled binary
 // exists — killing the test process before any test runs. Surfaced on the
-// windows-free-tests CI lane where the runner has no compiled browse
+// Windows Free Tests CI lane where the runner has no compiled browse
 // binary (intentional — that lane only builds server-node.mjs).
 if (import.meta.main) {
   main();

@@ -5,19 +5,14 @@ import * as path from 'node:path';
 const ROOT = path.resolve(import.meta.dir, '..');
 
 describe('security boundary invariants', () => {
-  test('Bun bootstrap verifies the downloaded installer checksum', () => {
-    const browseResolver = fs.readFileSync(
-      path.join(ROOT, 'scripts', 'resolvers', 'browse.ts'),
-      'utf8',
-    );
-    expect(browseResolver).toContain('BUN_INSTALL_SHA');
-    expect(browseResolver).toContain('shasum -a 256');
-
+  test('setup never executes a remote Bun installer and requires checksum verification', () => {
     const setup = fs.readFileSync(path.join(ROOT, 'setup'), 'utf8');
     const unsafe = setup
       .split('\n')
       .filter((line) => line.includes('bun.sh/install') && line.includes('| bash'));
     expect(unsafe).toEqual([]);
+    expect(setup).toContain('Install with checksum verification:');
+    expect(setup).toContain('shasum -a 256 $tmpfile');
   });
 
   test('extension messages require the native sender and an allowlisted type', () => {

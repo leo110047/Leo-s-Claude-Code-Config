@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["bun"]
+  },
+  "include": [
+    "bin/**/*.ts",
+    "browse/src/**/*.ts",
+    "browser-skills/**/*.ts",
+    "design/prototype.ts",
+    "design/src/**/*.ts",
+    "hosts/**/*.ts",
+    "ios-qa/daemon/src/**/*.ts",
+    "ios-qa/scripts/**/*.ts",
+    "lib/**/*.ts",
+    "make-pdf/src/**/*.ts",
+    "scripts/**/*.ts",
+    "scripts/**/*.mts",
+    "types/**/*.d.ts",
+    "workflows/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/test/**",
+    "generated/**",
+    "supabase/**",
+    "workflows/**/*.generated.ts"
+  ]
+}

@@ -14,14 +14,9 @@ const {
   buildKnowledgeAdvisory,
 } = require('../lib/skill-activation/knowledge-advisory');
 const {
-  shouldEmitClaimVerificationBaseline,
   shouldEmitKnowledgeAdvisory,
   shouldEmitSuggestions,
 } = require('../lib/skill-activation/session-state');
-const {
-  CLAIM_VERIFICATION_BASELINE_VERSION,
-  formatClaimVerificationBaseline,
-} = require('../lib/skill-activation/claim-verification-baseline');
 
 function buildMatchUsageEvents(matches, sessionId, prompt) {
   return matches.map((match) => ({
@@ -106,10 +101,6 @@ function buildPromptContext({
   sessionId,
 }) {
   const suggestedSkills = matches.slice(0, 3).map((match) => match.skill);
-  const shouldEmitBaseline = shouldEmitClaimVerificationBaseline(
-    sessionId,
-    CLAIM_VERIFICATION_BASELINE_VERSION,
-  );
   const shouldEmitSuggestionsForPrompt =
     suggestedSkills.length > 0 &&
     shouldEmitSuggestions(sessionId, suggestedSkills);
@@ -125,14 +116,12 @@ function buildPromptContext({
   return {
     shouldEmit:
       shouldEmitCrossReview ||
-      shouldEmitBaseline ||
       shouldEmitSuggestionsForPrompt ||
       shouldEmitKnowledgeForPrompt,
     shouldEmitSuggestions: shouldEmitSuggestionsForPrompt,
     additionalContext: [
       shouldEmitCrossReview ? crossReviewMessage : null,
       shouldEmitKnowledgeForPrompt ? knowledgeAdvisory.text : null,
-      shouldEmitBaseline ? formatClaimVerificationBaseline() : null,
       shouldEmitSuggestionsForPrompt ? formatSuggestions(matches, 3) : null,
     ]
       .filter(Boolean)

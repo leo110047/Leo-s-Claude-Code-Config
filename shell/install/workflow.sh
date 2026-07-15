@@ -221,7 +221,7 @@ run_workflow_setup() {
             echo "  [錯誤] 無法進入 Goldband Loop runtime: $repo_dir"
             exit 1
         }
-        GOLDBAND_HOME="$HOME/.goldband" ./setup --host "$host" --profile "$profile" --prefix --quiet 2>&1
+        GOLDBAND_HOME="$HOME/.goldband" ./setup --host "$host" --profile "$profile" --quiet 2>&1
     )
     setup_status=${PIPESTATUS[0]}
     if [ "$errexit_was_set" -eq 1 ]; then

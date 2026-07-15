@@ -47,8 +47,9 @@ create_fake_goldband_loop() {
 
 create_fake_loop_metadata() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated" "$loop_dir/.agents/skills"
-  printf '{"schemaVersion":1,"actions":[]}\n' > "$loop_dir/generated/capability-actions.json"
+  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated/workflow-contracts/review" "$loop_dir/.agents/skills"
+  printf '{"schemaVersion":1,"actions":[{"capability":"review","action":"code","contractPath":"generated/workflow-contracts/review/code.workflow.md"}]}\n' > "$loop_dir/generated/capability-actions.json"
+  printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
   printf '0.0.0-test\n' > "$loop_dir/VERSION"
   write_skill "$loop_dir" "goldband"
   local skill
@@ -67,9 +68,6 @@ EOF_SHARED
   cat > "$loop_dir/review/findings-schema.md" <<'EOF_SCHEMA'
 # test findings schema
 EOF_SCHEMA
-  cat > "$loop_dir/review/ship-fix-first.md" <<'EOF_SHIP_FIX'
-# test ship fix first
-EOF_SHIP_FIX
   cat > "$loop_dir/review/greptile-triage.md" <<'EOF_GREPTILE'
 # test greptile triage
 EOF_GREPTILE
@@ -162,10 +160,9 @@ install_claude() {
     ln -s "$ROOT/review/shared-rubric.md" "$HOME/.claude/skills/goldband/review/shared-rubric.md"
     ln -s "$ROOT/review/findings-schema.md" "$HOME/.claude/skills/goldband/review/findings-schema.md"
     ln -s "$ROOT/review/checklist.md" "$HOME/.claude/skills/goldband/review/checklist.md"
-    ln -s "$ROOT/review/ship-fix-first.md" "$HOME/.claude/skills/goldband/review/ship-fix-first.md"
     ln -s "$ROOT/review/greptile-triage.md" "$HOME/.claude/skills/goldband/review/greptile-triage.md"
     mkdir -p "$HOME/.claude/skills/goldband/workflows/review"
-    ln -s "$ROOT/review/SKILL.md" "$HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
+    ln -s "$ROOT/generated/workflow-contracts/review/code.workflow.md" "$HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
     for old in goldband-investigate goldband-review goldband-qa goldband-ship goldband-browse; do
       rm -rf "$HOME/.claude/skills/$old"
     done
@@ -200,11 +197,10 @@ install_codex() {
   ln -s "$ROOT/review/shared-rubric.md" "$HOME/.codex/skills/goldband/review/shared-rubric.md"
   ln -s "$ROOT/review/findings-schema.md" "$HOME/.codex/skills/goldband/review/findings-schema.md"
   ln -s "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"
-  ln -s "$ROOT/review/ship-fix-first.md" "$HOME/.codex/skills/goldband/review/ship-fix-first.md"
   ln -s "$ROOT/review/greptile-triage.md" "$HOME/.codex/skills/goldband/review/greptile-triage.md"
   printf '%s\n' "$VERSION" > "$HOME/.codex/skills/goldband/.installed-version"
   mkdir -p "$HOME/.codex/skills/goldband/workflows/review"
-  ln -s "$ROOT/.agents/skills/goldband-review/SKILL.md" "$HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
+  ln -s "$ROOT/generated/workflow-contracts/review/code.workflow.md" "$HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
   for skill_dir in "$ROOT/.agents/skills"/goldband-*; do
     [ -f "$skill_dir/SKILL.md" ] || continue
     skill_name="$(basename "$skill_dir")"
@@ -287,6 +283,13 @@ plant_legacy_workflow_entries() {
   ln -s "$source_dir/qa/SKILL.md" "$home_dir/.claude/skills/goldband-qa/SKILL.md"
   ln -s "$source_dir/review/SKILL.md" "$home_dir/.codex/skills/goldband-review/SKILL.md"
   ln -s "$source_dir/qa/SKILL.md" "$home_dir/.codex/skills/goldband-qa/SKILL.md"
+
+  # Historical installers also materialized these aliases as standalone
+  # copies. Their deleted source files cannot be used for provenance checks.
+  write_skill "$home_dir/.claude/skills/goldband-open-browser" "goldband-open-browser"
+  write_skill "$home_dir/.claude/skills/goldband-workflow-upgrade" "goldband-workflow-upgrade"
+  write_skill "$home_dir/.codex/skills/goldband-open-browser" "goldband-open-browser"
+  write_skill "$home_dir/.codex/skills/goldband-workflow-upgrade" "goldband-workflow-upgrade"
 }
 
 write_fake_bun_bin() {
@@ -299,13 +302,14 @@ EOF_BUN
   chmod +x "$bin_dir/bun"
 }
 
-write_noop_patch_names_bin() {
+write_noop_runtime_bin() {
   local loop_dir="$1"
-  cat > "$loop_dir/bin/goldband-patch-names" <<'EOF_PATCH'
+  local bin_name="$2"
+  cat > "$loop_dir/bin/$bin_name" <<'EOF_RUNTIME_BIN'
 #!/usr/bin/env bash
 exit 0
-EOF_PATCH
-  chmod +x "$loop_dir/bin/goldband-patch-names"
+EOF_RUNTIME_BIN
+  chmod +x "$loop_dir/bin/$bin_name"
 }
 
 create_minimal_real_setup_fixture() {
@@ -314,7 +318,7 @@ create_minimal_real_setup_fixture() {
   cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
   chmod +x "$loop_dir/setup"
   write_fake_config_bin "$loop_dir"
-  write_noop_patch_names_bin "$loop_dir"
+  write_noop_runtime_bin "$loop_dir" "goldband-task-emission"
   cat > "$loop_dir/browse/dist/browse" <<'EOF_BROWSE'
 #!/usr/bin/env bash
 exit 0
@@ -336,19 +340,9 @@ EOF_BROWSE
   write_skill "$loop_dir/.factory/skills/goldband-review" "goldband-review"
   write_skill "$loop_dir/.opencode/skills/goldband" "goldband"
   write_skill "$loop_dir/.opencode/skills/goldband-review" "goldband-review"
-  cat > "$loop_dir/generated/capability-actions.json" <<'EOF_CAPABILITIES'
-{
-  "schemaVersion": 1,
-  "interface": "$goldband <capability> <action>",
-  "actions": [
-    {
-      "capability": "review",
-      "action": "code",
-      "sourceTemplate": "review/SKILL.md.tmpl"
-    }
-  ]
-}
-EOF_CAPABILITIES
+  printf '%s\n' '{"schemaVersion":1,"interface":"$goldband <capability> <action>","manuals":[],"actions":[{"capability":"review","action":"code","contractPath":"generated/workflow-contracts/review/code.workflow.md"}]}' > "$loop_dir/generated/capability-actions.json"
+  mkdir -p "$loop_dir/generated/workflow-contracts/review"
+  printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
   write_minimal_review_assets "$loop_dir"
 }
 
@@ -363,9 +357,6 @@ EOF_SHARED
   cat > "$loop_dir/review/findings-schema.md" <<'EOF_SCHEMA'
 # test findings schema
 EOF_SCHEMA
-  cat > "$loop_dir/review/ship-fix-first.md" <<'EOF_SHIP_FIX'
-# test ship fix first
-EOF_SHIP_FIX
   cat > "$loop_dir/review/design-checklist.md" <<'EOF_DESIGN'
 # test design checklist
 EOF_DESIGN
@@ -453,7 +444,6 @@ assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/shared-rubric.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/findings-schema.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
-assert_exists "$TMP_HOME/.codex/skills/goldband/review/ship-fix-first.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/greptile-triage.md"
 assert_absent "$TMP_HOME/.claude/skills/goldband-investigate"
 assert_absent "$TMP_HOME/.claude/skills/goldband-review"
@@ -504,6 +494,8 @@ assert_absent "$COPY_HOME/.claude/skills/_goldband-command"
 assert_absent "$COPY_HOME/.claude/skills/goldband-review"
 assert_absent "$COPY_HOME/.claude/skills/goldband-qa"
 assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
+assert_absent "$COPY_HOME/.claude/skills/goldband-open-browser"
+assert_absent "$COPY_HOME/.claude/skills/goldband-workflow-upgrade"
 assert_exists "$COPY_HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
 
 CODEX_LEGACY_HOME="$TMP_ROOT/codex-legacy-home"
@@ -513,6 +505,8 @@ plant_legacy_workflow_entries "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE"
 run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host codex --profile standard --quiet >/tmp/goldband-loop-codex-legacy-cleanup.log
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-open-browser"
+assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-workflow-upgrade"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
 
 for HOST_CASE in factory opencode kiro; do
@@ -529,8 +523,10 @@ for HOST_CASE in factory opencode kiro; do
   assert_exists "$HOST_SKILLS/goldband/workflows/review/code.workflow.md"
   assert_absent "$HOST_SKILLS/goldband-review"
   if [ "$HOST_CASE" = "kiro" ]; then
-    assert_contains "$(cat "$HOST_SKILLS/goldband/workflows/review/code.workflow.md")" '$HOME/.kiro/skills/goldband'
-    assert_not_contains "$(cat "$HOST_SKILLS/goldband/workflows/review/code.workflow.md")" '$HOME/.codex/skills/goldband'
+    KIRO_CONTRACT="$(cat "$HOST_SKILLS/goldband/workflows/review/code.workflow.md")"
+    assert_contains "$KIRO_CONTRACT" '## Goal'
+    assert_not_contains "$KIRO_CONTRACT" '$HOME/.kiro/skills/goldband'
+    assert_not_contains "$KIRO_CONTRACT" '$HOME/.codex/skills/goldband'
   fi
 done
 
@@ -560,7 +556,7 @@ COUNT_HOME="$TMP_ROOT/count-home"
 COUNT_SOURCE="$TMP_ROOT/count-source/goldband-loop"
 create_minimal_real_setup_fixture "$COUNT_SOURCE"
 write_skill "$COUNT_HOME/.claude/skills/external-tool" "external-tool"
-run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile standard --no-prefix --quiet >/tmp/goldband-loop-count-standard.log
+run_minimal_real_setup "$COUNT_HOME" "$COUNT_SOURCE/setup" --profile standard --quiet >/tmp/goldband-loop-count-standard.log
 COUNT_STATUS="$(HOME="$COUNT_HOME" "$TMP_ROOT/install.sh" status)"
 assert_contains "$COUNT_STATUS" "Goldband Loop Claude workflow profile: standard"
 assert_contains "$COUNT_STATUS" "0 top-level workflows"

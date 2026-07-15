@@ -4,8 +4,7 @@
  * No runtime code. Imports are safe from any module.
  */
 
-export type PageSize = "letter" | "a4" | "legal" | "tabloid";
-export type FontMode = "sans"; // v1: Helvetica only. Future: "serif" | "custom".
+type PageSize = "letter" | "a4" | "legal" | "tabloid";
 
 /**
  * Options for `$P generate` — the public CLI contract.
@@ -68,32 +67,6 @@ export interface PreviewOptions {
   title?: string;
   author?: string;
   date?: string;
-}
-
-/**
- * Parsed page.pdf() options passed to browse.
- */
-export interface BrowsePdfOptions {
-  output: string;
-  tabId: number;
-  format?: PageSize;
-  width?: string;
-  height?: string;
-  margins?: {
-    top: string;
-    right: string;
-    bottom: string;
-    left: string;
-  };
-  headerTemplate?: string;
-  footerTemplate?: string;
-  pageNumbers?: boolean;
-  displayHeaderFooter?: boolean;
-  tagged?: boolean;
-  outline?: boolean;
-  printBackground?: boolean;
-  preferCSSPageSize?: boolean;
-  toc?: boolean;                  // signals browse to wait for Paged.js
 }
 
 /**

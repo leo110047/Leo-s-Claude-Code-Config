@@ -7,7 +7,6 @@
  */
 
 import fs from "fs";
-import path from "path";
 
 const API_KEY = process.env.OPENAI_API_KEY;
 

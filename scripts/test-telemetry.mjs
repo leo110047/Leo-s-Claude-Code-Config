@@ -69,17 +69,6 @@ function readJsonl(filePath) {
     .map((line) => JSON.parse(line));
 }
 
-function dedupeMarkerPath(sessionId) {
-  return path.join(
-    tmpDir,
-    'runtime-data',
-    'hook-router',
-    'dedupe',
-    'session-start-context-restore-hint',
-    `${sessionId}.json`,
-  );
-}
-
 function runReportJson() {
   const result = spawnSync(
     process.execPath,
@@ -373,56 +362,13 @@ function testCodexRunIdFileFallback() {
   );
 }
 
-function testClaudeSessionStartContextIsDedupedBySession() {
-  const sessionId = 'claude-session-start-dedupe';
-  const first = runNode(claudeRouter, {
+function testClaudeSessionStartIsSilent() {
+  const result = runNode(claudeRouter, {
     hook_event_name: 'SessionStart',
-    session_id: sessionId,
+    session_id: 'claude-session-start-silent',
   });
-  const second = runNode(claudeRouter, {
-    hook_event_name: 'SessionStart',
-    session_id: sessionId,
-  });
-
-  const firstOutput = JSON.parse(first.stdout);
-  assert.equal(firstOutput.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(
-    second.stdout,
-    '',
-    'A deduplicated SessionStart must emit no hook output',
-  );
-
-  const sessionStartEvents = readJsonl(usageFile).filter(
-    (event) =>
-      event.category === 'hook-advisory' &&
-      event.name === 'SessionStart' &&
-      event.sessionId === sessionId &&
-      event.detail?.host === 'claude',
-  );
-  assert.equal(sessionStartEvents.length, 1);
-}
-
-function testClaudeExpiredDedupeMarkerIsCleanedUp() {
-  const sessionId = 'claude-session-start-expired-marker';
-  const markerPath = dedupeMarkerPath(sessionId);
-  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-  fs.writeFileSync(markerPath, '{}', 'utf8');
-  const oldDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-  fs.utimesSync(markerPath, oldDate, oldDate);
-
-  const result = runNode(
-    claudeRouter,
-    {
-      hook_event_name: 'SessionStart',
-      session_id: sessionId,
-    },
-    { GOLDBAND_DEDUPE_RETENTION_DAYS: '1' },
-  );
-
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-  assert.equal(marker.sessionId, sessionId);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
 }
 
 function runTelemetryFixtures() {
@@ -488,7 +434,7 @@ function runTelemetryFixtures() {
   });
   runNode(codexRouter, {
     hook_event_name: 'UserPromptSubmit',
-    prompt: '/goldband-ship',
+    prompt: '/goldband-investigate',
   });
 }
 
@@ -565,7 +511,7 @@ function testReportSummary() {
   );
   assert.ok(
     summary.workflowEntries.inferred.some(
-      (row) => row.host === 'codex' && row.name === 'goldband-ship',
+      (row) => row.host === 'codex' && row.name === 'goldband-investigate',
     ),
   );
   assert.ok(
@@ -581,8 +527,7 @@ testCodexUsageRetention();
 testCodexStructuredDenyTelemetryName();
 testSchemaValidationAndLegacyCompatibility();
 testCodexRunIdFileFallback();
-testClaudeSessionStartContextIsDedupedBySession();
-testClaudeExpiredDedupeMarkerIsCleanedUp();
+testClaudeSessionStartIsSilent();
 testTelemetryCapture();
 testReportSummary();
 

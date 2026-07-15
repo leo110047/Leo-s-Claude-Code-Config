@@ -29,6 +29,7 @@ describe('setup: Apple Silicon codesign', () => {
     expect(binaries).toContain('browse/dist/find-browse');
     expect(binaries).toContain('design/dist/design');
     expect(binaries).toContain('bin/goldband-global-discover');
+    expect(binaries).toContain('bin/goldband-task-emission');
   });
 
   test('codesign block is inside the NEEDS_BUILD=1 branch', () => {

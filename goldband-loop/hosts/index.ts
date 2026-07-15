@@ -25,9 +25,6 @@ export const HOST_CONFIG_MAP: Record<string, HostConfig> = Object.fromEntries(
   ALL_HOST_CONFIGS.map(c => [c.name, c])
 );
 
-/** Union type of all host names, derived from configs. */
-export type Host = (typeof ALL_HOST_CONFIGS)[number]['name'];
-
 /** All host names as a string array (for CLI arg validation, etc.). */
 export const ALL_HOST_NAMES: string[] = ALL_HOST_CONFIGS.map(c => c.name);
 
@@ -58,11 +55,8 @@ export function resolveHostArg(arg: string): string {
 
 /**
  * Get hosts that are NOT the primary host (Claude).
- * These are the hosts that need generated skill docs.
+ * These are the non-primary hosts that share the portable root skill.
  */
 export function getExternalHosts(): HostConfig[] {
   return ALL_HOST_CONFIGS.filter(c => c.name !== 'claude');
 }
-
-// Re-export individual configs for direct import
-export { claude, codex, factory, kiro, opencode, slate, cursor, openclaw, hermes, gbrain };

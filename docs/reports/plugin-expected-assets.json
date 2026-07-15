@@ -40,11 +40,6 @@
       "goldband-rules"
     ],
     "hooks": {
-      "SessionStart": {
-        "entries": 1,
-        "commandHooks": 1,
-        "promptHooks": 0
-      },
       "UserPromptSubmit": {
         "entries": 1,
         "commandHooks": 1,
@@ -60,11 +55,6 @@
         "commandHooks": 3,
         "promptHooks": 0
       },
-      "PostToolUseFailure": {
-        "entries": 1,
-        "commandHooks": 1,
-        "promptHooks": 0
-      },
       "Stop": {
         "entries": 1,
         "commandHooks": 1,
@@ -76,21 +66,6 @@
         "promptHooks": 1
       },
       "Notification": {
-        "entries": 1,
-        "commandHooks": 1,
-        "promptHooks": 0
-      },
-      "PreCompact": {
-        "entries": 1,
-        "commandHooks": 1,
-        "promptHooks": 0
-      },
-      "PostCompact": {
-        "entries": 1,
-        "commandHooks": 1,
-        "promptHooks": 0
-      },
-      "SessionEnd": {
         "entries": 1,
         "commandHooks": 1,
         "promptHooks": 0

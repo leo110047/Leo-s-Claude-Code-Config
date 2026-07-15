@@ -62,7 +62,7 @@ git clone --depth 1 https://github.com/leo110047/goldband.git ~/.claude/skills/g
 cd ~/.claude/skills/goldband && ./setup --team
 ```
 
-Skills like /qa, /ship, /review, /investigate, and /browse become available after install.
+Use the `$goldband <capability> <action>` interface after install.
 Use /browse for all web browsing. Use ~/.claude/skills/goldband/... for goldband file paths.'
 else
   SNIPPET='## goldband (REQUIRED — global install)
@@ -85,8 +85,8 @@ If GOLDBAND_MISSING: STOP. Do not proceed. Tell the user:
 
 Do not skip skills, ignore goldband errors, or work around missing goldband.
 
-Using goldband skills: After install, skills like /qa, /ship, /review, /investigate,
-and /browse are available. Use /browse for all web browsing.
+Using goldband: After install, invoke capabilities through `$goldband <capability> <action>`.
+Use the browser capability for web browsing.
 Use ~/.claude/skills/goldband/... for goldband file paths (the global path).'
 fi
 

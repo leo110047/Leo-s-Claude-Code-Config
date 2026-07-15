@@ -17,17 +17,8 @@ import { ALL_HOST_CONFIGS, getHostConfig, ALL_HOST_NAMES } from '../hosts/index'
 import { validateAllConfigs } from './host-config';
 import { execSync } from 'child_process';
 
-const CLI_REGEX = /^[a-z][a-z0-9_-]*$/;
-const PATH_REGEX = /^[a-zA-Z0-9_.\/${}~-]+$/;
-
 function shellEscape(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
-}
-
-function validateValue(val: string, context: string): void {
-  if (!PATH_REGEX.test(val) && !CLI_REGEX.test(val)) {
-    throw new Error(`Unsafe value for ${context}: ${val}`);
-  }
 }
 
 const [command, ...args] = process.argv.slice(2);

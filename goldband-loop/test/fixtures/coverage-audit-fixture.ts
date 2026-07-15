@@ -5,7 +5,7 @@
  * test coverage gaps: processPayment has happy-path-only tests,
  * refundPayment has no tests at all.
  *
- * Used by: ship-coverage-audit E2E, review-coverage-audit E2E
+ * Used by: review-coverage-audit E2E
  */
 
 import * as fs from 'fs';

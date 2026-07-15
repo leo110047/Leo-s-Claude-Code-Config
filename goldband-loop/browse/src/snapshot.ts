@@ -17,7 +17,7 @@
  * Later: "click @e3" → look up Locator → locator.click()
  */
 
-import type { Page, Frame, Locator } from 'playwright';
+import type { Locator } from 'playwright';
 import type { TabSession, RefEntry } from './tab-session';
 import * as Diff from 'diff';
 import { TEMP_DIR, isPathWithin } from './platform';
@@ -49,8 +49,7 @@ interface SnapshotOptions {
  * Snapshot flag metadata — single source of truth for CLI parsing and doc generation.
  *
  * Imported by:
- *   - gen-skill-docs.ts (generates {{SNAPSHOT_FLAGS}} tables)
- *   - skill-parser.ts (validates flags in SKILL.md examples)
+ *   - browser command help and tests
  */
 export const SNAPSHOT_FLAGS: Array<{
   short: string;
@@ -83,7 +82,7 @@ interface ParsedNode {
 /**
  * Parse CLI args into SnapshotOptions — driven by SNAPSHOT_FLAGS metadata.
  */
-export function parseSnapshotArgs(args: string[]): SnapshotOptions {
+function parseSnapshotArgs(args: string[]): SnapshotOptions {
   const opts: SnapshotOptions = {};
   for (let i = 0; i < args.length; i++) {
     const flag = SNAPSHOT_FLAGS.find(f => f.short === args[i] || f.long === args[i]);
@@ -303,12 +302,12 @@ export async function handleSnapshot(
           const parts: string[] = [];
           let current: Element | null = el;
           while (current && current !== document.documentElement) {
-            const parent = current.parentElement;
-            if (!parent) break;
-            const siblings = [...parent.children];
+            const parentElement: Element | null = current.parentElement;
+            if (!parentElement) break;
+            const siblings = [...parentElement.children];
             const index = siblings.indexOf(current) + 1;
             parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${index})`);
-            current = parent;
+            current = parentElement;
           }
           const selector = parts.join(' > ');
 

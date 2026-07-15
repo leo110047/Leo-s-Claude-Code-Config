@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import { requireApiKey } from "./auth";
 import { parseBrief } from "./brief";
+import { OPENAI_DESIGN_MODEL, OPENAI_IMAGE_GENERATION_MODEL } from "./models";
 
 export interface VariantsOptions {
   brief?: string;
@@ -68,9 +69,9 @@ export async function generateVariant(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o",
+          model: OPENAI_DESIGN_MODEL,
           input: prompt,
-          tools: [{ type: "image_generation", model: "gpt-image-2", size, quality }],
+          tools: [{ type: "image_generation", model: OPENAI_IMAGE_GENERATION_MODEL, size, quality }],
         }),
         signal: controller.signal,
       });

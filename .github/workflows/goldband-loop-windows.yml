@@ -1,0 +1,118 @@
+name: Goldband Loop Windows
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: goldband-loop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-free-tests:
+    name: Windows Free Tests
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: goldband-loop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "windows-ci@goldband.test"
+          git config --global user.name "Windows CI"
+          git config --global init.defaultBranch main
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Node-compatible browse server
+        run: bash browse/scripts/build-node-server.sh
+
+      - name: Generate host skill outputs
+        run: bun run gen:surfaces
+
+      - name: Show curated Windows-safe test set
+        run: bun run scripts/test-free-shards.ts --windows-only --list
+
+      - name: Verify Windows portability paths
+        run: |
+          bun test \
+            test/goldband-paths.test.ts \
+            browse/test/claude-bin.test.ts \
+            test/test-free-shards.test.ts \
+            browse/test/file-permissions.test.ts \
+            browse/test/security.test.ts \
+            browse/test/server-sanitize-surrogates.test.ts \
+            test/setup-windows-fallback.test.ts \
+            test/build-script-shell-compat.test.ts \
+            test/docs-config-keys.test.ts \
+            test/brain-sync-windows-paths.test.ts \
+            make-pdf/test/browseClient.test.ts \
+            make-pdf/test/pdftotext.test.ts
+
+  windows-setup-e2e:
+    name: Windows Setup E2E
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: goldband-loop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "windows-setup-e2e@goldband.test"
+          git config --global user.name "Windows Setup E2E"
+          git config --global init.defaultBranch main
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the Windows runtime
+        run: bun run build
+        env:
+          GOLDBAND_SKIP_PLAYWRIGHT: '1'
+
+      - name: Verify Windows binaries
+        run: |
+          set -e
+          test -f browse/dist/browse.exe || test -f browse/dist/browse || (echo "MISSING: browse" && exit 1)
+          test -f browse/dist/find-browse.exe || test -f browse/dist/find-browse || (echo "MISSING: find-browse" && exit 1)
+          test -f design/dist/design.exe || test -f design/dist/design || (echo "MISSING: design" && exit 1)
+          test -f bin/goldband-global-discover.exe || test -f bin/goldband-global-discover || (echo "MISSING: goldband-global-discover" && exit 1)
+          test -f bin/goldband-task-emission.exe || test -f bin/goldband-task-emission || (echo "MISSING: goldband-task-emission" && exit 1)
+
+      - name: Verify find-browse binary resolution
+        run: |
+          set -e
+          OUT=$(bun browse/src/find-browse.ts 2>&1) || true
+          echo "find-browse output: $OUT"
+          echo "$OUT" | grep -qE '(browse\.exe|browse)$' || (echo "find-browse failed to resolve binary on Windows" && exit 1)
+
+      - name: Verify state-root resolution
+        run: |
+          set -e
+          eval "$(bash bin/goldband-paths)"
+          test -n "$GOLDBAND_STATE_ROOT" || (echo "GOLDBAND_STATE_ROOT empty" && exit 1)
+          test -n "$PLAN_ROOT" || (echo "PLAN_ROOT empty" && exit 1)
+          test -n "$TMP_ROOT" || (echo "TMP_ROOT empty" && exit 1)

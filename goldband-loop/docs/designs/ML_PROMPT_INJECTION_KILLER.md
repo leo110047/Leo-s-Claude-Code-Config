@@ -1,6 +1,6 @@
 # ML Prompt Injection Killer
 
-**Status:** P0 TODO (follow-up to sidebar security fix PR)
+**Status:** Implemented — the defense-in-depth stack shipped with revised classifier choices; `ARCHITECTURE.md` owns current behavior.
 **Branch:** project-owner/extension-prompt-injection-defense
 **Date:** 2026-03-28
 **CEO Plan:** ~/.goldband/projects/project-owner-goldband/ceo-plans/2026-03-28-sidebar-prompt-injection-defense.md

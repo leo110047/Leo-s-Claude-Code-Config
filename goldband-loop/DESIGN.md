@@ -81,6 +81,6 @@ Apply a subtle noise overlay to the entire page for materiality:
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-03-21 | Initial design system | Created by /design-consultation. Industrial aesthetic, warm amber accent, Satoshi + DM Sans + JetBrains Mono. |
+| 2026-03-21 | Initial design system | Created by `/goldband design consult`. Industrial aesthetic, warm amber accent, Satoshi + DM Sans + JetBrains Mono. |
 | 2026-03-21 | Light mode amber-600 | amber-500 too bright/washed against white; amber-700 too brown/umber. amber-600 is the sweet spot. |
 | 2026-03-21 | Grain texture | Adds materiality to flat dark surfaces. Prevents the "generic SaaS template" sameness. |

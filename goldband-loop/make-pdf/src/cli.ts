@@ -59,7 +59,7 @@ function printUsage(): void {
     "",
     "Usage:",
   ];
-  for (const [name, info] of COMMANDS) {
+  for (const [, info] of COMMANDS) {
     lines.push(`  $P ${info.usage}`);
     lines.push(`      ${info.description}`);
   }

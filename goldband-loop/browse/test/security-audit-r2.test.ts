@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { escapeRegExp } from '../src/meta-commands';
 
 // ─── Shared source reads (used across multiple test sections) ───────────────
 const META_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/meta-commands.ts'), 'utf-8');
@@ -324,10 +325,7 @@ describe('frame --url ReDoS fix', () => {
     expect(block).toContain('escapeRegExp');
   });
 
-  it('escapeRegExp neutralizes catastrophic patterns (behavioral)', async () => {
-    const mod = await import('../src/meta-commands.ts');
-    const { escapeRegExp } = mod as any;
-    expect(typeof escapeRegExp).toBe('function');
+  it('escapeRegExp neutralizes catastrophic patterns (behavioral)', () => {
     const evil = '(a+)+$';
     const escaped = escapeRegExp(evil);
     const start = Date.now();

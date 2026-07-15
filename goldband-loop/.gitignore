@@ -6,6 +6,8 @@ design/dist/
 make-pdf/dist/
 bin/goldband-global-discover
 bin/goldband-global-discover.exe
+bin/goldband-task-emission
+bin/goldband-task-emission.exe
 .goldband/
 .claude/skills/
 .claude/scheduled_tasks.lock

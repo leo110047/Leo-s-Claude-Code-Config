@@ -140,7 +140,7 @@ const FALLBACK_SECRET_PATTERNS = [
   },
 ];
 
-export function goldbandHome(): string {
+function goldbandHome(): string {
   return process.env.GOLDBAND_HOME || join(homedir(), ".goldband");
 }
 
@@ -152,7 +152,7 @@ export function entriesDir(root = knowledgeRoot()): string {
   return join(root, "entries");
 }
 
-export function indexPath(root = knowledgeRoot()): string {
+function indexPath(root = knowledgeRoot()): string {
   return join(root, "index.json");
 }
 
@@ -208,7 +208,7 @@ export function currentCanonicalRemote(cwd = process.cwd()): string {
   }
 }
 
-export function ensureKnowledgeDirs(root = knowledgeRoot()): void {
+function ensureKnowledgeDirs(root = knowledgeRoot()): void {
   mkdirSync(entriesDir(root), { recursive: true });
 }
 
@@ -252,7 +252,7 @@ export function writeKnowledgeCandidate(
   return { filePath, skipped: false };
 }
 
-export function readIndex(root = knowledgeRoot()): KnowledgeIndex {
+function readIndex(root = knowledgeRoot()): KnowledgeIndex {
   const file = indexPath(root);
   if (!existsSync(file)) {
     return rebuildIndex(root);
@@ -391,7 +391,7 @@ export function createKnowledgeEntry(input: Partial<KnowledgeEntry>): KnowledgeE
   return entry;
 }
 
-export function validateEntry(entry: KnowledgeEntry): void {
+function validateEntry(entry: KnowledgeEntry): void {
   if (!ID_RE.test(entry.id)) {
     throw new Error("id must be a short kebab slug: lowercase letters, numbers, hyphens");
   }

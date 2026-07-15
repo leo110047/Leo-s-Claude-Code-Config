@@ -16,8 +16,8 @@
  * Add entries via PR. CI lint (cdp-allowlist.test.ts) ensures every entry has all 4 fields.
  */
 
-export type CdpScope = 'tab' | 'browser';
-export type CdpOutput = 'trusted' | 'untrusted';
+type CdpScope = 'tab' | 'browser';
+type CdpOutput = 'trusted' | 'untrusted';
 
 export interface CdpAllowEntry {
   domain: string;

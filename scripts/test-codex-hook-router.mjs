@@ -20,9 +20,10 @@ process.on('exit', () => {
   fs.rmSync(telemetryDir, { recursive: true, force: true });
 });
 
-function runHook(input, extraEnv = {}) {
+function runHook(input, options = {}) {
+  const { cwd = repoDir, env: extraEnv = {} } = options;
   const result = spawnSync(process.execPath, [routerPath], {
-    cwd: repoDir,
+    cwd,
     input: JSON.stringify(input),
     encoding: 'utf8',
     env: {
@@ -61,25 +62,6 @@ function assertCodexPreToolUseSchema(input, output) {
 
 function assertNoopOutput(output) {
   assert.deepEqual(output, {});
-}
-
-function sessionStartMarkerPath(sessionId) {
-  return path.join(
-    telemetryDir,
-    'hook-router',
-    'dedupe',
-    'session-start-context-restore-hint',
-    `${sessionId}.json`,
-  );
-}
-
-function readUsageEvents() {
-  if (!fs.existsSync(usageFile)) return [];
-  return fs
-    .readFileSync(usageFile, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
 }
 
 function testHighRiskBashDenied() {
@@ -278,24 +260,34 @@ function testRegisteredNoopHooksEmitJson() {
 }
 
 function testPostToolUseStyleGateAdvisory() {
-  const fixtureDir = fs.mkdtempSync(path.join(repoDir, '.tmp-style-gate-'));
-  const fixtureFile = path.join(fixtureDir, 'fixture.ts');
-  const relativeFixture = path.relative(repoDir, fixtureFile);
+  const projectDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'goldband-style-gate-'),
+  );
+  const fixtureFile = path.join(projectDir, 'fixture.ts');
+  const relativeFixture = path.relative(projectDir, fixtureFile);
   try {
-    fs.writeFileSync(fixtureFile, 'console.log("debug");\n', 'utf8');
-    const output = runHook({
-      hook_event_name: 'PostToolUse',
-      tool_name: 'apply_patch',
-      tool_input: {
-        command: [
-          '*** Begin Patch',
-          `*** Update File: ${relativeFixture}`,
-          '@@',
-          '+con' + 'sole.log("debug");',
-          '*** End Patch',
-        ].join('\n'),
-      },
+    const init = spawnSync('git', ['init', '--quiet'], {
+      cwd: projectDir,
+      encoding: 'utf8',
     });
+    assert.equal(init.status, 0, init.stderr);
+    fs.writeFileSync(fixtureFile, 'console.log("debug");\n', 'utf8');
+    const output = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'apply_patch',
+        tool_input: {
+          command: [
+            '*** Begin Patch',
+            `*** Update File: ${relativeFixture}`,
+            '@@',
+            '+con' + 'sole.log("debug");',
+            '*** End Patch',
+          ].join('\n'),
+        },
+      },
+      { cwd: projectDir },
+    );
 
     assert.equal(output.hookSpecificOutput.hookEventName, 'PostToolUse');
     assert.match(
@@ -304,15 +296,19 @@ function testPostToolUseStyleGateAdvisory() {
     );
     assert.match(output.hookSpecificOutput.additionalContext, /console-log/);
   } finally {
-    fs.rmSync(fixtureDir, { recursive: true, force: true });
+    fs.rmSync(projectDir, { recursive: true, force: true });
   }
 }
 
-function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
+function testPostToolUseStyleGateAdvisoryUsesExplicitProjectRoot() {
   const originalCwd = process.cwd();
   const externalRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-cwd-'));
   try {
-    spawnSync('git', ['init', '--quiet'], { cwd: externalRepo });
+    const init = spawnSync('git', ['init', '--quiet'], {
+      cwd: externalRepo,
+      encoding: 'utf8',
+    });
+    assert.equal(init.status, 0, init.stderr);
     process.chdir(externalRepo);
     testPostToolUseStyleGateAdvisory();
   } finally {
@@ -321,92 +317,12 @@ function testPostToolUseStyleGateAdvisoryRunsFromRepoRoot() {
   }
 }
 
-function testLifecycleContexts() {
-  const output = runHook({ hook_event_name: 'SessionStart' });
-  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(
-    output.hookSpecificOutput.additionalContext,
-    /\$goldband context restore/,
-  );
-}
-
-function testSessionStartContextIsDedupedBySession() {
-  const sessionId = 'session-start-dedupe-test';
-  const outputs = Array.from({ length: 4 }, () =>
-    runHook({
-      hook_event_name: 'SessionStart',
-      session_id: sessionId,
-      start_source: 'resume',
-    }),
-  );
-
-  assert.equal(outputs[0].hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(
-    outputs[0].hookSpecificOutput.additionalContext,
-    /\$goldband context restore/,
-  );
-  assertNoopOutput(outputs[1]);
-  assertNoopOutput(outputs[2]);
-  assertNoopOutput(outputs[3]);
-
-  const sessionStartEvents = readUsageEvents().filter(
-    (event) =>
-      event.category === 'hook-advisory' &&
-      event.name === 'SessionStart' &&
-      event.sessionId === sessionId,
-  );
-  assert.equal(sessionStartEvents.length, 1);
-  assert.equal(sessionStartEvents[0].detail.startSource, 'resume');
-}
-
-function testSessionStartContextIsNotDedupedAcrossSessions() {
-  const first = runHook({
-    hook_event_name: 'SessionStart',
-    session_id: 'session-start-dedupe-a',
-  });
-  const second = runHook({
-    hook_event_name: 'SessionStart',
-    session_id: 'session-start-dedupe-b',
-  });
-
-  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
-}
-
-function testSessionStartContextWithoutSessionIdIsNotGloballyDeduped() {
-  const first = runHook({ hook_event_name: 'SessionStart' });
-  const second = runHook({ hook_event_name: 'SessionStart' });
-
-  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.equal(second.hookSpecificOutput.hookEventName, 'SessionStart');
-}
-
-function testSessionStartExpiredDedupeMarkerIsCleanedUp() {
-  const sessionId = 'session-start-expired-marker';
-  const markerPath = sessionStartMarkerPath(sessionId);
-  fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-  fs.writeFileSync(markerPath, '{}', 'utf8');
-  const oldDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-  fs.utimesSync(markerPath, oldDate, oldDate);
-
-  const output = runHook(
-    {
-      hook_event_name: 'SessionStart',
-      session_id: sessionId,
-    },
-    { GOLDBAND_DEDUPE_RETENTION_DAYS: '1' },
-  );
-
-  assert.equal(output.hookSpecificOutput.hookEventName, 'SessionStart');
-  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-  assert.equal(marker.sessionId, sessionId);
-  assert.equal(marker.advisoryName, 'session-start-context-restore-hint');
-}
-
-function testCompactHooksAreNotRegistered() {
+function testPassiveLifecycleHooksAreNotRegistered() {
   const hooksConfig = JSON.parse(fs.readFileSync(hooksConfigPath, 'utf8'));
+  assert.equal(hooksConfig.hooks.SessionStart, undefined);
   assert.equal(hooksConfig.hooks.PreCompact, undefined);
   assert.equal(hooksConfig.hooks.PostCompact, undefined);
+  assertNoopOutput(runHook({ hook_event_name: 'SessionStart' }));
   assertNoopOutput(runHook({ hook_event_name: 'PreCompact' }));
   assertNoopOutput(runHook({ hook_event_name: 'PostCompact' }));
 }
@@ -578,13 +494,8 @@ testGitPatchDenied();
 testPostToolUseFailureContext();
 testRegisteredNoopHooksEmitJson();
 testPostToolUseStyleGateAdvisory();
-testPostToolUseStyleGateAdvisoryRunsFromRepoRoot();
-testLifecycleContexts();
-testSessionStartContextIsDedupedBySession();
-testSessionStartContextIsNotDedupedAcrossSessions();
-testSessionStartContextWithoutSessionIdIsNotGloballyDeduped();
-testSessionStartExpiredDedupeMarkerIsCleanedUp();
-testCompactHooksAreNotRegistered();
+testPostToolUseStyleGateAdvisoryUsesExplicitProjectRoot();
+testPassiveLifecycleHooksAreNotRegistered();
 testMutatingMcpWarnsOnly();
 testPromptWorkflowHint();
 testPromptWorkflowHintRequiresTriggerBoundaries();

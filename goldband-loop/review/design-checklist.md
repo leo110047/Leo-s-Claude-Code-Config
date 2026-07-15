@@ -1,6 +1,7 @@
 # Design Review Checklist (Lite)
 
-> **Subset of DESIGN_METHODOLOGY** — when adding items here, also update `generateDesignMethodology()` in `scripts/gen-skill-docs.ts`, and vice versa.
+> Runtime-owned design review checklist. Workflow prompts reference this asset
+> on demand instead of embedding a copy.
 
 ## Instructions
 
@@ -37,8 +38,8 @@ This checklist is findings-only when used by `/review`. Do not edit files.
 - **[MEDIUM]** heuristic findings should include why the pattern is risky.
 - **[LOW]** visual-intent findings should be presented as possible issues.
 
-`/ship` may choose to apply mechanical CSS fixes through its ship-only
-Fix-First flow. Normal `/review` must only report findings.
+Release workflows may consume this checklist as a readiness signal. Normal
+review must only report findings.
 
 ---
 

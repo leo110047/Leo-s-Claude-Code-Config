@@ -8,7 +8,7 @@ import {
 } from './review-rules';
 import type { ReviewFinding, WorkflowContext } from './types';
 
-export const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
+const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
   'critical',
   'high',
   'medium',
@@ -44,8 +44,7 @@ export type PreparedSpecialistReview = {
   }>;
 };
 
-export const SPECIALIST_CONCURRENCY = 2;
-const MAX_AUTO_SPECIALISTS = 2;
+const SPECIALIST_CONCURRENCY = 2;
 
 const SPECIALIST_GUIDANCE: Record<ReviewSpecialist, string> = {
   'correctness-contract':
@@ -95,7 +94,7 @@ export function selectReviewSpecialists(diff: string, mode: SpecialistMode = 'au
     selected.push('performance');
   }
 
-  const selectedSet = new Set(selected.slice(0, MAX_AUTO_SPECIALISTS));
+  const selectedSet = new Set(selected);
 
   return {
     selected: REVIEW_SPECIALISTS.filter((specialist) => selectedSet.has(specialist)),
@@ -103,9 +102,7 @@ export function selectReviewSpecialists(diff: string, mode: SpecialistMode = 'au
       .filter((specialist) => !selectedSet.has(specialist))
       .map((specialist) => ({
         specialist,
-        reason: selected.includes(specialist)
-          ? 'auto specialist budget reached'
-          : 'diff scope not relevant',
+        reason: 'diff scope not relevant',
       })),
   };
 }
@@ -194,7 +191,7 @@ export function aggregateReviewFindings(findings: ReviewFinding[]): ReviewFindin
   return [...byKey.values()].sort(compareFindings);
 }
 
-export function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
+function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
   const severity = normalizeSeverity(finding.severity);
   const needsEvidenceDowngrade = (severity === 'critical' || severity === 'high') && !finding.evidence;
   const nextSeverity = needsEvidenceDowngrade ? 'info' : severity;

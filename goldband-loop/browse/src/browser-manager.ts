@@ -16,6 +16,7 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Locator, type Cookie } from 'playwright';
+import type { ChildProcess } from 'node:child_process';
 import { writeSecureFile, mkdirSecure } from './file-permissions';
 import { addConsoleEntry, addNetworkEntry, addDialogEntry, networkBuffer, type DialogEntry } from './buffers';
 import { validateNavigationUrl } from './url-validation';
@@ -88,7 +89,9 @@ export function shouldEnableChromiumSandbox(): boolean {
  * restarts on backoff.
  */
 export async function resolveDisconnectCause(browser: Browser | null): Promise<'clean' | 'crash'> {
-  const proc = browser?.process();
+  const proc = (
+    browser as (Browser & { process?: () => ChildProcess | null }) | null
+  )?.process?.();
   if (proc && proc.exitCode === null && proc.signalCode === null) {
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, 1000);
@@ -106,7 +109,7 @@ export async function resolveDisconnectCause(browser: Browser | null): Promise<'
  * crash. Inlined into the launch() body via a one-line dispatch so
  * browser-manager's flow stays grep-friendly.
  */
-export async function handleChromiumDisconnect(browser: Browser | null): Promise<void> {
+async function handleChromiumDisconnect(browser: Browser | null): Promise<void> {
   const cause = await resolveDisconnectCause(browser);
   if (cause === 'clean') {
     console.error('[browse] Chromium closed cleanly (user-initiated quit). Server exiting (0).');
@@ -409,7 +412,6 @@ export class BrowserManager {
       // Write to ~/.goldband/.auth.json (not the extension dir, which may be read-only
       // in .app bundles and breaks codesigning).
       if (authToken) {
-        const fs = require('fs');
         const path = require('path');
         const goldbandDir = path.join(process.env.HOME || '/tmp', '.goldband');
         mkdirSecure(goldbandDir);
@@ -662,7 +664,6 @@ export class BrowserManager {
           }
           if (!this.onDisconnect) {
             process.exit(exitCode);
-            return;
           }
           try {
             const result = this.onDisconnect(exitCode);
@@ -688,20 +689,21 @@ export class BrowserManager {
   }
 
   async close() {
-    if (this.browser || (this.connectionMode === 'headed' && this.context)) {
+    const browser = this.browser;
+    if (browser || (this.connectionMode === 'headed' && this.context)) {
       if (this.connectionMode === 'headed') {
         // Headed/persistent context mode: close the context (which closes the browser)
         this.intentionalDisconnect = true;
-        if (this.browser) this.browser.removeAllListeners('disconnected');
+        if (browser) browser.removeAllListeners('disconnected');
         await Promise.race([
           this.context ? this.context.close() : Promise.resolve(),
           new Promise(resolve => setTimeout(resolve, 5000)),
         ]).catch(() => {});
-      } else {
+      } else if (browser) {
         // Launched mode: close the browser we spawned
-        this.browser.removeAllListeners('disconnected');
+        browser.removeAllListeners('disconnected');
         await Promise.race([
-          this.browser.close(),
+          browser.close(),
           new Promise(resolve => setTimeout(resolve, 5000)),
         ]).catch(() => {});
       }

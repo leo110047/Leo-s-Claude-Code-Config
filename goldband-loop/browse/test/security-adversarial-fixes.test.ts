@@ -1,5 +1,5 @@
 /**
- * Regression tests for the 4 adversarial findings fixed during /ship:
+ * Regression tests for the 4 adversarial findings fixed during release readiness review:
  *
  * 1. Canary stream-chunk split bypass — rolling-buffer detection across
  *    consecutive text_delta / input_json_delta events.
@@ -96,10 +96,9 @@ describe('transcript classifier tool_output parameter', () => {
     expect(src).toContain('tool_output');
   });
 
-  // sidebar-agent passed tool text to the transcript classifier on
-  // tool-result scans. That whole pipeline is gone — Terminal pane has
-  // no LLM stream to scan, and security-classifier.ts is dead code with
-  // no production caller (a separate v1.1+ cleanup TODO).
+  // The removed sidebar-agent used this transcript-only path. The page-content
+  // classifier in the same module remains live through security-sidecar-entry.ts;
+  // transcript classification is retained for benchmark and regression coverage.
 });
 
 describe('GOLDBAND_SECURITY_OFF kill switch', () => {

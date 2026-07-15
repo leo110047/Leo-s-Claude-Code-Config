@@ -46,7 +46,6 @@ function warnIcaclsFailure(fsPath: string, err: unknown): void {
   if (warnedOnce) return;
   warnedOnce = true;
   const msg = err instanceof Error ? err.message : String(err);
-  // biome-ignore lint/suspicious/noConsole: intentional user-facing warning
   console.warn(
     `[goldband] Failed to restrict Windows ACL on ${fsPath}: ${msg}\n` +
     `  Sensitive files may be readable by other accounts on this machine.\n` +
@@ -117,7 +116,7 @@ export function restrictDirectoryPermissions(dirPath: string): void {
  */
 export function writeSecureFile(
   filePath: string,
-  data: string | NodeJS.ArrayBufferView,
+  data: string | Uint8Array,
 ): void {
   fs.writeFileSync(filePath, data, { mode: 0o600 });
   restrictFilePermissions(filePath);
@@ -132,7 +131,7 @@ export function writeSecureFile(
  */
 export function appendSecureFile(
   filePath: string,
-  data: string | NodeJS.ArrayBufferView,
+  data: string | Uint8Array,
 ): void {
   const existed = fs.existsSync(filePath);
   fs.appendFileSync(filePath, data, { mode: 0o600 });

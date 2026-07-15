@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-30
 **Author:** project maintainer + Claude Code
-**Status:** Phase 1a shipped, Phase 1b in progress
+**Status:** Superseded — `BROWSER.md`, `ARCHITECTURE.md`, and `SIDEBAR_MESSAGE_FLOW.md` now own the browser architecture and roadmap.
 **Branch:** project-owner/goldband-as-browser
 
 ## The Thesis

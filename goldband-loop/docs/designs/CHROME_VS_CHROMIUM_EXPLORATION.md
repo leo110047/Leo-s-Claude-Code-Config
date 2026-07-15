@@ -1,5 +1,7 @@
 # Chrome vs Chromium: Why We Use Playwright's Bundled Chromium
 
+**Status:** Implemented — the CDP naming and dead-code cleanup described here is reflected in the headed-browser implementation.
+
 ## The Original Vision
 
 When we built `$B connect`, the plan was to connect to the user's **real Chrome browser** — the one with their cookies, sessions, extensions, and open tabs. No more cookie import. The design called for:

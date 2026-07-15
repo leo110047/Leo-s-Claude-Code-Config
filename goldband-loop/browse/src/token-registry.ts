@@ -27,7 +27,6 @@
  */
 
 import * as crypto from 'crypto';
-import { READ_COMMANDS, WRITE_COMMANDS, META_COMMANDS } from './commands';
 
 // ─── Scope Definitions ─────────────────────────────────────────
 // Derived from commands.ts, but reclassified by actual side effects.
@@ -518,14 +517,9 @@ export function checkConnectRateLimit(): boolean {
   return true;
 }
 
-// Test-only reset.
-export function __resetConnectRateLimit(): void {
-  connectAttempts = [];
-}
-
 // Test-only reset. Zeroes the registry so a subsequent initRegistry call
-// always succeeds. Mirrors __resetConnectRateLimit. Needed by tests that
-// follow the rotateRoot() pattern — rotateRoot leaves rootToken non-empty,
+// always succeeds. Needed by tests that follow the rotateRoot() pattern —
+// rotateRoot leaves rootToken non-empty,
 // which would otherwise trip the initRegistry mismatch guard.
 export function __resetRegistry(): void {
   rootToken = '';

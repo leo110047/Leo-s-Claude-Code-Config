@@ -186,9 +186,6 @@ async function fetchAndRelayRefs() {
 
 // ─── Inspector ──────────────────────────────────────────────────
 
-// Track inspector mode per tab — 'full' (inspector.js injected) or 'basic' (content.js fallback)
-let inspectorMode = 'full';
-
 async function injectInspector(tabId) {
   // Try full inspector injection first
   try {
@@ -211,18 +208,15 @@ async function injectInspector(tabId) {
     } catch (err) {
       console.warn('[goldband bg] Failed to send startPicker:', err.message);
     }
-    inspectorMode = 'full';
     return { ok: true, mode: 'full' };
   } catch (err) {
     // Script injection failed (CSP, chrome:// page, etc.)
     // Fall back to content.js basic picker (loaded by manifest on most pages)
     try {
       await chrome.tabs.sendMessage(tabId, { type: 'startBasicPicker' });
-      inspectorMode = 'basic';
       return { ok: true, mode: 'basic' };
     } catch (err2) {
       console.error('[goldband bg] Inspector injection failed completely:', err.message, '| Basic fallback:', err2.message);
-      inspectorMode = 'full';
       return { error: 'Cannot inspect this page' };
     }
   }

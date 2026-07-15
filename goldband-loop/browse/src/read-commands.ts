@@ -10,8 +10,6 @@ import type { BrowserManager } from './browser-manager';
 import { consoleBuffer, networkBuffer, dialogBuffer } from './buffers';
 import type { Page, Frame } from 'playwright';
 import * as fs from 'fs';
-import * as path from 'path';
-import { TEMP_DIR } from './platform';
 import { inspectElement, formatInspectorResult, getModificationHistory } from './cdp-inspector';
 import { validateReadPath } from './path-security';
 import { stripLoneSurrogates } from './sanitize';
@@ -269,6 +267,9 @@ export async function handleReadCommand(
 
       // Network capture extensions
       if (args[0] === '--capture') {
+        if (!bm) {
+          throw new Error('network capture requires a browser manager');
+        }
         const {
           startCapture, stopCapture, getCaptureListener, isCaptureActive,
         } = await import('./network-capture');
@@ -421,6 +422,7 @@ export async function handleReadCommand(
     }
 
     case 'inspect': {
+      if (!bm) throw new Error('inspect commands require a browser manager');
       // Parse flags
       let includeUA = false;
       let showHistory = false;
@@ -469,6 +471,7 @@ export async function handleReadCommand(
     }
 
     case 'media': {
+      if (!bm) throw new Error('media commands require a browser manager');
       const { extractMedia } = await import('./media-extract');
       const target = bm.getActiveFrameOrPage();
       const filter = args.includes('--images') ? 'images' as const
@@ -481,6 +484,7 @@ export async function handleReadCommand(
     }
 
     case 'data': {
+      if (!bm) throw new Error('data commands require a browser manager');
       const target = bm.getActiveFrameOrPage();
       const wantJsonLd = args.includes('--jsonld') || args.length === 0;
       const wantOg = args.includes('--og') || args.length === 0;
