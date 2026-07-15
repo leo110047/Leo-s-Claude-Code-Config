@@ -22,8 +22,20 @@
       "typed-evidence",
       "stop-conditions",
       "state",
-      "observability"
+      "observability",
+      "interaction-schema"
     ],
+    "interactionPolicy": {
+      "askOnlyWhen": "Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.",
+      "batching": "Batch related decisions when they can be answered together; split only when an earlier answer changes the next question, risk level, or required evidence.",
+      "formatOwner": "Tool schemas and UI own question shape, option labels, validation, and persistence. Prompts should provide only concise decision context.",
+      "avoidPromptFormats": [
+        "prompt-owned formatting rubrics",
+        "scores",
+        "word-count rules",
+        "per-finding question rules"
+      ]
+    },
     "prohibitedSharedBoilerplate": [
       "universal-preamble",
       "embedded-browser-manual",

@@ -261,6 +261,12 @@ function generatedRootSkill(capabilities, manuals) {
   const content = template
     .replace('{{CAPABILITY_ROUTER}}', generatedRouter(capabilities).trim())
     .replace(
+      '{{INTERACTION_POLICY}}',
+      generatedInteractionPolicy(
+        manifest.promptArchitecture.interactionPolicy,
+      ).trim(),
+    )
+    .replace(
       '{{CAPABILITY_MANUAL_ROUTING}}',
       generatedManualRouting(manuals).trim(),
     );
@@ -285,7 +291,11 @@ function generatedDocs(value) {
         `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
     )
     .join('\n');
-  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\n| Capability | Action | Outcome | Runtime | Risk |\n| --- | --- | --- | --- | --- |\n${rows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n`;
+  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\n| Capability | Action | Outcome | Runtime | Risk |\n| --- | --- | --- | --- | --- |\n${rows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
+}
+
+function generatedInteractionPolicy(policy) {
+  return `## Human decisions\n\n- ${policy.askOnlyWhen}\n- ${policy.batching}\n- ${policy.formatOwner}\n- Avoid prompt-owned formats: ${policy.avoidPromptFormats.join(', ')}.`;
 }
 
 function json(value) {

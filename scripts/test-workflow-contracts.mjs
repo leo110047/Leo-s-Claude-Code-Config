@@ -156,6 +156,8 @@ assert.deepEqual(
 );
 
 let totalBytes = 0;
+const retiredQuestionFormatPattern =
+  /decision brief|ELI10|completeness score|each option|40 words|ONE AT A TIME|Do NOT batch|Never batch/i;
 for (const [relativePath, content] of contracts) {
   assert.match(
     relativePath,
@@ -168,6 +170,11 @@ for (const [relativePath, content] of contracts) {
     content,
     /manuals\/[a-z][a-z0-9-]*\.md/,
     `${relativePath} should not duplicate manifest-owned manual routing`,
+  );
+  assert.doesNotMatch(
+    content,
+    retiredQuestionFormatPattern,
+    `${relativePath} reintroduced retired question-format boilerplate`,
   );
   const bytes = Buffer.byteLength(content);
   assert.ok(bytes <= 2_048, `${relativePath} exceeds 2 KiB: ${bytes}`);
@@ -197,6 +204,31 @@ const reportOnly = contracts.get(
 );
 assert.ok(reportOnly);
 assert.match(reportOnly, /Do not modify/i);
+
+assert.equal(
+  manifest.promptArchitecture.interactionPolicy.askOnlyWhen,
+  'Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.',
+);
+assert.match(
+  manifest.promptArchitecture.interactionPolicy.batching,
+  /Batch related decisions/,
+);
+assert.match(
+  manifest.promptArchitecture.interactionPolicy.formatOwner,
+  /Tool schemas and UI/,
+);
+
+const rootSkill = fs.readFileSync(
+  path.join(root, 'goldband-loop', 'SKILL.md'),
+  'utf8',
+);
+assert.match(rootSkill, /## Human decisions/);
+assert.match(
+  rootSkill,
+  /Ask only when the answer can materially change the result/,
+);
+assert.match(rootSkill, /Batch related decisions/);
+assert.match(rootSkill, /Tool schemas and UI own question shape/);
 assert.throws(
   () =>
     validateWorkflowContractContent(

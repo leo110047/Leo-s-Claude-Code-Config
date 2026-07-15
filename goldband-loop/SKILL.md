@@ -44,6 +44,13 @@ For an empty invocation, show this generated capability menu and stop:
 5. Require approval before an outward-facing or irreversible action. Verify the
    requested outcome before reporting completion.
 
+## Human decisions
+
+- Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.
+- Batch related decisions when they can be answered together; split only when an earlier answer changes the next question, risk level, or required evidence.
+- Tool schemas and UI own question shape, option labels, validation, and persistence. Prompts should provide only concise decision context.
+- Avoid prompt-owned formats: prompt-owned formatting rubrics, scores, word-count rules, per-finding question rules.
+
 Load on-demand manuals only for their generated selectors:
 
 <!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->

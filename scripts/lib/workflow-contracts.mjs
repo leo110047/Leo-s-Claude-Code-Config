@@ -14,6 +14,13 @@ const REQUIRED_PROHIBITIONS = [
   'duplicated-routing-table',
 ];
 
+const REQUIRED_INTERACTION_POLICY_FIELDS = [
+  'askOnlyWhen',
+  'batching',
+  'formatOwner',
+  'avoidPromptFormats',
+];
+
 const PROHIBITED_PATTERNS = {
   'universal-preamble': [
     /## Preamble \(run first\)/i,
@@ -46,9 +53,41 @@ export function validatePromptArchitecture(manifest) {
     architecture.prohibitedSharedBoilerplate,
     REQUIRED_PROHIBITIONS,
   );
+  validateInteractionPolicy(architecture.interactionPolicy);
 
   validateCapabilityPromptContracts(manifest.capabilities ?? []);
   validateManuals(manifest.manuals ?? []);
+}
+
+function validateInteractionPolicy(policy) {
+  if (!policy || typeof policy !== 'object') {
+    throw new Error('promptArchitecture.interactionPolicy is required');
+  }
+  for (const field of REQUIRED_INTERACTION_POLICY_FIELDS) {
+    if (!(field in policy)) {
+      throw new Error(
+        `promptArchitecture.interactionPolicy.${field} is required`,
+      );
+    }
+  }
+  for (const field of ['askOnlyWhen', 'batching', 'formatOwner']) {
+    if (typeof policy[field] !== 'string' || policy[field].trim() === '') {
+      throw new Error(
+        `promptArchitecture.interactionPolicy.${field} must be a non-empty string`,
+      );
+    }
+  }
+  if (
+    !Array.isArray(policy.avoidPromptFormats) ||
+    policy.avoidPromptFormats.length === 0 ||
+    policy.avoidPromptFormats.some(
+      (item) => typeof item !== 'string' || item.trim() === '',
+    )
+  ) {
+    throw new Error(
+      'promptArchitecture.interactionPolicy.avoidPromptFormats must be a non-empty string array',
+    );
+  }
 }
 
 function validateCapabilityPromptContracts(capabilities) {
