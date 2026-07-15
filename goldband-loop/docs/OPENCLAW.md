@@ -104,7 +104,7 @@ ready to build, spawn a FULL session that references the saved plan.
 ### Native methodology skills
 Published to ClawHub. Install with `clawhub install`:
 - `goldband-openclaw-office-hours` — Product interrogation (6 forcing questions)
-- `goldband-openclaw-ceo-review` — Strategic challenge (10-section review, 4 modes)
+- `goldband-openclaw-ceo-review` — Compact strategic challenge with an on-demand deep rubric
 - `goldband-openclaw-investigate` — Operational debugging (4-phase methodology)
 - `goldband-openclaw-retro` — Operational retrospective (weekly review)
 
