@@ -16,7 +16,7 @@ bin/dev-setup                  # activate dev mode
 
 > **Full clone vs shallow.** The README's user-facing install uses `--depth 1` for speed. As a contributor, use a full clone (no `--depth` flag) — you'll need history for `git log`, `git blame`, `git bisect`, and reviewing PRs against earlier versions. If you already have a `--depth 1` clone from following the README, promote it to a full clone with `git fetch --unshallow`.
 
-Now edit any `SKILL.md`, invoke it in Claude Code (e.g. `/review`), and see your changes live. When you're done developing:
+Now edit any `SKILL.md`, invoke it in Claude Code (e.g. `/goldband review code`), and see your changes live. When you're done developing:
 
 ```bash
 bin/dev-teardown               # deactivate — back to your global install
@@ -29,12 +29,12 @@ reflects on what went wrong (CLI errors, wrong approaches, project quirks) and l
 operational learnings to `~/.goldband/projects/{slug}/learnings.jsonl`. Future sessions
 surface these learnings automatically, so goldband gets smarter on your codebase over time.
 
-No setup needed. Learnings are logged automatically. View them with `/learn`.
+No setup needed. Learnings are logged automatically. View them with `/goldband knowledge recall`.
 
 ### The contributor workflow
 
 1. **Use goldband normally** — operational learnings are captured automatically
-2. **Check your learnings:** `/learn` or `ls ~/.goldband/projects/*/learnings.jsonl`
+2. **Check your learnings:** `/goldband knowledge recall` or `ls ~/.goldband/projects/*/learnings.jsonl`
 3. **Fork and clone goldband** (if you haven't already)
 4. **Symlink your fork into the project where you hit the bug:**
    ```bash
@@ -91,7 +91,7 @@ bin/dev-setup
 vim review/SKILL.md
 
 # 3. Test it in Claude Code — changes are live
-#    > /review
+#    > /goldband review code
 
 # 4. Editing browse source? Rebuild the binary
 bun run build
@@ -267,11 +267,11 @@ worth the review overhead.
 
 ## Multi-host development
 
-goldband generates SKILL.md files for 8 hosts from one set of `.tmpl` templates.
+goldband generates SKILL.md files for 10 hosts from one set of `.tmpl` templates.
 Each host is a typed config in `hosts/*.ts`. The generator reads these configs
 to produce host-appropriate output (different frontmatter, paths, tool names).
 
-**Supported hosts:** Claude (primary), Codex, Factory, Kiro, OpenCode, Slate, Cursor, OpenClaw.
+**Supported hosts:** Claude (primary), Codex, Factory, Kiro, OpenCode, Slate, Cursor, OpenClaw, Hermes, GBrain.
 
 ### Generating for all hosts
 
@@ -280,7 +280,7 @@ to produce host-appropriate output (different frontmatter, paths, tool names).
 bun run gen:skill-docs                    # Claude (default)
 bun run gen:skill-docs --host codex       # Codex
 bun run gen:skill-docs --host opencode    # OpenCode
-bun run gen:skill-docs --host all         # All 8 hosts
+bun run gen:skill-docs --host all         # All 10 hosts
 
 # Or use build, which does all hosts + compiles binaries
 bun run build
@@ -347,7 +347,7 @@ When Conductor creates a new workspace, `bin/dev-setup` runs automatically. It d
 
 **First-time setup:** Put your `ANTHROPIC_API_KEY` in `.env` in the main repo (see `.env.example`). Every Conductor workspace inherits it automatically.
 
-**`GOLDBAND_*` env prefix (Conductor-injected keys).** Conductor explicitly strips `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from every workspace's process env. The `.env` copy path doesn't restore them either — the strip happens after env inheritance. Users who want paid evals, `/sync-gbrain` embeddings, or `claude-agent-sdk` calls to work in a Conductor workspace must set `GOLDBAND_ANTHROPIC_API_KEY` and `GOLDBAND_OPENAI_API_KEY` in Conductor's workspace env config; Conductor passes those through untouched. On the goldband side, TS entry points import `lib/conductor-env-shim.ts` as a side effect, which promotes `GOLDBAND_FOO_API_KEY` to `FOO_API_KEY` when the canonical name is empty. If you add a new TS entry point that hits a paid API, add `import "../lib/conductor-env-shim";` to the top of the file. Today the shim is imported from `bin/goldband-gbrain-sync.ts`, `bin/goldband-model-benchmark`, `scripts/preflight-agent-sdk.ts`, and `test/helpers/e2e-helpers.ts`.
+**`GOLDBAND_*` env prefix (Conductor-injected keys).** Conductor explicitly strips `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from every workspace's process env. The `.env` copy path doesn't restore them either — the strip happens after env inheritance. Users who want paid evals, `/goldband knowledge sync` embeddings, or `claude-agent-sdk` calls to work in a Conductor workspace must set `GOLDBAND_ANTHROPIC_API_KEY` and `GOLDBAND_OPENAI_API_KEY` in Conductor's workspace env config; Conductor passes those through untouched. On the goldband side, TS entry points import `lib/conductor-env-shim.ts` as a side effect, which promotes `GOLDBAND_FOO_API_KEY` to `FOO_API_KEY` when the canonical name is empty. If you add a new TS entry point that hits a paid API, add `import "../lib/conductor-env-shim";` to the top of the file. Today the shim is imported from `bin/goldband-gbrain-sync.ts`, `bin/goldband-model-benchmark`, `scripts/preflight-agent-sdk.ts`, and `test/helpers/e2e-helpers.ts`.
 
 ## Things to know
 
@@ -476,7 +476,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 ### How it runs
 
-During `/goldband-upgrade`, after `./setup` completes (Step 4.75), the upgrade
+During `/goldband system upgrade`, after `./setup` completes (Step 4.75), the upgrade
 skill scans `goldband-upgrade/migrations/` and runs every `v*.sh` script whose
 version is newer than the user's old version. Scripts run in version order.
 Failures are logged but never block the upgrade.

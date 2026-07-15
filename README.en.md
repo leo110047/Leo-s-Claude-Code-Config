@@ -143,9 +143,10 @@ Dependencies:
 
 Goldband Loop uses one standard workflow discovery profile:
 
-- It exposes only a few entrypoints such as `goldband` and `goldband-upgrade`.
+- It exposes one public workflow entrypoint, `goldband`; maintenance flows such
+  as upgrades route through capability actions.
 - Full workflow instructions remain installed under `workflows/*.workflow.md` in the runtime root and are loaded by the entrypoint skill.
-- Claude users list and run workflows through `/goldband`; Codex users list and run workflows through `$goldband <workflow>`.
+- Claude users list and run workflows through `/goldband <capability> <action>`; Codex users use `$goldband <capability> <action>`.
 
 This keeps the Claude/Codex skill list cleaner and prevents Goldband Loop workflow descriptions from crowding the skills context. The old fully expanded top-level `/goldband-qa`, `/goldband-review`, and similar workflow entries have been removed.
 
@@ -241,7 +242,7 @@ These workflow entry points require `workflow`, `workflow-codex`, or
 - Verification command: `/verify`
 
 Run `/goldband` or `$goldband` with no argument to list installed
-workflows, then choose by number or name. Direct examples:
+capabilities and actions. Direct examples:
 `/goldband review code` on Claude, `$goldband review code` on Codex. A
 `pack-quality`-only install does not expose Goldband Loop workflows.
 

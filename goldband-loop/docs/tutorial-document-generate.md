@@ -1,6 +1,6 @@
 # Tutorial: generate docs for a feature in 90 seconds
 
-You'll run `/document-generate` against a project you already have, watch it write tutorial / how-to / reference / explanation docs in the right places, and end with a coverage map you can drop into a PR. By the end, you'll know the four moves: scope, archaeology, partition, write.
+You'll run `/goldband document generate` against a project you already have, watch it write tutorial / how-to / reference / explanation docs in the right places, and end with a coverage map you can drop into a PR. By the end, you'll know the four moves: scope, archaeology, partition, write.
 
 ## What you'll need
 
@@ -15,7 +15,7 @@ You do not need a `docs/` directory in advance — the skill creates one if it's
 Open Claude Code in the project you want to document. Type:
 
 ```
-/document-generate
+/goldband document generate
 ```
 
 You'll see the skill ask one question about output target:
@@ -132,11 +132,11 @@ You now have four documents that serve four different readers:
 - An API caller can read `reference-*.md` for exact signatures
 - A code reviewer can read `explanation-*.md` to understand the design
 
-Each one is short enough to maintain. Each one has a single job. The PR body shows which quadrants were covered. If you run `/document-release` later, the Diataxis coverage map will report this entity as fully covered (4/4 quadrants).
+Each one is short enough to maintain. Each one has a single job. The PR body shows which quadrants were covered. If you run `/goldband release docs` later, the Diataxis coverage map will report this entity as fully covered (4/4 quadrants).
 
 ## What to do next
 
-- **If you have gaps** /document-release flagged but didn't fill: run `/document-generate` again, scoped to those entities specifically.
+- **If you have gaps** `/goldband release docs` flagged but didn't fill: run `/goldband document generate` again, scoped to those entities specifically.
 - **If you want to understand why the four quadrants exist:** read [explanation-diataxis-in-goldband.md](./explanation-diataxis-in-goldband.md).
 - **If you want to document one specific shipped feature** (not the whole project): read [howto-document-a-shipped-feature.md](./howto-document-a-shipped-feature.md).
 - **Reference for the skill itself:** [`document-generate/SKILL.md`](../document-generate/SKILL.md).

@@ -1,6 +1,6 @@
 # How to document a feature you just shipped
 
-This is the post-ship workflow: you merged a PR, the docs are stale, and you want a coverage map plus filled gaps in one pass. You'll run `/document-release` to audit, then `/document-generate` to fill the gaps it finds.
+This is the post-ship workflow: you merged a PR, the docs are stale, and you want a coverage map plus filled gaps in one pass. You'll run `/goldband release docs` to audit, then `/goldband document generate` to fill the gaps it finds.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ If no PR exists yet, run `$goldband release land` to prepare one; release docume
 Run:
 
 ```
-/document-release
+/goldband release docs
 ```
 
 The skill walks your diff against the base branch, extracts new public surface (skills, CLI flags, config options, API endpoints, new modules), and scores each entity across the four Diataxis quadrants. You'll see a coverage map like:
@@ -32,7 +32,7 @@ Coverage map:
 
 Items with zero coverage are **critical gaps**. Items with only reference coverage are **common gaps**. Both land in the PR body as a `### Documentation Debt` subsection so reviewers see them.
 
-If `/document-release` reports everything is covered, you're done. Skip the rest of this how-to.
+If `/goldband release docs` reports everything is covered, you're done. Skip the rest of this how-to.
 
 ### 2. Read the documentation debt section in the PR body
 
@@ -47,24 +47,24 @@ Open your PR (the skill prints the URL). Scroll to `## Documentation` → `### D
 
 This is the input to the next step. Each line tells you what's missing and which quadrant fills it.
 
-### 3. Fill the gaps with /document-generate
+### 3. Fill the gaps with `/goldband document generate`
 
 Run:
 
 ```
-/document-generate
+/goldband document generate
 ```
 
 When the skill asks about scope, tell it the specific entities flagged in the debt section. The skill reads the codebase (its Step 1 archaeology phase is mandatory), partitions by Diataxis quadrant, and writes the missing docs.
 
-You can also let the skill auto-discover: if /document-release passed you the gaps explicitly (it does this when chained), `/document-generate` already knows what to write.
+You can also let the workflow auto-discover: if `/goldband release docs` passed you the gaps explicitly (it does this when chained), `/goldband document generate` already knows what to write.
 
 ### 4. Verify the gaps closed
 
-Re-run `/document-release`:
+Re-run `/goldband release docs`:
 
 ```
-/document-release
+/goldband release docs
 ```
 
 The coverage map should now show the previously-flagged entities with green checkmarks in the previously-empty quadrants. The PR body's Documentation Debt section should be empty or reduced to items you intentionally deferred.
@@ -82,13 +82,13 @@ If all four check, your PR is ready to land with complete documentation.
 
 ## Troubleshooting
 
-**`/document-release` reports "No public surface changes detected."**
+**`/goldband release docs` reports "No public surface changes detected."**
 The diff is internal-only (refactors, tests, infra). No docs are needed. Skip to landing.
 
 **The Diataxis quadrant tag on a gap doesn't match what you'd expect.**
 The skill uses an entity taxonomy to decide which quadrants matter (CLI flags want reference + how-to; internal modules want reference + explanation; user-facing features want all four). If you disagree, you can override by hand-editing the docs after generation. The audit is a guide, not a constraint.
 
-**`/document-generate` writes a tutorial that takes 8 steps to reach a working result.**
+**`/goldband document generate` writes a tutorial that takes 8 steps to reach a working result.**
 Tutorials should hit a working result in 3 steps or fewer. Re-run the skill and ask it to compress, or hand-edit. The Step 8 Quality Self-Review catches some of these but not all.
 
 **You want to document a feature but no PR exists yet.**
@@ -99,7 +99,7 @@ File a bug. The skill's Step 1 archaeology is supposed to read implementation fi
 
 ## Related
 
-- **Tutorial: first time using `/document-generate`:** [tutorial-document-generate.md](./tutorial-document-generate.md)
+- **Tutorial: first time using `/goldband document generate`:** [tutorial-document-generate.md](./tutorial-document-generate.md)
 - **Why goldband uses the Diataxis framework:** [explanation-diataxis-in-goldband.md](./explanation-diataxis-in-goldband.md)
 - **Reference for the audit skill:** [`document-release/SKILL.md`](../document-release/SKILL.md)
 - **Reference for the generation skill:** [`document-generate/SKILL.md`](../document-generate/SKILL.md)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineWorkflow } from '../workflows/definition';
 import {
@@ -7,8 +7,23 @@ import {
   WORKFLOW_REGISTRY,
   registeredOnlyWorkflows,
 } from '../workflows/registry';
+import { ALL_HOST_NAMES } from '../hosts';
 
 const ROOT = resolve(import.meta.dir, '..');
+const INACTIVE_DOC_DIRECTORIES = new Set(['designs', 'plans', 'reports']);
+
+function activeDocumentationFiles(relativeDirectory: string): string[] {
+  return readdirSync(resolve(ROOT, relativeDirectory), { withFileTypes: true })
+    .flatMap((entry) => {
+      const relativePath = `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        return INACTIVE_DOC_DIRECTORIES.has(entry.name)
+          ? []
+          : activeDocumentationFiles(relativePath);
+      }
+      return entry.isFile() && entry.name.endsWith('.md') ? [relativePath] : [];
+    });
+}
 
 describe('workflow registry', () => {
   test('covers every manifest capability action', () => {
@@ -84,20 +99,105 @@ describe('workflow registry', () => {
   test('active documentation exposes only the capability interface', () => {
     expect(existsSync(resolve(ROOT, 'docs/skills.md'))).toBe(false);
 
-    const activeDocs = ['README.md', 'AGENTS.md', 'CLAUDE.md'];
-    const retiredEntrypoints = [
-      /(?<![\w-])\/(?:review|qa|ship)(?![\w/-])/,
-      /(?<![\w-])goldband-(?:review|qa|ship)(?![\w-])/,
+    const activeDocs = [
+      '../README.md',
+      '../README.en.md',
+      '../CONTRIBUTING.md',
+      '../ARCHITECTURE.md',
+      '../OPERATIONS.md',
+      '../DESIGN.md',
+      '../AGENTS.md',
+      '../CLAUDE.md',
+      'README.md',
+      'CONTRIBUTING.md',
+      'ARCHITECTURE.md',
+      'BROWSER.md',
+      'DESIGN.md',
+      'ETHOS.md',
+      'AGENTS.md',
+      'CLAUDE.md',
+      'USING_GBRAIN_WITH_GOLDBAND.md',
+      ...activeDocumentationFiles('../docs'),
+      ...activeDocumentationFiles('docs'),
     ];
+    const manifest = JSON.parse(
+      readFileSync(resolve(ROOT, '../goldband.manifest.json'), 'utf8'),
+    ) as {
+      capabilities: Array<{
+        id: string;
+        actions: Array<{ id: string; source: string }>;
+      }>;
+    };
+    const validActions = new Set(
+      manifest.capabilities.flatMap((capability) =>
+        capability.actions.map((action) => `${capability.id}/${action.id}`),
+      ),
+    );
+    const retiredFlatCommands = new Set([
+      ...manifest.capabilities.flatMap((capability) =>
+        capability.actions
+          .map((action) => action.source.match(/^([^/]+)\/SKILL\.md\.tmpl$/)?.[1])
+          .filter((command): command is string => Boolean(command)),
+      ),
+      'automate',
+      'ship',
+    ]);
+    const staleReferences: string[] = [];
 
     for (const relativePath of activeDocs) {
+      const content = readFileSync(resolve(ROOT, relativePath), 'utf8');
+      for (const legacyInterface of [
+        '$goldband <workflow>',
+        '/goldband <workflow>',
+      ]) {
+        if (content.includes(legacyInterface)) {
+          const line = content.slice(0, content.indexOf(legacyInterface)).split('\n').length;
+          staleReferences.push(`${relativePath}:${line}: ${legacyInterface}`);
+        }
+      }
+      const invocationPattern =
+        /(?:\$|\/)goldband(?:[ \t]+([a-z][a-z0-9-]*))?(?:[ \t]+([a-z][a-z0-9-]*))?/gi;
+      for (const match of content.matchAll(invocationPattern)) {
+        if (!match[1]) continue;
+        const action = match[2]
+          ? `${match[1].toLowerCase()}/${match[2].toLowerCase()}`
+          : '';
+        if (validActions.has(action)) continue;
+        const line = content.slice(0, match.index).split('\n').length;
+        staleReferences.push(`${relativePath}:${line}: ${match[0]}`);
+      }
+      for (const command of retiredFlatCommands) {
+        const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(?<![\\w-])/${escaped}(?![\\w/-])`, 'g');
+        for (const match of content.matchAll(pattern)) {
+          const prefix = content.slice(Math.max(0, (match.index ?? 0) - 8), match.index);
+          if (/(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s$/.test(prefix)) continue;
+          const line = content.slice(0, match.index).split('\n').length;
+          staleReferences.push(`${relativePath}:${line}: ${match[0]}`);
+        }
+      }
+    }
+    expect(staleReferences).toEqual([]);
+
+    const contributing = readFileSync(resolve(ROOT, 'CONTRIBUTING.md'), 'utf8');
+    expect(contributing).toContain(`for ${ALL_HOST_NAMES.length} hosts`);
+    expect(contributing).toContain(`All ${ALL_HOST_NAMES.length} hosts`);
+    const supportedHosts = contributing
+      .split('\n')
+      .find((line) => line.startsWith('**Supported hosts:**'))
+      ?.toLowerCase() ?? '';
+    for (const host of ALL_HOST_NAMES) {
+      expect(supportedHosts).toContain(host);
+    }
+
+    for (const relativePath of ['README.md', 'AGENTS.md', 'CLAUDE.md']) {
       const content = readFileSync(resolve(ROOT, relativePath), 'utf8');
       expect(content).toContain('../docs/generated/capabilities.md');
       expect(content).toContain('$goldband <capability> <action>');
       expect(content).toContain('/goldband <capability> <action>');
-      for (const retiredEntrypoint of retiredEntrypoints) {
-        expect(content).not.toMatch(retiredEntrypoint);
-      }
+      expect(content).not.toMatch(
+        /(?<![\w-])goldband-(?:review|qa|ship)(?![\w-])/,
+      );
     }
 
     for (const adapter of ['AGENTS.md', 'CLAUDE.md']) {

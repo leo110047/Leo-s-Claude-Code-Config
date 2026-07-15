@@ -87,14 +87,14 @@ The HTTP server binds to `127.0.0.1`, not `0.0.0.0`. It's not reachable from the
 
 ### Dual-listener tunnel architecture (v1.6.0.0)
 
-When a user runs `pair-agent --client`, the daemon starts an ngrok tunnel so a remote paired agent can drive the browser. Exposing the full daemon surface to the internet (even behind a random ngrok subdomain) meant `/health` leaked the root token on any Origin spoof, and `/cookie-picker` embedded the token into HTML that any caller could fetch.
+When a user runs `pair-agent --client`, the daemon starts an ngrok tunnel so a remote paired agent can drive the browser. Exposing the full daemon surface to the internet (even behind a random ngrok subdomain) meant `GET /health` leaked the root token on any Origin spoof, and `/cookie-picker` embedded the token into HTML that any caller could fetch.
 
 The fix is **two HTTP listeners**, not one:
 
-- **Local listener** (`127.0.0.1:LOCAL_PORT`) — always bound. Serves bootstrap (`/health` with token delivery), `/cookie-picker`, `/inspector/*`, `/welcome`, `/refs`, the sidebar-agent API, and the full command surface. Never forwarded.
+- **Local listener** (`127.0.0.1:LOCAL_PORT`) — always bound. Serves bootstrap (`GET /health` with token delivery), `/cookie-picker`, `/inspector/*`, `/welcome`, `/refs`, the sidebar-agent API, and the full command surface. Never forwarded.
 - **Tunnel listener** (`127.0.0.1:TUNNEL_PORT`) — bound lazily on `/tunnel/start`, torn down on `/tunnel/stop`. Serves a locked allowlist: `/connect` (pairing ceremony, unauth + rate-limited), `/command` (scoped tokens only, further restricted to a browser-driving command allowlist), and `/sidebar-chat`. Everything else 404s.
 
-ngrok forwards only the tunnel port. The security property comes from **physical port separation**: a tunnel caller cannot reach `/health` or `/cookie-picker` because those paths don't exist on that TCP socket. Header inference (check `x-forwarded-for`, check origin) is unreliable (ngrok header behavior changes; local proxies can add these headers); socket separation isn't.
+ngrok forwards only the tunnel port. The security property comes from **physical port separation**: a tunnel caller cannot reach `GET /health` or `/cookie-picker` because those paths don't exist on that TCP socket. Header inference (check `x-forwarded-for`, check origin) is unreliable (ngrok header behavior changes; local proxies can add these headers); socket separation isn't.
 
 | Endpoint | Local listener | Tunnel listener | Notes |
 |---|---|---|---|
@@ -124,7 +124,7 @@ ngrok forwards only the tunnel port. The security property comes from **physical
 
 Every server session generates a random UUID token, written to the state file with mode 0o600 (owner-only read). Every HTTP request that mutates browser state must include `Authorization: Bearer <token>`. If the token doesn't match, the server returns 401.
 
-This prevents other processes on the same machine from talking to your browse server. The cookie picker UI (`/cookie-picker`) and health check (`/health`) are exempt on the local listener — they're 127.0.0.1-bound and don't execute commands. On the tunnel listener nothing is exempt except `/connect`.
+This prevents other processes on the same machine from talking to your browse server. The cookie picker UI (`/cookie-picker`) and health check (`GET /health`) are exempt on the local listener — they're 127.0.0.1-bound and don't execute commands. On the tunnel listener nothing is exempt except `/connect`.
 
 ### Cookie security
 
@@ -257,7 +257,9 @@ SKILL.md files tell Claude how to use the browse commands. If the docs list a fl
 ```
 SKILL.md.tmpl          (human-written prose + placeholders)
        ↓
-gen-skill-docs.ts      (reads source code metadata)
+gen-skill-docs.ts      (template-expansion orchestrator)
+       ↓
+scripts/resolvers/     (placeholder ownership + source metadata)
        ↓
 SKILL.md               (committed, auto-generated sections)
 ```
@@ -266,21 +268,21 @@ Templates contain the workflows, tips, and examples that require human judgment.
 
 | Placeholder | Source | What it generates |
 |-------------|--------|-------------------|
-| `{{COMMAND_REFERENCE}}` | `commands.ts` | Categorized command table |
-| `{{SNAPSHOT_FLAGS}}` | `snapshot.ts` | Flag reference with examples |
-| `{{PREAMBLE}}` | `gen-skill-docs.ts` | Startup block: update check, session tracking, contributor mode, AskUserQuestion format |
-| `{{BROWSE_SETUP}}` | `gen-skill-docs.ts` | Binary discovery + setup instructions |
-| `{{BASE_BRANCH_DETECT}}` | `gen-skill-docs.ts` | Dynamic base branch detection for PR-targeting skills (ship, review, qa, plan-ceo-review) |
-| `{{QA_METHODOLOGY}}` | `gen-skill-docs.ts` | Shared QA methodology block for /qa and /qa-only |
-| `{{DESIGN_METHODOLOGY}}` | `gen-skill-docs.ts` | Shared design audit methodology for /plan-design-review and /design-review |
-| `{{REVIEW_DASHBOARD}}` | `gen-skill-docs.ts` | Review Readiness Dashboard |
-| `{{TEST_BOOTSTRAP}}` | `gen-skill-docs.ts` | Test framework detection, bootstrap, CI/CD setup for QA and design review |
-| `{{CODEX_PLAN_REVIEW}}` | `gen-skill-docs.ts` | Optional cross-model plan review (Codex or Claude subagent fallback) for /plan-ceo-review and /plan-eng-review |
-| `{{DESIGN_SETUP}}` | `resolvers/design.ts` | Discovery pattern for `$D` design binary, mirrors `{{BROWSE_SETUP}}` |
-| `{{DESIGN_SHOTGUN_LOOP}}` | `resolvers/design.ts` | Shared comparison board feedback loop for /design-shotgun, /plan-design-review, /design-consultation |
-| `{{UX_PRINCIPLES}}` | `resolvers/design.ts` | User behavioral foundations (scanning, satisficing, goodwill reservoir, trunk test) for /design-html, /design-shotgun, /design-review, /plan-design-review |
-| `{{GBRAIN_CONTEXT_LOAD}}` | `resolvers/gbrain.ts` | Brain-first context search with keyword extraction, health awareness, and data-research routing. Injected into 10 brain-aware skills. Suppressed on non-brain hosts. |
-| `{{GBRAIN_SAVE_RESULTS}}` | `resolvers/gbrain.ts` | Post-skill brain persistence with entity enrichment, throttle handling, and per-skill save instructions. 8 skill-specific save formats. |
+| `{{COMMAND_REFERENCE}}` | `scripts/resolvers/browse.ts` + `browse/src/commands.ts` | Categorized command table |
+| `{{SNAPSHOT_FLAGS}}` | `scripts/resolvers/browse.ts` + `browse/src/snapshot.ts` | Flag reference with examples |
+| `{{PREAMBLE}}` | `scripts/resolvers/preamble.ts` | Startup block: update check, session tracking, contributor mode, AskUserQuestion format |
+| `{{BROWSE_SETUP}}` | `scripts/resolvers/browse.ts` | Binary discovery + setup instructions |
+| `{{BASE_BRANCH_DETECT}}` | `scripts/resolvers/utility.ts` | Dynamic base branch detection for PR-targeting workflows |
+| `{{QA_METHODOLOGY}}` | `scripts/resolvers/utility.ts` | Shared QA methodology for `qa/app` and `qa/report-only` |
+| `{{DESIGN_METHODOLOGY}}` | `scripts/resolvers/design.ts` | Shared design audit methodology for design-related capability actions |
+| `{{REVIEW_DASHBOARD}}` | `scripts/resolvers/review.ts` | Review Readiness Dashboard |
+| `{{TEST_BOOTSTRAP}}` | `scripts/resolvers/testing.ts` | Test framework detection, bootstrap, CI/CD setup for QA and design review |
+| `{{CODEX_PLAN_REVIEW}}` | `scripts/resolvers/review.ts` | Optional cross-model plan review for `review/plan-ceo` and `review/plan-engineering` |
+| `{{DESIGN_SETUP}}` | `scripts/resolvers/design.ts` | Discovery pattern for `$D` design binary, mirrors `{{BROWSE_SETUP}}` |
+| `{{DESIGN_SHOTGUN_LOOP}}` | `scripts/resolvers/design.ts` | Shared comparison-board feedback loop for design capability actions |
+| `{{UX_PRINCIPLES}}` | `scripts/resolvers/design.ts` | User behavioral foundations for design capability actions |
+| `{{GBRAIN_CONTEXT_LOAD}}` | `scripts/resolvers/gbrain.ts` | Brain-first context search with keyword extraction, health awareness, and data-research routing. Injected into brain-aware workflows and suppressed on non-brain hosts. |
+| `{{GBRAIN_SAVE_RESULTS}}` | `scripts/resolvers/gbrain.ts` | Post-workflow brain persistence with entity enrichment, throttle handling, and workflow-specific save instructions. |
 
 This is structurally sound — if a command exists in code, it appears in docs. If it doesn't exist, it can't appear.
 
@@ -298,7 +300,7 @@ Every skill starts with a `{{PREAMBLE}}` block that runs before the skill's own 
 
 Three reasons:
 
-1. **Claude reads SKILL.md at skill load time.** There's no build step when a user invokes `/browse`. The file must already exist and be correct.
+1. **The capability router reads generated workflow documents at invocation time.** There's no user-side build step when someone invokes `/goldband browser session`. The generated file must already exist and be correct.
 2. **CI can validate freshness.** `gen:skill-docs --dry-run` + `git diff --exit-code` catches stale docs before merge.
 3. **Git blame works.** You can see when a command was added and in which commit.
 

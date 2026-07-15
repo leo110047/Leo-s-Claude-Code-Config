@@ -7,8 +7,9 @@ flow, and a layered prompt-injection defense — all behind a compiled CLI that
 prints plain text to stdout. ~100-200ms per call. Zero context-token overhead.
 
 If you've used goldband in the last release or two, the productivity loop is the
-new headline: `/scrape <intent>` drives a page once, `/skillify` codifies the
-flow into a deterministic Playwright script, and the next `/scrape` on the
+new headline: `/goldband browser scrape <intent>` drives a page once,
+`/goldband system skill-authoring` codifies the flow into a deterministic
+Playwright script, and the next `/goldband browser scrape` on the
 same intent runs in ~200ms instead of ~30 seconds of agent re-exploration.
 
 ---
@@ -30,9 +31,9 @@ $B text                          # get clean page text
 $B screenshot /tmp/hn.png
 
 # Codify a repeated flow
-/scrape latest hacker news stories
-/skillify                        # writes ~/.goldband/browser-skills/hn-front/...
-/scrape hacker news front page   # second call: 200ms via the codified skill
+/goldband browser scrape latest hacker news stories
+/goldband system skill-authoring              # writes ~/.goldband/browser-skills/hn-front/...
+/goldband browser scrape hacker news front page # second call: 200ms via the codified skill
 
 # Watch Claude work in real time
 $B connect                       # headed Chromium + Side Panel extension
@@ -43,7 +44,7 @@ $B connect                       # headed Chromium + Side Panel extension
 ## Table of contents
 
 1. [What it is](#what-it-is)
-2. [The productivity loop — `/scrape` + `/skillify`](#the-productivity-loop)
+2. [The productivity loop — scrape + skill authoring](#the-productivity-loop)
 3. [Architecture](#architecture)
 4. [Command reference](#command-reference)
 5. [Snapshot system + ref-based selection](#snapshot-system)
@@ -85,7 +86,8 @@ WebSocket — Claude's Bash tool already exists, so we use it.
 Three escalating modes:
 
 - **Headless** (default). Daemon runs Chromium with no visible window. Fastest,
-  cheapest, what skills like `/qa`, `/design-review`, `/benchmark` use by
+  cheapest, what capabilities like `/goldband qa app`,
+  `/goldband review design`, and `/goldband benchmark workflow` use by
   default.
 - **Headed via `$B connect`**. Same daemon, but Chromium is visible (rebranded
   as "Goldband Loop Browser") with the Side Panel extension auto-loaded. You watch
@@ -99,10 +101,11 @@ Three escalating modes:
 
 ## The productivity loop
 
-The shipped headline of v1.19.0.0. Two goldband skills wrap the browser-skills
-runtime so the second time you ask Claude to scrape a page, it runs in ~200ms.
+The shipped headline of v1.19.0.0. Two Goldband capability actions wrap the
+browser-skills runtime so the second time you ask Claude to scrape a page, it
+runs in ~200ms.
 
-### `/scrape <intent>`
+### `/goldband browser scrape <intent>`
 
 One entry point for pulling page data. Three paths under the hood:
 
@@ -111,18 +114,18 @@ One entry point for pulling page data. Three paths under the hood:
    and runs `$B skill run <name>` if a confident match exists.
 2. **Prototype path (~30s)** — no match, agent drives the page with `$B goto`,
    `$B text`, `$B html`, `$B links`, etc., returns the JSON, and appends a
-   one-line "say `/skillify`" suggestion.
-3. **Mutating-intent refusal** — verbs like *submit*, *click*, *fill* route
-   to `/automate` (Phase 2b, P0 in `TODOS.md`). `/scrape` is read-only by
-   contract.
+   one-line "run `/goldband system skill-authoring`" suggestion.
+3. **Mutating-intent handoff** — verbs like *submit*, *click*, and *fill*
+   route to `/goldband browser session`. `/goldband browser scrape` remains
+   read-only by contract.
 
-### `/skillify`
+### `/goldband system skill-authoring`
 
-Codifies the most recent successful `/scrape` prototype into a permanent
-browser-skill on disk. Eleven steps, three locked contracts:
+Codifies the most recent successful `/goldband browser scrape` prototype into
+a permanent browser-skill on disk. Eleven steps, three locked contracts:
 
 - **D1 — Provenance guard.** Walks back ≤10 agent turns for a clearly-bounded
-  `/scrape` result. Refuses with one specific message if cold. No silent
+  `/goldband browser scrape` result. Refuses with one specific message if cold. No silent
   synthesis from chat fragments.
 - **D2 — Synthesis input slice.** Extracts ONLY the final-attempt `$B` calls
   that produced the JSON the user accepted, plus the user's intent string.
@@ -132,9 +135,9 @@ browser-skill on disk. Eleven steps, three locked contracts:
   tier path on test pass + user approval. Test fail or rejection: `rm -rf` the
   temp dir entirely. No half-written skill ever appears in `$B skill list`.
 
-Mutating-flow sibling `/automate` is split out as P0 in `TODOS.md` and ships
-on the next branch — same skillify machinery, per-mutating-step confirmation
-gate when running non-codified.
+Mutating flows use `/goldband browser session`, which exposes the shipped `$B`
+interaction surface. Outward-facing or irreversible actions still require
+explicit approval.
 
 See [`docs/designs/BROWSER_SKILLS_V1.md`](docs/designs/BROWSER_SKILLS_V1.md)
 for the full design + decision trail.
@@ -452,12 +455,13 @@ exit if exceeded). Matches `gh` / `kubectl` / `docker` conventions.
 ### How the SDK distribution works
 
 Each skill ships its own copy of `browse-client.ts` at `_lib/browse-client.ts`,
-byte-identical to the canonical `browse/src/browse-client.ts`. `/skillify`
+byte-identical to the canonical `browse/src/browse-client.ts`.
+`/goldband system skill-authoring`
 copies the canonical SDK alongside every generated script. Each skill is
 fully self-contained: copy the directory anywhere, it runs. Version drift
 impossible — the SDK is frozen at the version the skill was authored against.
 
-### Atomic write discipline (`/skillify` D3)
+### Atomic write discipline (`/goldband system skill-authoring` D3)
 
 `browse/src/browser-skill-write.ts` provides three primitives:
 
@@ -541,7 +545,8 @@ and bookmarks stays untouched.
 
 ### CDP-aware skills
 
-When in real-browser mode, `/qa` and `/design-review` automatically skip
+When in real-browser mode, `/goldband qa app` and `/goldband review design`
+automatically skip
 cookie import prompts and headless workarounds — the headed browser already
 has whatever session you logged into.
 
@@ -680,7 +685,7 @@ by a 26-command allowlist, scoped tokens, and a denial log.
 ### How it works
 
 ```bash
-/pair-agent                     # generates a setup key, prints connection instructions
+/goldband browser pair          # generates a setup key, prints connection instructions
 # Copy the instructions to the remote agent
 # Remote agent runs:
 #   POST <tunnel-url>/connect with setup key → gets a scoped token (24h, single client)
@@ -761,7 +766,7 @@ feed without putting the root token in extension storage.
 
 The Terminal pane uses a separate session cookie, `goldband_pty`, minted via
 `POST /pty-session`. Different scope — can spawn / drive the live `claude`
-PTY, can't dispatch arbitrary `/command` calls. `/health` endpoint MUST NOT
+PTY, can't dispatch arbitrary `/command` calls. The `GET /health` endpoint MUST NOT
 surface this token.
 
 ### Token registry
@@ -1095,7 +1100,8 @@ $B ux-audit
 
 Returns JSON with site identity, navigation, headings (capped 50), text
 blocks, interactive elements (capped 200) — page structure for behavioral
-analysis without dumping the full HTML. Used by `/qa` and `/design-review`
+analysis without dumping the full HTML. Used by `/goldband qa app` and
+`/goldband review design`
 for cheap coverage maps.
 
 ---
@@ -1186,7 +1192,7 @@ browse/
 │   ├── meta-commands.ts         # state, watch, inbox, frame, ux-audit, chain, diff, ...
 │   ├── browser-skills.ts        # 3-tier walk + frontmatter parser + tombstones
 │   ├── browser-skill-commands.ts # $B skill list/show/run/test/rm + spawnSkill
-│   ├── browser-skill-write.ts   # D3 atomic stage/commit/discard helper for /skillify
+│   ├── browser-skill-write.ts   # D3 atomic stage/commit/discard helper for skill authoring
 │   ├── skill-token.ts           # mintSkillToken / revokeSkillToken (per-spawn, scoped)
 │   ├── domain-skills.ts         # Per-site agent notes (state machine: quarantined→active→global)
 │   ├── domain-skill-commands.ts # $B domain-skill save/list/show/edit/promote/rollback/rm
@@ -1231,8 +1237,8 @@ browser-skills/
     ├── fixtures/hn-2026-04-26.html
     └── script.test.ts
 
-scrape/SKILL.md.tmpl             # /scrape goldband skill — match-or-prototype entry point
-skillify/SKILL.md.tmpl           # /skillify goldband skill — codify last /scrape into permanent skill
+scrape/SKILL.md.tmpl             # browser/scrape workflow — match-or-prototype entry point
+skillify/SKILL.md.tmpl           # system/skill-authoring workflow — codify last scrape into a permanent skill
 ```
 
 ---
@@ -1306,8 +1312,9 @@ update SKILL.md frontmatter, rewrite `script.ts` against your target site,
 re-capture the fixture, update the parser test. `bun test` validates the
 SKILL.md contract (sibling SDK byte-identity, frontmatter schema).
 
-For an agent-written skill: drive the page once with `/scrape <intent>`,
-say `/skillify`, accept the proposed name in the approval gate. The skill
+For an agent-written skill: drive the page once with
+`/goldband browser scrape <intent>`, run `/goldband system skill-authoring`,
+and accept the proposed name in the approval gate. The skill
 lands at `~/.goldband/browser-skills/<name>/` after the test passes.
 
 ### Deploying to the active skill
@@ -1332,11 +1339,11 @@ cp browse/dist/browse ~/.claude/skills/goldband/browse/dist/browse
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system-level architecture, dual-listener tunnel design, prompt-injection defense threat model
 - [`CLAUDE.md`](CLAUDE.md) — project-level instructions, sidebar architecture notes, security-stack constraints
-- [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for `/pair-agent` (setup keys, scoped tokens, denial log)
+- [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for `/goldband browser pair` (setup keys, scoped tokens, denial log)
 - [`docs/designs/BROWSER_SKILLS_V1.md`](docs/designs/BROWSER_SKILLS_V1.md) — design doc for browser-skills runtime (Phase 1 + 2a + roadmap)
-- [`scrape/SKILL.md`](scrape/SKILL.md) — `/scrape` skill: match-or-prototype data extraction
-- [`skillify/SKILL.md`](skillify/SKILL.md) — `/skillify` skill: codify last `/scrape` into permanent skill
-- [`TODOS.md`](TODOS.md) — `/automate` (Phase 2b P0), Phase 3 resolver injection, Phase 4 eval + sandbox
+- [`scrape/SKILL.md`](scrape/SKILL.md) — `browser/scrape` workflow: match-or-prototype data extraction
+- [`skillify/SKILL.md`](skillify/SKILL.md) — `system/skill-authoring` workflow: codify the last scrape into a permanent skill
+- [`TODOS.md`](TODOS.md) — remaining browser resolver, eval, and sandbox work
 
 ---
 
