@@ -102,7 +102,7 @@ function hashPath(p: string): string {
  * call share one fork-exec (~200ms saved per skill preamble).
  */
 const _gbrainBinCache = new Map<string, string | null>();
-function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
+export function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
   const e = env ?? process.env;
   const key = e.PATH || "";
   if (_gbrainBinCache.has(key)) return _gbrainBinCache.get(key)!;
@@ -124,7 +124,7 @@ function resolveGbrainBin(env?: NodeJS.ProcessEnv): string | null {
 
 /** Memoized per-process. */
 const _gbrainVersionCache = new Map<string, string>();
-function readGbrainVersion(env?: NodeJS.ProcessEnv): string {
+export function readGbrainVersion(env?: NodeJS.ProcessEnv): string {
   const e = env ?? process.env;
   const key = `${e.PATH || ""}|${resolveGbrainBin(e) || ""}`;
   if (_gbrainVersionCache.has(key)) return _gbrainVersionCache.get(key)!;
