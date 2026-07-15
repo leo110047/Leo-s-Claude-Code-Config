@@ -51,6 +51,21 @@ const profileFiles = fs
   .filter((entry) => entry.endsWith('.config.toml'));
 assert.ok(profileFiles.length > 0, 'codex profile fixture inventory is empty');
 
+const installedConfig = fs.readFileSync(
+  path.join(home, '.codex', 'config.toml'),
+  'utf8',
+);
+assert.match(
+  installedConfig,
+  /model = "gpt-5\.6-sol"/,
+  'codex-config install must use the shared GPT-5.6 Sol default',
+);
+assert.doesNotMatch(
+  installedConfig,
+  /model = "gpt-5\.5"/,
+  'codex-config install must not retain the previous GPT-5.5 default',
+);
+
 for (const profile of profileFiles) {
   const sourcePath = path.join(profileSourceRoot, profile);
   const installedPath = path.join(home, '.codex', profile);

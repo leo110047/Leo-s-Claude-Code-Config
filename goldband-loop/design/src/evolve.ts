@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { requireApiKey } from "./auth";
+import { OPENAI_DESIGN_MODEL, OPENAI_IMAGE_GENERATION_MODEL } from "./models";
 
 export interface EvolveOptions {
   screenshot: string;  // Path to current site screenshot
@@ -15,10 +16,38 @@ export interface EvolveOptions {
   output: string;      // Output path for evolved mockup
 }
 
+export function buildEvolveInput(screenshotBase64: string, brief: string): unknown[] {
+  const prompt = [
+    "Generate a pixel-perfect UI mockup that is an improved version of an existing design.",
+    "",
+    "REQUESTED CHANGES:",
+    brief,
+    "",
+    "Use the attached screenshot as the current design reference.",
+    "Keep the existing layout structure where it still supports the requested change.",
+    "The result should look like a real production UI. All text must be readable.",
+    "1536x1024 pixels.",
+  ].join("\n");
+
+  return [{
+    role: "user",
+    content: [
+      {
+        type: "input_image",
+        image_url: `data:image/png;base64,${screenshotBase64}`,
+        detail: "auto",
+      },
+      {
+        type: "input_text",
+        text: prompt,
+      },
+    ],
+  }];
+}
+
 /**
  * Generate an evolved mockup from an existing screenshot + brief.
- * Sends the screenshot as context to GPT-4o with image generation,
- * asking it to produce a new version incorporating the brief's changes.
+ * Sends the screenshot directly as image input to the Responses API.
  */
 export async function evolve(options: EvolveOptions): Promise<void> {
   const apiKey = requireApiKey();
@@ -26,30 +55,6 @@ export async function evolve(options: EvolveOptions): Promise<void> {
 
   console.error(`Evolving ${options.screenshot} with: "${options.brief}"`);
   const startTime = Date.now();
-
-  // Use the Responses API with both a text prompt referencing the screenshot
-  // and the image_generation tool to produce the evolved version.
-  // Since we can't send reference images directly to image_generation,
-  // we describe the current state in detail first via vision, then generate.
-
-  // Step 1: Analyze current screenshot
-  const analysis = await analyzeScreenshot(apiKey, screenshotData);
-  console.error(`  Analyzed current design: ${analysis.slice(0, 100)}...`);
-
-  // Step 2: Generate evolved version using analysis + brief
-  const evolvedPrompt = [
-    "Generate a pixel-perfect UI mockup that is an improved version of an existing design.",
-    "",
-    "CURRENT DESIGN (what exists now):",
-    analysis,
-    "",
-    "REQUESTED CHANGES:",
-    options.brief,
-    "",
-    "Generate a new mockup that keeps the existing layout structure but applies the requested changes.",
-    "The result should look like a real production UI. All text must be readable.",
-    "1536x1024 pixels.",
-  ].join("\n");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 240_000);
@@ -62,9 +67,14 @@ export async function evolve(options: EvolveOptions): Promise<void> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
-        input: evolvedPrompt,
-        tools: [{ type: "image_generation", model: "gpt-image-2", size: "1536x1024", quality: "high" }],
+        model: OPENAI_DESIGN_MODEL,
+        input: buildEvolveInput(screenshotData, options.brief),
+        tools: [{
+          type: "image_generation",
+          model: OPENAI_IMAGE_GENERATION_MODEL,
+          size: "1536x1024",
+          quality: "high",
+        }],
       }),
       signal: controller.signal,
     });
@@ -100,51 +110,6 @@ export async function evolve(options: EvolveOptions): Promise<void> {
       sourceScreenshot: options.screenshot,
       brief: options.brief,
     }, null, 2));
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-/**
- * Analyze a screenshot to produce a detailed description for re-generation.
- */
-async function analyzeScreenshot(apiKey: string, imageBase64: string): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:image/png;base64,${imageBase64}` },
-            },
-            {
-              type: "text",
-              text: `Describe this UI in detail for re-creation. Include: overall layout structure, color scheme (hex values), typography (sizes, weights), specific text content visible, spacing between elements, alignment patterns, and any decorative elements. Be precise enough that someone could recreate this UI from your description alone. 200 words max.`,
-            },
-          ],
-        }],
-        max_tokens: 400,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      return "Unable to analyze screenshot";
-    }
-
-    const data = await response.json() as any;
-    return data.choices?.[0]?.message?.content?.trim() || "Unable to analyze screenshot";
   } finally {
     clearTimeout(timeout);
   }

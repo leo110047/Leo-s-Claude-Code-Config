@@ -6,6 +6,7 @@
 
 import fs from "fs";
 import { requireApiKey } from "./auth";
+import { OPENAI_DESIGN_MODEL } from "./models";
 
 export interface DiffResult {
   differences: { area: string; description: string; severity: string }[];
@@ -35,7 +36,7 @@ export async function diffMockups(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_DESIGN_MODEL,
         messages: [{
           role: "user",
           content: [

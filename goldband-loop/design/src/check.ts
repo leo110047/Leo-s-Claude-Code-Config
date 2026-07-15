@@ -5,6 +5,7 @@
 
 import fs from "fs";
 import { requireApiKey } from "./auth";
+import { OPENAI_DESIGN_MODEL } from "./models";
 
 export interface CheckResult {
   pass: boolean;
@@ -29,7 +30,7 @@ export async function checkMockup(imagePath: string, brief: string): Promise<Che
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_DESIGN_MODEL,
         messages: [{
           role: "user",
           content: [

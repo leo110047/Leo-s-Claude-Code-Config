@@ -1,12 +1,13 @@
 /**
  * Design-to-Code Prompt Generator.
- * Extracts implementation instructions from an approved mockup via GPT-4o vision.
+ * Extracts implementation instructions from an approved mockup via the configured design model.
  * Produces a structured prompt the agent can use to implement the design.
  */
 
 import fs from "fs";
 import { requireApiKey } from "./auth";
 import { readDesignConstraints } from "./memory";
+import { OPENAI_DESIGN_MODEL } from "./models";
 
 export interface DesignToCodeResult {
   implementationPrompt: string;
@@ -44,7 +45,7 @@ export async function generateDesignToCodePrompt(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_DESIGN_MODEL,
         messages: [{
           role: "user",
           content: [

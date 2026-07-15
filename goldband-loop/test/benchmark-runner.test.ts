@@ -27,6 +27,13 @@ test('estimateCostUsd computes correctly for known Claude model', () => {
   expect(cost).toBeCloseTo(52.50, 2);
 });
 
+test('estimateCostUsd computes correctly for the default GPT model', () => {
+  // gpt-5.6-sol: $5/MTok input, $30/MTok output
+  // 1K input + 500 output = $0.005 + $0.015 = $0.020
+  const cost = estimateCostUsd({ input: 1000, output: 500 }, 'gpt-5.6-sol');
+  expect(cost).toBeCloseTo(0.02, 6);
+});
+
 test('estimateCostUsd applies cached input discount alongside uncached input', () => {
   // tokens.input is uncached-only; tokens.cached is disjoint cache-reads at 10%.
   // 0 uncached input, 1M cached → 10% of 15 = $1.50
@@ -40,7 +47,7 @@ test('estimateCostUsd applies cached input discount alongside uncached input', (
 test('PRICING table covers the key model families', () => {
   expect(PRICING['claude-opus-4-7']).toBeDefined();
   expect(PRICING['claude-sonnet-4-6']).toBeDefined();
-  expect(PRICING['gpt-5.4']).toBeDefined();
+  expect(PRICING['gpt-5.6-sol']).toBeDefined();
   expect(PRICING['gemini-2.5-pro']).toBeDefined();
 });
 
@@ -89,7 +96,7 @@ test('formatTable handles a report with mixed success/error/unavailable entries'
           tokens: { input: 0, output: 0 },
           durationMs: 200,
           toolCalls: 0,
-          modelUsed: 'gpt-5.4',
+          modelUsed: 'gpt-5.6-sol',
           error: { code: 'auth', reason: 'codex login required' },
         },
       },

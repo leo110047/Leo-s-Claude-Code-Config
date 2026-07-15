@@ -8,6 +8,7 @@ import { requireApiKey } from "./auth";
 import { parseBrief } from "./brief";
 import { createSession, sessionPath } from "./session";
 import { checkMockup } from "./check";
+import { OPENAI_DESIGN_MODEL, OPENAI_IMAGE_GENERATION_MODEL } from "./models";
 
 export interface GenerateOptions {
   brief?: string;
@@ -47,11 +48,11 @@ async function callImageGeneration(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: OPENAI_DESIGN_MODEL,
         input: prompt,
         tools: [{
           type: "image_generation",
-          model: "gpt-image-2",
+          model: OPENAI_IMAGE_GENERATION_MODEL,
           size,
           quality,
         }],
