@@ -294,13 +294,14 @@ EOF_BUN
   chmod +x "$bin_dir/bun"
 }
 
-write_noop_patch_names_bin() {
+write_noop_runtime_bin() {
   local loop_dir="$1"
-  cat > "$loop_dir/bin/goldband-patch-names" <<'EOF_PATCH'
+  local bin_name="$2"
+  cat > "$loop_dir/bin/$bin_name" <<'EOF_RUNTIME_BIN'
 #!/usr/bin/env bash
 exit 0
-EOF_PATCH
-  chmod +x "$loop_dir/bin/goldband-patch-names"
+EOF_RUNTIME_BIN
+  chmod +x "$loop_dir/bin/$bin_name"
 }
 
 create_minimal_real_setup_fixture() {
@@ -309,7 +310,8 @@ create_minimal_real_setup_fixture() {
   cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
   chmod +x "$loop_dir/setup"
   write_fake_config_bin "$loop_dir"
-  write_noop_patch_names_bin "$loop_dir"
+  write_noop_runtime_bin "$loop_dir" "goldband-patch-names"
+  write_noop_runtime_bin "$loop_dir" "goldband-task-emission"
   cat > "$loop_dir/browse/dist/browse" <<'EOF_BROWSE'
 #!/usr/bin/env bash
 exit 0
