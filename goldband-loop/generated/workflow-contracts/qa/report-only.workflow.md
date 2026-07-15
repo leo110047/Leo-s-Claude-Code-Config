@@ -7,7 +7,7 @@ Report QA findings without fixing.
 
 ## Relevant context
 
-- Use the requested environment, user flow, expected behavior, and browser manual when browser work is needed.
+- Use the requested environment, user flow, expected behavior, and active-host browser state when browser work is needed.
 
 ## Hard boundaries
 

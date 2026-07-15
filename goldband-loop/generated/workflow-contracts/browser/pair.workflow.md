@@ -7,7 +7,7 @@ Pair another agent with the browser.
 
 ## Relevant context
 
-- Read manuals/browser.md from the active Goldband runtime and use the browser state available on the active host.
+- Use the browser state available on the active host.
 
 ## Hard boundaries
 

@@ -164,6 +164,11 @@ for (const [relativePath, content] of contracts) {
   validateWorkflowContractContent(content, manifest.promptArchitecture, {
     relativePath,
   });
+  assert.doesNotMatch(
+    content,
+    /manuals\/[a-z][a-z0-9-]*\.md/,
+    `${relativePath} should not duplicate manifest-owned manual routing`,
+  );
   const bytes = Buffer.byteLength(content);
   assert.ok(bytes <= 2_048, `${relativePath} exceeds 2 KiB: ${bytes}`);
   totalBytes += bytes;
