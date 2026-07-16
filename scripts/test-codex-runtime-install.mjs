@@ -73,6 +73,15 @@ assert.ok(profileFiles.length > 0, 'codex profile fixture inventory is empty');
 
 const installedConfigPath = path.join(home, '.codex', 'config.toml');
 const installedConfig = fs.readFileSync(installedConfigPath, 'utf8');
+const localConfigPath = path.join(
+  process.cwd(),
+  'codex',
+  'local',
+  'config.toml',
+);
+const expectedConfigStatus = fs.existsSync(localConfigPath)
+  ? '[OK] codex-config (generated base + local overlay)'
+  : '[OK] codex-config (generated base only)';
 assert.match(
   installedConfig,
   /model = "gpt-5\.6-sol"/,
@@ -100,9 +109,9 @@ assert.equal(
   0,
   statusResult.stderr || statusResult.stdout,
 );
-assert.match(
-  stripAnsi(statusResult.stdout),
-  /\[OK\] codex-config \(generated base \+ local overlay\)/,
+assert.ok(
+  stripAnsi(statusResult.stdout).includes(expectedConfigStatus),
+  `status must match the installed config source: ${expectedConfigStatus}`,
 );
 
 fs.appendFileSync(
