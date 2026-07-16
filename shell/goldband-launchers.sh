@@ -22,6 +22,29 @@ _goldband_prelaunch_update() {
   fi
 }
 
+_goldband_runtime_bin() {
+  local candidate
+  for candidate in \
+    "$HOME/.codex/skills/goldband/bin/goldband" \
+    "$HOME/.claude/skills/goldband/bin/goldband"
+  do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+goldband() {
+  local runtime_bin
+  if ! runtime_bin="$(_goldband_runtime_bin)"; then
+    echo "goldband: workflow runtime is not installed; run ./install.sh workflow-auto" >&2
+    return 127
+  fi
+  "$runtime_bin" "$@"
+}
+
 claude() {
   _goldband_prelaunch_update "claude"
   command claude "$@"

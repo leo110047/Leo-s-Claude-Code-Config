@@ -420,6 +420,7 @@
     "chrome-cdp",
     "dev-setup",
     "dev-teardown",
+    "goldband",
     "goldband-analytics",
     "goldband-artifacts-init",
     "goldband-artifacts-url",

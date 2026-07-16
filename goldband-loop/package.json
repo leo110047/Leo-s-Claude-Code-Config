@@ -6,6 +6,7 @@
   "type": "module",
   "bin": {
     "browse": "./browse/dist/browse",
+    "goldband": "./bin/goldband",
     "make-pdf": "./make-pdf/dist/pdf"
   },
   "scripts": {

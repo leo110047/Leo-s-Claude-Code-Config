@@ -16,6 +16,21 @@ fi
 
 [ -f "$project_hook_lib" ] && source "$project_hook_lib"
 
+block_managed_worktree_commit() {
+  local git_dir marker
+  git_dir="$(git rev-parse --git-dir 2>/dev/null || true)"
+  [ -n "$git_dir" ] || return 0
+  case "$git_dir" in
+    /*) ;;
+    *) git_dir="$repo_root/$git_dir" ;;
+  esac
+  marker="$git_dir/goldband-managed-worktree.json"
+  [ -f "$marker" ] || return 0
+  echo "[goldband] BLOCKED: managed worktrees cannot commit directly." >&2
+  echo "[goldband] Exit the managed shell and run: goldband worktree finish <name> -m \"<message>\"" >&2
+  return 1
+}
+
 run_project_pre_commit() {
   declare -F goldband_run_project_hook >/dev/null || return 0
   goldband_run_project_hook "$repo_root" "$hook_dir" "$git_common_dir_value" "pre-commit"
@@ -49,5 +64,6 @@ run_goldband_pre_commit() {
   node "$gate_script" --staged
 }
 
+block_managed_worktree_commit
 run_goldband_pre_commit
 run_project_pre_commit

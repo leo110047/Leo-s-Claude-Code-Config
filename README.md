@@ -102,7 +102,9 @@ git pull --ff-only
 - `./install.sh status` 會 read back 安裝狀態；若 plugin 和 installer-managed
   Claude assets 同時存在，它會回報 duplicate asset。
 - hooks、rules、cross-review gate、sandbox 是防誤操作與 evidence gate，不是
-  抵抗同權限惡意操作者的安全邊界。
+  抵抗同權限 host 使用者的安全邊界。managed worktree 是較窄的例外：它用
+  OS sandbox 限制 agent process 的 Git metadata 寫入；host 使用者仍可在
+  sandbox 外管理與完成工作。
 - `all-with-workflow` 會安裝並驗證 Goldband Loop browser runtime；離線或 CI
   可用 `GOLDBAND_SKIP_PLAYWRIGHT=1` 明確跳過 browser workflows。
 
@@ -115,6 +117,29 @@ git pull --ff-only
 
 目前支援的 capability/action 清單以
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
+
+平行 agent worktree 使用兩個 user-triggered 指令：
+
+```bash
+goldband worktree create task-name
+# managed shell 內擇一啟動；外層 Goldband sandbox 仍是 hard boundary
+claude --settings '{"sandbox":{"enabled":false}}'
+codex --sandbox danger-full-access
+# 完成後 exit
+goldband worktree finish task-name -m "feat: integrate task"
+```
+
+`create` 只接受乾淨、位於正常 branch 的 source worktree，並建立 detached
+worktree；不建立 task branch。managed shell 內工作檔可寫，但 Git index、
+objects、refs、broker runtime 與 Git config/hook inputs 由 OS sandbox 保持唯讀。
+`finish` 必須在退出 managed shell 後執行；broker 使用固定 Git executable、隔離
+config environment 與 create 時記錄的 source-owned hook contract，且 source 的
+ignored content 若與 candidate tree 衝突就停止。只有驗證、整合與 durable commit
+都成功才會移除 worktree。macOS 使用 Seatbelt、Linux 使用 bubblewrap；boundary
+不可用時會 fail closed。Windows 目前不宣稱有 hard enforcement。agent 的內建 OS
+sandbox 必須依上例停用，避免 macOS 不支援的 nested sandbox；一般 permission
+prompts 與 Goldband hooks 不會因此停用，Git 寫入權仍由外層 managed boundary
+封鎖。
 
 ## 開發
 

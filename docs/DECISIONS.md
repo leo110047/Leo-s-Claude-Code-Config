@@ -1,5 +1,125 @@
 # Goldband Decisions
 
+## 2026-07-16: Managed Agent Worktrees Use an OS Sandbox and Brokered Finish
+
+Decision: keep the public worktree interface to `goldband worktree create` and
+`goldband worktree finish`. `create` opens the agent inside a host OS sandbox
+where working files are writable but all Git metadata and the source worktree
+are read-only. `finish` is the only Git-writing path and runs outside that
+sandbox after the user exits the managed shell.
+
+Implementation contract:
+
+- Leases, locks, scratch indexes, checkouts, and finish evidence live under the
+  canonical real path of the declared Goldband state root at
+  `~/.goldband/worktrees/` by default. Every lease, policy, and validation path
+  uses that same canonical root, including macOS `/var` to `/private/var`
+  resolution and user-supplied symlink aliases.
+- The lease records canonical repository, source branch/worktree, base commit,
+  common Git directory, per-worktree Git directory, enforcement boundary, and
+  evidence target. Control files are owner-only.
+- `create` accepts only a clean source worktree on a normal branch, creates a
+  detached worktree, creates no branch, and probes the boundary before exposing
+  the interactive shell.
+- macOS uses Seatbelt to deny writes to source/Git/control state and every
+  recorded broker input. Linux uses a read-only root through bubblewrap. Both
+  expose a separate writable agent scratch directory while broker scratch stays
+  read-only to the agent. Unsupported platforms, missing runtimes, failed
+  probes, and nested hosts that cannot establish the boundary fail closed
+  instead of falling back to hook-only enforcement.
+- Claude Code and Codex run inside the same inherited process boundary. Their
+  PreToolUse adapters and the global `pre-commit` hook are early diagnostics,
+  not authorization owners.
+- The managed shell instructs Codex to use `--sandbox danger-full-access` and
+  Claude Code to apply `sandbox.enabled=false`. This disables only the nested
+  OS sandbox that macOS cannot reliably establish; ordinary permission prompts
+  and hooks remain active, and neither setting can bypass the outer boundary.
+- `finish` validates the lease/marker, unchanged branch/base, clean source,
+  Git locks, detached managed HEAD, tracked/untracked changes, and ignored
+  files. It also compares source ignored paths with the prepared candidate tree
+  immediately before integration. A file/directory collision stops and
+  preserves the worktree, so ignored source content cannot be overwritten or
+  removed by `updateInstead`.
+- A broker-owned temporary index and object directory create the candidate in
+  lease scratch. A local `receive-pack` quarantines those objects, accepts only
+  a fast-forward of the checked-out original branch, and updates its clean
+  worktree. Failed receives do not promote the candidate into the source object
+  store. The managed worktree is removed only after commit, tree, branch, and
+  clean-worktree readback succeed.
+- At `create`, the broker pins a canonical trusted Git executable, captures the
+  user identity, resolves only source/common-Git-owned local config and hook
+  paths, and records their digest. The outer OS policy makes that executable,
+  Goldband runtime, source config/hooks, global Git config inputs, and installed
+  launcher/runtime paths read-only to the agent.
+- At `finish`, every broker Git subprocess uses the pinned executable and an
+  allowlisted environment with isolated `HOME`/XDG config, ignored system and
+  global Git config, fixed identity, trusted `PATH`, and explicit hook/fsmonitor
+  settings. The local receiver additionally pins the source-owned `hooksPath`,
+  rejects non-fast-forwards, and uses `updateInstead`. The client-side
+  `pre-push` hook remains disabled; receiver-side hooks still run only from the
+  recorded source-owned hook root.
+- Integration and cleanup are recoverable states. Before durable integration,
+  every failure preserves the worktree. After integration, the lease remains
+  until cleanup and evidence persistence succeed. If the broker process stops
+  after preparing a scratch candidate but before receive, the next `finish`
+  discards that candidate and rebuilds it from the still-present worktree.
+
+Assumptions:
+
+- The user starts agents from the shell opened by `create` and runs `finish`
+  only after exiting it.
+- Seatbelt and bubblewrap continue to enforce restrictions on all descendants;
+  a same-permission host user outside the sandbox is intentionally trusted.
+- Source-branch movement and source-worktree edits are external concurrent
+  changes and must stop, not merge heuristically.
+
+Consequences:
+
+- Direct `git commit`, `--no-verify`, absolute-path Git, scripts,
+  `commit-tree`, `update-ref`, and index writes share one filesystem denial
+  instead of depending on command parsing.
+- Tests that need temporary files receive a lease-owned scratch directory.
+  Tests needing arbitrary writes outside the worktree may fail and must not be
+  granted Git metadata access as a workaround.
+- A failed receive discards the scratch candidate and Git's receive quarantine,
+  so the source repository gains neither an unreachable commit nor a temporary
+  ref. The editable worktree remains available for retry.
+- Windows installation can distribute the CLI, but `create` fails closed there
+  until a verified native boundary is implemented.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| PreToolUse or `pre-commit` only | `--no-verify`, absolute Git paths, scripts, and plumbing commands bypass command-level checks. |
+| chmod/ACL under the same user | The agent can restore permissions; it is not a durable authority boundary. |
+| An environment-variable finish override | Agent-controlled environment is not authorization. |
+| A normal task branch per worktree | Expands the public model and leaves refs the agent can mutate. |
+| Automatic active-agent detection | Host session death is not reliable enough; the user explicitly starts finish. |
+
+Failure signals:
+
+- A boundary probe can write the `.git` pointer, worktree Git directory,
+  common Git directory, source worktree, or lease-control state.
+- A managed agent changes refs or index state with any Git executable or
+  indirect script.
+- A managed agent can modify the pinned Git executable, Goldband broker runtime,
+  installed launcher/runtime, global Git config, or recorded source hook/config
+  inputs after `create`.
+- `finish` proceeds after source movement, dirty state, ignored files, Git lock
+  contention, an ignored source/candidate collision, changed broker config,
+  invalid marker/manifest, or failed readback.
+- Claude and Codex installs expose different CLI or hook/runtime assets.
+
+Revisit triggers:
+
+- Codex or Claude exposes a stable host-owned broker API that can replace the
+  inherited shell boundary without weakening it.
+- Windows gains a verified filesystem sandbox with equivalent descendant and
+  Git-metadata restrictions.
+- Git gains an atomic worktree-aware transaction that can replace the current
+  prepare/fast-forward/readback sequence.
+
 ## 2026-07-15: Installed Workflow Prompts Are Thin Manifest Contracts
 
 Decision: generate every installed

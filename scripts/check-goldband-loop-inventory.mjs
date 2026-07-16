@@ -12,6 +12,7 @@ import {
   GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
 import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
+import { assertInstalledManagedWorktreeSurface } from './lib/managed-worktree-install-check.mjs';
 import { assertInstalledWorkflowDocuments } from './lib/workflow-contract-install-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -75,6 +76,7 @@ function main() {
     runInstall(tmpHome, 'workflow');
     runInstall(tmpHome, 'workflow-codex');
     assertInstalledStandardInventory(tmpHome, inventory, capabilityContract);
+    assertInstalledManagedWorktreeSurface(tmpHome);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });

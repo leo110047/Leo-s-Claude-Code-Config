@@ -36,6 +36,10 @@ const tests = [
   ],
   ['pre-commit missing checker fails soft', testPreCommitMissingChecker],
   ['pre-commit missing node fails soft', testPreCommitMissingNode],
+  [
+    'pre-commit blocks managed worktrees before all style-gate bypasses',
+    testPreCommitBlocksManagedWorktree,
+  ],
 ];
 
 for (const [name, test] of tests) {
@@ -272,6 +276,20 @@ function testPreCommitMissingNode() {
 
   assertEqual(result.status, 0, result.stdout + result.stderr);
   assertIncludes(result.stderr, 'node not found');
+}
+
+function testPreCommitBlocksManagedWorktree() {
+  const dir = createRepo();
+  fs.writeFileSync(
+    path.join(dir, '.git', 'goldband-managed-worktree.json'),
+    '{"schemaVersion":1,"leaseId":"fixture","manifestPath":"/fixture"}\n',
+  );
+  const result = run('bash', [preCommitHook], {
+    cwd: dir,
+    env: hookEnv({ GOLDBAND_STYLE_GATE: '0' }),
+  });
+  assertEqual(result.status, 1);
+  assertIncludes(result.stderr, 'managed worktrees cannot commit directly');
 }
 
 function checkStyle(cwd) {

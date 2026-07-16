@@ -126,6 +126,16 @@ jobs:
       - name: Check Goldband Loop source quality
         run: cd goldband-loop && bun run check:source
 
+      - name: Install managed worktree Linux boundary
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+
+      - name: Test managed worktree bubblewrap enforcement on Linux
+        run: cd goldband-loop && bun test test/managed-worktree.test.ts
+        env:
+          GOLDBAND_REQUIRE_LIVE_BOUNDARY: "1"
+
       - name: Test Goldband Loop Playwright setup behavior
         run: bash scripts/test-goldband-loop-playwright-setup.sh
 
@@ -166,6 +176,11 @@ jobs:
 
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Test managed worktree Seatbelt enforcement on macOS
+        run: cd goldband-loop && bun test test/managed-worktree.test.ts
+        env:
+          GOLDBAND_REQUIRE_LIVE_BOUNDARY: "1"
 
       - name: Test Goldband Loop Playwright setup behavior on macOS
         run: bash scripts/test-goldband-loop-playwright-setup.sh
