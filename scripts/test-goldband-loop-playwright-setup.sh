@@ -34,6 +34,17 @@ assert_portable_mktemp_templates() {
   fi
 }
 
+assert_log_contains() {
+  local expected="$1"
+  local log_file="$2"
+  if grep -Fq "$expected" "$log_file"; then
+    return 0
+  fi
+  echo "expected setup log to contain: $expected" >&2
+  cat "$log_file" >&2
+  exit 1
+}
+
 run_required_missing_browser_fails() {
   local tmp_home log_file rc
   tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/goldband-pw-required.XXXXXX")"
@@ -55,8 +66,10 @@ run_required_missing_browser_fails() {
     cat "$log_file" >&2
     exit 1
   fi
-  grep -q "goldband setup failed: Playwright Chromium install did not finish successfully" "$log_file"
-  grep -q "GOLDBAND_SKIP_PLAYWRIGHT=1" "$log_file"
+  assert_log_contains \
+    "goldband setup failed: Playwright Chromium install did not finish successfully" \
+    "$log_file"
+  assert_log_contains "GOLDBAND_SKIP_PLAYWRIGHT=1" "$log_file"
   if grep -q "goldband ready" "$log_file"; then
     echo "setup reported ready after required Playwright failure" >&2
     cat "$log_file" >&2
@@ -72,6 +85,10 @@ write_fake_playwright_tools() {
   cat > "$fake_bin/bun" <<EOF_BUN
 #!/usr/bin/env bash
 set -euo pipefail
+if [ "\${1:-}" = "--version" ]; then
+  printf '1.3.11\n'
+  exit 0
+fi
 if [ "\${1:-}" = "--eval" ]; then
   case "$bun_mode" in
     sandbox)
@@ -122,8 +139,8 @@ run_sandbox_launch_block_skips_install() {
     cat "$log_file" >&2
     exit 1
   fi
-  grep -q "Playwright Chromium launch was blocked" "$log_file"
-  grep -q "Playwright Chromium install was not attempted" "$log_file"
+  assert_log_contains "Playwright Chromium launch was blocked" "$log_file"
+  assert_log_contains "Playwright Chromium install was not attempted" "$log_file"
   if [ -e "$bunx_marker" ]; then
     echo "setup tried to install Chromium after a sandbox launch denial" >&2
     cat "$log_file" >&2
@@ -157,8 +174,8 @@ run_unwritable_cache_skips_install() {
     cat "$log_file" >&2
     exit 1
   fi
-  grep -q "Playwright browser cache is not writable" "$log_file"
-  grep -q "Playwright Chromium install was not attempted" "$log_file"
+  assert_log_contains "Playwright browser cache is not writable" "$log_file"
+  assert_log_contains "Playwright Chromium install was not attempted" "$log_file"
   if [ -e "$bunx_marker" ]; then
     echo "setup tried to install Chromium with an unwritable cache" >&2
     cat "$log_file" >&2
@@ -179,9 +196,9 @@ run_explicit_skip_succeeds() {
     GOLDBAND_SKIP_COREUTILS=1 \
     "$SETUP_SCRIPT" --host claude > "$log_file" 2>&1
 
-  grep -q "Skipping Playwright Chromium install" "$log_file"
-  grep -q "Browser workflows will be unavailable" "$log_file"
-  grep -q "goldband ready (claude, standard profile)." "$log_file"
+  assert_log_contains "Skipping Playwright Chromium install" "$log_file"
+  assert_log_contains "Browser workflows will be unavailable" "$log_file"
+  assert_log_contains "goldband ready (claude, standard profile)." "$log_file"
 }
 
 assert_portable_mktemp_templates
