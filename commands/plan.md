@@ -26,9 +26,8 @@ is complete.
 When this command is invoked, create a comprehensive implementation plan before
 writing code for the requested implementation.
 
-For architecture or implementation-plan review, use `/goldband review plan-engineering`
-after the draft exists. This command creates the plan; the workflow review
-command pressure-tests it.
+This command owns both plan creation and the bounded engineering review stage;
+do not route a draft through a second public action.
 
 ## Process
 
@@ -98,5 +97,5 @@ command pressure-tests it.
   confirms with "yes" or "proceed"
 - Always verify assumptions with actual code (Read, Grep, Glob) before planning
 - For architecture or direction-setting work, do not optimize for minimal diff; explain why this is the healthiest option now and when it should be replaced
-- If the plan is complex, risky, or cross-module, recommend `/goldband review plan-engineering` before implementation
+- If the plan is complex, risky, or cross-module, include the engineering review before implementation
 - If user says "modify", adjust the plan and present again

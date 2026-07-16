@@ -24,18 +24,34 @@ describe('gen-llms-txt — shape', () => {
     expect(generated.content).toContain('auto-generated');
   });
 
-  test('every generated capability action appears in the index', () => {
+  test('only public generated capability actions appear in the index', () => {
     const contract = JSON.parse(
       fs.readFileSync(
         path.join(ROOT, 'generated', 'capability-actions.json'),
         'utf8',
       ),
-    ) as { actions: Array<{ name: string }> };
+    ) as {
+      actions: Array<{
+        name: string;
+        lifecycle?: 'public' | 'experimental';
+      }>;
+    };
+    const publicActions = contract.actions.filter(
+      (action) => (action.lifecycle ?? 'public') === 'public',
+    );
+    const experimentalActions = contract.actions.filter(
+      (action) => action.lifecycle === 'experimental',
+    );
     expect(generated.skills.length).toBeGreaterThan(0);
-    expect(generated.skills).toHaveLength(contract.actions.length);
+    expect(generated.skills).toHaveLength(publicActions.length);
 
-    for (const action of contract.actions) {
+    for (const action of publicActions) {
       expect(generated.content).toContain(
+        `$goldband ${action.name.replace('/', ' ')}`,
+      );
+    }
+    for (const action of experimentalActions) {
+      expect(generated.content).not.toContain(
         `$goldband ${action.name.replace('/', ' ')}`,
       );
     }

@@ -43,14 +43,24 @@ const CAPABILITY_INVOCATION_ROOTS = [
   'plugin-assets/claude-code-plugin/hooks/scripts/lib/skill-activation/activation-rules.js',
   'goldband-loop/CONTRIBUTING.md',
   'goldband-loop/SKILL.md',
+  'goldband-loop/openclaw',
 ];
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
 validateManifest(manifest);
+const discoverableCapabilities = publicCapabilities(manifest.capabilities);
+const claudeCapabilities = publicCapabilitiesForHost(
+  manifest.capabilities,
+  'claude',
+);
+const codexCapabilities = publicCapabilitiesForHost(
+  manifest.capabilities,
+  'codex',
+);
 validateCapabilityInvocations({
   root,
   invocationRoots: CAPABILITY_INVOCATION_ROOTS,
-  capabilities: manifest.capabilities,
+  capabilities: discoverableCapabilities,
 });
 
 const capabilityActions = manifest.capabilities.flatMap((capability) =>
@@ -64,6 +74,9 @@ const capabilityActions = manifest.capabilities.flatMap((capability) =>
       '',
     ),
     runtime: action.runtime,
+    lifecycle: action.lifecycle ?? 'public',
+    runtimeOwner: action.owner ?? null,
+    runtimeContract: action.runtimeContract ?? null,
     riskLevel: action.risk,
     hostSupport: action.hostSupport ?? ALL_HOSTS,
   })),
@@ -125,28 +138,48 @@ const outputs = new Map([
   ],
   [
     'hooks/scripts/lib/skill-activation/capability-routing.generated.json',
-    json(activationRules(manifest.capabilities)),
+    json(activationRules(claudeCapabilities)),
   ],
   [
     'codex/hooks/capability-routing.generated.json',
-    json(codexHints(manifest.capabilities)),
+    json(codexHints(codexCapabilities)),
   ],
   [
     'goldband-loop/generated/capability-router.md',
-    generatedRouter(manifest.capabilities),
+    generatedRouter(discoverableCapabilities),
   ],
   [
     'goldband-loop/SKILL.md',
-    generatedRootSkill(manifest.capabilities, manifest.manuals),
+    generatedRootSkill(discoverableCapabilities, manifest.manuals),
   ],
   ['docs/generated/capabilities.md', generatedDocs(manifest)],
 ]);
+
+for (const host of ALL_HOSTS) {
+  outputs.set(
+    `goldband-loop/generated/host-skills/${host}.SKILL.md`,
+    generatedRootSkill(
+      publicCapabilitiesForHost(manifest.capabilities, host),
+      manifest.manuals,
+    ),
+  );
+}
 
 for (const [relativePath, content] of buildWorkflowContracts(manifest)) {
   outputs.set(relativePath, content);
 }
 
+const retiredGeneratedContracts = findRetiredGeneratedContracts(outputs);
 let stale = false;
+for (const relativePath of retiredGeneratedContracts) {
+  stale = true;
+  if (check) {
+    console.error(`STALE ${relativePath}`);
+    continue;
+  }
+  fs.unlinkSync(path.join(root, relativePath));
+  console.log(`REMOVED ${relativePath}`);
+}
 for (const [relativePath, content] of outputs) {
   const target = path.join(root, relativePath);
   const current = fs.existsSync(target)
@@ -165,6 +198,26 @@ for (const [relativePath, content] of outputs) {
 
 if (check && stale) process.exit(1);
 if (check) console.log('Goldband generated surfaces are current.');
+
+function findRetiredGeneratedContracts(expectedOutputs) {
+  const generatedRoot = path.join(
+    root,
+    'goldband-loop',
+    'generated',
+    'workflow-contracts',
+  );
+  if (!fs.existsSync(generatedRoot)) return [];
+  const expected = new Set(expectedOutputs.keys());
+  return fs
+    .readdirSync(generatedRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.workflow.md'))
+    .map((entry) => {
+      const absolutePath = path.join(entry.parentPath, entry.name);
+      return path.relative(root, absolutePath).split(path.sep).join('/');
+    })
+    .filter((relativePath) => !expected.has(relativePath))
+    .sort();
+}
 
 function validateManifest(value) {
   if (value.schemaVersion !== 1) throw new Error('unsupported manifest schema');
@@ -211,13 +264,100 @@ function validateAction(capabilityId, action, seen) {
   const name = `${capabilityId}/${action.id}`;
   if (seen.has(name)) throw new Error(`duplicate action: ${name}`);
   seen.add(name);
+  if (!['typed', 'compatibility', 'registered-only'].includes(action.runtime)) {
+    throw new Error(`${name}: invalid runtime: ${action.runtime}`);
+  }
+  const lifecycle = action.lifecycle ?? 'public';
+  if (!['public', 'experimental'].includes(lifecycle)) {
+    throw new Error(`${name}: invalid lifecycle: ${lifecycle}`);
+  }
+  if (lifecycle === 'experimental' && action.runtime !== 'registered-only') {
+    throw new Error(
+      `${name}: experimental actions must remain registered-only`,
+    );
+  }
+  if (action.runtime === 'registered-only' && action.owner !== undefined) {
+    throw new Error(`${name}: registered-only actions cannot claim an owner`);
+  }
+  if (action.runtime !== 'registered-only' && !action.owner) {
+    throw new Error(`${name}: runnable actions require an owner`);
+  }
+  if (action.runtimeContract !== undefined) {
+    validateRuntimeContract(name, action.runtimeContract);
+  }
+}
+
+function validateRuntimeContract(name, contract) {
+  if (!contract || typeof contract !== 'object') {
+    throw new Error(`${name}: runtimeContract must be an object`);
+  }
+  validateRuntimeModes(name, contract.modes);
+  if (!contract.requiredInputs || typeof contract.requiredInputs !== 'object') {
+    throw new Error(`${name}: runtimeContract.requiredInputs is required`);
+  }
+  for (const mode of contract.modes) {
+    const fields = contract.requiredInputs[mode];
+    if (!Array.isArray(fields) || fields.length === 0) {
+      throw new Error(
+        `${name}: runtimeContract.requiredInputs.${mode} is required`,
+      );
+    }
+  }
+  if (!Array.isArray(contract.outputs) || contract.outputs.length === 0) {
+    throw new Error(`${name}: runtimeContract.outputs must be non-empty`);
+  }
+  if (!contract.sideEffects || typeof contract.sideEffects !== 'object') {
+    throw new Error(`${name}: runtimeContract.sideEffects is required`);
+  }
+}
+
+function validateRuntimeModes(name, modes) {
+  const valid =
+    Array.isArray(modes) &&
+    modes.length > 0 &&
+    modes.every((mode) => /^[a-z][a-z0-9-]*$/.test(mode));
+  if (!valid) {
+    throw new Error(
+      `${name}: runtimeContract.modes must be non-empty action names`,
+    );
+  }
+}
+
+function publicCapabilities(capabilities) {
+  return capabilities.flatMap((capability) => {
+    const actions = capability.actions.filter(
+      (action) => (action.lifecycle ?? 'public') === 'public',
+    );
+    if (actions.length === 0) return [];
+    const defaultAction = actions.some(
+      (action) => action.id === capability.defaultAction,
+    )
+      ? capability.defaultAction
+      : actions[0].id;
+    return [{ ...capability, actions, defaultAction }];
+  });
+}
+
+function publicCapabilitiesForHost(capabilities, host) {
+  return publicCapabilities(capabilities).flatMap((capability) => {
+    const actions = capability.actions.filter((action) =>
+      (action.hostSupport ?? ALL_HOSTS).includes(host),
+    );
+    if (actions.length === 0) return [];
+    const defaultAction = actions.some(
+      (action) => action.id === capability.defaultAction,
+    )
+      ? capability.defaultAction
+      : actions[0].id;
+    return [{ ...capability, actions, defaultAction }];
+  });
 }
 
 function generatedRegistry(entries) {
   return (
     `// AUTO-GENERATED from goldband.manifest.json. Do not edit.\n` +
-    `import type { HostName, RiskLevel } from './types';\n\n` +
-    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
+    `import type { HostName, RiskLevel, RuntimeActionContract } from './types';\n\n` +
+    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  lifecycle: 'public' | 'experimental';\n  runtimeOwner: string | null;\n  runtimeContract: RuntimeActionContract | null;\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
     `export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = ${JSON.stringify(
       entries,
       null,
@@ -285,13 +425,25 @@ function generatedRootSkill(capabilities, manuals) {
 }
 
 function generatedDocs(value) {
-  const rows = capabilityActions
+  const publicActions = capabilityActions.filter(
+    (action) => action.lifecycle === 'public',
+  );
+  const experimentalActions = capabilityActions.filter(
+    (action) => action.lifecycle === 'experimental',
+  );
+  const rows = publicActions
     .map(
       (action) =>
-        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
+        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | \`${action.runtimeOwner}\` | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
     )
     .join('\n');
-  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\n| Capability | Action | Outcome | Runtime | Risk |\n| --- | --- | --- | --- | --- |\n${rows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
+  const experimentalRows = experimentalActions
+    .map(
+      (action) =>
+        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | — | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
+    )
+    .join('\n');
+  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\nPublic inventory: ${publicActions.length} actions. Experimental actions are excluded from routing and activation hints.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${rows}\n\n## Experimental inventory\n\nThese actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${experimentalRows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
 }
 
 function generatedInteractionPolicy(policy) {

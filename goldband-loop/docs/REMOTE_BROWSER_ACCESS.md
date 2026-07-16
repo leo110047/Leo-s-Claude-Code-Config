@@ -38,7 +38,7 @@ See [ARCHITECTURE.md](../ARCHITECTURE.md#dual-listener-tunnel-architecture-v1600
 
 ## Connection Flow
 
-1. **User runs** `$B pair-agent` (or `/goldband browser pair` in Claude Code)
+1. **User runs** `$B pair-agent` from a `/goldband browser session`
 2. **Server creates** a one-time setup key (expires in 5 minutes)
 3. **User copies** the instruction block into the other agent's chat
 4. **Remote agent runs** `POST /connect` with the setup key
@@ -158,7 +158,7 @@ Each agent owns the tabs it creates. Rules:
 
 | Code | Meaning | What to do |
 |------|---------|------------|
-| 401 | Token invalid, expired, or revoked | Ask user to run `/goldband browser pair` again |
+| 401 | Token invalid, expired, or revoked | Ask user to run `$B pair-agent` again |
 | 403 | Command not in scope, or tab not yours | Use newtab, or ask for --admin |
 | 429 | Rate limit exceeded (>10 req/s) | Wait for Retry-After header |
 

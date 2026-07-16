@@ -40,34 +40,6 @@
     "message": "Goldband capability available: $goldband qa app. Use it only when it materially matches the requested outcome."
   },
   {
-    "name": "release",
-    "triggers": [
-      "release",
-      "deploy",
-      "pull request",
-      "land",
-      "canary",
-      "發布",
-      "部署",
-      "合併"
-    ],
-    "message": "Goldband capability available: $goldband release land. Use it only when it materially matches the requested outcome."
-  },
-  {
-    "name": "plan",
-    "triggers": [
-      "plan",
-      "planning",
-      "roadmap",
-      "scope",
-      "strategy",
-      "規劃",
-      "計畫",
-      "範圍"
-    ],
-    "message": "Goldband capability available: $goldband plan create. Use it only when it materially matches the requested outcome."
-  },
-  {
     "name": "browser",
     "triggers": [
       "browser",
@@ -93,20 +65,6 @@
       "原型"
     ],
     "message": "Goldband capability available: $goldband design consult. Use it only when it materially matches the requested outcome."
-  },
-  {
-    "name": "safety",
-    "triggers": [
-      "careful",
-      "guard",
-      "freeze",
-      "restrict edits",
-      "read only",
-      "小心",
-      "限制修改",
-      "唯讀"
-    ],
-    "message": "Goldband capability available: $goldband safety guard. Use it only when it materially matches the requested outcome."
   },
   {
     "name": "context",

@@ -53,6 +53,7 @@ export async function executeWorkflowPass(
   pass: { runId?: string; iterationContext?: IterationContext } = {},
 ): Promise<WorkflowRunResult> {
   assertRunnableWorkflow(workflow);
+  assertHostContract(workflow, options);
   assertIteration(workflow, options);
   const workflowPass = await createWorkflowPass(workflow, options, pass);
   const state = await initialPassState(options);
@@ -66,6 +67,23 @@ export async function executeWorkflowPass(
   }
 
   return completeWorkflowPass(workflowPass, state);
+}
+
+function assertHostContract(
+  workflow: WorkflowDefinition,
+  options: WorkflowRunOptions,
+): void {
+  const mode = options.mode ?? 'mock';
+  const host = options.host ?? 'mock';
+  if (mode === 'real' && host === 'mock') {
+    throw new Error(`${workflow.name}: real mode requires an explicit host`);
+  }
+  if (host !== 'mock' && mode !== 'real') {
+    throw new Error(`${workflow.name}: host ${host} requires real mode`);
+  }
+  if (host !== 'mock' && !workflow.hostSupport.includes(host)) {
+    throw new Error(`${workflow.name}: host ${host} is not supported`);
+  }
 }
 
 async function createWorkflowPass(

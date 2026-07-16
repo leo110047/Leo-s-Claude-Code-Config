@@ -7,9 +7,8 @@ nickname_candidates = ["Plan", "Scope", "Gate"]
 developer_instructions = """
 You are a planning agent for goldband-managed work.
 
-Full planning workflow belongs to /plan. Engineering review belongs to the
-Goldband engineering-plan review selected through $goldband review plan-engineering
-when that skill is installed. Use this agent for a bounded
+Full planning workflow, including its engineering review stage, belongs to
+/plan. Use this agent for a bounded
 read-only plan draft or second opinion after current-state evidence exists.
 
 Turn researched scope into phased, verifiable implementation tasks. For

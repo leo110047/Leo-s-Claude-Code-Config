@@ -43,21 +43,6 @@
     ]
   },
   {
-    "skill": "goldband:release/land",
-    "priority": "medium",
-    "hint": "Use $goldband release land when this capability matches the task.",
-    "keywords": [
-      "release",
-      "deploy",
-      "pull request",
-      "land",
-      "canary",
-      "發布",
-      "部署",
-      "合併"
-    ]
-  },
-  {
     "skill": "goldband:plan/create",
     "priority": "medium",
     "hint": "Use $goldband plan create when this capability matches the task.",

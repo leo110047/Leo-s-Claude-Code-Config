@@ -12,7 +12,14 @@ export type HostName =
 
 type EntrypointType = 'typed' | 'compatibility' | 'legacy-thin';
 type IntegrationStatus = 'integrated' | 'registered-only';
+type WorkflowLifecycle = 'public' | 'experimental';
 export type RiskLevel = 'low' | 'medium' | 'high';
+export type RuntimeActionContract = {
+  modes: string[];
+  requiredInputs: Record<string, string[]>;
+  outputs: string[];
+  sideEffects: Record<string, string>;
+};
 type StepKind = 'typed' | 'llm' | 'legacyPrompt';
 export type StepStatus = 'ok' | 'failed' | 'skipped';
 export type StopPredicateName =
@@ -56,6 +63,9 @@ export type WorkflowDefinition = {
   contractPath: string;
   entrypointType: EntrypointType;
   integrationStatus: IntegrationStatus;
+  lifecycle: WorkflowLifecycle;
+  runtimeOwner: string | null;
+  runtimeContract: RuntimeActionContract | null;
   hostSupport: HostName[];
   riskLevel: RiskLevel;
   evidencePolicy: string;

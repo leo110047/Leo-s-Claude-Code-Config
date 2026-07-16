@@ -1,7 +1,8 @@
 import type { WorkflowDefinition, WorkflowStep } from './types';
 
-type WorkflowInput = Omit<WorkflowDefinition, 'steps'> & {
+type WorkflowInput = Omit<WorkflowDefinition, 'steps' | 'runtimeContract'> & {
   steps?: WorkflowStep[];
+  runtimeContract?: WorkflowDefinition['runtimeContract'];
 };
 
 export function defineWorkflow(input: WorkflowInput): WorkflowDefinition {
@@ -18,10 +19,25 @@ export function defineWorkflow(input: WorkflowInput): WorkflowDefinition {
   if (!Array.isArray(input.hostSupport) || input.hostSupport.length === 0) {
     throw new Error(`${input.name}: hostSupport must be non-empty`);
   }
-  return { ...input, steps: input.steps ?? [] };
+  if (input.integrationStatus === 'integrated') {
+    assertText(input.runtimeOwner, 'runtimeOwner');
+  }
+  if (input.integrationStatus === 'registered-only' && input.runtimeOwner !== null) {
+    throw new Error(`${input.name}: registered-only workflow cannot claim a runtimeOwner`);
+  }
+  return {
+    ...input,
+    runtimeContract: input.runtimeContract ?? null,
+    steps: input.steps ?? [],
+  };
 }
 
 export function assertRunnableWorkflow(workflow: WorkflowDefinition): void {
+  if (workflow.lifecycle === 'experimental') {
+    throw new Error(
+      `${workflow.name} is experimental, hidden from discovery, and not runnable yet`,
+    );
+  }
   if (workflow.integrationStatus !== 'integrated') {
     throw new Error(`${workflow.name} is registered-only and is not runnable yet`);
   }

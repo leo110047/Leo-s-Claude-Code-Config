@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -94,10 +95,424 @@ describe('workflow runtime', () => {
     })).rejects.toThrow('compatibility runtime only supports mock mode');
   });
 
-  test('registered-only workflows are not runnable', async () => {
-    await expect(runWorkflow(getWorkflow('benchmark/workflow'), {
+  test('experimental workflows are not runnable', async () => {
+    await expect(runWorkflow(getWorkflow('release/land'), {
       goldbandHome: tmpHome,
-    })).rejects.toThrow('registered-only');
+    })).rejects.toThrow('experimental');
+  });
+
+  test('owned typed workflows expose action-specific runtime steps', () => {
+    const owned = [
+      'browser/session',
+      'design/consult',
+      'document/generate',
+      'safety/guard',
+      'safety/freeze',
+      'safety/unfreeze',
+      'context/save',
+      'context/restore',
+      'knowledge/recall',
+      'benchmark/workflow',
+      'system/health',
+      'system/upgrade',
+      'ios/qa',
+    ];
+    for (const name of owned) {
+      const workflow = getWorkflow(name);
+      expect(workflow.entrypointType).toBe('typed');
+      expect(workflow.integrationStatus).toBe('integrated');
+      expect(workflow.lifecycle).toBe('public');
+      expect(workflow.steps.map((step) => step.name)).toEqual([
+        `run-${name.replace('/', '-')}-owner`,
+      ]);
+    }
+  });
+
+  test('browser/session delegates only read-only commands', async () => {
+    const result = await runWorkflow(getWorkflow('browser/session'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('browser-write.json', {
+        command: 'click',
+        args: ['#buy'],
+      }),
+    });
+    expect(result.output).toMatchObject({
+      owner: 'browse',
+      operation: 'click',
+      status: 'blocked',
+    });
+
+    const clearing = await runWorkflow(getWorkflow('browser/session'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('browser-clear.json', {
+        command: 'console',
+        args: ['--clear'],
+      }),
+    });
+    expect(clearing.output).toMatchObject({ status: 'blocked' });
+  });
+
+  test('design/consult validates decisions before persisting an artifact', async () => {
+    await expect(runWorkflow(getWorkflow('design/consult'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('design-missing.json', { brief: 'Dashboard' }),
+    })).rejects.toThrow('decisions must be an object');
+
+    await expect(runWorkflow(getWorkflow('design/consult'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('design-incomplete.json', {
+        brief: 'Dashboard',
+        decisions: { typography: 'System sans' },
+      }),
+    })).rejects.toThrow('decisions.color must be a non-empty string');
+
+    const result = await runWorkflow(getWorkflow('design/consult'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('design.json', {
+        brief: 'Dashboard',
+        decisions: {
+          typography: 'System sans with tabular numerals',
+          color: 'High contrast neutral palette',
+          spacing: '8px scale',
+          layout: 'Single focal data column',
+          motion: 'Reduced-motion-safe transitions',
+        },
+      }),
+    });
+    expect(result.output).toMatchObject({
+      owner: 'design',
+      operation: 'consult',
+      status: 'completed',
+    });
+    expect(readFileSync(result.artifacts[0], 'utf8')).toContain(
+      'Single focal data column',
+    );
+  });
+
+  test('safety freeze and unfreeze share the hook state owner', async () => {
+    const oldEnv = {
+      CLAUDE_PLUGIN_DATA: process.env.CLAUDE_PLUGIN_DATA,
+      CLAUDE_SESSION_ID: process.env.CLAUDE_SESSION_ID,
+    };
+    process.env.CLAUDE_PLUGIN_DATA = tmpHome;
+    process.env.CLAUDE_SESSION_ID = 'workflow-freeze-test';
+    try {
+      const frozen = await runWorkflow(getWorkflow('safety/freeze'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      const stateFile = join(
+        tmpHome,
+        'hook-router',
+        'modes',
+        'session-workflow-freeze-test.json',
+      );
+      expect(frozen.artifacts).toContain(stateFile);
+      expect(JSON.parse(readFileSync(stateFile, 'utf8')).modes['freeze-mode'].active)
+        .toBe(true);
+
+      const editInput = JSON.stringify({
+        hook_event_name: 'PreToolUse',
+        session_id: 'workflow-freeze-test',
+        tool_name: 'Edit',
+        tool_input: { file_path: join(ROOT, 'workflows', 'runtime.ts') },
+      });
+      const blockedEdit = spawnSync(
+        process.execPath,
+        [resolve(PROJECT_ROOT, 'hooks/scripts/hooks/hook-router.js')],
+        {
+          cwd: PROJECT_ROOT,
+          encoding: 'utf8',
+          input: editInput,
+          env: { ...process.env, CLAUDE_PLUGIN_DATA: tmpHome },
+        },
+      );
+      expect(blockedEdit.status).toBe(2);
+      expect(blockedEdit.stderr).toContain('freeze-mode allows inspection only');
+
+      const unfrozen = await runWorkflow(getWorkflow('safety/unfreeze'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      expect(unfrozen.output).toMatchObject({ status: 'completed', active: false });
+
+      const allowedEdit = spawnSync(
+        process.execPath,
+        [resolve(PROJECT_ROOT, 'hooks/scripts/hooks/hook-router.js')],
+        {
+          cwd: PROJECT_ROOT,
+          encoding: 'utf8',
+          input: editInput,
+          env: { ...process.env, CLAUDE_PLUGIN_DATA: tmpHome },
+        },
+      );
+      expect(allowedEdit.status).toBe(0);
+    } finally {
+      restoreEnv(oldEnv);
+    }
+  });
+
+  test('document/generate emits audit artifacts and stops at PR approval', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-document-audit-'));
+    try {
+      mkdirSync(join(repo, 'docs'));
+      writeFileSync(join(repo, 'docs', 'tutorial-example.md'), '# Tutorial\n');
+      writeFileSync(join(repo, 'feature.diff'), [
+        'diff --git a/src/example.ts b/src/example.ts',
+        '--- a/src/example.ts',
+        '+++ b/src/example.ts',
+        '@@ -1 +1 @@',
+        '-old',
+        '+new',
+      ].join('\n'));
+
+      const result = await runWorkflow(getWorkflow('document/generate'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: repo,
+        goldbandHome: tmpHome,
+        diffFile: 'feature.diff',
+      });
+      expect(result.output).toMatchObject({
+        owner: 'documentation audit',
+        operation: 'audit',
+        status: 'completed',
+        coverage: { coverageStatus: 'documentation-review-required' },
+      });
+      expect(result.artifacts).toHaveLength(2);
+      expect(JSON.parse(readFileSync(result.artifacts[0], 'utf8')))
+        .toMatchObject({ changedFiles: ['src/example.ts'] });
+
+      const approval = await runWorkflow(getWorkflow('document/generate'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: repo,
+        goldbandHome: tmpHome,
+        diffFile: 'feature.diff',
+        inputFile: writeInput('document-approval.json', { updatePrBody: true }),
+      });
+      expect(approval.output).toMatchObject({
+        status: 'blocked',
+        requiresApproval: { action: 'pr-body-update' },
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('context save and restore preserve git provenance and freshness', async () => {
+    const saved = await runWorkflow(getWorkflow('context/save'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('context.json', {
+        summary: 'Capability convergence implementation',
+        decisions: ['Retire standalone aliases'],
+        nextSteps: ['Run workflow tests'],
+      }),
+    });
+    expect(saved.output).toMatchObject({
+      owner: 'context checkpoint store',
+      status: 'completed',
+    });
+
+    const restored = await runWorkflow(getWorkflow('context/restore'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    });
+    expect(restored.output).toMatchObject({
+      status: 'completed',
+      stale: false,
+    });
+  });
+
+  test('context restore selects the newest checkpoint for the current branch', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-context-branches-'));
+    try {
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      spawnSync('git', ['checkout', '-b', 'branch-a'], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      await runWorkflow(getWorkflow('context/save'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: repo,
+        goldbandHome: tmpHome,
+        inputFile: writeInput('context-a.json', { summary: 'Branch A context' }),
+      });
+
+      spawnSync('git', ['checkout', '-b', 'branch-b'], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      await runWorkflow(getWorkflow('context/save'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: repo,
+        goldbandHome: tmpHome,
+        inputFile: writeInput('context-b.json', { summary: 'Branch B context' }),
+      });
+
+      spawnSync('git', ['checkout', 'branch-a'], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      const restored = await runWorkflow(getWorkflow('context/restore'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: repo,
+        goldbandHome: tmpHome,
+      });
+      expect(restored.output).toMatchObject({
+        status: 'completed',
+        stale: false,
+        saved: { branch: 'branch-a', summary: 'Branch A context' },
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('system/health blocks empty, incomplete, stale, and drifted installs', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'goldband-health-home-'));
+    const source = mkdtempSync(join(tmpdir(), 'goldband-health-source-'));
+    const oldHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const empty = await runWorkflow(getWorkflow('system/health'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      expect(empty.output).toMatchObject({ status: 'blocked' });
+      expect(checkStatus(empty.output, 'runtime-present')).toBe('fail');
+
+      const runtime = join(home, '.codex', 'skills', 'goldband');
+      mkdirSync(runtime, { recursive: true });
+      writeFileSync(join(runtime, 'VERSION'), '0.1.0\n');
+      const incomplete = await runWorkflow(getWorkflow('system/health'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      expect(checkStatus(incomplete.output, 'runtime-files')).toBe('fail');
+
+      writeRuntimeFixture(source, 'source-contract');
+      writeRuntimeFixture(runtime, 'source-contract');
+      writeFileSync(join(runtime, '.installed-source'), `${source}\n`);
+      writeFileSync(join(runtime, '.installed-contract'), 'stale-contract\n');
+      const stale = await runWorkflow(getWorkflow('system/health'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      expect(checkStatus(stale.output, 'installed-contract')).toBe('fail');
+      expect(checkStatus(stale.output, 'source-install-drift')).toBe('pass');
+
+      writeFileSync(
+        join(runtime, '.installed-contract'),
+        `${contractFingerprint(source)}\n`,
+      );
+      writeFileSync(join(runtime, 'setup'), 'runtime drift\n');
+      const drift = await runWorkflow(getWorkflow('system/health'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+      });
+      expect(checkStatus(drift.output, 'installed-contract')).toBe('pass');
+      expect(checkStatus(drift.output, 'source-install-drift')).toBe('fail');
+    } finally {
+      if (oldHome === undefined) delete process.env.HOME;
+      else process.env.HOME = oldHome;
+      rmSync(home, { recursive: true, force: true });
+      rmSync(source, { recursive: true, force: true });
+    }
+  });
+
+  test('runtime rejects invocations outside manifest hostSupport', async () => {
+    await expect(runWorkflow(getWorkflow('plan/create'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    })).rejects.toThrow('plan/create: host codex is not supported');
+
+    await expect(runWorkflow(getWorkflow('safety/freeze'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    })).rejects.toThrow('safety/freeze: host codex is not supported');
+  });
+
+  test('benchmark/workflow aggregates supplied measurements without running a shell', async () => {
+    const result = await runWorkflow(getWorkflow('benchmark/workflow'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('benchmark.json', {
+        label: 'manifest generation',
+        metric: 'duration_ms',
+        conditions: 'Bun 1.3.11, warm checkout',
+        sourceEvidence: 'workflow-runs/raw/manifest-generation.jsonl',
+        samples: [10, 12, 11, 15],
+      }),
+    });
+    expect(result.output).toMatchObject({
+      status: 'completed',
+      report: { count: 4, mean: 12, median: 11.5 },
+    });
+  });
+
+  test('system/upgrade fails closed without typed authorization', async () => {
+    const result = await runWorkflow(getWorkflow('system/upgrade'), {
+      mode: 'real',
+      host: 'codex',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('upgrade.json', { approved: false }),
+    });
+    expect(result.output).toMatchObject({
+      owner: 'goldband setup',
+      operation: 'upgrade',
+      status: 'blocked',
+    });
+    const source = readFileSync(resolve(ROOT, 'workflows/owned-runtime.ts'), 'utf8');
+    expect(source).toContain('authorization=native-host-required');
+    expect(source).toContain('"system-upgrade"');
+    expect(source).toContain('"preflight.json"');
+    expect(source).toContain('preflightId');
+    expect(source).not.toContain(
+      'commandResult("git", ["pull", "--ff-only"]',
+    );
   });
 
   test('iteration cap and repeated-blocker stop condition are enforced', async () => {
@@ -239,6 +654,8 @@ describe('workflow runtime', () => {
       contractPath: 'README.md',
       entrypointType: 'typed',
       integrationStatus: 'integrated',
+      lifecycle: 'public',
+      runtimeOwner: 'test-runtime',
       hostSupport: ['claude'],
       riskLevel: 'low',
       evidencePolicy: 'JSONL',
@@ -910,6 +1327,47 @@ function readJsonl(workflow: string): Array<Record<string, any>> {
     .map((line) => JSON.parse(line));
 }
 
+function writeInput(name: string, value: unknown): string {
+  const file = join(tmpHome, name);
+  writeFileSync(file, `${JSON.stringify(value)}\n`);
+  return file;
+}
+
+function checkStatus(output: unknown, id: string): string | undefined {
+  const checks = (output as { checks?: Array<{ id: string; status: string }> })
+    .checks ?? [];
+  return checks.find((check) => check.id === id)?.status;
+}
+
+function writeRuntimeFixture(root: string, contractContent: string): void {
+  mkdirSync(join(root, 'generated'), { recursive: true });
+  writeFileSync(join(root, 'VERSION'), '0.1.0\n');
+  writeFileSync(join(root, 'SKILL.md'), '# Goldband\n');
+  writeFileSync(join(root, 'setup'), `${contractContent}\n`);
+  writeFileSync(
+    join(root, 'generated', 'capability-actions.json'),
+    `${JSON.stringify({ contractContent })}\n`,
+  );
+}
+
+function contractFingerprint(root: string): string {
+  const entries = ['setup', 'generated/capability-actions.json'].map((file) => {
+    const result = spawnSync('cksum', [join(root, file)], { encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+    const [checksum, bytes] = result.stdout.trim().split(/\s+/);
+    return `${checksum}:${bytes}`;
+  });
+  const combined = spawnSync('cksum', [], {
+    encoding: 'utf8',
+    input: `${entries.join('\n')}\n`,
+  });
+  if (combined.status !== 0) {
+    throw new Error(combined.stderr || combined.stdout);
+  }
+  const [checksum, bytes] = combined.stdout.trim().split(/\s+/);
+  return `${checksum}:${bytes}`;
+}
+
 function restoreEnv(env: Record<string, string | undefined>): void {
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete process.env[key];
@@ -946,6 +1404,8 @@ function signalWorkflow(input: {
     contractPath: 'README.md',
     entrypointType: 'typed',
     integrationStatus: 'integrated',
+    lifecycle: 'public',
+    runtimeOwner: 'test-runtime',
     hostSupport: ['claude'],
     riskLevel: 'low',
     evidencePolicy: 'JSONL',

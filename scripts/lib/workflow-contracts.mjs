@@ -208,8 +208,35 @@ ${renderList(contract.hardBoundaries)}
 
 ## Verification
 
-${renderList(contract.verification)}
+${renderList(contract.verification)}${renderRuntimeContract(action.runtimeContract)}
 `;
+}
+
+function renderRuntimeContract(contract) {
+  if (!contract) return '';
+  const requiredInputs = contract.modes
+    .map(
+      (mode) =>
+        `- \`${mode}\`: ${(contract.requiredInputs[mode] ?? []).map((field) => `\`${field}\``).join(', ')}`,
+    )
+    .join('\n');
+  const sideEffects = Object.entries(contract.sideEffects)
+    .map(([effect, gate]) => `- \`${effect}\`: \`${gate}\``)
+    .join('\n');
+  return `
+
+## Runtime contract
+
+Modes and required inputs:
+
+${requiredInputs}
+
+Outputs: ${contract.outputs.map((output) => `\`${output}\``).join(', ')}.
+
+Side effects:
+
+${sideEffects}
+`.trimEnd();
 }
 
 function mergePromptContracts(base, override = {}) {

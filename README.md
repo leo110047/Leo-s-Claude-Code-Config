@@ -17,7 +17,8 @@ Goldband Loop workflow runtime 裝到同一個 checkout 管理。
 - root `goldband`：安裝器、Claude/Codex adapters、shared policy、hooks、
   rules、commands、portable skills、plugin/app distribution。
 - `goldband-loop/`：first-party workflow runtime，提供 review、investigate、
-  QA、release、browser、planning 等 capability actions。
+  QA、browser、planning 等公開 capability actions；未完成的高風險能力另列為
+  hidden experimental inventory。
 
 更細的 ownership 和 runtime contract 看 [ARCHITECTURE.md](ARCHITECTURE.md)。
 

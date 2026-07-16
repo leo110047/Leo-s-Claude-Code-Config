@@ -650,3 +650,106 @@ Revisit triggers:
   failure cannot be solved at the state owner.
 - A lifecycle transition gains a concrete user decision or deterministic
   enforcement contract that cannot be expressed elsewhere.
+
+## 2026-07-16: Capability Surface Requires Proven Runtime Ownership
+
+Decision: reduce the formal capability inventory from 51 actions to 23. Expose
+19 public actions and retain four high-risk actions only as hidden experimental
+inventory. A runnable action must declare one runtime owner in the manifest;
+an experimental action cannot claim an owner.
+
+Implementation contract:
+
+- Remove 28 overlapping action names instead of preserving aliases. Their
+  useful behavior becomes a mode, lens, command, or stage of the remaining
+  review, plan, browser, document, safety, and iOS owners.
+- Generated routing and activation hints contain only public actions.
+  Experimental actions remain in the engineering inventory and thin contract
+  projection, but are not discoverable or runnable.
+- Typed owner steps validate structured input, write JSONL evidence, persist
+  state atomically where state exists, and return explicit completed or blocked
+  readback.
+- Compatibility actions remain mock-only and fail closed in real mode.
+- High-risk work cannot hide outward side effects inside a workflow child
+  process. In particular, `system/upgrade` owns preflight and readback while the
+  host's native tool and approval layer owns `git pull` and setup execution.
+
+The resulting inventory is 15 typed, four compatibility, and four experimental
+registered-only actions. The experimental set is `release/land`,
+`release/setup`, `knowledge/setup`, and `knowledge/sync`.
+
+Why:
+
+- A prompt contract and formal name are not runtime capability. Without an
+  owner, validated state, evidence, and a stop condition, the interface
+  overstates product maturity.
+- Separate lifecycle from runtime maturity. This keeps high-risk work visible
+  to maintainers without advertising unfinished operations to users.
+- Folding lenses and phases into stable owners reduces routing ambiguity and
+  migration cost while preserving the underlying behavior.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep all 51 actions and label 46 experimental | Leaves the oversized public vocabulary and duplicate ownership model intact. |
+| Change only manifest runtime labels | Produces typed-looking entries with no action-specific validation, state, or evidence owner. |
+| Preserve removed actions as compatibility aliases | Violates the no-alias capability decision and keeps old contracts alive indefinitely. |
+| Let `system/upgrade` run `git pull` after an input boolean | A JSON field is not native host approval and would hide an outward side effect inside Bun. |
+
+Failure signals:
+
+- Router or activation output contains an experimental action.
+- A runnable manifest action has no owner, or a registered-only action claims
+  one.
+- Removed action names return through active documentation or generated
+  contracts.
+- A typed owner accepts malformed real-mode input, writes non-atomic state, or
+  reports completion without readback evidence.
+- High-risk runtime code executes a network, release, setup, or sync side
+  effect behind the host permission boundary.
+
+Revisit triggers:
+
+- Release obtains a deployment-neutral approval, rollback, and readback owner.
+- GBrain setup and sync obtain secret-safe interaction schemas plus resumable
+  checkpoint and round-trip verification contracts.
+- Compatibility actions gain action-specific typed schemas and real-mode
+  evidence.
+
+## 2026-07-16: Runtime Completion Must Reflect Effective Host State
+
+Decision: host-scoped workflows may report completion only after reading back
+the state that the host actually consumes. Public menus are generated per host,
+and runtime invocation independently enforces manifest `hostSupport`.
+
+Implementation contract:
+
+- `safety/guard`, `safety/freeze`, and `safety/unfreeze` are Claude-only and
+  delegate to the existing session-scoped careful-mode and freeze-mode owner.
+  Completion requires owner readback; an actual PreToolUse `Edit` regression
+  test proves freeze enforcement.
+- `system/health` inspects the selected host's installed runtime under `HOME`,
+  including required files, `.installed-source`, `.installed-contract`, and
+  source/install fingerprint drift. Source checkout health is not installation
+  health.
+- `plan/create` remains Claude-only. Codex menus, hints, and planner guidance do
+  not advertise it, while runtime rejects a Codex invocation.
+- `document/generate` owns a typed `audit` mode with required unified-diff input,
+  deterministic coverage and PR-section artifacts, and a native approval gate
+  for PR mutation. The workflow does not generate documentation or mutate PRs.
+- Context checkpoint indexes include repository/worktree identity and branch;
+  restore selects the current branch's latest checkpoint.
+- Active-document tests validate local Markdown link targets, not only
+  capability invocation strings.
+
+Failure signals:
+
+- A safety action is completed while the corresponding hook decision still
+  allows the protected operation.
+- An empty or stale installed runtime passes `system/health` because source
+  files are healthy.
+- A host menu advertises an action excluded by its manifest `hostSupport`.
+- Documentation audit mutates a PR without native approval or claims it wrote
+  docs that it only analyzed.
+- Saving branch B makes branch A's latest checkpoint unreachable.

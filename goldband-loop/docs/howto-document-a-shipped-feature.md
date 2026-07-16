@@ -1,105 +1,55 @@
-# How to document a feature you just shipped
+# How to audit documentation for a shipped feature
 
-This is the post-ship workflow: you merged a PR, the docs are stale, and you want a coverage map plus filled gaps in one pass. You'll run `/goldband release docs` to audit, then `/goldband document generate` to fill the gaps it finds.
+Use `$goldband document generate` in `audit` mode to compare a unified diff with the repository's active Markdown documentation. The runtime produces two local artifacts: a machine-readable coverage report and a PR-body section for review. It does not write documentation files or update a pull request.
 
 ## Prerequisites
 
-- goldband installed (`./setup` complete; verify with `which goldband` or by typing `/` in Claude Code and seeing skills listed)
-- The branch with your shipped feature is checked out
-- A PR exists on GitHub or GitLab (recommended — the workflow updates the PR body with a coverage map)
-
-If no PR exists yet, run `$goldband release land` to prepare one; release documentation is designed to run against a concrete diff and PR.
+- Goldband is installed for the current host.
+- The feature diff is available as a unified diff file inside the working directory.
+- Run from the repository root so active documentation can be inventoried correctly.
 
 ## Steps
 
-### 1. Audit current coverage
+### 1. Capture the diff
 
-Run:
+For example:
 
-```
-/goldband release docs
-```
-
-The skill walks your diff against the base branch, extracts new public surface (skills, CLI flags, config options, API endpoints, new modules), and scores each entity across the four Diataxis quadrants. You'll see a coverage map like:
-
-```
-Coverage map:
-  [entity]         [reference?] [how-to?] [tutorial?] [explanation?]
-  /new-skill       ✅ AGENTS.md  ❌        ❌          ❌
-  --new-flag       ✅ README     ✅ README  ❌          ❌
-  FooProcessor     ❌            ❌        ❌          ❌
+```bash
+git diff origin/main...HEAD > feature.diff
 ```
 
-Items with zero coverage are **critical gaps**. Items with only reference coverage are **common gaps**. Both land in the PR body as a `### Documentation Debt` subsection so reviewers see them.
+### 2. Run the formal audit contract
 
-If `/goldband release docs` reports everything is covered, you're done. Skip the rest of this how-to.
+Invoke `$goldband document generate` with `mode=audit` and `diffFile=feature.diff`. The host adapter may collect these inputs directly or place them in the workflow input JSON.
 
-### 2. Read the documentation debt section in the PR body
+The audit reads the diff, separates changed source and documentation files, and records the active tutorial, how-to, reference, and explanation files it can identify by deterministic filename conventions.
 
-Open your PR (the skill prints the URL). Scroll to `## Documentation` → `### Documentation Debt`. Each item is tagged with the Diataxis quadrant that would fill it:
+### 3. Inspect the artifacts
 
-```
-### Documentation Debt
+The result contains:
 
-- ⚠️ /new-skill — has reference in AGENTS.md but no how-to example in README. Diataxis quadrant: how-to.
-- ⚠️ FooProcessor — zero coverage. Diataxis quadrants: reference, explanation.
-```
+- `documentation-coverage.json`: changed files, changed documentation, Diataxis inventory, and `coverageStatus`.
+- `documentation-pr-section.md`: a reviewable summary that can be copied into a PR body.
 
-This is the input to the next step. Each line tells you what's missing and which quadrant fills it.
+`documentation-review-required` means source changed without a documentation file in the supplied diff. It is a review signal, not proof that documentation is necessarily required.
 
-### 3. Fill the gaps with `/goldband document generate`
+### 4. Apply outward-facing changes separately
 
-Run:
+If a PR-body update is requested, the workflow stops with `status: blocked`, returns the prepared section, and declares `native-host-required`. Apply it only through the host's native approval flow. The runtime never invokes GitHub or GitLab by itself.
 
-```
-/goldband document generate
-```
-
-When the skill asks about scope, tell it the specific entities flagged in the debt section. The skill reads the codebase (its Step 1 archaeology phase is mandatory), partitions by Diataxis quadrant, and writes the missing docs.
-
-You can also let the workflow auto-discover: if `/goldband release docs` passed you the gaps explicitly (it does this when chained), `/goldband document generate` already knows what to write.
-
-### 4. Verify the gaps closed
-
-Re-run `/goldband release docs`:
-
-```
-/goldband release docs
-```
-
-The coverage map should now show the previously-flagged entities with green checkmarks in the previously-empty quadrants. The PR body's Documentation Debt section should be empty or reduced to items you intentionally deferred.
+If the audit exposes a real documentation gap, author the missing content as a separate implementation task, verify it, regenerate the diff, and rerun the audit.
 
 ## Verification
 
-Open your PR and confirm:
+Confirm that:
 
-1. The PR body has a `## Documentation` section with a doc-diff preview.
-2. The `### Documentation Debt` subsection lists zero critical gaps (or only items you knowingly deferred).
-3. Each generated doc file in `docs/` opens cleanly and cross-links to siblings (reference → how-to → tutorial → explanation).
-4. Run `grep -rE '\]\([^)]*\.md\)' docs/` and verify no link points to a missing file.
-
-If all four check, your PR is ready to land with complete documentation.
-
-## Troubleshooting
-
-**`/goldband release docs` reports "No public surface changes detected."**
-The diff is internal-only (refactors, tests, infra). No docs are needed. Skip to landing.
-
-**The Diataxis quadrant tag on a gap doesn't match what you'd expect.**
-The skill uses an entity taxonomy to decide which quadrants matter (CLI flags want reference + how-to; internal modules want reference + explanation; user-facing features want all four). If you disagree, you can override by hand-editing the docs after generation. The audit is a guide, not a constraint.
-
-**`/goldband document generate` writes a tutorial that takes 8 steps to reach a working result.**
-Tutorials should hit a working result in 3 steps or fewer. Re-run the skill and ask it to compress, or hand-edit. The Step 8 Quality Self-Review catches some of these but not all.
-
-**You want to document a feature but no PR exists yet.**
-Run `$goldband release land` to prepare the PR, then `$goldband release docs`. Without a PR, the documentation workflow can still audit but skips the PR-body update.
-
-**A generated reference doc has hallucinated API signatures.**
-File a bug. The skill's Step 1 archaeology is supposed to read implementation files end-to-end, not just signatures, specifically to prevent this. Include the generated text and the actual code so we can trace why the archaeology missed it.
+1. Both artifact paths exist in the workflow result.
+2. The coverage JSON names the exact diff that was audited.
+3. Every changed file listed in the diff appears in `changedFiles`.
+4. Requesting a PR update does not mutate the PR and returns the native-approval boundary.
 
 ## Related
 
-- **Tutorial: first time using `/goldband document generate`:** [tutorial-document-generate.md](./tutorial-document-generate.md)
-- **Why goldband uses the Diataxis framework:** [explanation-diataxis-in-goldband.md](./explanation-diataxis-in-goldband.md)
-- **Reference for the audit workflow:** [`release/docs` contract](../generated/workflow-contracts/release/docs.workflow.md)
-- **Reference for the generation workflow:** [`document/generate` contract](../generated/workflow-contracts/document/generate.workflow.md)
+- [Tutorial: run your first documentation audit](./tutorial-document-generate.md)
+- [Why Goldband uses Diataxis as an audit vocabulary](./explanation-diataxis-in-goldband.md)
+- [`document/generate` contract](../generated/workflow-contracts/document/generate.workflow.md)

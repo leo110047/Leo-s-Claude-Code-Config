@@ -79,19 +79,25 @@ export async function generateLlmsTxt(opts: GenerateOptions = {}): Promise<Gener
     );
   }
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8')) as {
-    actions?: Array<{ name?: string; description?: string }>;
+    actions?: Array<{
+      name?: string;
+      description?: string;
+      lifecycle?: 'public' | 'experimental';
+    }>;
   };
   if (!Array.isArray(contract.actions)) {
     throw new Error('gen-llms-txt: generated capability contract has no actions');
   }
-  const skills: SkillEntry[] = contract.actions.map((action, index) => {
-    if (!action.name || !action.description) {
-      throw new Error(
-        `gen-llms-txt: capability action ${index} is missing name or description`,
-      );
-    }
-    return { name: action.name, description: action.description };
-  });
+  const skills: SkillEntry[] = contract.actions
+    .filter((action) => (action.lifecycle ?? 'public') === 'public')
+    .map((action, index) => {
+      if (!action.name || !action.description) {
+        throw new Error(
+          `gen-llms-txt: public capability action ${index} is missing name or description`,
+        );
+      }
+      return { name: action.name, description: action.description };
+    });
   skills.sort((a, b) => a.name.localeCompare(b.name));
 
   const browseCommands = Object.keys(BROWSE_COMMANDS).sort();

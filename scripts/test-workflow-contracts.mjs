@@ -143,6 +143,61 @@ const actionCount = manifest.capabilities.reduce(
   0,
 );
 
+const actions = manifest.capabilities.flatMap((capability) =>
+  capability.actions.map((action) => ({
+    name: `${capability.id}/${action.id}`,
+    runtime: action.runtime,
+    lifecycle: action.lifecycle ?? 'public',
+    owner: action.owner ?? null,
+  })),
+);
+assert.equal(actionCount, 23);
+assert.equal(
+  actions.filter((action) => action.lifecycle === 'public').length,
+  19,
+);
+assert.equal(actions.filter((action) => action.runtime === 'typed').length, 15);
+assert.equal(
+  actions.filter((action) => action.runtime === 'compatibility').length,
+  4,
+);
+assert.deepEqual(
+  actions
+    .filter((action) => action.lifecycle === 'experimental')
+    .map((action) => action.name)
+    .sort(),
+  ['knowledge/setup', 'knowledge/sync', 'release/land', 'release/setup'],
+);
+assert.equal(
+  actions
+    .filter((action) => action.lifecycle === 'public')
+    .every(
+      (action) => typeof action.owner === 'string' && action.owner.length > 0,
+    ),
+  true,
+  'every public action must declare a runtime owner',
+);
+assert.equal(
+  actions
+    .filter((action) => action.lifecycle === 'experimental')
+    .every((action) => action.owner === null),
+  true,
+  'experimental actions cannot claim a runtime owner',
+);
+for (const retired of [
+  'qa/report-only',
+  'release/report',
+  'plan/tune',
+  'system/skill-authoring',
+  'ios/fix',
+]) {
+  assert.equal(
+    actions.some((action) => action.name === retired),
+    false,
+    `${retired} was reintroduced as a standalone action`,
+  );
+}
+
 assert.equal(contracts.size, actionCount);
 
 const generatedContractRoot = path.join(
@@ -224,12 +279,6 @@ const release = contracts.get(
 );
 assert.ok(release);
 assert.match(release, /explicit approval/i);
-
-const reportOnly = contracts.get(
-  'goldband-loop/generated/workflow-contracts/qa/report-only.workflow.md',
-);
-assert.ok(reportOnly);
-assert.match(reportOnly, /Do not modify/i);
 
 assert.equal(
   manifest.promptArchitecture.interactionPolicy.askOnlyWhen,

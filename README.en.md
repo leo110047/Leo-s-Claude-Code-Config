@@ -17,8 +17,9 @@ This repo has two layers:
 
 - root `goldband`: installer, Claude/Codex adapters, shared policy, hooks,
   rules, commands, portable skills, plugin/app distribution.
-- `goldband-loop/`: first-party workflow runtime for review, investigation, QA,
-  release, browser, planning, and related capability actions.
+- `goldband-loop/`: first-party workflow runtime for public review,
+  investigation, QA, browser, planning, and related capability actions;
+  unfinished high-risk work stays in a hidden experimental inventory.
 
 For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).

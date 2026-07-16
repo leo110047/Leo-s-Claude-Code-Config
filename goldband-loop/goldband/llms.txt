@@ -10,56 +10,24 @@ Conventions:
 
 ## Capability actions
 
-- `$goldband benchmark models`: Compare model performance.
 - `$goldband benchmark workflow`: Benchmark product or workflow performance.
-- `$goldband browser cookies`: Import browser cookies for authenticated testing.
-- `$goldband browser open`: Open a visible browser workbench.
-- `$goldband browser pair`: Pair another agent with the browser.
-- `$goldband browser scrape`: Extract content or media from a page.
 - `$goldband browser session`: Use the persistent browser for interactive work.
 - `$goldband context restore`: Restore saved working context.
 - `$goldband context retro`: Summarize recent work and lessons.
 - `$goldband context save`: Save current working context.
 - `$goldband design consult`: Define a design direction and system.
-- `$goldband design explore`: Explore multiple design directions.
-- `$goldband design prototype`: Generate an HTML design prototype.
-- `$goldband document generate`: Generate product or module documentation.
-- `$goldband document pdf`: Create a PDF artifact.
+- `$goldband document generate`: Audit documentation coverage and prepare documentation artifacts.
 - `$goldband investigate code`: Investigate code or runtime behavior.
-- `$goldband ios clean`: Clean iOS project state.
-- `$goldband ios fix`: Repair iOS implementation issues.
 - `$goldband ios qa`: Run iOS QA.
-- `$goldband ios review`: Review iOS design and behavior.
-- `$goldband ios sync`: Synchronize iOS project state.
 - `$goldband knowledge recall`: Inspect Goldband learnings and knowledge.
-- `$goldband knowledge setup`: Configure GBrain integration.
-- `$goldband knowledge sync`: Synchronize GBrain knowledge.
-- `$goldband plan auto`: Run the complete plan review pipeline.
 - `$goldband plan create`: Create an implementation plan.
-- `$goldband plan strategy`: Explore product direction and scope.
-- `$goldband plan tune`: Tune recurring planning questions.
 - `$goldband qa app`: Run product QA and record evidence.
-- `$goldband qa report-only`: Report QA findings without fixing.
-- `$goldband release canary`: Monitor a deployment after release.
-- `$goldband release docs`: Update documentation for a release.
-- `$goldband release land`: Merge, deploy, and verify.
-- `$goldband release report`: Produce a landing report.
-- `$goldband release setup`: Configure deployment.
 - `$goldband review code`: Review a code diff.
-- `$goldband review design`: Review visual and product design.
-- `$goldband review devex`: Review developer experience.
-- `$goldband review opposite-host`: Get an opposite-host second opinion.
-- `$goldband review plan-ceo`: Review product scope and ambition.
-- `$goldband review plan-design`: Review a plan's design contract.
-- `$goldband review plan-devex`: Review a plan's developer experience.
-- `$goldband review plan-engineering`: Review architecture and implementation plans.
 - `$goldband review security`: Review security and trust boundaries.
-- `$goldband safety careful`: Enable careful command handling.
-- `$goldband safety freeze`: Restrict edits to an approved scope.
-- `$goldband safety guard`: Enable workflow-local safety rails.
-- `$goldband safety unfreeze`: Remove an active edit restriction.
+- `$goldband safety freeze`: Enable read-only freeze-mode for a Claude session.
+- `$goldband safety guard`: Enable careful-mode for a Claude session.
+- `$goldband safety unfreeze`: Disable freeze-mode for a Claude session.
 - `$goldband system health`: Inspect Goldband health and installation state.
-- `$goldband system skill-authoring`: Create or improve a Goldband workflow skill.
 - `$goldband system upgrade`: Upgrade Goldband.
 
 ## Browse Commands

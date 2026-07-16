@@ -1,8 +1,10 @@
 # Goldband Loop
 
 Goldband Loop is goldband's first-party workflow runtime for AI coding agents.
-It implements the capability actions used for planning, review, investigation,
-QA, browser automation, release work, documentation, and system maintenance.
+It implements the public capability actions used for planning, review,
+investigation, QA, browser automation, documentation, and system maintenance.
+Unfinished high-risk release and knowledge operations remain hidden
+experimental inventory until they have runtime owners.
 
 This directory is maintained as first-party source inside the goldband
 repository.

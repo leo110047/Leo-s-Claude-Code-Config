@@ -15,7 +15,7 @@
     "prohibitedSharedBoilerplate": ["universal-preamble", "embedded-browser-manual", "per-workflow-tool-script", "duplicated-routing-table"]
   },
   "manuals": [
-    { "id": "browser", "source": "manuals/browser.md", "loadFor": ["browser/*", "qa/app", "qa/report-only"] }
+    { "id": "browser", "source": "manuals/browser.md", "loadFor": ["browser/*", "qa/app"] }
   ],
   "distribution": {
     "visibleSkills": ["goldband"],
@@ -56,15 +56,8 @@
         "verification": ["Validate every finding against current evidence and state clearly when no blocking issue is verified."]
       },
       "actions": [
-        { "id": "code", "description": "Review a code diff.", "runtime": "typed", "risk": "medium", "promptContract": { "relevantContext": ["Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime."] } },
-        { "id": "security", "description": "Review security and trust boundaries.", "runtime": "compatibility", "risk": "medium" },
-        { "id": "design", "description": "Review visual and product design.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "devex", "description": "Review developer experience.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "opposite-host", "description": "Get an opposite-host second opinion.", "runtime": "registered-only", "risk": "low" },
-        { "id": "plan-ceo", "description": "Review product scope and ambition.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-design", "description": "Review a plan's design contract.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-devex", "description": "Review a plan's developer experience.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "plan-engineering", "description": "Review architecture and implementation plans.", "runtime": "registered-only", "risk": "medium" }
+        { "id": "code", "description": "Review a code diff.", "runtime": "typed", "owner": "review-runtime", "risk": "medium", "promptContract": { "relevantContext": ["Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime."] } },
+        { "id": "security", "description": "Review security and trust boundaries.", "runtime": "compatibility", "owner": "prompt-contract-dispatch", "risk": "medium" }
       ]
     },
     {
@@ -78,7 +71,7 @@
         "verification": ["Reproduce the symptom or provide equivalent direct evidence for the confirmed cause."]
       },
       "actions": [
-        { "id": "code", "description": "Investigate code or runtime behavior.", "runtime": "compatibility", "risk": "medium" }
+        { "id": "code", "description": "Investigate code or runtime behavior.", "runtime": "compatibility", "owner": "prompt-contract-dispatch", "risk": "medium" }
       ]
     },
     {
@@ -92,8 +85,7 @@
         "verification": ["Record direct pass/fail evidence for each tested behavior and distinguish tested, blocked, and untested scope."]
       },
       "actions": [
-        { "id": "app", "description": "Run product QA and record evidence.", "runtime": "typed", "risk": "medium" },
-        { "id": "report-only", "description": "Report QA findings without fixing.", "runtime": "registered-only", "risk": "medium", "promptContract": { "hardBoundaries": ["Do not modify files, application state, or deployment state while reporting findings."] } }
+        { "id": "app", "description": "Run product QA and record evidence.", "runtime": "typed", "owner": "qa-runtime", "risk": "medium" }
       ]
     },
     {
@@ -107,11 +99,8 @@
         "verification": ["Verify the resulting commit, remote, deployment, and user-visible health at the layers the action changed."]
       },
       "actions": [
-        { "id": "land", "description": "Merge, deploy, and verify.", "runtime": "registered-only", "risk": "high" },
-        { "id": "setup", "description": "Configure deployment.", "runtime": "registered-only", "risk": "high" },
-        { "id": "canary", "description": "Monitor a deployment after release.", "runtime": "registered-only", "risk": "high" },
-        { "id": "report", "description": "Produce a landing report.", "runtime": "registered-only", "risk": "low" },
-        { "id": "docs", "description": "Update documentation for a release.", "runtime": "registered-only", "risk": "low" }
+        { "id": "land", "description": "Merge, deploy, and verify.", "runtime": "registered-only", "lifecycle": "experimental", "risk": "high" },
+        { "id": "setup", "description": "Configure deployment.", "runtime": "registered-only", "lifecycle": "experimental", "risk": "high" }
       ]
     },
     {
@@ -125,10 +114,7 @@
         "verification": ["Make every task executable by naming its artifact, expected result, and proof step; identify unresolved decisions explicitly."]
       },
       "actions": [
-        { "id": "create", "description": "Create an implementation plan.", "runtime": "compatibility", "risk": "low", "hostSupport": ["claude"] },
-        { "id": "auto", "description": "Run the complete plan review pipeline.", "runtime": "registered-only", "risk": "low" },
-        { "id": "strategy", "description": "Explore product direction and scope.", "runtime": "registered-only", "risk": "low" },
-        { "id": "tune", "description": "Tune recurring planning questions.", "runtime": "registered-only", "risk": "low" }
+        { "id": "create", "description": "Create an implementation plan.", "runtime": "compatibility", "owner": "prompt-contract-dispatch", "risk": "low", "hostSupport": ["claude"] }
       ]
     },
     {
@@ -142,11 +128,7 @@
         "verification": ["Inspect the resulting page state and capture the smallest useful visual or textual evidence."]
       },
       "actions": [
-        { "id": "session", "description": "Use the persistent browser for interactive work.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "open", "description": "Open a visible browser workbench.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "scrape", "description": "Extract content or media from a page.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "cookies", "description": "Import browser cookies for authenticated testing.", "runtime": "registered-only", "risk": "high" },
-        { "id": "pair", "description": "Pair another agent with the browser.", "runtime": "registered-only", "risk": "medium" }
+        { "id": "session", "description": "Use the persistent browser for interactive work.", "runtime": "typed", "owner": "browse", "risk": "medium" }
       ]
     },
     {
@@ -160,9 +142,7 @@
         "verification": ["Check the result against the chosen typography, color, spacing, layout, interaction, and accessibility decisions."]
       },
       "actions": [
-        { "id": "consult", "description": "Define a design direction and system.", "runtime": "registered-only", "risk": "low" },
-        { "id": "prototype", "description": "Generate an HTML design prototype.", "runtime": "registered-only", "risk": "low" },
-        { "id": "explore", "description": "Explore multiple design directions.", "runtime": "registered-only", "risk": "low" }
+        { "id": "consult", "description": "Define a design direction and system.", "runtime": "typed", "owner": "design-decision-store", "risk": "low" }
       ]
     },
     {
@@ -171,15 +151,14 @@
       "defaultAction": "guard",
       "triggers": ["careful", "guard", "freeze", "restrict edits", "read only", "小心", "限制修改", "唯讀"],
       "promptContract": {
-        "relevantContext": ["Inspect the current safety state and the exact scope the user wants protected or released."],
-        "hardBoundaries": ["Change only the requested safety boundary. Never silently widen permissions or edit scope."],
-        "verification": ["Read back the effective safety state and report the scope now allowed or blocked."]
+        "relevantContext": ["Inspect the current Claude session ID and its existing careful-mode or freeze-mode state."],
+        "hardBoundaries": ["Change only the requested session-scoped hook mode. Never report protection as active without owner readback."],
+        "verification": ["Read back the authoritative hook mode state and verify a representative PreToolUse decision when enforcement changed."]
       },
       "actions": [
-        { "id": "careful", "description": "Enable careful command handling.", "runtime": "registered-only", "risk": "low" },
-        { "id": "guard", "description": "Enable workflow-local safety rails.", "runtime": "registered-only", "risk": "low" },
-        { "id": "freeze", "description": "Restrict edits to an approved scope.", "runtime": "registered-only", "risk": "low" },
-        { "id": "unfreeze", "description": "Remove an active edit restriction.", "runtime": "registered-only", "risk": "low" }
+        { "id": "guard", "description": "Enable careful-mode for a Claude session.", "runtime": "typed", "owner": "claude-hook-mode-state", "risk": "low", "hostSupport": ["claude"] },
+        { "id": "freeze", "description": "Enable read-only freeze-mode for a Claude session.", "runtime": "typed", "owner": "claude-hook-mode-state", "risk": "low", "hostSupport": ["claude"] },
+        { "id": "unfreeze", "description": "Disable freeze-mode for a Claude session.", "runtime": "typed", "owner": "claude-hook-mode-state", "risk": "low", "hostSupport": ["claude"] }
       ]
     },
     {
@@ -193,9 +172,9 @@
         "verification": ["Identify the artifact used, distinguish saved context from current state, and state the next actionable step."]
       },
       "actions": [
-        { "id": "save", "description": "Save current working context.", "runtime": "registered-only", "risk": "low" },
-        { "id": "restore", "description": "Restore saved working context.", "runtime": "registered-only", "risk": "low", "promptContract": { "hardBoundaries": ["Do not modify the project while restoring context."] } },
-        { "id": "retro", "description": "Summarize recent work and lessons.", "runtime": "registered-only", "risk": "low" }
+        { "id": "save", "description": "Save current working context.", "runtime": "typed", "owner": "context-checkpoint-store", "risk": "low" },
+        { "id": "restore", "description": "Restore saved working context.", "runtime": "typed", "owner": "context-checkpoint-store", "risk": "low", "promptContract": { "hardBoundaries": ["Do not modify the project while restoring context."] } },
+        { "id": "retro", "description": "Summarize recent work and lessons.", "runtime": "compatibility", "owner": "prompt-contract-dispatch", "risk": "low" }
       ]
     },
     {
@@ -209,9 +188,9 @@
         "verification": ["Read back the stored, recalled, or synchronized result and label anything not currently verified."]
       },
       "actions": [
-        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "runtime": "registered-only", "risk": "low" },
-        { "id": "setup", "description": "Configure GBrain integration.", "runtime": "registered-only", "risk": "high" },
-        { "id": "sync", "description": "Synchronize GBrain knowledge.", "runtime": "registered-only", "risk": "high" }
+        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "runtime": "typed", "owner": "goldband-knowledge", "risk": "low" },
+        { "id": "setup", "description": "Configure GBrain integration.", "runtime": "registered-only", "lifecycle": "experimental", "risk": "high" },
+        { "id": "sync", "description": "Synchronize GBrain knowledge.", "runtime": "registered-only", "lifecycle": "experimental", "risk": "high" }
       ]
     },
     {
@@ -225,8 +204,7 @@
         "verification": ["Run repeatable measurements, preserve raw results, and report both the result and test conditions."]
       },
       "actions": [
-        { "id": "workflow", "description": "Benchmark product or workflow performance.", "runtime": "registered-only", "risk": "low" },
-        { "id": "models", "description": "Compare model performance.", "runtime": "registered-only", "risk": "low" }
+        { "id": "workflow", "description": "Benchmark product or workflow performance.", "runtime": "typed", "owner": "benchmark-evidence-aggregator", "risk": "low" }
       ]
     },
     {
@@ -240,8 +218,24 @@
         "verification": ["Render or inspect the final artifact and verify content accuracy, structure, links, and visual layout as applicable."]
       },
       "actions": [
-        { "id": "generate", "description": "Generate product or module documentation.", "runtime": "registered-only", "risk": "low" },
-        { "id": "pdf", "description": "Create a PDF artifact.", "runtime": "registered-only", "risk": "medium" }
+        {
+          "id": "generate",
+          "description": "Audit documentation coverage and prepare documentation artifacts.",
+          "runtime": "typed",
+          "owner": "documentation-audit",
+          "risk": "low",
+          "runtimeContract": {
+            "modes": ["audit"],
+            "requiredInputs": { "audit": ["diffFile"] },
+            "outputs": ["coverage-artifact", "pr-body-section-artifact"],
+            "sideEffects": { "pr-body-update": "native-host-approval" }
+          },
+          "promptContract": {
+            "relevantContext": ["Audit mode requires a unified diff input and emits a deterministic Diataxis coverage artifact."],
+            "hardBoundaries": ["Do not update a pull request from the workflow runtime; prepare a PR-body section artifact and require native host approval for the outward-facing update."],
+            "verification": ["Inspect the coverage artifact schema and the prepared PR-body section; if an update was requested, stop at the native approval boundary."]
+          }
+        }
       ]
     },
     {
@@ -255,9 +249,8 @@
         "verification": ["Read back the installed state and run the narrowest relevant health, syntax, or installation check."]
       },
       "actions": [
-        { "id": "health", "description": "Inspect Goldband health and installation state.", "runtime": "registered-only", "risk": "low", "promptContract": { "hardBoundaries": ["Health inspection is read-only unless the user separately requests maintenance."] } },
-        { "id": "upgrade", "description": "Upgrade Goldband.", "runtime": "registered-only", "risk": "high" },
-        { "id": "skill-authoring", "description": "Create or improve a Goldband workflow skill.", "runtime": "registered-only", "risk": "low" }
+        { "id": "health", "description": "Inspect Goldband health and installation state.", "runtime": "typed", "owner": "goldband-installation", "risk": "low", "promptContract": { "hardBoundaries": ["Health inspection is read-only unless the user separately requests maintenance."] } },
+        { "id": "upgrade", "description": "Upgrade Goldband.", "runtime": "typed", "owner": "goldband-setup-gate", "risk": "high" }
       ]
     },
     {
@@ -271,11 +264,7 @@
         "verification": ["Use the relevant build, test, simulator, screenshot, or project-state evidence and report untested device coverage."]
       },
       "actions": [
-        { "id": "clean", "description": "Clean iOS project state.", "runtime": "registered-only", "risk": "low" },
-        { "id": "review", "description": "Review iOS design and behavior.", "runtime": "registered-only", "risk": "medium" },
-        { "id": "fix", "description": "Repair iOS implementation issues.", "runtime": "registered-only", "risk": "low" },
-        { "id": "qa", "description": "Run iOS QA.", "runtime": "registered-only", "risk": "high" },
-        { "id": "sync", "description": "Synchronize iOS project state.", "runtime": "registered-only", "risk": "high" }
+        { "id": "qa", "description": "Run iOS QA.", "runtime": "typed", "owner": "ios-qa-evidence", "risk": "high" }
       ]
     }
   ]

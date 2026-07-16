@@ -781,6 +781,7 @@ create_internal_workflow_docs() {
 create_codex_runtime_root() {
   local goldband_dir="$1"
   local codex_goldband="$2"
+  local root_skill="$goldband_dir/generated/host-skills/codex.SKILL.md"
 
   if [ -L "$codex_goldband" ]; then
     rm -f "$codex_goldband"
@@ -792,10 +793,10 @@ create_codex_runtime_root() {
 
   mkdir -p "$codex_goldband" "$codex_goldband/browse" "$codex_goldband/review" "$codex_goldband/workflows"
 
-  if [ -f "$goldband_dir/SKILL.md" ]; then
+  if [ -f "$root_skill" ]; then
     # Codex discovers skills from SKILL.md files. Keep the root selector as a
     # materialized file; symlinked SKILL.md files can be skipped by the scanner.
-    _materialize_codex_skill_file "$goldband_dir/SKILL.md" "$codex_goldband/SKILL.md"
+    _materialize_codex_skill_file "$root_skill" "$codex_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$codex_goldband/bin"
@@ -828,6 +829,7 @@ create_codex_runtime_root() {
 create_claude_runtime_root() {
   local goldband_dir="$1"
   local claude_goldband="$2"
+  local root_skill="$goldband_dir/generated/host-skills/claude.SKILL.md"
 
   if [ ! -L "$claude_goldband" ] && same_dir_path "$goldband_dir" "$claude_goldband"; then
     mkdir -p "$claude_goldband/workflows"
@@ -848,8 +850,8 @@ create_claude_runtime_root() {
 
   mkdir -p "$claude_goldband" "$claude_goldband/browse" "$claude_goldband/review" "$claude_goldband/workflows"
 
-  if [ -f "$goldband_dir/SKILL.md" ]; then
-    _link_or_copy "$goldband_dir/SKILL.md" "$claude_goldband/SKILL.md"
+  if [ -f "$root_skill" ]; then
+    _link_or_copy "$root_skill" "$claude_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$claude_goldband/bin"
@@ -880,6 +882,7 @@ create_claude_runtime_root() {
 create_factory_runtime_root() {
   local goldband_dir="$1"
   local factory_goldband="$2"
+  local root_skill="$goldband_dir/generated/host-skills/factory.SKILL.md"
 
   if [ -L "$factory_goldband" ]; then
     rm -f "$factory_goldband"
@@ -889,8 +892,8 @@ create_factory_runtime_root() {
 
   mkdir -p "$factory_goldband" "$factory_goldband/browse" "$factory_goldband/review"
 
-  if [ -f "$goldband_dir/SKILL.md" ]; then
-    _link_or_copy "$goldband_dir/SKILL.md" "$factory_goldband/SKILL.md"
+  if [ -f "$root_skill" ]; then
+    _link_or_copy "$root_skill" "$factory_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$factory_goldband/bin"
@@ -921,6 +924,7 @@ create_factory_runtime_root() {
 create_opencode_runtime_root() {
   local goldband_dir="$1"
   local opencode_goldband="$2"
+  local root_skill="$goldband_dir/generated/host-skills/opencode.SKILL.md"
 
   if [ -L "$opencode_goldband" ]; then
     rm -f "$opencode_goldband"
@@ -930,8 +934,8 @@ create_opencode_runtime_root() {
 
   mkdir -p "$opencode_goldband" "$opencode_goldband/browse" "$opencode_goldband/design" "$opencode_goldband/review" "$opencode_goldband/qa" "$opencode_goldband/plan-devex-review"
 
-  if [ -f "$goldband_dir/SKILL.md" ]; then
-    _link_or_copy "$goldband_dir/SKILL.md" "$opencode_goldband/SKILL.md"
+  if [ -f "$root_skill" ]; then
+    _link_or_copy "$root_skill" "$opencode_goldband/SKILL.md"
   fi
   if [ -d "$goldband_dir/bin" ]; then
     _link_or_copy "$goldband_dir/bin" "$opencode_goldband/bin"
@@ -1105,7 +1109,7 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
   sed -e "s|~/.claude/skills/goldband|~/.kiro/skills/goldband|g" \
       -e "s|\.claude/skills/goldband|.kiro/skills/goldband|g" \
       -e "s|\.claude/skills|.kiro/skills|g" \
-      "$SOURCE_GOLDBAND_DIR/SKILL.md" > "$KIRO_GOLDBAND/SKILL.md"
+      "$SOURCE_GOLDBAND_DIR/generated/host-skills/kiro.SKILL.md" > "$KIRO_GOLDBAND/SKILL.md"
 
   create_internal_workflow_docs "$KIRO_GOLDBAND"
   cleanup_legacy_full_workflow_entries_for_standard "$SOURCE_GOLDBAND_DIR" "$KIRO_SKILLS" "$SOURCE_GOLDBAND_DIR/.agents/skills" "kiro"

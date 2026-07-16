@@ -59,7 +59,7 @@ Key behavioral rules (these go ABOVE the dispatch tiers):
    ALWAYS spawn a Claude Code session. Never tell the user to open Claude Code.
 2. **Resolve the repo.** If the user names a repo, set the working directory. If
    unknown, ask which repo.
-3. **Automated planning runs end-to-end.** Spawn `$goldband plan auto`, let it run the full pipeline, report back
+3. **Planning runs end-to-end.** Spawn `$goldband plan create`, let its review stage finish, report back
    in chat. User should never have to leave Telegram.
 
 ### CLAUDE.md collision handling
@@ -85,15 +85,15 @@ A/B tested: 2x time, meaningfully better output.
 ### goldband-full (Full tier)
 `openclaw/goldband-full-CLAUDE.md` — chains existing goldband skills:
 1. Read CLAUDE.md and understand the project
-2. Run `$goldband plan auto` (CEO + eng + design review)
+2. Run `$goldband plan create` and include its engineering and design review stages
 3. Implement the approved plan
-4. Run `$goldband release land` to create and land the PR
+4. Use the user-approved repository release process to create and land the PR
 5. Report back with PR URL and decisions
 
 ### goldband-plan (Plan tier)
 `openclaw/goldband-plan-CLAUDE.md` — full review gauntlet, no implementation:
-1. Run `$goldband plan strategy` to produce a design doc
-2. Run `$goldband plan auto` (CEO + eng + design + DX reviews + codex adversarial)
+1. Run `$goldband plan create` to produce a design doc
+2. Complete the plan's engineering, design, DX, and adversarial review stages
 3. Save the reviewed plan to `plans/<project-slug>-plan-<date>.md`
 4. Report back: plan path, summary, key decisions, recommended next step
 
