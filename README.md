@@ -146,13 +146,18 @@ prompts 與 Goldband hooks 不會因此停用，Git 寫入權仍由外層 manage
 Repo root 的預設聚合測試入口是：
 
 ```bash
+npm run bootstrap:test # 首次 clone、更新 lockfile 或 installer migration 後執行
 npm test
 # or
 bun run test
 ```
 
-它等同 `npm run test:repo`，會跑一組明確列出的 package-owned suites，並在
-最後輸出 per-suite summary。查看清單：
+`bootstrap:test` 會安裝 root、`mcp/server` 與 `goldband-loop` 各自宣告的
+dependencies，並只清除舊 installer 留在 ignored host skill roots 下的
+generated entries；ownership 必須由 tracked retired inventory 或 managed marker
+證明，同前綴的未知 skill 會保留。`npm test` 本身不會連網或偷偷修改 checkout；
+它會先檢查 dependencies、Bun minimum 與 legacy artifacts，再跑一組明確列出的
+package-owned suites，最後輸出 per-suite summary。查看清單：
 
 ```bash
 npm run test:repo:list

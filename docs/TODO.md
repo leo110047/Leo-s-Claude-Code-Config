@@ -1,64 +1,38 @@
 # TODO
 
-## P0 - 補完 workflow convergence loop runtime
+## P0 - 補完 workflow convergence loop real-mode 驗證
 
-目前狀態：workflow convergence loop 的實作只完成了一部分。後續要補齊 runtime
-自主多輪執行、stop condition predicate、逐輪 evidence、real-mode 驗證、以及文件同步。
-目標是讓 loop 真的由 `goldband-loop/workflows/` runtime 擁有，而不是靠 markdown
-指示或模型自律來完成「跑一輪、檢查、再跑下一輪」。
+目前狀態：runtime-owned convergence loop 的 deterministic 基礎已完成；剩餘 P0
+是把 mock coverage 推進到真實 host 的 live evidence。不可再把 controller、stop
+predicate 或逐輪 evidence 列為尚未實作，也不可用 fixture 冒充 real-mode E2E。
+
+### 已完成
+
+- [x] runtime 自主驅動多輪，不需要 caller 手動提供 iteration 或 blocker 狀態。
+- [x] `target-met`、`iteration-cap`、`same-blocker-repeated`、
+  `no-improvement` stop predicates 與 regression tests。
+- [x] `review/code` 把前輪 findings 帶入下一輪，並輸出 signal trail、stop reason
+  與 machine-readable `loop-summary`。
+- [x] `qa/app` typed mock adapter 只重跑 failed checks，並驗證 check schema。
+- [x] CLI 保留 single-pass 預設，且 `--max-iterations` 不可超過 registry cap。
+- [x] 每輪 JSONL evidence 包含 `iteration` 與 `signalSnapshot`。
+- [x] `goldband-loop/workflows/README.md` 已描述目前實際 loop 行為。
 
 ### 待辦
 
-- [ ] 重新做 gap audit：對照目前 `goldband-loop/workflows/` 的實作狀態，
-  標出 convergence loop 哪些已完成、部分完成、未完成、未驗證。
-
-- [ ] 確認 loop controller 真正由 runtime 自主驅動，不靠 caller 手動塞
-  `iteration` 或 `repeatedBlocker` 來假裝多輪。
-
-- [ ] 補齊 stop predicate 的可執行測試：
-  `target-met`、`iteration-cap`、`same-blocker-repeated`、`no-improvement`。
-
-- [ ] 補齊 `review/code` 多輪語意：
-  第一輪 findings 要能進入第二輪 context，第二輪要能判斷既有 findings 是否解掉、
-  是否出現新問題，最後輸出 machine-readable loop summary。
-
-- [ ] 補齊 `qa/app` 最小 typed adapter：
-  固定 mock check list、schema 驗證 pass/fail、第二輪只 rerun failed checks。
-  真 browser QA 不要硬搬進這次範圍；若未支援，要明確記 blocked / out of scope。
-
-- [ ] 補齊 CLI 行為驗證：
-  `--loop` 不破壞預設 single-pass，`--max-iterations` 在 real mode 只能調小、
-  不能超過 registry cap。
-
-- [ ] 補齊 evidence readback：
-  每輪 JSONL event 要有 `iteration`、`signalSnapshot`；結束時要有
-  `loop-summary`，能重建 signal trail 與 stop reason。
-
-- [ ] 補跑或補建測試：
-  loop controller unit tests、`review/code` mock 多輪整合測試、
-  `qa/app` mock 多輪整合測試、iteration cap 限制測試。
-
-- [ ] 補做 `review/code` real LLM e2e。
-  若 host、授權、網路、或 budget gate 無法執行，不可用 mock 冒充；要在結果中
-  明確標為 blocked / not verified。
-
-- [ ] 同步文件：
-  `ARCHITECTURE.md` 不可再宣稱 runner 只有 single-pass；
-  `goldband-loop/workflows/README.md` 要描述實際 loop 行為；
-  `goldband-loop/workflows/COVERAGE.md` 只在 runtime 狀態真的改變時同步。
-
-- [ ] 補完整驗證紀錄：
-  至少包含 focused runtime tests、`node scripts/check-code-style.mjs`、
-  必要時執行 `node scripts/generate-goldband-surfaces.mjs --check` 與
-  `node scripts/test-workflow-contracts.mjs`。
+- [ ] 執行 `review/code` real LLM convergence E2E，保存真實 host、命令、退出狀態、
+  JSONL evidence 與 artifacts；host、授權、網路或 budget 不足時明確標記 blocked。
+- [ ] 執行 `qa/app` real browser E2E；在 typed browser adapter 完成前維持
+  unsupported，不可把 mock check 或 Playwright setup 當成 runtime 支援。
+- [ ] 對 live runs 驗證 iteration context、stop reason 與 artifact readback，並把
+  結果同步到 architecture / coverage 文件。
 
 ### 驗收標準
 
-- [ ] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
-- [ ] `review/code` 與 `qa/app` 的 mock 多輪整合測試都有逐輪 evidence。
-- [ ] real-mode 驗證結果被誠實標記為 pass、blocked、或 not verified。
-- [ ] 文件描述、registry 狀態、runtime 行為三者一致。
-- [ ] 沒有直接編輯 generated workflow contracts 或 root `SKILL.md`。
+- [x] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
+- [x] `review/code` 與 `qa/app` mock 多輪整合測試都有逐輪 evidence。
+- [ ] real-mode 驗證結果有可重跑的 pass、blocked 或 unsupported evidence。
+- [ ] live evidence、registry 狀態、runtime 行為與文件一致。
 
 ## P1 - Workflow runtime migration
 

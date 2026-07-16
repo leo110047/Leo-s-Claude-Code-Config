@@ -177,6 +177,9 @@ jobs:
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
 
+      - name: Test terminal PTY and WebSocket runtime on macOS
+        run: cd goldband-loop && bun test browse/test/terminal-agent-integration.test.ts --max-concurrency=1 --timeout=30000
+
       - name: Test managed worktree Seatbelt enforcement on macOS
         run: cd goldband-loop && bun test test/managed-worktree.test.ts
         env:
@@ -184,6 +187,15 @@ jobs:
 
       - name: Test Goldband Loop Playwright setup behavior on macOS
         run: bash scripts/test-goldband-loop-playwright-setup.sh
+
+      - name: Install Goldband Loop Playwright browser on macOS
+        run: cd goldband-loop && bunx playwright install chromium
+
+      - name: Test Goldband Loop workflow runtime on macOS
+        run: cd goldband-loop && bun run test:workflows
+
+      - name: Test Goldband Loop free suite on macOS
+        run: cd goldband-loop && bun run test:free
 
       - name: Test workflow installer integration on macOS Bash
         run: bash scripts/test-workflow-integration.sh

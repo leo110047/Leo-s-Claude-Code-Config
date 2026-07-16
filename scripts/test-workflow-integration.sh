@@ -297,11 +297,11 @@ write_fake_bun_bin() {
   mkdir -p "$bin_dir"
   cat > "$bin_dir/bun" <<'EOF_BUN'
 #!/usr/bin/env bash
+[ "${1:-}" != "--version" ] || printf '%s\n' "${FAKE_BUN_VERSION:-1.3.11}"
 exit 0
 EOF_BUN
   chmod +x "$bin_dir/bun"
 }
-
 write_noop_runtime_bin() {
   local loop_dir="$1"
   local bin_name="$2"
@@ -314,8 +314,9 @@ EOF_RUNTIME_BIN
 
 create_minimal_real_setup_fixture() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/review"
+  mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review"
   cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
+  cp "$ROOT_DIR/goldband-loop/lib/retired-workflow-entry-names.txt" "$loop_dir/lib/retired-workflow-entry-names.txt"
   chmod +x "$loop_dir/setup"
   write_fake_config_bin "$loop_dir"
   write_noop_runtime_bin "$loop_dir" "goldband-task-emission"
@@ -324,6 +325,7 @@ create_minimal_real_setup_fixture() {
 exit 0
 EOF_BROWSE
   chmod +x "$loop_dir/browse/dist/browse"
+  printf '%s\n' '{"engines":{"bun":">=1.3.11"}}' > "$loop_dir/package.json"
   printf '0.0.0-test\n' > "$loop_dir/VERSION"
   write_skill "$loop_dir" "goldband"
   write_skill "$loop_dir/browse" "goldband-browse"
@@ -345,7 +347,6 @@ EOF_BROWSE
   printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
   write_minimal_review_assets "$loop_dir"
 }
-
 write_minimal_review_assets() {
   local loop_dir="$1"
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
@@ -473,6 +474,8 @@ write_fake_bun_bin "$TMP_ROOT/test-bin"
 SELF_HOME="$TMP_ROOT/self-home"
 SELF_SOURCE="$SELF_HOME/.claude/skills/goldband"
 create_minimal_real_setup_fixture "$SELF_SOURCE"
+write_skill "$SELF_SOURCE/.agents/skills/external-tool" "external-tool"
+write_skill "$SELF_SOURCE/.agents/skills/goldband-custom" "goldband-custom"
 printf '%s\n' 'self-source sentinel' >> "$SELF_SOURCE/SKILL.md"
 run_minimal_real_setup "$SELF_HOME" "$SELF_SOURCE/setup" --profile standard --quiet >/tmp/goldband-loop-self-standard.log
 if [ -L "$SELF_SOURCE/SKILL.md" ]; then
@@ -481,7 +484,8 @@ if [ -L "$SELF_SOURCE/SKILL.md" ]; then
 fi
 grep -q 'self-source sentinel' "$SELF_SOURCE/SKILL.md"
 assert_exists "$SELF_SOURCE/workflows/review/code.workflow.md"
-
+assert_absent "$SELF_SOURCE/.agents/skills/goldband-review"
+for PRESERVED_SOURCE_SKILL in goldband goldband-custom external-tool; do assert_exists "$SELF_SOURCE/.agents/skills/$PRESERVED_SOURCE_SKILL"; done
 COPY_HOME="$TMP_ROOT/copy-home"
 COPY_SOURCE="$TMP_ROOT/copy-source/goldband-loop"
 create_minimal_real_setup_fixture "$COPY_SOURCE"
@@ -497,18 +501,19 @@ assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
 assert_absent "$COPY_HOME/.claude/skills/goldband-open-browser"
 assert_absent "$COPY_HOME/.claude/skills/goldband-workflow-upgrade"
 assert_exists "$COPY_HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
-
 CODEX_LEGACY_HOME="$TMP_ROOT/codex-legacy-home"
 CODEX_LEGACY_SOURCE="$TMP_ROOT/codex-legacy-source/goldband-loop"
 create_minimal_real_setup_fixture "$CODEX_LEGACY_SOURCE"
 plant_legacy_workflow_entries "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE"
+write_skill "$CODEX_LEGACY_SOURCE/.agents/skills/goldband-custom" "goldband-custom"
+ln -s "$CODEX_LEGACY_SOURCE/.agents/skills/goldband-custom" "$CODEX_LEGACY_HOME/.codex/skills/goldband-custom"
 run_minimal_real_setup "$CODEX_LEGACY_HOME" "$CODEX_LEGACY_SOURCE/setup" --host codex --profile standard --quiet >/tmp/goldband-loop-codex-legacy-cleanup.log
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-open-browser"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-workflow-upgrade"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
-
+assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband-custom"
 for HOST_CASE in factory opencode kiro; do
   HOST_HOME="$TMP_ROOT/$HOST_CASE-home"
   HOST_SOURCE="$TMP_ROOT/$HOST_CASE-source/goldband-loop"
@@ -529,7 +534,6 @@ for HOST_CASE in factory opencode kiro; do
     assert_not_contains "$KIRO_CONTRACT" '$HOME/.codex/skills/goldband'
   fi
 done
-
 PROMPT_LEGACY_HOME="$TMP_ROOT/prompt-legacy-home"
 mkdir -p "$PROMPT_LEGACY_HOME/.codex"
 ln -s "$TMP_ROOT/codex/prompts" "$PROMPT_LEGACY_HOME/.codex/prompts"

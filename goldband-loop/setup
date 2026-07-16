@@ -3,10 +3,14 @@
 set -e
 umask 077  # Restrict new files to owner-only (0o600 files, 0o700 dirs)
 
+SOURCE_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+MINIMUM_BUN_VERSION=$(sed -n 's/.*"bun"[[:space:]]*:[[:space:]]*">=\([0-9][0-9.]*\)".*/\1/p' "$SOURCE_GOLDBAND_DIR/package.json" | head -1)
+[ -n "$MINIMUM_BUN_VERSION" ] || { echo "Error: goldband package is missing an exact engines.bun >=x.y.z contract." >&2; exit 1; }
+
 if ! command -v bun >/dev/null 2>&1; then
   echo "Error: bun is required but not installed." >&2
   echo "Install with checksum verification:" >&2
-  echo '  BUN_VERSION="1.3.10"' >&2
+  echo "  BUN_VERSION=\"$MINIMUM_BUN_VERSION\"" >&2
   echo '  tmpfile=$(mktemp)' >&2
   echo '  curl -fsSL "https://bun.sh/install" -o "$tmpfile"' >&2
   echo '  echo "Verify checksum before running: shasum -a 256 $tmpfile"' >&2
@@ -14,8 +18,35 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
+version_at_least() {
+  local current="${1%%+*}"
+  local minimum="${2%%+*}"
+  local current_major current_minor current_patch
+  local minimum_major minimum_minor minimum_patch
+  IFS=. read -r current_major current_minor current_patch <<EOF
+$current
+EOF
+  IFS=. read -r minimum_major minimum_minor minimum_patch <<EOF
+$minimum
+EOF
+  case "$current_major$current_minor$current_patch$minimum_major$minimum_minor$minimum_patch" in
+    *[!0-9]*) return 1 ;;
+  esac
+  [ "$current_major" -gt "$minimum_major" ] && return 0
+  [ "$current_major" -lt "$minimum_major" ] && return 1
+  [ "$current_minor" -gt "$minimum_minor" ] && return 0
+  [ "$current_minor" -lt "$minimum_minor" ] && return 1
+  [ "$current_patch" -ge "$minimum_patch" ]
+}
+
+CURRENT_BUN_VERSION=$(bun --version 2>/dev/null || true)
+if ! version_at_least "$CURRENT_BUN_VERSION" "$MINIMUM_BUN_VERSION"; then
+  echo "Error: Bun >=$MINIMUM_BUN_VERSION is required; found ${CURRENT_BUN_VERSION:-unknown}." >&2
+  echo "Upgrade Bun before running setup: bun upgrade" >&2
+  exit 1
+fi
+
 INSTALL_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd)"
-SOURCE_GOLDBAND_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 INSTALL_SKILLS_DIR="$(dirname "$INSTALL_GOLDBAND_DIR")"
 BROWSE_BIN="$SOURCE_GOLDBAND_DIR/browse/dist/browse"
 TASK_EMISSION_BIN="$SOURCE_GOLDBAND_DIR/bin/goldband-task-emission"
@@ -106,6 +137,57 @@ _materialize_codex_skill_file() {
 # ─── Quiet mode helper ────────────────────────────────────────
 QUIET=0
 log() { [ "$QUIET" -eq 0 ] && echo "$@" || true; }
+
+cleanup_retired_source_host_skill_artifacts() {
+  local host_root skills_root target target_name
+  local inventory="$SOURCE_GOLDBAND_DIR/lib/retired-workflow-entry-names.txt"
+  [ -f "$inventory" ] || {
+    echo "goldband setup failed: missing retired workflow inventory: $inventory" >&2
+    exit 1
+  }
+  validate_retired_workflow_inventory "$inventory"
+  for host_root in .agents .factory .opencode; do
+    skills_root="$SOURCE_GOLDBAND_DIR/$host_root/skills"
+    [ -d "$skills_root" ] || continue
+    for target in "$skills_root"/goldband-*; do
+      [ -e "$target" ] || [ -L "$target" ] || continue
+      target_name="$(basename "$target")"
+      if ! retired_workflow_entry_name "$target_name" "$inventory" && \
+          { [ -L "$target" ] || [ ! -f "$target/.goldband-managed-skill" ]; }; then
+        continue
+      fi
+      rm -rf "$target"
+      log "  cleaned retired source host skill: ${target#"$SOURCE_GOLDBAND_DIR"/}"
+    done
+  done
+}
+
+validate_retired_workflow_inventory() {
+  local inventory="$1"
+  local retired_name
+  while IFS= read -r retired_name || [ -n "$retired_name" ]; do
+    [ -n "$retired_name" ] || continue
+    case "$retired_name" in
+      *[!a-z0-9-]*|-*|*-|*--*)
+        echo "goldband setup failed: invalid retired workflow entry name: $retired_name" >&2
+        exit 1
+        ;;
+    esac
+  done < "$inventory"
+}
+
+retired_workflow_entry_name() {
+  local target_name="$1"
+  local inventory="$2"
+  local retired_name
+  while IFS= read -r retired_name || [ -n "$retired_name" ]; do
+    [ -n "$retired_name" ] || continue
+    case "$target_name" in
+      "$retired_name"|"goldband-$retired_name") return 0 ;;
+    esac
+  done < "$inventory"
+  return 1
+}
 
 # ─── Parse flags ──────────────────────────────────────────────
 HOST="claude"
@@ -209,6 +291,8 @@ elif [ "$HOST" = "factory" ]; then
 elif [ "$HOST" = "opencode" ]; then
   INSTALL_OPENCODE=1
 fi
+
+cleanup_retired_source_host_skill_artifacts
 
 migrate_direct_codex_install() {
   local goldband_dir="$1"
@@ -578,34 +662,6 @@ workflow_managed_manifest_path() {
   printf '%s\n' "$HOME/.goldband/state/workflow-managed-$host"
 }
 
-write_goldband_managed_skill_marker() {
-  local target="$1"
-  local source="$2"
-  [ -d "$target" ] || return 0
-  [ -L "$target" ] && return 0
-  printf 'source=%s\n' "$source" > "$target/.goldband-managed-skill"
-}
-
-goldband_managed_skill_marker_matches() {
-  local target="$1"
-  local source_root="$2"
-  local generated_root="$3"
-  local marker="$target/.goldband-managed-skill"
-  local source_path source_dir
-
-  [ -f "$marker" ] || return 1
-  source_path="$(sed -n 's/^source=//p' "$marker" | head -1)"
-  [ -n "$source_path" ] || return 1
-  if [ -d "$source_path" ]; then
-    source_dir="$source_path"
-  else
-    source_dir="$(dirname "$source_path")"
-  fi
-  path_under_dir "$source_dir" "$source_root" && return 0
-  [ -n "$generated_root" ] && path_under_dir "$source_dir" "$generated_root" && return 0
-  return 1
-}
-
 symlink_target_under_dir() {
   local candidate="$1"
   local base="$2"
@@ -626,69 +682,6 @@ symlink_target_under_dir() {
     "$base_real"|"$base_real"/*) return 0 ;;
     *) return 1 ;;
   esac
-}
-
-skill_file_matches_under_dir() {
-  local target="$1"
-  local root="$2"
-  local source_skill
-
-  [ -f "$target/SKILL.md" ] || return 1
-  [ -d "$root" ] || return 1
-
-  for source_skill in "$root"/*/SKILL.md; do
-    [ -f "$source_skill" ] || continue
-    cmp -s "$target/SKILL.md" "$source_skill" && return 0
-  done
-
-  return 1
-}
-
-kiro_skill_file_matches_under_dir() {
-  local target="$1"
-  local root="$2"
-  local source_skill
-
-  [ -f "$target/SKILL.md" ] || return 1
-  [ -d "$root" ] || return 1
-
-  for source_skill in "$root"/goldband*/SKILL.md; do
-    [ -f "$source_skill" ] || continue
-    if cmp -s "$target/SKILL.md" <(
-      sed -e 's|\$HOME/.codex/skills/goldband|$HOME/.kiro/skills/goldband|g' \
-          -e 's|~/.codex/skills/goldband|~/.kiro/skills/goldband|g' \
-          -e 's|~/.claude/skills/goldband|~/.kiro/skills/goldband|g' \
-          "$source_skill"
-    ); then
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-goldband_managed_skill_entry() {
-  local target="$1"
-  local source_root="$2"
-  local generated_root="$3"
-
-  if [ -L "$target" ]; then
-    path_under_dir "$target" "$source_root" && return 0
-    [ -n "$generated_root" ] && path_under_dir "$target" "$generated_root" && return 0
-  fi
-
-  if [ -d "$target" ] && [ -L "$target/SKILL.md" ]; then
-    symlink_target_under_dir "$target/SKILL.md" "$source_root" && return 0
-    [ -n "$generated_root" ] && symlink_target_under_dir "$target/SKILL.md" "$generated_root" && return 0
-  fi
-
-  if [ -d "$target" ]; then
-    goldband_managed_skill_marker_matches "$target" "$source_root" "$generated_root" && return 0
-    skill_file_matches_under_dir "$target" "$source_root" && return 0
-    [ -n "$generated_root" ] && skill_file_matches_under_dir "$target" "$generated_root" && return 0
-  fi
-
-  return 1
 }
 
 cleanup_manifest_entries_for_standard() {
@@ -715,42 +708,12 @@ cleanup_manifest_entries_for_standard() {
   fi
 }
 
-LEGACY_WORKFLOW_ENTRY_NAMES="autoplan benchmark benchmark-models browse canary careful codex context-restore context-save cso design-consultation design-html design-review design-shotgun devex-review document-generate document-release freeze goldband-upgrade guard health investigate ios-clean ios-design-review ios-fix ios-qa ios-sync land-and-deploy landing-report learn make-pdf office-hours open-browser open-goldband-browser pair-agent plan-ceo-review plan-design-review plan-devex-review plan-eng-review plan-tune qa qa-only retro review scrape setup-browser-cookies setup-deploy setup-gbrain skillify sync-gbrain unfreeze workflow-upgrade"
-
-retired_goldband_namespace_entry() {
-  local target="$1"
-  case "$(basename "$target")" in
-    goldband-*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-legacy_symlink_points_to_source() {
-  local target="$1"
-  local source_root="$2"
-  local link_target
-
-  if [ -L "$target" ]; then
-    link_target="$(readlink "$target" 2>/dev/null || true)"
-  elif [ -L "$target/SKILL.md" ]; then
-    link_target="$(readlink "$target/SKILL.md" 2>/dev/null || true)"
-  else
-    return 1
-  fi
-
-  case "$link_target" in
-    "$source_root"|"$source_root"/*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 cleanup_legacy_full_workflow_entries_for_standard() {
-  local goldband_dir="$1"
   local skills_dir="$2"
-  local generated_root="$3"
   local host="${4:-}"
   local removed=()
-  local skill_dir skill_name target
+  local skill_name target
+  local inventory="$SOURCE_GOLDBAND_DIR/lib/retired-workflow-entry-names.txt"
 
   if [ -n "$host" ]; then
     cleanup_manifest_entries_for_standard "$host" "$skills_dir"
@@ -758,32 +721,19 @@ cleanup_legacy_full_workflow_entries_for_standard() {
 
   # The prompt sources are intentionally gone, so keep only this migration
   # inventory to identify names owned by pre-thin-contract installers.
-  for skill_name in $LEGACY_WORKFLOW_ENTRY_NAMES; do
+  [ -f "$inventory" ] || {
+    echo "goldband setup failed: missing retired workflow inventory: $inventory" >&2
+    exit 1
+  }
+  validate_retired_workflow_inventory "$inventory"
+  while IFS= read -r skill_name || [ -n "$skill_name" ]; do
+    [ -n "$skill_name" ] || continue
     for target in "$skills_dir/$skill_name" "$skills_dir/goldband-$skill_name"; do
       [ -e "$target" ] || [ -L "$target" ] || continue
-      if retired_goldband_namespace_entry "$target" || \
-          goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
-          legacy_symlink_points_to_source "$target" "$goldband_dir"; then
-        rm -rf "$target"
-        removed+=("$(basename "$target")")
-      fi
+      rm -rf "$target"
+      removed+=("$(basename "$target")")
     done
-  done
-
-  if [ -n "$generated_root" ] && [ -d "$generated_root" ]; then
-    for skill_dir in "$generated_root"/goldband*/; do
-      [ -f "$skill_dir/SKILL.md" ] || continue
-      skill_name="$(basename "$skill_dir")"
-      case "$skill_name" in goldband) continue ;; esac
-      target="$skills_dir/$skill_name"
-      [ -e "$target" ] || [ -L "$target" ] || continue
-      if goldband_managed_skill_entry "$target" "$goldband_dir" "$generated_root" || \
-          { [ "$host" = "kiro" ] && kiro_skill_file_matches_under_dir "$target" "$generated_root"; }; then
-        rm -rf "$target"
-        removed+=("$skill_name")
-      fi
-    done
-  fi
+  done < "$inventory"
 
   if [ ${#removed[@]} -gt 0 ]; then
     echo "  cleaned legacy full-profile entries: ${removed[*]}"

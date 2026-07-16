@@ -1,5 +1,76 @@
 # Goldband Decisions
 
+## 2026-07-16: Repository Runtime Tests Require Bun 1.3.11 and Explicit Bootstrap
+
+Decision: treat Bun 1.3.11 as the minimum supported Goldband Loop runtime and
+make repository test setup an explicit, deterministic bootstrap step. The root
+test entrypoint remains offline and non-mutating; it fails early with one
+remediation command when declared dependencies, the Bun minimum, or retired
+ignored host artifacts are not ready.
+
+Implementation contract:
+
+- `goldband-loop/package.json` owns the Bun minimum and exact package-manager
+  version. Setup reads the minimum from that contract and rejects older Bun
+  before build, cleanup, or install side effects.
+- CI pins the same Bun release on every platform. macOS runs the focused real
+  PTY/WebSocket test plus the workflow and complete free runtime suites.
+- `npm run bootstrap:test` installs the root, `mcp/server`, and
+  `goldband-loop` lockfiles with their package-native installers. It also
+  removes entries from ignored legacy host skill roots only when the shared
+  retired inventory or a managed marker proves Goldband ownership. The root
+  `goldband` skill, unrelated entries, and unknown same-prefix skills remain.
+- `npm test` performs an offline preflight and reports all missing prerequisites
+  before starting the fail-fast suite runner. Focused `--suite` runs remain
+  available for diagnostics without requiring unrelated package setup.
+
+Assumptions:
+
+- Bun 1.3.11 or newer preserves the verified macOS PTY and WebSocket behavior.
+- `npm ci` and `bun install --frozen-lockfile` remain the authoritative clean
+  installers for their respective lockfiles.
+- The tracked retired-entry inventory remains the authoritative migration list;
+  new managed entries carry an explicit marker instead of claiming a prefix.
+
+Consequences:
+
+- A checkout that only ran root `npm ci` now gets a precise MCP/Loop dependency
+  error instead of failing later because nested `tsc` is absent.
+- Developers run one explicit bootstrap after clone, lockfile changes, or
+  installer migrations; ordinary test reruns do not access the network or
+  silently rewrite the checkout.
+- Bun 1.2.x is no longer advertised as supported. Environments pinned below
+  1.3.11 must upgrade before setup or the full runtime suite.
+- macOS CI takes longer because it now owns the same runtime confidence expected
+  from Linux instead of validating only installer and Playwright setup paths.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep `engines.bun >=1.0.0` and patch only the two tests | The failures reproduce in Bun 1.2.21 but pass unchanged in 1.3.11; weakening the runtime tests would preserve a false support claim. |
+| Let `npm test` install missing dependencies automatically | Makes a validation command networked and mutating, and hides checkout/bootstrap drift. |
+| Convert the root package to mixed npm/Bun workspaces | Does not give npm authoritative ownership of the Bun lockfile and expands the packaging change beyond the failure. |
+| Ignore legacy generated host artifacts in contract tests | Leaves removed public entrypoints on upgraded checkouts and makes installed state differ from clean state. |
+
+Failure signals:
+
+- A supported Bun release fails the focused macOS PTY/WebSocket round trip.
+- CI, setup instructions, `packageManager`, and `engines.bun` name different
+  Bun versions.
+- `npm run bootstrap:test && npm test` fails on a clean supported checkout due
+  to missing declared dependencies or ignored legacy artifacts.
+- Cleanup removes the root `goldband` skill, unrelated host entries, or unknown
+  same-prefix entries without a managed marker.
+
+Revisit triggers:
+
+- A newer Bun release is adopted after the same cross-platform suite passes.
+- Bun documents a lower stable release with equivalent PTY/WebSocket behavior
+  and the focused test verifies it on macOS.
+- The repository adopts one package manager and lockfile owner for all nested
+  packages, making the explicit multi-package bootstrap unnecessary.
+
 ## 2026-07-16: Managed Agent Worktrees Use an OS Sandbox and Brokered Finish
 
 Decision: keep the public worktree interface to `goldband worktree create` and

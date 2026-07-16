@@ -152,13 +152,19 @@ remain active, while the outer managed boundary continues to deny Git writes.
 The repo-root default aggregate test entrypoint is:
 
 ```bash
+npm run bootstrap:test # after the first clone, lockfile changes, or installer migrations
 npm test
 # or
 bun run test
 ```
 
-It is equivalent to `npm run test:repo`: it runs an explicit set of
-package-owned suites and prints a final per-suite summary. List the suites with:
+`bootstrap:test` installs the dependencies declared by the root, `mcp/server`,
+and `goldband-loop`, then removes entries from ignored host skill roots only
+when a tracked retired inventory or managed marker proves ownership. Unknown
+same-prefix skills are preserved. `npm test` itself does not access the network or
+silently mutate the checkout. It checks dependencies, the minimum Bun version,
+and legacy artifacts before running an explicit set of package-owned suites and
+printing a final per-suite summary. List the suites with:
 
 ```bash
 npm run test:repo:list

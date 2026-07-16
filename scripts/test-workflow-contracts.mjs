@@ -9,6 +9,7 @@ import {
   assertPromptSurfaceTotal,
   PROMPT_SURFACE_BUDGETS,
 } from './lib/prompt-surface-budget.mjs';
+import { listLegacyHostSkillArtifacts } from './lib/repo-test-environment.mjs';
 import {
   buildWorkflowContracts,
   validatePromptArchitecture,
@@ -122,21 +123,12 @@ assert.deepEqual(
   `legacy per-workflow prompt files remain:\n${legacyPromptFiles.join('\n')}`,
 );
 
-for (const hostRoot of ['.agents', '.factory', '.opencode']) {
-  const skillsRoot = path.join(root, 'goldband-loop', hostRoot, 'skills');
-  if (!fs.existsSync(skillsRoot)) continue;
-  const legacyGeneratedSkills = fs
-    .readdirSync(skillsRoot, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isDirectory() && entry.name.startsWith('goldband-'),
-    )
-    .map((entry) => path.join('goldband-loop', hostRoot, 'skills', entry.name));
-  assert.deepEqual(
-    legacyGeneratedSkills,
-    [],
-    `legacy generated host skills remain:\n${legacyGeneratedSkills.join('\n')}`,
-  );
-}
+const legacyGeneratedSkills = listLegacyHostSkillArtifacts(root);
+assert.deepEqual(
+  legacyGeneratedSkills,
+  [],
+  `legacy generated host skills remain:\n${legacyGeneratedSkills.join('\n')}`,
+);
 
 const missingContract = structuredClone(manifest);
 delete missingContract.capabilities[0].promptContract;
