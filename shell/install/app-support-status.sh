@@ -9,7 +9,7 @@ show_app_surface_status() {
 show_codex_app_shared_config_status() {
     local missing=()
 
-    is_generated_codex_config "$CODEX_CONFIG_FILE" || missing+=("~/.codex/config.toml")
+    is_current_generated_codex_config "$CODEX_CONFIG_FILE" || missing+=("~/.codex/config.toml")
     repo_path_installed_from "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" || missing+=("~/.codex/hooks.json")
     repo_path_installed_from "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" || missing+=("~/.codex/hooks")
     repo_path_installed_from "$REPO_DIR/codex/AGENTS.md" "$CODEX_AGENTS_FILE" || missing+=("~/.codex/AGENTS.md")

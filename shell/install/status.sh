@@ -280,10 +280,14 @@ show_codex_install_status() {
 
 show_codex_config_status() {
     if is_generated_codex_config "$CODEX_CONFIG_FILE"; then
-        if grep -q '^# Local overlay: none$' "$CODEX_CONFIG_FILE" 2>/dev/null; then
-            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base only)"
-        else
+        if ! is_current_generated_codex_config "$CODEX_CONFIG_FILE"; then
+            echo -e "  ${RED}[stale]${NC} codex-config — managed content differs from current sources"
+            echo "    建議: 重跑 ./install.sh codex-config。"
+            GOLDBAND_STATUS_EXIT_CODE=2
+        elif [ -f "$REPO_DIR/codex/local/config.toml" ]; then
             echo -e "  ${GREEN}[OK]${NC} codex-config (generated base + local overlay)"
+        else
+            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base only)"
         fi
     elif [ -L "$CODEX_CONFIG_FILE" ]; then
         local target
