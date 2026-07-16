@@ -312,62 +312,8 @@ EOF_RUNTIME_BIN
   chmod +x "$loop_dir/bin/$bin_name"
 }
 
-create_minimal_real_setup_fixture() {
-  local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review"
-  cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
-  cp "$ROOT_DIR/goldband-loop/lib/retired-workflow-entry-names.txt" "$loop_dir/lib/retired-workflow-entry-names.txt"
-  chmod +x "$loop_dir/setup"
-  write_fake_config_bin "$loop_dir"
-  write_noop_runtime_bin "$loop_dir" "goldband-task-emission"
-  cat > "$loop_dir/browse/dist/browse" <<'EOF_BROWSE'
-#!/usr/bin/env bash
-exit 0
-EOF_BROWSE
-  chmod +x "$loop_dir/browse/dist/browse"
-  printf '%s\n' '{"engines":{"bun":">=1.3.11"}}' > "$loop_dir/package.json"
-  printf '0.0.0-test\n' > "$loop_dir/VERSION"
-  write_skill "$loop_dir" "goldband"
-  write_skill "$loop_dir/browse" "goldband-browse"
-  write_skill "$loop_dir/review" "goldband-review"
-  write_skill "$loop_dir/qa" "goldband-qa"
-  write_skill "$loop_dir/ship" "goldband-ship"
-  write_skill "$loop_dir/goldband-upgrade" "goldband-upgrade"
-  write_skill "$loop_dir/.agents/skills/goldband" "goldband"
-  write_skill "$loop_dir/.agents/skills/goldband-review" "goldband-review"
-  printf '%s\n' 'runtime: $HOME/.codex/skills/goldband' >> "$loop_dir/.agents/skills/goldband-review/SKILL.md"
-  write_skill "$loop_dir/.agents/skills/goldband-qa" "goldband-qa"
-  write_skill "$loop_dir/.agents/skills/goldband-upgrade" "goldband-upgrade"
-  write_skill "$loop_dir/.factory/skills/goldband" "goldband"
-  write_skill "$loop_dir/.factory/skills/goldband-review" "goldband-review"
-  write_skill "$loop_dir/.opencode/skills/goldband" "goldband"
-  write_skill "$loop_dir/.opencode/skills/goldband-review" "goldband-review"
-  printf '%s\n' '{"schemaVersion":1,"interface":"$goldband <capability> <action>","manuals":[],"actions":[{"capability":"review","action":"code","contractPath":"generated/workflow-contracts/review/code.workflow.md"}]}' > "$loop_dir/generated/capability-actions.json"
-  mkdir -p "$loop_dir/generated/workflow-contracts/review"
-  printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
-  write_minimal_review_assets "$loop_dir"
-}
-write_minimal_review_assets() {
-  local loop_dir="$1"
-  cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
-# test checklist
-EOF_CHECKLIST
-  cat > "$loop_dir/review/shared-rubric.md" <<'EOF_SHARED'
-# test shared rubric
-EOF_SHARED
-  cat > "$loop_dir/review/findings-schema.md" <<'EOF_SCHEMA'
-# test findings schema
-EOF_SCHEMA
-  cat > "$loop_dir/review/design-checklist.md" <<'EOF_DESIGN'
-# test design checklist
-EOF_DESIGN
-  cat > "$loop_dir/review/greptile-triage.md" <<'EOF_GREPTILE'
-# test greptile triage
-EOF_GREPTILE
-  cat > "$loop_dir/review/TODOS-format.md" <<'EOF_TODOS'
-# test todos format
-EOF_TODOS
-}
+# shellcheck source=scripts/test-workflow-integration-fixture.sh
+source "$ROOT_DIR/scripts/test-workflow-integration-fixture.sh"
 
 run_minimal_real_setup() {
   local home_dir="$1"
@@ -500,6 +446,8 @@ assert_absent "$COPY_HOME/.claude/skills/goldband-qa"
 assert_absent "$COPY_HOME/.claude/skills/goldband-ship"
 assert_absent "$COPY_HOME/.claude/skills/goldband-open-browser"
 assert_absent "$COPY_HOME/.claude/skills/goldband-workflow-upgrade"
+assert_exists "$COPY_HOME/.claude/skills/goldband/SKILL.md"
+assert_contains "$(cat "$COPY_HOME/.claude/skills/goldband/SKILL.md")" "fixture host selector: claude"
 assert_exists "$COPY_HOME/.claude/skills/goldband/workflows/review/code.workflow.md"
 CODEX_LEGACY_HOME="$TMP_ROOT/codex-legacy-home"
 CODEX_LEGACY_SOURCE="$TMP_ROOT/codex-legacy-source/goldband-loop"
@@ -512,6 +460,8 @@ assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-review"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-qa"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-open-browser"
 assert_absent "$CODEX_LEGACY_HOME/.codex/skills/goldband-workflow-upgrade"
+assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/SKILL.md"
+assert_contains "$(cat "$CODEX_LEGACY_HOME/.codex/skills/goldband/SKILL.md")" "fixture host selector: codex"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband/workflows/review/code.workflow.md"
 assert_exists "$CODEX_LEGACY_HOME/.codex/skills/goldband-custom"
 for HOST_CASE in factory opencode kiro; do
@@ -525,6 +475,8 @@ for HOST_CASE in factory opencode kiro; do
     opencode) HOST_SKILLS="$HOST_HOME/.config/opencode/skills" ;;
     kiro) HOST_SKILLS="$HOST_HOME/.kiro/skills" ;;
   esac
+  assert_exists "$HOST_SKILLS/goldband/SKILL.md"
+  assert_contains "$(cat "$HOST_SKILLS/goldband/SKILL.md")" "fixture host selector: $HOST_CASE"
   assert_exists "$HOST_SKILLS/goldband/workflows/review/code.workflow.md"
   assert_absent "$HOST_SKILLS/goldband-review"
   if [ "$HOST_CASE" = "kiro" ]; then
@@ -533,6 +485,28 @@ for HOST_CASE in factory opencode kiro; do
     assert_not_contains "$KIRO_CONTRACT" '$HOME/.kiro/skills/goldband'
     assert_not_contains "$KIRO_CONTRACT" '$HOME/.codex/skills/goldband'
   fi
+done
+for MISSING_HOST_CASE in claude codex factory opencode kiro; do
+  MISSING_HOST_HOME="$TMP_ROOT/missing-$MISSING_HOST_CASE-home"
+  MISSING_HOST_SOURCE="$TMP_ROOT/missing-$MISSING_HOST_CASE-source/goldband-loop"
+  case "$MISSING_HOST_CASE" in
+    claude) MISSING_HOST_TARGET="$MISSING_HOST_HOME/.claude/skills/goldband" ;;
+    codex) MISSING_HOST_TARGET="$MISSING_HOST_HOME/.codex/skills/goldband" ;;
+    factory) MISSING_HOST_TARGET="$MISSING_HOST_HOME/.factory/skills/goldband" ;;
+    opencode) MISSING_HOST_TARGET="$MISSING_HOST_HOME/.config/opencode/skills/goldband" ;;
+    kiro) MISSING_HOST_TARGET="$MISSING_HOST_HOME/.kiro/skills/goldband" ;;
+  esac
+  create_minimal_real_setup_fixture "$MISSING_HOST_SOURCE"
+  rm "$MISSING_HOST_SOURCE/generated/host-skills/$MISSING_HOST_CASE.SKILL.md"
+  mkdir -p "$MISSING_HOST_TARGET"
+  printf '0.0.0-existing\n' > "$MISSING_HOST_TARGET/.installed-version"
+  printf 'preserve me\n' > "$MISSING_HOST_TARGET/preexisting-sentinel"
+  if run_minimal_real_setup "$MISSING_HOST_HOME" "$MISSING_HOST_SOURCE/setup" --host "$MISSING_HOST_CASE" --profile standard --quiet >"/tmp/goldband-loop-missing-$MISSING_HOST_CASE.log" 2>&1; then
+    echo "expected missing $MISSING_HOST_CASE host selector to fail" >&2
+    exit 1
+  fi
+  assert_contains "$(cat "/tmp/goldband-loop-missing-$MISSING_HOST_CASE.log")" "missing generated host skill for $MISSING_HOST_CASE"
+  assert_exists "$MISSING_HOST_TARGET/preexisting-sentinel"
 done
 PROMPT_LEGACY_HOME="$TMP_ROOT/prompt-legacy-home"
 mkdir -p "$PROMPT_LEGACY_HOME/.codex"

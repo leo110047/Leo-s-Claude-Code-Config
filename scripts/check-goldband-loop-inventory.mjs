@@ -48,6 +48,7 @@ const RETIRED_SHIP_REFERENCE_ALLOWLIST = [
   'goldband-loop/test/uninstall.test.ts',
   'scripts/check-goldband-loop-inventory.mjs',
   'scripts/test-workflow-integration.sh',
+  'scripts/test-workflow-integration-fixture.sh',
 ];
 const RETIRED_LOOP_CI_ASSETS = [
   '.github/actionlint.yaml',
