@@ -38,6 +38,7 @@ export const WORKFLOW_REGISTRY: WorkflowDefinition[] = CAPABILITY_ACTIONS.map((e
     lifecycle: entry.lifecycle,
     runtimeOwner: entry.runtimeOwner,
     runtimeContract: entry.runtimeContract,
+    safetyGates: entry.safetyGates,
     hostSupport: entry.hostSupport,
     riskLevel: entry.riskLevel,
     evidencePolicy:

@@ -80,6 +80,57 @@ describe('workflow registry', () => {
     expect(registeredOnlyWorkflows().every((entry) => entry.lifecycle === 'experimental')).toBe(true);
   });
 
+  test('nine high-risk operations have fail-closed safety contracts', () => {
+    const gates = WORKFLOW_REGISTRY.flatMap((entry) =>
+      entry.safetyGates.map((gate) => ({ ...gate, action: entry.name })),
+    );
+    expect(gates.map((gate) => gate.operation).sort()).toEqual([
+      'browser/cookies',
+      'ios/qa',
+      'ios/sync',
+      'knowledge/setup',
+      'knowledge/sync',
+      'release/canary',
+      'release/land',
+      'release/setup',
+      'system/upgrade',
+    ]);
+    expect(
+      gates
+        .filter((gate) => gate.enforcement === 'runtime-owner')
+        .map((gate) => gate.operation)
+        .sort(),
+    ).toEqual(['ios/qa', 'system/upgrade']);
+    expect(
+      gates.filter((gate) => gate.enforcement === 'blocked-before-runtime'),
+    ).toHaveLength(7);
+    for (const entry of WORKFLOW_REGISTRY.filter(
+      (workflow) => workflow.riskLevel === 'high',
+    )) {
+      expect(
+        entry.safetyGates.some((gate) => gate.operation === entry.name),
+      ).toBe(true);
+    }
+    expect(WORKFLOW_REGISTRY.some((entry) => entry.name === 'release/canary'))
+      .toBe(false);
+    expect(WORKFLOW_REGISTRY.some((entry) => entry.name === 'browser/cookies'))
+      .toBe(false);
+    expect(WORKFLOW_REGISTRY.some((entry) => entry.name === 'ios/sync'))
+      .toBe(false);
+  });
+
+  test('runtime gate verifiers must cover the exact declared contract', () => {
+    const ios = WORKFLOW_REGISTRY.find((entry) => entry.name === 'ios/qa');
+    expect(ios).toBeDefined();
+    if (!ios) return;
+    expect(() => defineWorkflow({
+      ...ios,
+      safetyGates: ios.safetyGates.map((gate) => gate.operation === 'ios/qa'
+        ? { ...gate, readback: [...gate.readback, 'undeclared-readback'] }
+        : gate),
+    })).toThrow('ios/qa: verifier readback contract mismatch');
+  });
+
   test('integrated workflows expose only the thin prompt contract', () => {
     for (const name of CORE_WORKFLOWS) {
       const entry = WORKFLOW_REGISTRY.find((item) => item.name === name);
@@ -312,5 +363,25 @@ describe('workflow registry', () => {
       migrationNotes: 'x',
       nextStep: 'x',
     })).toThrow('stopConditions');
+
+    expect(() => defineWorkflow({
+      capability: 'broken',
+      action: 'dangerous',
+      name: 'broken/dangerous',
+      target: 'x',
+      evaluationSignal: 'x',
+      iterationCap: 1,
+      stopConditions: ['target-met'],
+      contractPath: 'README.md',
+      entrypointType: 'typed',
+      integrationStatus: 'integrated',
+      lifecycle: 'public',
+      runtimeOwner: 'test-owner',
+      hostSupport: ['claude'],
+      riskLevel: 'high',
+      evidencePolicy: 'x',
+      migrationNotes: 'x',
+      nextStep: 'x',
+    })).toThrow('high-risk workflow has no primary safety gate');
   });
 });

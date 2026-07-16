@@ -1,8 +1,13 @@
 import type { WorkflowDefinition, WorkflowStep } from './types';
+import { assertWorkflowSafetyContract } from './safety-gates';
 
-type WorkflowInput = Omit<WorkflowDefinition, 'steps' | 'runtimeContract'> & {
+type WorkflowInput = Omit<
+  WorkflowDefinition,
+  'steps' | 'runtimeContract' | 'safetyGates'
+> & {
   steps?: WorkflowStep[];
   runtimeContract?: WorkflowDefinition['runtimeContract'];
+  safetyGates?: WorkflowDefinition['safetyGates'];
 };
 
 export function defineWorkflow(input: WorkflowInput): WorkflowDefinition {
@@ -25,11 +30,14 @@ export function defineWorkflow(input: WorkflowInput): WorkflowDefinition {
   if (input.integrationStatus === 'registered-only' && input.runtimeOwner !== null) {
     throw new Error(`${input.name}: registered-only workflow cannot claim a runtimeOwner`);
   }
-  return {
+  const workflow = {
     ...input,
     runtimeContract: input.runtimeContract ?? null,
+    safetyGates: input.safetyGates ?? [],
     steps: input.steps ?? [],
   };
+  assertWorkflowSafetyContract(workflow);
+  return workflow;
 }
 
 export function assertRunnableWorkflow(workflow: WorkflowDefinition): void {

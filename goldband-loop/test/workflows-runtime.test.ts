@@ -21,6 +21,10 @@ import {
 } from '../workflows/registry';
 import { findingsSchema, objectSchema } from '../workflows/schema';
 import { runWorkflow } from '../workflows/runtime';
+import {
+  prepareSafetyGate,
+  verifySafetyGate,
+} from '../workflows/safety-gates';
 import type { EvaluationSignalSnapshot } from '../workflows/types';
 import {
   buildReviewPrompt,
@@ -66,7 +70,15 @@ describe('workflow runtime', () => {
     for (const workflow of integratedWorkflows()) {
       const options = workflow.name === 'review/code'
         ? { diffFile: 'test/fixtures/workflows/review.diff' }
-        : {};
+        : workflow.name === 'ios/qa'
+          ? { inputFile: writeInput('core-ios-qa.json', iosQaInput()) }
+          : workflow.name === 'system/upgrade'
+            ? {
+                inputFile: writeInput('core-system-upgrade.json', {
+                  phase: 'preflight',
+                }),
+              }
+            : {};
       const result = await runWorkflow(workflow, {
         ...options,
         mode: 'mock',
@@ -154,6 +166,224 @@ describe('workflow runtime', () => {
       }),
     });
     expect(clearing.output).toMatchObject({ status: 'blocked' });
+  });
+
+  test('blocked high-risk modes stop at safety admission before their owner', async () => {
+    await expect(runWorkflow(getWorkflow('browser/session'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('browser-cookies.json', {
+        command: 'cookie-import',
+        args: ['cookies.json'],
+      }),
+    })).rejects.toThrow('browser/cookies: safety gate is blocked-before-runtime');
+    expect(readJsonl('browser/session')).toMatchObject([
+      {
+        step: 'safety-gate:blocked',
+        status: 'failed',
+        error: expect.stringContaining('browser/cookies'),
+      },
+    ]);
+
+    await expect(runWorkflow(getWorkflow('browser/session'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('browser-state-load.json', {
+        command: 'state',
+        args: ['load', 'authenticated-session'],
+      }),
+    })).rejects.toThrow('browser/cookies: safety gate is blocked-before-runtime');
+
+    await expect(runWorkflow(getWorkflow('ios/qa'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('ios-sync.json', { mode: 'sync' }),
+    })).rejects.toThrow('ios/sync: safety gate is blocked-before-runtime');
+    expect(readJsonl('ios/qa')).toMatchObject([
+      {
+        step: 'safety-gate:blocked',
+        status: 'failed',
+        error: expect.stringContaining('ios/sync'),
+      },
+    ]);
+  });
+
+  test('runtime-owned high-risk actions reject missing contract inputs before their owner', async () => {
+    await expect(runWorkflow(getWorkflow('ios/qa'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    })).rejects.toThrow('ios/qa input must be an object');
+    expect(readJsonl('ios/qa')).toMatchObject([{
+      step: 'safety-gate:blocked',
+      status: 'failed',
+    }]);
+
+    await expect(runWorkflow(getWorkflow('system/upgrade'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+    })).rejects.toThrow('system/upgrade input must be an object');
+    expect(readJsonl('system/upgrade')).toMatchObject([{
+      step: 'safety-gate:blocked',
+      status: 'failed',
+    }]);
+  });
+
+  test('mock owners leave high-risk gates pending without successful evidence', async () => {
+    const ios = await runWorkflow(getWorkflow('ios/qa'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('ios-qa-mock.json', iosQaInput()),
+    });
+    expect(ios.output).toMatchObject({ status: 'blocked' });
+    expect(readJsonl('ios/qa').map(({ step, status }) => ({ step, status })))
+      .toEqual([
+        { step: 'run-ios-qa-owner', status: 'ok' },
+        { step: 'safety-gate:ios/qa:pending', status: 'skipped' },
+        { step: 'workflow-complete', status: 'ok' },
+      ]);
+
+    const upgrade = await runWorkflow(getWorkflow('system/upgrade'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      inputFile: writeInput('system-upgrade-mock.json', {
+        phase: 'preflight',
+      }),
+    });
+    expect(upgrade.output).toMatchObject({ status: 'blocked' });
+    expect(
+      readJsonl('system/upgrade').map(({ step, status }) => ({ step, status })),
+    ).toEqual([
+      { step: 'run-system-upgrade-owner', status: 'ok' },
+      { step: 'safety-gate:system/upgrade:pending', status: 'skipped' },
+      { step: 'workflow-complete', status: 'ok' },
+    ]);
+  });
+
+  test('runtime gate verification requires declared readback artifacts', () => {
+    const request = iosQaInput();
+    const admission = prepareSafetyGate(getWorkflow('ios/qa'), request);
+    expect(admission).not.toBeNull();
+    if (!admission) return;
+    const artifactRoot = join(
+      stateRoot({ goldbandHome: tmpHome }),
+      'workflow-runs',
+      'artifacts',
+    );
+    mkdirSync(artifactRoot, { recursive: true });
+    const artifact = join(artifactRoot, 'ios-qa-readback.json');
+    const readback = {
+      schemaVersion: 1,
+      targetScope: request.targetScope,
+      checks: request.checks,
+      darwinPlatform: true,
+      xcodeToolchain: true,
+      simulatorInventoryDigest: 'inventory-digest',
+      availableDevices: ['iPhone 16'],
+      untestedDeviceCoverage: ['iPad Pro'],
+    };
+    writeFileSync(artifact, `${JSON.stringify(readback)}\n`);
+    const output = {
+      owner: 'ios qa evidence',
+      operation: 'qa',
+      status: 'completed',
+      summary: 'Verified.',
+      evidence: [],
+      artifacts: [artifact],
+      ...readback,
+    };
+    expect(verifySafetyGate(admission, request, output, {
+      mode: 'real',
+      goldbandHome: tmpHome,
+    }))
+      .toMatchObject({
+        operation: 'ios/qa',
+        state: 'verified',
+        satisfiedPreconditions: admission.preconditions,
+        verifiedReadback: admission.readback,
+      });
+    expect(() => verifySafetyGate(
+      admission,
+      request,
+      { ...output, untestedDeviceCoverage: [] },
+      { mode: 'real', goldbandHome: tmpHome },
+    )).toThrow('untested device coverage');
+
+    const upgradeRequest = {
+      phase: 'readback',
+      preflightId: 'preflight-123',
+      oldVersion: '1.0.0',
+      newVersion: '1.1.0',
+      setupVerified: true,
+    } as const;
+    const upgradeAdmission = prepareSafetyGate(
+      getWorkflow('system/upgrade'),
+      upgradeRequest,
+    );
+    expect(upgradeAdmission).not.toBeNull();
+    if (!upgradeAdmission) return;
+    const upgradeRoot = join(
+      stateRoot({ goldbandHome: tmpHome }),
+      'system-upgrade',
+    );
+    mkdirSync(upgradeRoot, { recursive: true });
+    const preflight = join(upgradeRoot, 'preflight.json');
+    writeFileSync(preflight, `${JSON.stringify({
+      schemaVersion: 1,
+      status: 'completed',
+      preflightId: upgradeRequest.preflightId,
+      root: '/trusted/source',
+      runtimeRoot: '/trusted/runtime',
+      setupPath: '/trusted/runtime/setup',
+      oldVersion: upgradeRequest.oldVersion,
+      oldHead: 'old-head',
+      trustedInstallation: true,
+      cleanWorktree: true,
+      installationChecks: [
+        { id: 'runtime-present', status: 'pass', evidence: 'present' },
+        { id: 'runtime-files', status: 'pass', evidence: 'complete' },
+        { id: 'runtime-source', status: 'pass', evidence: 'live-link' },
+      ],
+      createdAt: '2026-07-16T00:00:00.000Z',
+      nextCommands: [
+        ['git', '-C', '/trusted/source', 'pull', '--ff-only'],
+        ['/trusted/runtime/setup', '-q'],
+      ],
+      newVersion: upgradeRequest.newVersion,
+      newHead: 'new-head',
+      completedAt: '2026-07-16T00:01:00.000Z',
+    })}\n`);
+    const upgradeOutput = {
+      owner: 'goldband setup',
+      operation: 'upgrade',
+      status: 'completed',
+      summary: 'Verified.',
+      evidence: [],
+      artifacts: [preflight],
+      preflightId: upgradeRequest.preflightId,
+      oldVersion: upgradeRequest.oldVersion,
+      newVersion: upgradeRequest.newVersion,
+      newHead: 'new-head',
+      setupVerified: true,
+    };
+    expect(verifySafetyGate(
+      upgradeAdmission,
+      upgradeRequest,
+      upgradeOutput,
+      { mode: 'real', goldbandHome: tmpHome },
+    )).toMatchObject({ operation: 'system/upgrade', state: 'verified' });
+    expect(() => verifySafetyGate(
+      upgradeAdmission,
+      upgradeRequest,
+      { ...upgradeOutput, newHead: 'unread-head' },
+      { mode: 'real', goldbandHome: tmpHome },
+    )).toThrow('completed preflight');
   });
 
   test('design/consult validates decisions before persisting an artifact', async () => {
@@ -411,6 +641,23 @@ describe('workflow runtime', () => {
       expect(empty.output).toMatchObject({ status: 'blocked' });
       expect(checkStatus(empty.output, 'runtime-present')).toBe('fail');
 
+      const upgrade = await runWorkflow(getWorkflow('system/upgrade'), {
+        mode: 'real',
+        host: 'codex',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        inputFile: writeInput('upgrade-empty-home.json', {
+          phase: 'preflight',
+        }),
+      });
+      expect(upgrade.output).toMatchObject({ status: 'blocked' });
+      expect(checkStatus(upgrade.output, 'runtime-present')).toBe('fail');
+      expect(readJsonl('system/upgrade').map(({ step, status }) => ({ step, status })))
+        .toContainEqual({
+          step: 'safety-gate:system/upgrade:pending',
+          status: 'skipped',
+        });
+
       const runtime = join(home, '.codex', 'skills', 'goldband');
       mkdirSync(runtime, { recursive: true });
       writeFileSync(join(runtime, 'VERSION'), '0.1.0\n');
@@ -498,7 +745,7 @@ describe('workflow runtime', () => {
       host: 'codex',
       cwd: ROOT,
       goldbandHome: tmpHome,
-      inputFile: writeInput('upgrade.json', { approved: false }),
+      inputFile: writeInput('upgrade.json', { phase: 'preflight' }),
     });
     expect(result.output).toMatchObject({
       owner: 'goldband setup',
@@ -513,6 +760,11 @@ describe('workflow runtime', () => {
     expect(source).not.toContain(
       'commandResult("git", ["pull", "--ff-only"]',
     );
+    expect(readJsonl('system/upgrade').map((event) => event.step)).toEqual([
+      'run-system-upgrade-owner',
+      'safety-gate:system/upgrade:pending',
+      'workflow-complete',
+    ]);
   });
 
   test('iteration cap and repeated-blocker stop condition are enforced', async () => {
@@ -1331,6 +1583,24 @@ function writeInput(name: string, value: unknown): string {
   const file = join(tmpHome, name);
   writeFileSync(file, `${JSON.stringify(value)}\n`);
   return file;
+}
+
+function iosQaInput() {
+  return {
+    targetScope: {
+      project: 'Goldband.xcodeproj',
+      scheme: 'Goldband',
+      devices: ['iPhone 16', 'iPad Pro'],
+    },
+    checks: [
+      {
+        id: 'simulator-smoke',
+        device: 'iPhone 16',
+        status: 'pass',
+        evidence: 'Supplied QA fixture evidence.',
+      },
+    ],
+  };
 }
 
 function checkStatus(output: unknown, id: string): string | undefined {

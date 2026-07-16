@@ -16,3 +16,17 @@ Upgrade Goldband.
 ## Verification
 
 - Read back the installed state and run the narrowest relevant health, syntax, or installation check.
+
+## Runtime contract
+
+Modes and required inputs:
+
+- `preflight`: `phase`
+- `readback`: `phase`, `preflightId`, `oldVersion`, `newVersion`, `setupVerified`
+
+Outputs: `upgrade-preflight`, `installed-version`, `installed-head`, `setup-status`.
+
+Side effects:
+
+- `git-fast-forward`: `native-host-approval`
+- `installer-execution`: `native-host-approval`

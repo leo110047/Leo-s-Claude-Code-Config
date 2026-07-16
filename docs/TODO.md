@@ -60,14 +60,23 @@ action 不得宣告 owner，也不會出現在 router 或 activation hints。
   experimental，明確不可執行。
 - [x] `system/upgrade` 只做 preflight/readback；`git pull` 與 setup 必須經過
   host 原生核准與工具執行，不藏在 workflow 子程序中。
+- [x] 收斂前的 9 個 high-risk operation 已有 manifest-owned safety gate：
+  7 個未有 owner 的 operation 維持 `blocked-before-runtime`；`system/upgrade`
+  與唯讀 `ios/qa` 只有在 operation-specific verifier 驗證 owner output 與 trusted
+  readback artifact 後才寫入 `verified`；mock 或尚待原生核准只會是 `pending`。
+  已刪除的
+  `release/canary`、`browser/cookies`、`ios/sync` 只作內部 operation inventory，
+  不恢復為公開 alias。
 
 ### 優先順序
 
 1. 把 `qa/app` real mode 接到 typed browser evidence，完成 browser E2E。
 2. 將 4 個 compatibility actions 逐一替換成 action-specific typed schemas。
-3. 為 release setup/land 建立原生 approval、deployment readback 與 rollback owner。
-4. 為 knowledge setup/sync 建立 secret-safe interaction schema、sync checkpoint 與
-   round-trip readback owner；完成前保持 experimental。
+3. 依既有 safety gate contract 為 release setup/land 建立原生 approval、
+   deployment readback 與 rollback owner。
+4. 依既有 safety gate contract 為 knowledge setup/sync 建立 secret-safe
+   interaction schema、sync checkpoint 與 round-trip readback owner；完成前保持
+   experimental。
 
 ### 驗收標準
 
@@ -75,6 +84,9 @@ action 不得宣告 owner，也不會出現在 router 或 activation hints。
   與 runtime 實作一致。
 - [x] 新接上的 workflow 能透過正式 CLI 產生 JSONL evidence。
 - [x] 若還不能 real mode 執行，會 fail closed，不可假裝已支援。
+- [x] 每個 high-risk action 都有 primary gate；nested high-risk mode 也有獨立
+  operation gate，缺 gate、owner mismatch、declared contract 與 verifier drift，或
+  提早接 runtime 都會驗證失敗。
 - [x] `goldband-loop/workflows/COVERAGE.md` 由 manifest-generated capability report
   投影，不維護第二份狀態。
 

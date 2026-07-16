@@ -1,5 +1,5 @@
 // AUTO-GENERATED from goldband.manifest.json. Do not edit.
-import type { HostName, RiskLevel, RuntimeActionContract } from './types';
+import type { HostName, RiskLevel, RuntimeActionContract, SafetyGateContract } from './types';
 
 export type CapabilityActionRecord = {
   capability: string;
@@ -11,6 +11,7 @@ export type CapabilityActionRecord = {
   lifecycle: 'public' | 'experimental';
   runtimeOwner: string | null;
   runtimeContract: RuntimeActionContract | null;
+  safetyGates: SafetyGateContract[];
   riskLevel: RiskLevel;
   hostSupport: HostName[];
 };
@@ -26,6 +27,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "review-runtime",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -50,6 +52,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "prompt-contract-dispatch",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -74,6 +77,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "prompt-contract-dispatch",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -98,6 +102,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "qa-runtime",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -122,6 +127,48 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "experimental",
     "runtimeOwner": null,
     "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "release/land",
+        "mode": "land",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "clean-worktree",
+          "required-checks-passed",
+          "deployment-target-resolved",
+          "rollback-plan-recorded"
+        ],
+        "sideEffects": [
+          "merge",
+          "deploy"
+        ],
+        "readback": [
+          "merged-commit",
+          "deployment-health",
+          "rollback-signal"
+        ]
+      },
+      {
+        "operation": "release/canary",
+        "mode": "canary",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "not-required-read-only",
+        "preconditions": [
+          "deployment-identity-resolved",
+          "health-baseline-recorded",
+          "observation-window-bounded"
+        ],
+        "sideEffects": [],
+        "readback": [
+          "canary-health-samples",
+          "anomaly-decision",
+          "observation-window-complete"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -146,6 +193,30 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "experimental",
     "runtimeOwner": null,
     "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "release/setup",
+        "mode": "setup",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "deployment-target-resolved",
+          "current-config-readback",
+          "secret-references-only",
+          "rollback-plan-recorded"
+        ],
+        "sideEffects": [
+          "deployment-config-write",
+          "secret-binding-update"
+        ],
+        "readback": [
+          "effective-config-digest",
+          "secret-bindings-redacted",
+          "deployment-health"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -170,6 +241,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "prompt-contract-dispatch",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude"
@@ -185,6 +257,28 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "browse",
     "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "browser/cookies",
+        "mode": "cookies",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "source-profile-resolved",
+          "domain-scope-explicit",
+          "credential-store-approval"
+        ],
+        "sideEffects": [
+          "session-cookie-import"
+        ],
+        "readback": [
+          "imported-domain-list",
+          "import-count",
+          "no-cookie-values-in-evidence"
+        ]
+      }
+    ],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -209,6 +303,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "design-decision-store",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -233,6 +328,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "claude-hook-mode-state",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude"
@@ -248,6 +344,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "claude-hook-mode-state",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude"
@@ -263,6 +360,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "claude-hook-mode-state",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude"
@@ -278,6 +376,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "context-checkpoint-store",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -302,6 +401,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "context-checkpoint-store",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -326,6 +426,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "prompt-contract-dispatch",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -350,6 +451,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "goldband-knowledge",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -374,6 +476,30 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "experimental",
     "runtimeOwner": null,
     "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "knowledge/setup",
+        "mode": "setup",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "endpoint-resolved",
+          "repository-scope-explicit",
+          "secret-references-only",
+          "existing-config-readback"
+        ],
+        "sideEffects": [
+          "knowledge-config-write",
+          "credential-binding-update"
+        ],
+        "readback": [
+          "sanitized-config",
+          "connection-check",
+          "repository-scope"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -398,6 +524,32 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "experimental",
     "runtimeOwner": null,
     "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "knowledge/sync",
+        "mode": "sync",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "source-scope-explicit",
+          "destination-scope-explicit",
+          "review-status-verified",
+          "secret-scan-passed",
+          "resume-checkpoint-resolved"
+        ],
+        "sideEffects": [
+          "external-knowledge-write",
+          "sync-checkpoint-write"
+        ],
+        "readback": [
+          "synced-item-count",
+          "destination-digest",
+          "resume-checkpoint",
+          "rejected-item-count"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -422,6 +574,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "benchmark-evidence-aggregator",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -462,6 +615,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
         "pr-body-update": "native-host-approval"
       }
     },
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -486,6 +640,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "lifecycle": "public",
     "runtimeOwner": "goldband-installation",
     "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -509,7 +664,58 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "runtime": "typed",
     "lifecycle": "public",
     "runtimeOwner": "goldband-setup-gate",
-    "runtimeContract": null,
+    "runtimeContract": {
+      "modes": [
+        "preflight",
+        "readback"
+      ],
+      "requiredInputs": {
+        "preflight": [
+          "phase"
+        ],
+        "readback": [
+          "phase",
+          "preflightId",
+          "oldVersion",
+          "newVersion",
+          "setupVerified"
+        ]
+      },
+      "outputs": [
+        "upgrade-preflight",
+        "installed-version",
+        "installed-head",
+        "setup-status"
+      ],
+      "sideEffects": {
+        "git-fast-forward": "native-host-approval",
+        "installer-execution": "native-host-approval"
+      }
+    },
+    "safetyGates": [
+      {
+        "operation": "system/upgrade",
+        "mode": "upgrade",
+        "enforcement": "runtime-owner",
+        "owner": "goldband-setup-gate",
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "trusted-installation",
+          "clean-worktree",
+          "upgrade-preflight-recorded"
+        ],
+        "sideEffects": [
+          "git-fast-forward",
+          "installer-execution"
+        ],
+        "readback": [
+          "installed-version",
+          "installed-head",
+          "setup-status",
+          "completed-preflight"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -533,7 +739,66 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "runtime": "typed",
     "lifecycle": "public",
     "runtimeOwner": "ios-qa-evidence",
-    "runtimeContract": null,
+    "runtimeContract": {
+      "modes": [
+        "qa"
+      ],
+      "requiredInputs": {
+        "qa": [
+          "targetScope",
+          "checks"
+        ]
+      },
+      "outputs": [
+        "simulator-inventory",
+        "qa-evidence-artifact",
+        "untested-device-coverage"
+      ],
+      "sideEffects": {}
+    },
+    "safetyGates": [
+      {
+        "operation": "ios/qa",
+        "mode": "qa",
+        "enforcement": "runtime-owner",
+        "owner": "ios-qa-evidence",
+        "authorization": "not-required-read-only",
+        "preconditions": [
+          "darwin-platform",
+          "xcode-toolchain",
+          "target-scope-explicit",
+          "qa-checks-supplied"
+        ],
+        "sideEffects": [],
+        "readback": [
+          "simulator-inventory",
+          "qa-evidence-artifact",
+          "untested-device-coverage"
+        ]
+      },
+      {
+        "operation": "ios/sync",
+        "mode": "sync",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "project-identity-resolved",
+          "sync-target-explicit",
+          "pre-sync-diff-recorded",
+          "backup-or-rollback-recorded"
+        ],
+        "sideEffects": [
+          "xcode-project-sync",
+          "project-file-write"
+        ],
+        "readback": [
+          "post-sync-diff",
+          "project-file-digest",
+          "build-status"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",

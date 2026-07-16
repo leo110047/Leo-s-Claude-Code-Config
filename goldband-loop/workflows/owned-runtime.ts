@@ -4,8 +4,8 @@ import {
 	existsSync,
 	lstatSync,
 	mkdirSync,
-	readFileSync,
 	readdirSync,
+	readFileSync,
 	realpathSync,
 	renameSync,
 	statSync,
@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { stateRoot } from "./evidence";
 import { workflowAssetPath } from "./paths";
+import { parseIosQaInput, parseSystemUpgradeInput } from "./safety-gates";
 import type { SchemaValidator, WorkflowContext, WorkflowStep } from "./types";
 
 type OwnedStatus = "completed" | "blocked";
@@ -238,7 +239,11 @@ function runDocumentGenerate(ctx: WorkflowContext): OwnedRuntimeResult {
 	};
 	const coverageArtifact = artifactPath(ctx, "documentation-coverage.json");
 	const prBodyArtifact = artifactPath(ctx, "documentation-pr-section.md");
-	writeArtifact(ctx, coverageArtifact, `${JSON.stringify(coverage, null, 2)}\n`);
+	writeArtifact(
+		ctx,
+		coverageArtifact,
+		`${JSON.stringify(coverage, null, 2)}\n`,
+	);
 	writeArtifact(ctx, prBodyArtifact, documentationPrSection(coverage));
 	const artifacts = [coverageArtifact, prBodyArtifact];
 	if (input.updatePrBody === true) {
@@ -561,12 +566,7 @@ function runSystemHealth(ctx: WorkflowContext): OwnedRuntimeResult {
 			[`host=${host ?? "missing"}`],
 		);
 	}
-	const runtimeRoot = join(
-		process.env.HOME || homedir(),
-		host === "claude" ? ".claude" : ".codex",
-		"skills",
-		"goldband",
-	);
+	const runtimeRoot = installedRuntimeRoot(host);
 	const checks = inspectInstalledRuntime(runtimeRoot);
 	const bun = commandResult("bun", ["--version"], ctx.cwd, 5_000);
 	checks.push({
@@ -595,20 +595,48 @@ function runSystemHealth(ctx: WorkflowContext): OwnedRuntimeResult {
 }
 
 function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
-	const input = optionalRecord(ctx.input, "system/upgrade input");
+	const input = parseSystemUpgradeInput(ctx.input);
 	if (!isReal(ctx)) {
-		return completed(
+		return blocked(
 			"goldband setup",
 			"upgrade",
-			"Validated upgrade preflight without changing installation state.",
-			["mode=mock", "authorization=not-consumed"],
+			"Mock mode cannot verify an installed-runtime upgrade safety contract.",
+			[`phase=${input.phase}`, "authorization=not-consumed"],
 		);
 	}
-	const runtimeRoot = workflowAssetPath(".");
+	const host = ctx.options.host;
+	if (host !== "claude" && host !== "codex") {
+		return blocked(
+			"goldband setup",
+			"upgrade",
+			"Upgrade requires an explicit Claude or Codex installed runtime.",
+			[`host=${host ?? "missing"}`],
+		);
+	}
+	const runtimeRoot = installedRuntimeRoot(host);
+	const installationChecks = inspectInstalledRuntime(runtimeRoot);
+	const failedInstallation = installationChecks.filter(
+		(check) => check.status === "fail",
+	);
+	if (failedInstallation.length > 0) {
+		return {
+			...blocked(
+				"goldband setup",
+				"upgrade",
+				"Installed Goldband runtime failed trusted-installation checks.",
+				installationChecks.map((check) => `${check.id}=${check.status}`),
+			),
+			checks: installationChecks,
+			runtimeRoot,
+		};
+	}
+	const sourceRoot = lstatSync(runtimeRoot).isSymbolicLink()
+		? realpathSync(runtimeRoot)
+		: readFileSync(join(runtimeRoot, ".installed-source"), "utf8").trim();
 	const checkout = commandResult(
 		"git",
 		["rev-parse", "--show-toplevel"],
-		runtimeRoot,
+		sourceRoot,
 		5_000,
 	);
 	const root = checkout.stdout.trim();
@@ -636,13 +664,14 @@ function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
 		"system-upgrade",
 		"preflight.json",
 	);
-	if (input.phase !== "readback") {
+	if (input.phase === "preflight") {
 		const preflightId = digest(
 			`${root}\0${runtimeRoot}\0${oldVersion}\0${oldHead}\0${ctx.runId}`,
 		).slice(0, 24);
+		const setupPath = join(sourceRoot, "setup");
 		const nextCommands = [
 			["git", "-C", root, "pull", "--ff-only"],
-			[join(runtimeRoot, "setup"), "-q"],
+			[setupPath, "-q"],
 		];
 		writeJson(stateFile, {
 			schemaVersion: 1,
@@ -650,8 +679,12 @@ function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
 			preflightId,
 			root,
 			runtimeRoot,
+			setupPath,
 			oldVersion,
 			oldHead,
+			trustedInstallation: true,
+			cleanWorktree: true,
+			installationChecks,
 			createdAt: new Date().toISOString(),
 			nextCommands,
 		});
@@ -685,9 +718,9 @@ function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
 		JSON.parse(readFileSync(stateFile, "utf8")),
 		"system upgrade preflight",
 	);
-	const preflightId = requiredString(input.preflightId, "preflightId");
-	const expectedOldVersion = requiredString(input.oldVersion, "oldVersion");
-	const expectedNewVersion = requiredString(input.newVersion, "newVersion");
+	const preflightId = input.preflightId;
+	const expectedOldVersion = input.oldVersion;
+	const expectedNewVersion = input.newVersion;
 	if (
 		preflight.status !== "pending" ||
 		preflight.preflightId !== preflightId ||
@@ -700,14 +733,6 @@ function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
 			"upgrade",
 			"Upgrade readback does not match the trusted preflight state.",
 			[`preflightId=${preflightId}`],
-		);
-	}
-	if (input.setupVerified !== true) {
-		return blocked(
-			"goldband setup",
-			"upgrade",
-			"Upgrade readback requires setupVerified=true from the native host execution.",
-			["setupVerified=false"],
 		);
 	}
 	const currentVersion = readFileSync(
@@ -751,31 +776,27 @@ function runSystemUpgrade(ctx: WorkflowContext): OwnedRuntimeResult {
 			"setupVerified=true",
 		],
 		[stateFile],
+		{
+			preflightId,
+			oldVersion: expectedOldVersion,
+			newVersion: currentVersion,
+			newHead: currentHead,
+			setupVerified: true,
+		},
 	);
 }
 
 function runIosQa(ctx: WorkflowContext): OwnedRuntimeResult {
-	const input = optionalRecord(ctx.input, "ios/qa input");
-	const checks = input.checks === undefined ? [] : qaEvidence(input.checks);
+	const input = parseIosQaInput(ctx.input);
 	if (!isReal(ctx)) {
-		const mockChecks = checks.length
-			? checks
-			: [
-					{
-						id: "simulator-smoke",
-						status: "pass",
-						evidence: "Mock simulator evidence.",
-					},
-				];
-		return completed(
+		return blocked(
 			"ios qa evidence",
 			"qa",
-			"Validated iOS QA evidence.",
-			mockChecks.map((check) => `${check.id}=${check.status}`),
-			[],
-			{
-				checks: mockChecks,
-			},
+			"Mock mode cannot verify macOS, Xcode, or simulator readback.",
+			[
+				`target=${input.targetScope.project}:${input.targetScope.scheme}`,
+				`checks=${input.checks.length}`,
+			],
 		);
 	}
 	if (process.platform !== "darwin") {
@@ -800,21 +821,35 @@ function runIosQa(ctx: WorkflowContext): OwnedRuntimeResult {
 			[compact(devices.stderr || devices.stdout)],
 		);
 	}
-	if (checks.length === 0) {
+	let availableDevices: string[];
+	try {
+		availableDevices = simulatorDeviceNames(devices.stdout);
+	} catch (error) {
 		return blocked(
 			"ios qa evidence",
 			"qa",
-			"No user-visible QA checks were supplied.",
-			["simulatorInventory=available"],
+			"Unable to validate the iOS simulator inventory readback.",
+			[error instanceof Error ? error.message : String(error)],
 		);
 	}
+	const testedDevices = new Set(input.checks.map((check) => check.device));
+	const untestedDeviceCoverage = input.targetScope.devices.filter(
+		(device) => !testedDevices.has(device),
+	);
+	const simulatorInventoryDigest = digest(devices.stdout);
 	const artifact = artifactPath(ctx, "ios-qa.json");
 	writeJson(artifact, {
-		checks,
-		simulatorInventoryDigest: digest(devices.stdout),
+		schemaVersion: 1,
+		targetScope: input.targetScope,
+		checks: input.checks,
+		darwinPlatform: true,
+		xcodeToolchain: true,
+		simulatorInventoryDigest,
+		availableDevices,
+		untestedDeviceCoverage,
 	});
 	ctx.artifacts.push(artifact);
-	const failed = checks.filter((check) => check.status === "fail");
+	const failed = input.checks.filter((check) => check.status === "fail");
 	return {
 		...completed(
 			"ios qa evidence",
@@ -822,9 +857,20 @@ function runIosQa(ctx: WorkflowContext): OwnedRuntimeResult {
 			failed.length === 0
 				? "iOS QA evidence passed."
 				: "iOS QA evidence contains failures.",
-			checks.map((check) => `${check.id}=${check.status}`),
+			[
+				...input.checks.map((check) => `${check.id}=${check.status}`),
+				`untestedDevices=${untestedDeviceCoverage.length}`,
+			],
 			[artifact],
-			{ checks },
+			{
+				targetScope: input.targetScope,
+				checks: input.checks,
+				darwinPlatform: true,
+				xcodeToolchain: true,
+				simulatorInventoryDigest,
+				availableDevices,
+				untestedDeviceCoverage,
+			},
 		),
 		status: failed.length === 0 ? "completed" : "blocked",
 	};
@@ -1029,9 +1075,7 @@ function git(cwd: string, args: string[]): string {
 	return result.status === 0 ? result.stdout.trim() : "";
 }
 
-function findModeOwnerScript(
-	modeName: "careful-mode" | "freeze-mode",
-): string {
+function findModeOwnerScript(modeName: "careful-mode" | "freeze-mode"): string {
 	const scriptName = `${modeName}.js`;
 	const candidates = [
 		process.env.CLAUDE_PLUGIN_ROOT
@@ -1054,7 +1098,9 @@ function findModeOwnerScript(
 			scriptName,
 		),
 	];
-	return candidates.find((candidate) => candidate && existsSync(candidate)) || "";
+	return (
+		candidates.find((candidate) => candidate && existsSync(candidate)) || ""
+	);
 }
 
 function normalizeHookSessionId(sessionId: string): string {
@@ -1095,7 +1141,8 @@ function inspectInstalledRuntime(runtimeRoot: string): InstalledRuntimeCheck[] {
 		{
 			id: "runtime-files",
 			status: missing.length === 0 ? "pass" : "fail",
-			evidence: missing.length === 0 ? "complete" : `missing:${missing.join(",")}`,
+			evidence:
+				missing.length === 0 ? "complete" : `missing:${missing.join(",")}`,
 		},
 	];
 	if (missing.length > 0) return checks;
@@ -1145,13 +1192,24 @@ function inspectInstalledRuntime(runtimeRoot: string): InstalledRuntimeCheck[] {
 	checks.push({
 		id: "source-install-drift",
 		status:
-			expectedContract && runtimeContract === expectedContract ? "pass" : "fail",
+			expectedContract && runtimeContract === expectedContract
+				? "pass"
+				: "fail",
 		evidence:
 			expectedContract && runtimeContract === expectedContract
 				? "none"
 				: `runtime=${runtimeContract || "unverifiable"},source=${expectedContract || "unverifiable"}`,
 	});
 	return checks;
+}
+
+function installedRuntimeRoot(host: "claude" | "codex"): string {
+	return join(
+		process.env.HOME || homedir(),
+		host === "claude" ? ".claude" : ".codex",
+		"skills",
+		"goldband",
+	);
 }
 
 function workflowContractFingerprint(root: string): string {
@@ -1195,23 +1253,28 @@ function commandResult(
 	};
 }
 
-function qaEvidence(value: unknown) {
-	if (!Array.isArray(value))
-		throw new Error("ios/qa input.checks must be an array");
-	return value.map((raw, index) => {
-		const item = record(raw, `ios/qa input.checks[${index}]`);
-		const status = requiredString(item.status, "status");
-		if (!["pass", "fail"].includes(status)) {
+function simulatorDeviceNames(value: string): string[] {
+	const payload = record(JSON.parse(value), "simulator inventory");
+	const runtimes = record(payload.devices, "simulator inventory.devices");
+	const names = Object.values(runtimes).flatMap((runtime, runtimeIndex) => {
+		if (!Array.isArray(runtime)) {
 			throw new Error(
-				`ios/qa input.checks[${index}].status must be pass or fail`,
+				`simulator inventory.devices[${runtimeIndex}] must be an array`,
 			);
 		}
-		return {
-			id: requiredString(item.id, "id"),
-			status: status as "pass" | "fail",
-			evidence: requiredString(item.evidence, "evidence"),
-		};
+		return runtime.map((raw, deviceIndex) => {
+			const device = record(
+				raw,
+				`simulator inventory.devices[${runtimeIndex}][${deviceIndex}]`,
+			);
+			return requiredString(device.name, "simulator device name");
+		});
 	});
+	const unique = [...new Set(names)].sort();
+	if (unique.length === 0) {
+		throw new Error("simulator inventory has no available devices");
+	}
+	return unique;
 }
 
 function record(value: unknown, label: string): JsonRecord {

@@ -38,6 +38,22 @@ These actions are tracked for implementation, but are not discoverable or runnab
 | `knowledge` | `setup` | Configure GBrain integration. | — | `registered-only` | `high` |
 | `knowledge` | `sync` | Synchronize GBrain knowledge. | — | `registered-only` | `high` |
 
+## High-risk safety gates
+
+These operation IDs are internal safety inventory, not public action aliases. `blocked-before-runtime` operations cannot run until a matching owner replaces the block and implements every precondition, authorization boundary, side effect, and readback requirement. `runtime-owner` operations record successful gate evidence only after an operation-specific verifier validates the declared contract against owner output and trusted readback; blocked or mock-only runs remain pending.
+
+| Operation | Active action | Mode | Enforcement | Authorization | Gate owner |
+| --- | --- | --- | --- | --- | --- |
+| `release/land` | `release/land` | `land` | `blocked-before-runtime` | `native-host-approval` | — |
+| `release/canary` | `release/land` | `canary` | `blocked-before-runtime` | `not-required-read-only` | — |
+| `release/setup` | `release/setup` | `setup` | `blocked-before-runtime` | `native-host-approval` | — |
+| `browser/cookies` | `browser/session` | `cookies` | `blocked-before-runtime` | `native-host-approval` | — |
+| `knowledge/setup` | `knowledge/setup` | `setup` | `blocked-before-runtime` | `native-host-approval` | — |
+| `knowledge/sync` | `knowledge/sync` | `sync` | `blocked-before-runtime` | `native-host-approval` | — |
+| `system/upgrade` | `system/upgrade` | `upgrade` | `runtime-owner` | `native-host-approval` | `goldband-setup-gate` |
+| `ios/qa` | `ios/qa` | `qa` | `runtime-owner` | `not-required-read-only` | `ios-qa-evidence` |
+| `ios/sync` | `ios/qa` | `sync` | `blocked-before-runtime` | `native-host-approval` | — |
+
 ## Prompt/runtime boundary
 
 - Prompt contract: goal, relevant-context, hard-boundaries, verification.

@@ -5,6 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  collectSafetyGates,
+  validateSafetyGates,
+} from './lib/capability-safety-gates.mjs';
+import {
   assertPromptSurfaceBudget,
   assertPromptSurfaceTotal,
   PROMPT_SURFACE_BUDGETS,
@@ -58,6 +62,7 @@ for (const installedContract of [
 }
 
 validatePromptArchitecture(manifest);
+validateSafetyGates(manifest.capabilities);
 
 assert.throws(
   () =>
@@ -197,6 +202,64 @@ for (const retired of [
     `${retired} was reintroduced as a standalone action`,
   );
 }
+
+const safetyGates = collectSafetyGates(manifest.capabilities);
+assert.deepEqual(safetyGates.map((gate) => gate.operation).sort(), [
+  'browser/cookies',
+  'ios/qa',
+  'ios/sync',
+  'knowledge/setup',
+  'knowledge/sync',
+  'release/canary',
+  'release/land',
+  'release/setup',
+  'system/upgrade',
+]);
+assert.deepEqual(
+  safetyGates
+    .filter((gate) => gate.enforcement === 'runtime-owner')
+    .map((gate) => gate.operation)
+    .sort(),
+  ['ios/qa', 'system/upgrade'],
+);
+assert.equal(
+  safetyGates.filter((gate) => gate.enforcement === 'blocked-before-runtime')
+    .length,
+  7,
+);
+
+const missingPrimaryGate = structuredClone(manifest.capabilities);
+const releaseLand = missingPrimaryGate
+  .find((capability) => capability.id === 'release')
+  .actions.find((action) => action.id === 'land');
+releaseLand.safetyGates = releaseLand.safetyGates.filter(
+  (gate) => gate.operation !== 'release/land',
+);
+assert.throws(
+  () => validateSafetyGates(missingPrimaryGate),
+  /high-risk actions require a primary safety gate/,
+);
+
+const prematureOwner = structuredClone(manifest.capabilities);
+const knowledgeSetup = prematureOwner
+  .find((capability) => capability.id === 'knowledge')
+  .actions.find((action) => action.id === 'setup');
+knowledgeSetup.safetyGates[0].enforcement = 'runtime-owner';
+knowledgeSetup.safetyGates[0].owner = 'unproven-owner';
+assert.throws(
+  () => validateSafetyGates(prematureOwner),
+  /registered-only actions must remain blocked before runtime/,
+);
+
+const missingRuntimeContract = structuredClone(manifest.capabilities);
+const iosQa = missingRuntimeContract
+  .find((capability) => capability.id === 'ios')
+  .actions.find((action) => action.id === 'qa');
+delete iosQa.runtimeContract;
+assert.throws(
+  () => validateSafetyGates(missingRuntimeContract),
+  /runtime safety gates require a runtimeContract/,
+);
 
 assert.equal(contracts.size, actionCount);
 

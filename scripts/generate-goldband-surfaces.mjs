@@ -5,6 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateCapabilityInvocations } from './lib/capability-invocations.mjs';
 import {
+  collectSafetyGates,
+  validateSafetyGates,
+} from './lib/capability-safety-gates.mjs';
+import {
   discoverLegacyEntrypoints,
   discoverRuntimeBinaries,
 } from './lib/goldband-source-inventory.mjs';
@@ -77,6 +81,7 @@ const capabilityActions = manifest.capabilities.flatMap((capability) =>
     lifecycle: action.lifecycle ?? 'public',
     runtimeOwner: action.owner ?? null,
     runtimeContract: action.runtimeContract ?? null,
+    safetyGates: action.safetyGates ?? [],
     riskLevel: action.risk,
     hostSupport: action.hostSupport ?? ALL_HOSTS,
   })),
@@ -222,6 +227,7 @@ function findRetiredGeneratedContracts(expectedOutputs) {
 function validateManifest(value) {
   if (value.schemaVersion !== 1) throw new Error('unsupported manifest schema');
   validatePromptArchitecture(value);
+  validateSafetyGates(value.capabilities ?? []);
   for (const manual of value.manuals) {
     const source = path.resolve(loopRoot, manual.source);
     if (!fs.existsSync(source)) {
@@ -356,8 +362,8 @@ function publicCapabilitiesForHost(capabilities, host) {
 function generatedRegistry(entries) {
   return (
     `// AUTO-GENERATED from goldband.manifest.json. Do not edit.\n` +
-    `import type { HostName, RiskLevel, RuntimeActionContract } from './types';\n\n` +
-    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  lifecycle: 'public' | 'experimental';\n  runtimeOwner: string | null;\n  runtimeContract: RuntimeActionContract | null;\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
+    `import type { HostName, RiskLevel, RuntimeActionContract, SafetyGateContract } from './types';\n\n` +
+    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  lifecycle: 'public' | 'experimental';\n  runtimeOwner: string | null;\n  runtimeContract: RuntimeActionContract | null;\n  safetyGates: SafetyGateContract[];\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
     `export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = ${JSON.stringify(
       entries,
       null,
@@ -443,7 +449,13 @@ function generatedDocs(value) {
         `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | — | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
     )
     .join('\n');
-  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\nPublic inventory: ${publicActions.length} actions. Experimental actions are excluded from routing and activation hints.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${rows}\n\n## Experimental inventory\n\nThese actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${experimentalRows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
+  const safetyRows = collectSafetyGates(value.capabilities)
+    .map(
+      (gate) =>
+        `| \`${gate.operation}\` | \`${gate.action}\` | \`${gate.mode}\` | \`${gate.enforcement}\` | \`${gate.authorization}\` | ${gate.owner ? `\`${gate.owner}\`` : '—'} |`,
+    )
+    .join('\n');
+  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\nPublic inventory: ${publicActions.length} actions. Experimental actions are excluded from routing and activation hints.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${rows}\n\n## Experimental inventory\n\nThese actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${experimentalRows}\n\n## High-risk safety gates\n\nThese operation IDs are internal safety inventory, not public action aliases. \`blocked-before-runtime\` operations cannot run until a matching owner replaces the block and implements every precondition, authorization boundary, side effect, and readback requirement. \`runtime-owner\` operations record successful gate evidence only after an operation-specific verifier validates the declared contract against owner output and trusted readback; blocked or mock-only runs remain pending.\n\n| Operation | Active action | Mode | Enforcement | Authorization | Gate owner |\n| --- | --- | --- | --- | --- | --- |\n${safetyRows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
 }
 
 function generatedInteractionPolicy(policy) {

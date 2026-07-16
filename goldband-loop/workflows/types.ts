@@ -20,6 +20,16 @@ export type RuntimeActionContract = {
   outputs: string[];
   sideEffects: Record<string, string>;
 };
+export type SafetyGateContract = {
+  operation: string;
+  mode: string;
+  enforcement: 'blocked-before-runtime' | 'runtime-owner';
+  owner: string | null;
+  authorization: 'native-host-approval' | 'not-required-read-only';
+  preconditions: string[];
+  sideEffects: string[];
+  readback: string[];
+};
 type StepKind = 'typed' | 'llm' | 'legacyPrompt';
 export type StepStatus = 'ok' | 'failed' | 'skipped';
 export type StopPredicateName =
@@ -66,6 +76,7 @@ export type WorkflowDefinition = {
   lifecycle: WorkflowLifecycle;
   runtimeOwner: string | null;
   runtimeContract: RuntimeActionContract | null;
+  safetyGates: SafetyGateContract[];
   hostSupport: HostName[];
   riskLevel: RiskLevel;
   evidencePolicy: string;

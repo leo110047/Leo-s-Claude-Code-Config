@@ -753,3 +753,67 @@ Failure signals:
 - Documentation audit mutates a PR without native approval or claims it wrote
   docs that it only analyzed.
 - Saving branch B makes branch A's latest checkpoint unreachable.
+
+## 2026-07-16: High-Risk Operations Require Verifiable Runtime Gates
+
+Decision: keep one manifest-owned safety contract for each of the nine
+high-risk operations identified before capability convergence. A retired action
+name may remain only as an internal operation ID mapped to its active action and
+mode; it does not become a public route or compatibility alias.
+
+Implementation contract:
+
+- `release/land`, `release/setup`, `release/canary`, `browser/cookies`,
+  `knowledge/setup`, `knowledge/sync`, `system/upgrade`, `ios/qa`, and
+  `ios/sync` each declare authorization, preconditions, side effects, readback,
+  enforcement state, and gate owner in `goldband.manifest.json`.
+- Every high-risk action must have a primary gate. Nested high-risk modes on a
+  lower-risk action require their own operation gate.
+- A registered-only action cannot declare `runtime-owner` enforcement. A
+  runtime-owned gate must match the action's declared runtime owner.
+- `blocked-before-runtime` is executable policy: browser cookie commands and
+  the iOS sync mode stop during runtime admission before an owner step runs.
+- `system/upgrade` and read-only `ios/qa` have operation-specific verifiers.
+  Definition fails when their declared preconditions, side effects, readback,
+  authorization, or owner drift from the implemented verifier contract.
+- Runtime input validation happens before the owner. A gate writes successful
+  `verified` evidence only after the owner output and trusted artifact satisfy
+  every declared readback. A blocked or mock-only owner writes `pending` with
+  `skipped` status, never successful gate evidence.
+- `ios/qa` requires an explicit project, scheme, device scope, and supplied QA
+  checks. It never fabricates mock passing evidence and reports untested device
+  coverage in the trusted QA artifact.
+- `system/upgrade` requires an explicit preflight or readback phase. Preflight
+  remains pending through native approval; only a matching completed preflight,
+  version/head transition, and setup readback can verify the gate.
+- Generated capability contracts and documentation include the safety
+  inventory so installer fingerprints and source checks detect drift.
+
+Why:
+
+- A prompt instruction to ask for approval is not an enforcement boundary.
+- Restoring removed action aliases would undo capability convergence, while
+  forgetting their risk contracts would make future modes easier to integrate
+  unsafely.
+- Owner identity alone is not safety evidence. Contract inputs, owner output,
+  provenance-bound artifacts, and readback must agree before verification.
+
+Failure signals:
+
+- A high-risk action has no primary gate or two actions claim the same safety
+  operation.
+- A registered-only operation claims an owner or becomes runnable.
+- Cookie import or iOS synchronization reaches an owner step while its gate is
+  blocked.
+- A typed high-risk action records `verified` before its declared readback is
+  validated, or a blocked/mock execution records successful gate evidence.
+- A runtime-owner gate declares a contract item its operation-specific verifier
+  does not implement.
+- Retired operation IDs reappear in generated menus or routing hints.
+
+Revisit triggers:
+
+- A blocked operation gains a typed owner that implements every declared
+  precondition, authorization boundary, side effect, and readback requirement.
+- A high-risk operation is removed entirely rather than retained as a mode of
+  an active action.
