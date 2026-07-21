@@ -301,6 +301,11 @@ write_fake_bun_bin() {
 exit 0
 EOF_BUN
   chmod +x "$bin_dir/bun"
+  cat > "$bin_dir/codex" <<'EOF_CODEX'
+#!/usr/bin/env bash
+exit 0
+EOF_CODEX
+  chmod +x "$bin_dir/codex"
 }
 write_noop_runtime_bin() {
   local loop_dir="$1"
