@@ -48,13 +48,34 @@ real browser QA remains unsupported until its checks consume the typed
 `browser/session` evidence contract.
 
 Interactive Codex and Claude `$goldband review code` invocations must enter this
-runtime through `bin/goldband review code --host <codex|claude>`. The launcher
-forces real mode and defaults to the whole current worktree when the user does
-not name a narrower scope. User-supplied prompt text never proves runtime
-ownership. Runtime-owned child prompts use the dedicated non-router
+runtime. Claude uses `bin/goldband review code --host claude`. Codex reads the
+installer-owned `~/.codex/skills/goldband/.workflow-launcher.json` and executes
+its exact `argvPrefix` followed by `review code --host codex`. The installed
+launcher is a materialized snapshot outside the reviewed workspace, and its
+machine-local rule allows only that exact Codex review prefix. The caller must
+not substitute a workspace path or request sandbox escalation. A missing
+marker, runtime, or rule is an installation failure and requires reinstall.
+The trusted snapshot also pins the installed Codex CLI by absolute path, so a
+reviewed repository cannot replace the nested reviewer through `PATH`.
+
+The launcher forces real mode and defaults to the whole current worktree when
+the user does not name a narrower scope. User-supplied prompt text never proves
+runtime ownership. Runtime-owned child prompts use the dedicated non-router
 `GOLDBAND_RUNTIME_TASK=review/code` header and do not invoke `$goldband` again.
 Launcher or runtime failure is terminal and must not silently fall back to an
 untyped manual review.
+
+Codex CLI browser work uses the same trusted launcher followed by
+`browser session --host codex <command> [args...]`. It does not depend on the
+Codex App's Browser or Chrome plugin bindings. The installed snapshot carries a
+materialized browser client and bundled server, so neither the launcher nor the
+daemon is resolved from the writable workspace. Exact rules auto-admit only
+inspection commands. Navigation (`goto`, `back`, `forward`, `reload`) and
+`wait` remain on Codex's native approval path so repository instructions cannot
+silently use the trusted launcher to reach localhost or private-network
+services. The runtime still rejects commands with outward effects.
+Claude uses `bin/goldband browser session --host claude` and the source-owned
+browser runtime.
 
 Review input has a 2 MiB limit. Larger Git diffs fail with an explicit request
 to narrow scope instead of a host-specific buffer error. `--diff-file` accepts
@@ -71,14 +92,31 @@ The launcher probes the evidence root before starting. If the default
 `~/.goldband` root is blocked by the caller's filesystem sandbox, review runs
 with a private temporary state root and reports that evidence as ephemeral.
 An explicitly configured state root still fails closed when it is not writable.
-For Codex, the parent session must request host-native sandbox escalation for
-the launcher command before execution: the nested `codex exec` CLI must
-initialize Codex state and app-server resources outside the parent command
-sandbox. This is one parent-session admission, not an approval request from the
-non-interactive child reviewer; the child remains `read-only` with approval set
-to `never`.
+For Codex, the installer-owned exact `allow` rule admits the trusted launcher
+outside the parent command sandbox without a prompt, so nested `codex exec` can
+initialize Codex state and app-server resources. The non-interactive child
+reviewer remains `read-only` with approval set to `never`.
 Strict or exhaustive requests add `--specialists all`; ordinary review keeps
 the runtime's `auto` specialist selection.
+
+Before host dispatch, `review/code` collects changed paths with the diff; Git
+scopes use NUL-delimited path output, while a supplied patch derives paths from
+its file headers.
+When two or more paths changed, the runtime builds a bounded repository-local
+dependency view from Git-tracked source files and the reviewed untracked paths.
+It follows common static import/source forms, walks reverse dependencies to
+depth two, identifies observed test dependents, and can route missing-test or
+wide-impact signals to the relevant automatic specialists. The persistent
+index lives under `${GOLDBAND_HOME:-$HOME/.goldband}/review-impact/`; it is
+Goldband runtime state and is not installed into, or supplied by, the child
+reviewer. A one-file review skips inventory and index work entirely.
+
+The graph is deliberately advisory. Its paths prioritize source inspection but
+cannot narrow the diff, prove coverage, or support a blocking finding without
+current file evidence. File, byte, traversal-depth, and output limits produce
+an explicit `degraded` status and diagnostics. Every pass records a JSON graph
+artifact plus graph telemetry so stale, skipped, and bounded coverage remain
+visible.
 
 Codex review subprocesses run with `--ask-for-approval never` and a read-only
 sandbox. Reviewer prompts prohibit `require_escalated`: when a test or other
@@ -118,7 +156,7 @@ produced by the model; runtime owners validate, gate, persist, and read it back.
 
 | Action | Runtime owner | Real-mode input |
 | --- | --- | --- |
-| `browser/session` | `browse` | Optional `command` and `args`; only read-only commands are delegated. Mutations use the browser tool's native approval path. |
+| `browser/session` | `browse` | Optional `command` and `args`; only non-outward-effect navigation and inspection commands are delegated. Mutations use the browser tool's native approval path. |
 | `design/consult` | `design-decision-store` | `brief` and `decisions` with typography, color, spacing, layout, and motion. |
 | `safety/guard` | `workflow-safety-state` | Optional `scope`. |
 | `safety/freeze` / `safety/unfreeze` | `freeze-hook-state` | Optional freeze `scope`; unfreeze reads the same state owner. |

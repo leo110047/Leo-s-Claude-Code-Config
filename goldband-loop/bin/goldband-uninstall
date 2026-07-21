@@ -171,6 +171,22 @@ if [ -d "$CODEX_SKILLS" ]; then
   done
 fi
 
+# ─── Remove Goldband-owned trusted Codex workflow admissions ──
+CODEX_TRUSTED_WORKFLOW_RUNTIME="$HOME/.codex/goldband/workflow-runtime"
+CODEX_TRUSTED_WORKFLOW_RULE="$HOME/.codex/rules/goldband-workflows.rules"
+if [ -d "$CODEX_TRUSTED_WORKFLOW_RUNTIME" ]; then
+  rm -rf "$CODEX_TRUSTED_WORKFLOW_RUNTIME"
+  REMOVED+=("~/.codex/goldband/workflow-runtime")
+  rmdir "$HOME/.codex/goldband" 2>/dev/null || true
+fi
+if [ -f "$CODEX_TRUSTED_WORKFLOW_RULE" ]; then
+  rm -f "$CODEX_TRUSTED_WORKFLOW_RULE"
+  REMOVED+=("~/.codex/rules/goldband-workflows.rules")
+fi
+# Clean the previous review-only admission name during migration.
+rm -rf "$HOME/.codex/goldband/review-runtime"
+rm -f "$HOME/.codex/rules/goldband-review.rules"
+
 # ─── Remove Factory Droid skills ────────────────────────────
 FACTORY_SKILLS="$HOME/.factory/skills"
 if [ -d "$FACTORY_SKILLS" ]; then

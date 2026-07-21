@@ -11,7 +11,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	abortCreatedManagedWorktree,
@@ -34,6 +34,12 @@ import { resolveGoldbandStateRoot } from "../lib/state-root";
 
 type ReviewHost = "claude" | "codex";
 
+type TrustedBrowserRuntime = {
+	browserExecutable: string;
+	browserServerScript: string;
+	bunExecutable: string;
+};
+
 type ReviewRuntimeResolutionOptions = {
 	entryFile?: string;
 	env?: NodeJS.ProcessEnv;
@@ -51,10 +57,17 @@ type ReviewProcessEnvironmentOptions = {
 	probeStateRoot?: (root: string) => void;
 };
 
+const TRUSTED_CODEX_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_CODEX_EXECUTABLE";
+const TRUSTED_BROWSER_EXECUTABLE_ENV =
+	"GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
+
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
 		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--specialists off|auto|all] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--loop]",
+	);
+	stream.log(
+		"  goldband browser session --host <claude|codex> [command] [args...]",
 	);
 	stream.log("  goldband worktree create <name>");
 	stream.log('  goldband worktree finish <name> -m "<commit message>"');
@@ -169,13 +182,17 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	return ["review", "code", "--mode", "real", "--host", host, ...forwarded];
 }
 
-export function resolveReviewRuntimeFile(
+function resolveWorkflowRuntimeFile(
 	options: ReviewRuntimeResolutionOptions = {},
 ): string {
 	const env = options.env ?? process.env;
 	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
 	const entryRoot = resolve(dirname(realpathSync(entryFile)), "..");
-	const roots = [env.GOLDBAND_LOOP_DIR, env.GOLDBAND_ROOT, entryRoot]
+	const trustedRuntime = existsSync(join(entryRoot, "trusted-runtime.json"));
+	const candidateRoots = trustedRuntime
+		? [entryRoot]
+		: [env.GOLDBAND_LOOP_DIR, env.GOLDBAND_ROOT, entryRoot];
+	const roots = candidateRoots
 		.filter((value): value is string => Boolean(value))
 		.flatMap((root) => [root, installedSourceRoot(root)])
 		.filter((value): value is string => Boolean(value));
@@ -188,9 +205,11 @@ export function resolveReviewRuntimeFile(
 	}
 
 	throw new Error(
-		"review runtime unavailable: expected workflows/run.ts in the active Goldband source or its .installed-source",
+		"workflow runtime unavailable: expected workflows/run.ts in the active Goldband source or its .installed-source",
 	);
 }
+
+export const resolveReviewRuntimeFile = resolveWorkflowRuntimeFile;
 
 function installedSourceRoot(runtimeRoot: string): string | undefined {
 	const marker = join(runtimeRoot, ".installed-source");
@@ -200,9 +219,14 @@ function installedSourceRoot(runtimeRoot: string): string | undefined {
 }
 
 function reviewCode(args: string[]): number {
-	const runtimeFile = resolveReviewRuntimeFile();
+	const runtimeFile = resolveWorkflowRuntimeFile();
 	const runtimeArgs = buildReviewRuntimeArgs(args);
 	const reviewEnvironment = prepareReviewProcessEnvironment(process.env);
+	const trustedCodexExecutable = resolveTrustedCodexExecutable();
+	if (trustedCodexExecutable) {
+		reviewEnvironment.env[TRUSTED_CODEX_EXECUTABLE_ENV] =
+			trustedCodexExecutable;
+	}
 	if (reviewEnvironment.durability === "ephemeral") {
 		console.error(
 			`Goldband review: durable state root is not writable in this sandbox; evidence will use sandbox-safe temporary root ${reviewEnvironment.evidenceRoot}.`,
@@ -222,12 +246,89 @@ function reviewCode(args: string[]): number {
 	return result.status;
 }
 
+function browserSession(args: string[]): number {
+	const hostFlag = args[0];
+	const host = args[1];
+	if (
+		hostFlag !== "--host" ||
+		(host !== "claude" && host !== "codex")
+	) {
+		throw new Error(
+			"browser session requires --host claude or --host codex before the browser command",
+		);
+	}
+	const command = args[2] || "status";
+	const commandArgs = args.slice(3);
+	const runtimeFile = resolveWorkflowRuntimeFile();
+	const runtimeEnvironment = prepareReviewProcessEnvironment(process.env);
+	const trustedBrowser = resolveTrustedBrowserRuntime();
+	if (host === "codex" && !trustedBrowser) {
+		throw new Error(
+			"trusted Codex browser runtime is not installed; rerun ./install.sh workflow-codex",
+		);
+	}
+	if (trustedBrowser) {
+		runtimeEnvironment.env[TRUSTED_BROWSER_EXECUTABLE_ENV] =
+			trustedBrowser.browserExecutable;
+		runtimeEnvironment.env.BROWSE_SERVER_SCRIPT =
+			trustedBrowser.browserServerScript;
+		runtimeEnvironment.env.BROWSE_BUN_EXECUTABLE = trustedBrowser.bunExecutable;
+	}
+	if (runtimeEnvironment.durability === "ephemeral") {
+		console.error(
+			`Goldband browser: durable state root is not writable in this sandbox; evidence will use sandbox-safe temporary root ${runtimeEnvironment.evidenceRoot}.`,
+		);
+	}
+
+	const inputRoot = mkdtempSync(join(tmpdir(), "goldband-browser-input-"));
+	const inputFile = join(inputRoot, "request.json");
+	writeFileSync(
+		inputFile,
+		`${JSON.stringify({ command, args: commandArgs })}\n`,
+		{ mode: 0o600 },
+	);
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[
+				runtimeFile,
+				"browser",
+				"session",
+				"--mode",
+				"real",
+				"--host",
+				host,
+				"--input",
+				inputFile,
+			],
+			{
+				cwd: process.cwd(),
+				env: runtimeEnvironment.env,
+				stdio: "inherit",
+			},
+		);
+		if (result.error) throw result.error;
+		if (result.status === null) {
+			throw new Error(
+				`browser runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
+			);
+		}
+		return result.status;
+	} finally {
+		rmSync(inputRoot, { recursive: true, force: true });
+	}
+}
+
 export function prepareReviewProcessEnvironment(
 	env: NodeJS.ProcessEnv,
 	options: ReviewProcessEnvironmentOptions = {},
 ): ReviewProcessEnvironment {
 	const cleanEnv = { ...env };
 	delete cleanEnv[REVIEW_EVIDENCE_DURABILITY_ENV];
+	delete cleanEnv[TRUSTED_CODEX_EXECUTABLE_ENV];
+	delete cleanEnv[TRUSTED_BROWSER_EXECUTABLE_ENV];
+	delete cleanEnv.BROWSE_SERVER_SCRIPT;
+	delete cleanEnv.BROWSE_BUN_EXECUTABLE;
 	const explicitRoot = hasExplicitStateRoot(env);
 	const evidenceRoot = resolveGoldbandStateRoot(
 		undefined,
@@ -256,6 +357,87 @@ export function prepareReviewProcessEnvironment(
 		evidenceRoot: temporaryRoot,
 		durability: "ephemeral",
 	};
+}
+
+export function resolveTrustedCodexExecutable(
+	entryFile = fileURLToPath(import.meta.url),
+): string | undefined {
+	const resolved = readTrustedRuntimeConfig(entryFile);
+	if (!resolved) return undefined;
+	return requireTrustedExecutable(
+		resolved.configFile,
+		"codexExecutable",
+		resolved.config.codexExecutable,
+	);
+}
+
+export function resolveTrustedBrowserRuntime(
+	entryFile = fileURLToPath(import.meta.url),
+): TrustedBrowserRuntime | undefined {
+	const resolved = readTrustedRuntimeConfig(entryFile);
+	if (!resolved) return undefined;
+	return {
+		browserExecutable: requireTrustedExecutable(
+			resolved.configFile,
+			"browserExecutable",
+			resolved.config.browserExecutable,
+		),
+		browserServerScript: requireTrustedFile(
+			resolved.configFile,
+			"browserServerScript",
+			resolved.config.browserServerScript,
+		),
+		bunExecutable: requireTrustedExecutable(
+			resolved.configFile,
+			"bunExecutable",
+			resolved.config.bunExecutable,
+		),
+	};
+}
+
+function readTrustedRuntimeConfig(entryFile: string):
+	| {
+			configFile: string;
+			config: Record<string, unknown>;
+	  }
+	| undefined {
+	const entryRoot = resolve(dirname(realpathSync(entryFile)), "..");
+	const configFile = join(entryRoot, "trusted-runtime.json");
+	if (!existsSync(configFile)) return undefined;
+	const config = JSON.parse(readFileSync(configFile, "utf8")) as Record<
+		string,
+		unknown
+	>;
+	if (config.schemaVersion !== 1) {
+		throw new Error(`trusted runtime configuration is invalid: ${configFile}`);
+	}
+	return { configFile, config };
+}
+
+function requireTrustedExecutable(
+	configFile: string,
+	field: string,
+	value: unknown,
+): string {
+	const file = requireTrustedFile(configFile, field, value);
+	return realpathSync(file);
+}
+
+function requireTrustedFile(
+	configFile: string,
+	field: string,
+	value: unknown,
+): string {
+	if (
+		typeof value !== "string" ||
+		!isAbsolute(value) ||
+		!existsSync(value)
+	) {
+		throw new Error(
+			`trusted runtime configuration field ${field} is invalid: ${configFile}`,
+		);
+	}
+	return realpathSync(value);
 }
 
 function hasExplicitStateRoot(env: NodeJS.ProcessEnv): boolean {
@@ -289,6 +471,12 @@ export function main(args = process.argv.slice(2)): number {
 	if (scope === "review") {
 		if (action !== "code") usage();
 		return reviewCode(
+			[name, ...rest].filter((value): value is string => value !== undefined),
+		);
+	}
+	if (scope === "browser") {
+		if (action !== "session") usage();
+		return browserSession(
 			[name, ...rest].filter((value): value is string => value !== undefined),
 		);
 	}

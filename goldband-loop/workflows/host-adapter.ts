@@ -115,7 +115,7 @@ class CodexHostAdapter implements HostAdapter {
     writeFileSync(schemaFile, JSON.stringify(schema));
     try {
       const result = await runProcess(
-        'codex',
+        process.env.GOLDBAND_TRUSTED_CODEX_EXECUTABLE || 'codex',
         codexRunJsonArgs(schemaFile, outputFile),
         {
           timeoutMs: options.timeoutMs,

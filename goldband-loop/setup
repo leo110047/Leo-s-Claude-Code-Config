@@ -843,6 +843,43 @@ create_codex_runtime_root() {
   create_internal_workflow_docs "$codex_goldband"
 }
 
+install_codex_trusted_workflow_launcher() {
+  local codex_goldband="$1"
+  local bun_path codex_path trusted_root rule_file marker_file
+  bun_path="$(command -v bun)"
+  codex_path="$(command -v codex 2>/dev/null || true)"
+  case "$bun_path" in
+    /*) ;;
+    *)
+      echo "goldband setup failed: Codex trusted workflow launcher requires an absolute Bun path; found: $bun_path" >&2
+      return 1
+      ;;
+  esac
+  case "$codex_path" in
+    /*) ;;
+    *)
+      echo "goldband setup failed: Codex trusted workflow launcher requires an absolute Codex CLI path; found: ${codex_path:-missing}" >&2
+      return 1
+      ;;
+  esac
+
+  trusted_root="$HOME/.codex/goldband/workflow-runtime"
+  rule_file="$HOME/.codex/rules/goldband-workflows.rules"
+  marker_file="$codex_goldband/.workflow-launcher.json"
+  bun "$SOURCE_GOLDBAND_DIR/scripts/install-codex-review-launcher.ts" \
+    --source-root "$SOURCE_GOLDBAND_DIR" \
+    --runtime-root "$trusted_root" \
+    --rule-file "$rule_file" \
+    --marker-file "$marker_file" \
+    --bun-path "$bun_path" \
+    --codex-path "$codex_path" \
+    --browser-path "$BROWSE_BIN"
+
+  rm -rf "$HOME/.codex/goldband/review-runtime"
+  rm -f "$HOME/.codex/rules/goldband-review.rules"
+  rm -f "$codex_goldband/.review-launcher.json"
+}
+
 create_claude_runtime_root() {
   local goldband_dir="$1"
   local claude_goldband="$2"
@@ -1087,6 +1124,7 @@ if [ "$INSTALL_CODEX" -eq 1 ]; then
   # create_codex_runtime_root would create self-referential symlinks (bin → bin, etc.).
   if [ "$CODEX_REPO_LOCAL" -eq 0 ]; then
     create_codex_runtime_root "$SOURCE_GOLDBAND_DIR" "$CODEX_GOLDBAND"
+    install_codex_trusted_workflow_launcher "$CODEX_GOLDBAND"
   else
     create_internal_workflow_docs "$CODEX_GOLDBAND"
   fi

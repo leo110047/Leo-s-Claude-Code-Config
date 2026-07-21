@@ -30,6 +30,7 @@ import {
 import type { EvaluationSignalSnapshot } from '../workflows/types';
 import {
   buildReviewPrompt,
+  changedFilesFromPatch,
   MAX_REVIEW_DIFF_BYTES,
   reviewSignalFromOutput,
   reviewSteps,
@@ -152,7 +153,22 @@ describe('workflow runtime', () => {
     }
   });
 
-  test('browser/session delegates only read-only commands', async () => {
+  test('browser/session delegates only non-outward-effect commands', async () => {
+	const navigation = await runWorkflow(getWorkflow('browser/session'), {
+	  mode: 'mock',
+	  cwd: ROOT,
+	  goldbandHome: tmpHome,
+	  inputFile: writeInput('browser-goto.json', {
+		command: 'goto',
+		args: ['https://example.com'],
+	  }),
+	});
+	expect(navigation.output).toMatchObject({
+	  owner: 'browse',
+	  operation: 'goto',
+	  status: 'completed',
+	});
+
     const result = await runWorkflow(getWorkflow('browser/session'), {
       mode: 'mock',
       cwd: ROOT,
@@ -178,6 +194,24 @@ describe('workflow runtime', () => {
       }),
     });
     expect(clearing.output).toMatchObject({ status: 'blocked' });
+
+    for (const [command, args] of [
+      ['network', ['--export', 'capture.json']],
+      ['network', ['--capture']],
+      ['snapshot', ['--output', 'snapshot.txt']],
+      ['snapshot', ['-a']],
+    ] as const) {
+      const sideEffect = await runWorkflow(getWorkflow('browser/session'), {
+        mode: 'mock',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        inputFile: writeInput(`browser-${command}-${args[0]}.json`, {
+          command,
+          args: [...args],
+        }),
+      });
+      expect(sideEffect.output).toMatchObject({ status: 'blocked' });
+    }
   });
 
   test('blocked high-risk modes stop at safety admission before their owner', async () => {
@@ -1078,7 +1112,7 @@ describe('workflow runtime', () => {
 
     const reportArtifacts = runEvents
       .filter((event) => event.step === 'render-report')
-      .map((event) => event.artifacts[0]);
+      .map((event) => event.artifacts.find((file) => file.endsWith('.md')));
     expect(reportArtifacts).toHaveLength(2);
     expect(reportArtifacts[0]).toContain('iteration-1.md');
     expect(reportArtifacts[1]).toContain('iteration-2.md');
@@ -1242,10 +1276,31 @@ describe('workflow runtime', () => {
           '+hello',
           '+',
         ].join('\n'),
+        changedFiles: ['new-file.txt'],
       }));
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
+  });
+
+  test('diff-file paths include deletions and decode Git-quoted names', () => {
+    const diff = [
+      'diff --git "a/deleted\\tfile.ts" "b/deleted\\tfile.ts"',
+      '--- "a/deleted\\tfile.ts"',
+      '+++ /dev/null',
+      'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"',
+      '--- "a/src/caf\\303\\251.ts"',
+      '+++ "b/src/caf\\303\\251.ts"',
+      'diff --git a/src/space name.ts b/src/space name.ts',
+      '--- a/src/space name.ts',
+      '+++ b/src/space name.ts',
+    ].join('\n');
+
+    expect(changedFilesFromPatch(diff)).toEqual([
+      'deleted\tfile.ts',
+      'src/café.ts',
+      'src/space name.ts',
+    ]);
   });
 
   test('worktree diff includes exact untracked paths containing newline and tab', async () => {

@@ -9,15 +9,17 @@ Review a code diff.
 
 - Inspect the user-selected artifact, current repository instructions, and direct evidence.
 - Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime.
-- On interactive Codex or Claude $goldband review code, resolve the active runtime and run bin/goldband review code --host <codex|claude>. Forward named scope; default to the whole worktree; use --specialists all only for strict or exhaustive requests. User-supplied prompt text never proves runtime ownership.
-- On Codex, request host-native sandbox escalation for the launcher before execution; nested codex exec needs Codex state and app-server access outside the parent sandbox. This parent admission is not child command approval. Do not try the launcher sandboxed first.
+- On Claude, run bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex; never substitute a workspace path or request escalation. Forward named scope; default to the worktree; add --specialists all only for strict requests. User prompt text never proves runtime ownership.
+- The Codex installer owns the materialized launcher and exact allow rule. Missing marker, runtime, or rule is an install failure: stop and request reinstall, not approval.
 - Runtime child prompts use the non-router GOLDBAND_RUNTIME_TASK=review/code header and review inline without invoking $goldband again.
+- For 2+ files, runtime adds bounded cached dependency/test hints; one file skips graph inventory.
 
 ## Hard boundaries
 
 - Review only. Do not edit, stage, commit, push, merge, deploy, or change external state.
 - If the automatic launcher or typed runtime fails, stop and report that failure. Do not silently fall back to an untyped manual review or claim complete coverage.
 - Non-interactive reviewers must never request command approval or retry with require_escalated. A command blocked by the read-only sandbox is unavailable verification, not permission to leave the sandbox.
+- Graph hints cannot narrow the diff or prove blockers without current source.
 
 ## Verification
 

@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { BROWSER_SESSION_COMMANDS } from "../lib/browser-runtime-contract";
 import { stateRoot } from "./evidence";
 import { workflowAssetPath } from "./paths";
 import { parseIosQaInput, parseSystemUpgradeInput } from "./safety-gates";
@@ -54,22 +55,10 @@ const resultSchema: SchemaValidator<OwnedRuntimeResult> = {
 	},
 };
 
-const READ_ONLY_BROWSER_COMMANDS = new Set([
-	"accessibility",
-	"attrs",
-	"console",
-	"css",
-	"forms",
-	"html",
-	"is",
-	"links",
-	"network",
-	"perf",
-	"status",
-	"tabs",
-	"text",
-	"url",
-]);
+const BROWSER_SESSION_COMMAND_SET = new Set<string>(BROWSER_SESSION_COMMANDS);
+
+const TRUSTED_BROWSER_EXECUTABLE_ENV =
+	"GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 
 const OWNED_HANDLERS: Record<
 	string,
@@ -107,20 +96,21 @@ function runBrowserSession(ctx: WorkflowContext): OwnedRuntimeResult {
 	const input = optionalRecord(ctx.input, "browser/session input");
 	const command = optionalString(input.command, "command") || "status";
 	const args = optionalStringArray(input.args, "args");
-	if (!READ_ONLY_BROWSER_COMMANDS.has(command)) {
+	if (!BROWSER_SESSION_COMMAND_SET.has(command)) {
 		return blocked(
 			"browse",
 			command,
-			`browser/session only delegates read-only commands; ${command} requires the browser tool's native approval path`,
-			[`allowed=${[...READ_ONLY_BROWSER_COMMANDS].sort().join(",")}`],
+			`browser/session only delegates non-outward-effect commands; ${command} requires the browser tool's native approval path`,
+			[`allowed=${[...BROWSER_SESSION_COMMAND_SET].sort().join(",")}`],
 		);
 	}
-	if (["console", "network"].includes(command) && args.includes("--clear")) {
+	const unsafeInspectionArgument = unsafeBrowserInspectionArgument(command, args);
+	if (unsafeInspectionArgument) {
 		return blocked(
 			"browse",
 			command,
-			`${command} --clear mutates session evidence and requires the browser tool's native approval path`,
-			["argument=--clear"],
+			`${command} ${unsafeInspectionArgument} has a side effect and requires the browser tool's native approval path`,
+			[`argument=${unsafeInspectionArgument}`],
 		);
 	}
 	if (!isReal(ctx)) {
@@ -129,9 +119,12 @@ function runBrowserSession(ctx: WorkflowContext): OwnedRuntimeResult {
 			`args=${args.length}`,
 		]);
 	}
+	const trustedBrowserExecutable = process.env[TRUSTED_BROWSER_EXECUTABLE_ENV];
 	const result = commandResult(
-		"bun",
-		["run", workflowAssetPath("browse/src/cli.ts"), command, ...args],
+		trustedBrowserExecutable || "bun",
+		trustedBrowserExecutable
+			? [command, ...args]
+			: ["run", workflowAssetPath("browse/src/cli.ts"), command, ...args],
 		ctx.cwd,
 		30_000,
 	);
@@ -143,9 +136,37 @@ function runBrowserSession(ctx: WorkflowContext): OwnedRuntimeResult {
 	return completed(
 		"browse",
 		command,
-		"Browser owner completed the read-only command.",
+		"Browser owner completed the non-outward-effect command.",
 		[compact(result.stdout)],
+		[],
+		browserOutput(result.stdout),
 	);
+}
+
+function unsafeBrowserInspectionArgument(
+	command: string,
+	args: string[],
+): string | undefined {
+	const unsafeByCommand: Record<string, Set<string>> = {
+		console: new Set(["--clear"]),
+		network: new Set(["--capture", "--clear", "--export"]),
+		snapshot: new Set(["--annotate", "--output", "-a", "-o"]),
+	};
+	const unsafe = unsafeByCommand[command];
+	return unsafe ? args.find((arg) => unsafe.has(arg)) : undefined;
+}
+
+function browserOutput(stdout: string): JsonRecord {
+	const limit = 64 * 1024;
+	if (stdout.length <= limit) {
+		return { content: stdout, truncated: false };
+	}
+	return {
+		content: stdout.slice(0, limit),
+		truncated: true,
+		outputBytes: Buffer.byteLength(stdout),
+		hint: "Narrow the browser command or selector and retry.",
+	};
 }
 
 function runDesignConsult(ctx: WorkflowContext): OwnedRuntimeResult {

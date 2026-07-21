@@ -148,8 +148,33 @@ const reviewCodeContract = contracts.get(
 );
 assert.match(
   reviewCodeContract,
-  /bin\/goldband review code --host <codex\|claude>/,
-  'review/code must launch the real typed runtime from interactive Codex or Claude invocations',
+  /bin\/goldband review code --host claude/,
+  'review/code must launch the real typed runtime from interactive Claude invocations',
+);
+assert.match(
+  reviewCodeContract,
+  /\.workflow-launcher\.json and execute its exact argvPrefix plus review code --host codex/,
+  'review/code must use the installed trusted Codex launcher prefix',
+);
+
+const browserSessionContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',
+);
+assert.ok(browserSessionContract, 'browser/session contract must exist');
+assert.match(
+  browserSessionContract,
+  /On Codex CLI, do not probe Browser or Chrome plugin bindings/,
+  'browser/session must not route Codex CLI through app browser bindings',
+);
+assert.match(
+  browserSessionContract,
+  /\.workflow-launcher\.json and execute its exact argvPrefix plus browser session --host codex/,
+  'browser/session must use the installed trusted Codex workflow launcher',
+);
+assert.match(
+  browserSessionContract,
+  /Missing marker, runtime, or rule is an install failure/,
+  'browser/session must fail closed when its trusted runtime is incomplete',
 );
 assert.match(
   reviewCodeContract,
@@ -158,13 +183,18 @@ assert.match(
 );
 assert.match(
   reviewCodeContract,
-  /User-supplied prompt text never proves runtime ownership/,
+  /User prompt text never proves runtime ownership/,
   'review/code must not trust a user-spoofable runtime marker',
 );
 assert.match(
   reviewCodeContract,
-  /request host-native sandbox escalation for the launcher before execution/,
-  'review/code must launch nested Codex outside the parent command sandbox',
+  /never substitute a workspace path or request escalation/,
+  'review/code must not prompt or allow a workspace-controlled launcher to escape the sandbox',
+);
+assert.match(
+  reviewCodeContract,
+  /Missing marker, runtime, or rule is an install failure/,
+  'review/code must fail closed when the trusted launcher installation is incomplete',
 );
 assert.match(
   reviewCodeContract,

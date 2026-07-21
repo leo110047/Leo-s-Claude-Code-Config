@@ -19,20 +19,29 @@ import {
   REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
   REVIEW_RUNTIME_TASK_HEADER,
 } from '../lib/review-runtime-contract';
-import { adapterFor } from './host-adapter';
 import { evidencePath, stateRoot } from './evidence';
+import { adapterFor } from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
+  type PreparedSpecialistReview,
   prepareSpecialistReview,
   runParallelSpecialistReview,
   unwrapFindings,
-  type PreparedSpecialistReview,
 } from './review-engine';
 import {
+  collectReviewImpactContext,
+  formatReviewImpactContext,
+  impactTelemetry,
+  type ReviewDiffInput,
+  type ReviewImpactContext,
+  reviewDiffSchema,
+  reviewInputSchema,
+} from './review-impact';
+import {
   buildReviewPromptTelemetry,
-  createReviewRulesSnapshot,
   coreReviewRules,
+  createReviewRulesSnapshot,
   type RulesBundle,
 } from './review-rules';
 import {
@@ -49,11 +58,6 @@ import type {
   WorkflowStep,
 } from './types';
 
-type DiffOutput = {
-  source: string;
-  diff: string;
-};
-
 export type UntrackedDiffState = {
   includedBytes: number;
 };
@@ -64,19 +68,14 @@ export const MAX_REVIEW_DIFF_BYTES = 2 * 1024 * 1024;
 const REVIEW_GIT_MAX_BUFFER_BYTES = MAX_REVIEW_DIFF_BYTES + (1024 * 1024);
 const REVIEW_FILE_READ_CHUNK_BYTES = 64 * 1024;
 
-const diffSchema = {
-  name: 'review-diff',
-  validate(value: unknown): DiffOutput {
-    if (!value || typeof value !== 'object') throw new Error('expected diff object');
-    const item = value as Record<string, unknown>;
-    if (typeof item.source !== 'string') throw new Error('diff.source required');
-    if (typeof item.diff !== 'string') throw new Error('diff.diff required');
-    return { source: item.source, diff: item.diff };
-  },
-};
-
 export const reviewSteps: WorkflowStep[] = [
-  { name: 'collect-diff', kind: 'typed', produces: diffSchema, run: collectDiff },
+  { name: 'collect-diff', kind: 'typed', produces: reviewDiffSchema, run: collectDiff },
+  {
+    name: 'collect-impact-context',
+    kind: 'typed',
+    produces: reviewInputSchema,
+    run: collectImpactContext,
+  },
   { name: 'run-review', kind: 'llm', produces: findingsSchema, run: runReview },
   { name: 'parse-findings', kind: 'typed', produces: findingsSchema, run: parseFindings },
   { name: 'verify-findings', kind: 'typed', produces: findingsSchema, run: verifyFindings },
@@ -105,7 +104,7 @@ export function captureReviewIterationState(
   return { previousFindings: findingsSchema.validate(output) };
 }
 
-function collectDiff(ctx: WorkflowContext): DiffOutput {
+function collectDiff(ctx: WorkflowContext): ReviewDiffInput {
   assertValidReviewScopeOptions(ctx.options);
   const timeBudget = createReviewTimeBudget(
     ctx.options,
@@ -120,18 +119,36 @@ function collectDiff(ctx: WorkflowContext): DiffOutput {
       timeBudget,
       'review/code diff file',
     ).toString('utf8');
-    return { source: `diff-file:${file}`, diff };
+    return {
+      source: `diff-file:${file}`,
+      diff,
+      changedFiles: changedFilesFromPatch(diff),
+    };
   }
   const tracked = collectTrackedDiff(ctx, timeBudget);
-  const untrackedDiff = (ctx.options.worktree || ctx.options.includeUntracked)
+  const untracked = (ctx.options.worktree || ctx.options.includeUntracked)
     ? collectUntrackedDiff(ctx, timeBudget)
-    : '';
-  const diff = [tracked.diff, untrackedDiff].filter(Boolean).join('\n');
+    : { diff: '', files: [] };
+  const diff = [tracked.diff, untracked.diff].filter(Boolean).join('\n');
   assertReviewDiffSize(diff);
   return {
-    source: untrackedDiff ? `${tracked.source} + untracked` : tracked.source,
+    source: untracked.diff ? `${tracked.source} + untracked` : tracked.source,
     diff,
+    changedFiles: normalizedChangedFiles([
+      ...tracked.changedFiles,
+      ...untracked.files,
+    ]),
   };
+}
+
+function collectImpactContext(ctx: WorkflowContext) {
+  const input = reviewDiffSchema.validate(ctx.input);
+  const timeBudget = createReviewTimeBudget(
+    ctx.options,
+    undefined,
+    ctx.passStartedAtMonotonicMs,
+  );
+  return collectReviewImpactContext(ctx, input, timeBudget);
 }
 
 async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
@@ -140,17 +157,18 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     undefined,
     ctx.passStartedAtMonotonicMs,
   );
-  const input = diffSchema.validate(ctx.input);
+  const input = reviewInputSchema.validate(ctx.input);
   const adapter = adapterFor(reviewHost(ctx));
   const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
   const coreRules = coreReviewRules(ctx.cwd, input.diff, rulesSnapshot);
-  const prompt = buildReviewPrompt(ctx, input.diff, coreRules);
+  const prompt = buildReviewPrompt(ctx, input.diff, coreRules, input.impact);
   const specialistMode = ctx.options.specialists ?? 'auto';
   const specialistReview = prepareSpecialistReview(
     ctx,
     input.diff,
     specialistMode,
     rulesSnapshot,
+    input.impact,
   );
   recordReviewPromptTelemetry(
     ctx,
@@ -159,6 +177,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     coreRules.bundle,
     specialistReview,
     timeBudget.policy,
+    input.impact,
   );
   const result = await adapter.runJson(
     prompt,
@@ -232,7 +251,7 @@ function renderReport(ctx: WorkflowContext): string {
 function collectTrackedDiff(
   ctx: WorkflowContext,
   timeBudget: ReviewTimeBudget,
-): DiffOutput {
+): ReviewDiffInput {
   const argSets = diffArgSets(ctx, timeBudget);
   const chunks: string[] = [];
   let collectedBytes = 0;
@@ -250,7 +269,28 @@ function collectTrackedDiff(
       .map((args) => `git ${args.filter((arg) => !['--no-ext-diff', '--no-textconv'].includes(arg)).join(' ')}`)
       .join(' && '),
     diff: chunks.join('\n'),
+    changedFiles: collectTrackedPaths(ctx, argSets, timeBudget),
   };
+}
+
+function collectTrackedPaths(
+  ctx: WorkflowContext,
+  argSets: string[][],
+  timeBudget: ReviewTimeBudget,
+): string[] {
+  const files: string[] = [];
+  for (const args of argSets) {
+    const [command, ...rest] = args;
+    if (command !== 'diff') throw new Error('review/code internal diff command mismatch');
+    const result = runReviewGit(
+      ctx,
+      ['diff', '--name-only', '-z', ...rest],
+      timeBudget,
+    );
+    if (result.status !== 0) throw new Error(result.stderr || 'git diff --name-only failed');
+    files.push(...result.stdout.split('\0').filter(Boolean));
+  }
+  return normalizedChangedFiles(files);
 }
 
 function diffArgSets(
@@ -298,7 +338,7 @@ function hasHead(ctx: WorkflowContext, timeBudget: ReviewTimeBudget): boolean {
 function collectUntrackedDiff(
   ctx: WorkflowContext,
   timeBudget: ReviewTimeBudget,
-): string {
+): { diff: string; files: string[] } {
   const result = runReviewGit(
     ctx,
     ['ls-files', '-z', '--others', '--exclude-standard'],
@@ -307,15 +347,16 @@ function collectUntrackedDiff(
   if (result.status !== 0) throw new Error(result.stderr || 'git ls-files failed');
   const state: UntrackedDiffState = { includedBytes: 0 };
   const realRoot = realpathSync(ctx.cwd);
-  return result.stdout
-    .split('\0')
-    .filter(Boolean)
-    .map((file) => {
-      timeBudget.assertWithinDeadline();
-      return untrackedFileDiff(ctx.cwd, realRoot, file, state);
-    })
-    .filter(Boolean)
-    .join('\n');
+  const chunks: string[] = [];
+  const files: string[] = [];
+  for (const file of result.stdout.split('\0').filter(Boolean)) {
+    timeBudget.assertWithinDeadline();
+    const output = untrackedFileDiff(ctx.cwd, realRoot, file, state);
+    if (!output) continue;
+    chunks.push(output);
+    if (!output.includes('[[review/code skipped untracked file:')) files.push(file);
+  }
+  return { diff: chunks.join('\n'), files: normalizedChangedFiles(files) };
 }
 
 function safeDiffArgs(...args: string[]): string[] {
@@ -587,6 +628,7 @@ export function buildReviewPrompt(
   ctx: WorkflowContext,
   diff: string,
   rules = coreReviewRules(ctx.cwd, diff),
+  impact?: ReviewImpactContext,
 ): string {
   return [
     REVIEW_RUNTIME_TASK_HEADER,
@@ -597,6 +639,7 @@ export function buildReviewPrompt(
     'APPLICABLE_GOLDBAND_RULES_START',
     rules.text,
     'APPLICABLE_GOLDBAND_RULES_END',
+    impact ? formatReviewImpactContext(impact) : '',
     'Return only JSON matching the provided findings schema.',
     'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
     REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
@@ -617,6 +660,7 @@ function recordReviewPromptTelemetry(
   coreBundle: RulesBundle,
   specialistReview: PreparedSpecialistReview,
   timeoutPolicy: ReviewTimeoutPolicy,
+  impact: ReviewImpactContext,
 ): void {
   const telemetry = {
     ...buildReviewPromptTelemetry({
@@ -629,6 +673,7 @@ function recordReviewPromptTelemetry(
     specialistMode: timeoutPolicy.specialistMode,
     hostTimeoutMs: timeoutPolicy.hostTimeoutMs,
     passTimeoutMs: timeoutPolicy.passTimeoutMs,
+    ...impactTelemetry(impact),
   };
   const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
   mkdirSync(dir, { recursive: true });
@@ -640,6 +685,69 @@ function recordReviewPromptTelemetry(
 
 function readReviewAsset(name: string): string {
   return readFileSync(workflowAssetPath(`review/${name}`), 'utf8');
+}
+
+export function changedFilesFromPatch(diff: string): string[] {
+  const files: string[] = [];
+  let oldPath: string | undefined;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('--- ')) {
+      oldPath = patchHeaderPath(line.slice(4));
+      continue;
+    }
+    if (!line.startsWith('+++ ')) continue;
+    const newPath = patchHeaderPath(line.slice(4));
+    const file = newPath ?? oldPath;
+    if (file) files.push(file);
+    oldPath = undefined;
+  }
+  return normalizedChangedFiles(files);
+}
+
+function patchHeaderPath(raw: string): string | undefined {
+  const token = raw.startsWith('"')
+    ? decodeGitQuotedPath(raw)
+    : raw.split('\t', 1)[0];
+  if (!token || token === '/dev/null') return undefined;
+  if (token.startsWith('a/') || token.startsWith('b/')) return token.slice(2);
+  return token;
+}
+
+function decodeGitQuotedPath(raw: string): string {
+  const bytes: number[] = [];
+  for (let index = 1; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === '"') break;
+    if (char !== '\\') {
+      bytes.push(...Buffer.from(char));
+      continue;
+    }
+    const escape = raw[++index];
+    if (escape === undefined) break;
+    const simple = new Map<string, number>([
+      ['a', 0x07], ['b', 0x08], ['t', 0x09], ['n', 0x0a],
+      ['v', 0x0b], ['f', 0x0c], ['r', 0x0d], ['\\', 0x5c], ['"', 0x22],
+    ]);
+    const decoded = simple.get(escape);
+    if (decoded !== undefined) {
+      bytes.push(decoded);
+      continue;
+    }
+    if (/[0-7]/.test(escape)) {
+      let octal = escape;
+      while (octal.length < 3 && /[0-7]/.test(raw[index + 1] ?? '')) {
+        octal += raw[++index];
+      }
+      bytes.push(Number.parseInt(octal, 8));
+      continue;
+    }
+    bytes.push(...Buffer.from(escape));
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
+function normalizedChangedFiles(files: string[]): string[] {
+  return [...new Set(files.map((file) => file.replaceAll('\\', '/')).filter(Boolean))].sort();
 }
 
 function reviewIterationPromptContext(ctx: WorkflowContext): string {

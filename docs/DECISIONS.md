@@ -1025,3 +1025,178 @@ Revisit triggers:
 - Goldband adopts a portable TOML parser as an installer dependency.
 - Codex App begins rewriting Goldband-owned keys semantically without preserving
   their textual value representation.
+
+## 2026-07-21: Review Impact Graph Is Parent-Runtime Infrastructure
+
+Decision: Goldband owns a bounded, persistent file dependency-impact graph in
+the typed `review/code` parent runtime. It is built only when at least two files
+changed, before host dispatch, and is passed to core and specialist prompts as
+advisory inspection context. It is not an MCP server, child-reviewer plugin, or
+independent source of findings.
+
+Implementation contract:
+
+- Git-backed `collect-diff` scopes emit exact changed paths alongside the
+  authoritative diff; supplied patch artifacts derive paths from file headers.
+- One changed file returns `skipped: single-file` before repository inventory or
+  graph-cache access. Zero paths and changes without supported source types have
+  separate explicit skip reasons.
+- Multi-file review inventories Git-tracked files plus reviewed changed paths,
+  parses bounded regular source files without following symlinks, resolves
+  common local dependency forms, and walks reverse impact to depth two.
+- The cache is stored under Goldband state, keyed by the real repository root,
+  validated on load, updated atomically, and reused by file identity and
+  metadata signature. It never modifies the reviewed repository.
+- Graph status is `analyzed`, `degraded`, or `skipped`. Limits and unreadable or
+  unstable inputs become diagnostics rather than silently implying complete
+  coverage.
+- Core and specialist prompts state that graph output is structural hinting
+  only. The diff remains complete review scope, and a blocking finding still
+  requires current source evidence and a reachable failure path.
+- Automatic specialist selection may add `testing` when a changed source file
+  has no observed reverse test dependency, and `maintainability` when the
+  bounded impact set is wide or truncated.
+- Each pass emits an impact JSON artifact and telemetry for skip reason, parsed
+  and reused files, edges, affected files, tests, truncation, and diagnostics.
+
+Assumptions:
+
+- Common local import patterns provide useful prioritization without claiming a
+  language-complete semantic graph.
+- Git-tracked inventory is the safest default repository boundary; only
+  untracked paths already admitted into the review diff may enter the graph.
+- File metadata signatures are adequate for cache invalidation because a file
+  is reread whenever identity, size, modification time, or change time differs.
+
+Consequences:
+
+- Multi-file review can inspect indirect consumers and likely test coverage
+  earlier without giving child reviewers network, MCP, or persistent state.
+- Single-file changes retain direct-review context efficiency and avoid a full
+  repository scan.
+- Unsupported languages, dynamic imports, aliases, generated wiring, and
+  relationships beyond the depth/output bounds can be absent; that absence is
+  never treated as proof of safety.
+- The parent runtime now owns a cache and graph artifact lifecycle that must
+  remain bounded, injection-safe, and covered by workflow tests.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Install the referenced graph MCP or parser stack into each reviewer child | Violates child isolation, adds external runtime dependencies, and duplicates persistent state across host adapters. |
+| Run graph construction for every review | The repository scan can cost more context and latency than direct inspection for a one-file change. |
+| Let graph reachability define review scope or findings | Static extraction is incomplete and would turn missing edges into false assurance. |
+| Keep only an in-memory graph | Repeats repository parsing on every review and discards useful bounded reuse. |
+| Use a language-complete parser immediately | Adds a large dependency and maintenance surface before Goldband has measured language-specific precision needs. |
+
+Failure signals:
+
+- A one-file review creates or reads the persistent graph index.
+- A graph path is used to omit a changed diff path or to report a blocker
+  without current source evidence.
+- Ignored or unrelated untracked files enter the graph.
+- Cache corruption, file churn, or repository size produces silent partial
+  coverage instead of `degraded` evidence.
+- Review latency or prompt size materially regresses on ordinary multi-file
+  changes.
+
+Revisit triggers:
+
+- Real review telemetry shows graph construction or prompt overhead outweighs
+  useful affected-path discovery.
+- A supported language repeatedly misses high-value edges that require a proper
+  parser or project configuration resolver.
+- Measured repository scale requires incremental background indexing, a tighter
+  bound, or an explicit opt-out.
+- Host runtimes gain a trustworthy native dependency graph with equivalent
+  isolation, bounds, and evidence semantics.
+
+## 2026-07-21: Codex Workflows Use Installer-Owned Exact Admissions
+
+Decision: supersede the parent-escalation clause of “Interactive Review Must
+Enter the Typed Runtime” for Codex. A global Codex install materializes a
+Goldband workflow launcher outside the active workspace and installs exact
+machine-local `allow` rules for only that launcher’s `review code --host codex`
+prefix and enumerated browser inspection commands. Interactive Codex runs those
+trusted admissions normally and never asks for `require_escalated` approval.
+
+Implementation contract:
+
+- `goldband-loop/setup --host codex` bundles the public launcher and typed
+  workflow owner, browser client, and bundled browser server into
+  `~/.codex/goldband/workflow-runtime`; these are real files, not links into the
+  Goldband checkout.
+- The installer records the absolute Bun and launcher paths in
+  `~/.codex/skills/goldband/.workflow-launcher.json` and generates
+  `~/.codex/rules/goldband-workflows.rules` from the same values.
+- The snapshot records the installed Codex CLI by absolute path. The launcher
+  removes caller-provided override state and the host adapter uses the pinned
+  executable instead of resolving `codex` from the reviewed process `PATH`.
+- The rules fix the Bun executable, materialized launcher, capability, action,
+  `--host`, and `codex` argv prefix. Review scope and timeout suffixes remain
+  available. Browser rules additionally fix an enumerated inspection command;
+  navigation and wait commands do not match automatic admission.
+- Codex CLI browser work always enters Goldband's browser owner. It never probes
+  Codex App Browser/Chrome bindings. The owner admits navigation and inspection
+  commands while rejecting outward-effect operations, but navigation remains
+  on Codex's native approval path because it can reach localhost/private origins.
+- The workflow reads and executes the installed marker exactly. It never
+  substitutes `bin/goldband` from the current workspace or falls back to a
+  manual review.
+- Reinstall stages a complete snapshot, swaps the previous runtime to a backup,
+  and restores it if activation fails. Status validates the same pinned Codex
+  executable used by review and probes policy through that executable. Uninstall
+  removes the snapshot and Goldband-owned rule.
+- Missing or inconsistent launcher state fails closed with a reinstall
+  instruction. A broader or more restrictive host/admin policy remains outside
+  this contract and may still override the generated rule.
+
+Assumptions:
+
+- Codex continues to interpret an exact `allow` rule as permission to run the
+  matching command outside the sandbox without prompting.
+- The user trusts the Goldband installer to refresh its own runtime; reviewed
+  repositories do not have write access to the installed snapshot or rule.
+- The nested reviewer retains its existing read-only sandbox and `never`
+  approval policy after the parent launcher is admitted.
+
+Consequences:
+
+- `$goldband review code` no longer enters a contradictory flow where the user
+  approves escalation but the session’s `approval_policy=never` rejects the
+  same request.
+- `$goldband browser session` works in Codex CLI without an app-hosted browser
+  provider. Inspection commands can run without prompting; navigation requires
+  Codex's normal approval because the Chromium daemon can reach local services.
+- Updating Goldband must rebuild the trusted snapshot; source edits alone do
+  not change the admitted executable until reinstall.
+- The install adds the bundled workflow entrypoints, browser client/server, and
+  review assets under `~/.codex/goldband`.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Allow `bin/goldband` by relative path | A workspace can replace that path and inherit the allow decision. |
+| Allow the installed skill’s symlinked `bin/goldband` | The link resolves back into the writable Goldband checkout and has the same spoofing boundary. |
+| Keep asking for `require_escalated` | Sessions with `approval_policy=never` cannot honor the prompt even after textual user consent. |
+| Use Codex App Browser/Chrome plugins from CLI | The CLI session has no registered browser provider even when plugin metadata is installed. |
+| Allow every `bun`, `browse`, or `codex exec` invocation | Grants a general sandbox escape far beyond the typed workflows. |
+
+Failure signals:
+
+- Either exact installed workflow command does not resolve to `allow` in
+  `codex execpolicy check`.
+- A source-tree launcher or unrelated Goldband command matches the generated
+  rule.
+- Reinstall leaves the marker, snapshot, and rule pointing to different paths.
+- Review or browser work asks the user for sandbox escalation despite a healthy
+  installation.
+
+Revisit triggers:
+
+- Codex gains a native trusted skill executable or scoped child-agent API that
+  removes the outer command admission entirely.
+- Codex changes rule precedence, matching, or sandbox behavior.
+- The typed runtime no longer needs host state outside the parent sandbox.
