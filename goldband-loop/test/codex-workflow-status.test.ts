@@ -27,6 +27,7 @@ describe("trusted Codex workflow status", () => {
 			for (const directory of [
 				join(runtimeRoot, "bin"),
 				join(runtimeRoot, "browse", "server"),
+				join(runtimeRoot, "review", "rules"),
 				skillRoot,
 				rulesRoot,
 				trustedBin,
@@ -40,6 +41,8 @@ describe("trusted Codex workflow status", () => {
 			const bunExecutable = join(trustedBin, "bun");
 			const browserExecutable = join(runtimeRoot, "browse", "browse");
 			const browserServer = join(runtimeRoot, "browse", "server", "server.js");
+			const rulesResolver = join(runtimeRoot, "review", "rules-resolver.js");
+			const rulesDirectory = join(runtimeRoot, "review", "rules");
 			const launcher = join(runtimeRoot, "bin", "goldband.js");
 			const rule = join(rulesRoot, "goldband-workflows.rules");
 			for (const executable of [bunExecutable, browserExecutable]) {
@@ -48,6 +51,8 @@ describe("trusted Codex workflow status", () => {
 			}
 			writeFileSync(launcher, "// fixture\n");
 			writeFileSync(browserServer, "// fixture\n");
+			writeFileSync(rulesResolver, "module.exports = {};\n");
+			writeFileSync(join(rulesDirectory, "manifest.json"), "{}\n");
 			writeFileSync(rule, "# fixture\n");
 			writeFileSync(
 				pinnedCodex,
@@ -62,11 +67,13 @@ describe("trusted Codex workflow status", () => {
 			writeFileSync(
 				join(runtimeRoot, "trusted-runtime.json"),
 				JSON.stringify({
-					schemaVersion: 1,
+					schemaVersion: 2,
 					bunExecutable,
 					codexExecutable: pinnedCodex,
 					browserExecutable,
 					browserServerScript: browserServer,
+					rulesResolverScript: rulesResolver,
+					rulesDirectory,
 				}),
 			);
 			writeFileSync(
@@ -104,6 +111,13 @@ describe("trusted Codex workflow status", () => {
 			expect(healthy.stdout).toContain("[OK] trusted Codex workflow launcher");
 			expect(readFileSync(pinnedLog, "utf8").trim().split("\n")).toHaveLength(2);
 			expect(() => readFileSync(poisonLog, "utf8")).toThrow();
+
+			unlinkSync(rulesResolver);
+			const missingRulesRuntime = runStatus();
+			expect(missingRulesRuntime.stdout).toContain(
+				"[stale] trusted Codex workflow launcher",
+			);
+			writeFileSync(rulesResolver, "module.exports = {};\n");
 
 			unlinkSync(pinnedCodex);
 			const stale = runStatus();

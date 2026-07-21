@@ -77,7 +77,18 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(existsSync(join(runtimeRoot, "browse", "browse"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "browse", "server", "server.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "shared-rubric.md"))).toBe(true);
-			expect(readFileSync(join(runtimeRoot, "trusted-runtime.json"), "utf8")).toContain('"browserExecutable"');
+			expect(existsSync(join(runtimeRoot, "review", "rules-resolver.js"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "review", "rules", "manifest.json"))).toBe(true);
+			const trustedConfig = JSON.parse(
+				readFileSync(join(runtimeRoot, "trusted-runtime.json"), "utf8"),
+			);
+			expect(trustedConfig.schemaVersion).toBe(2);
+			expect(trustedConfig.rulesResolverScript).toBe(
+				join(runtimeRoot, "review", "rules-resolver.js"),
+			);
+			expect(trustedConfig.rulesDirectory).toBe(
+				join(runtimeRoot, "review", "rules"),
+			);
 			expect(readFileSync(markerFile, "utf8")).toContain('"schemaVersion": 1');
 			const rule = readFileSync(ruleFile, "utf8");
 			expect(rule).toBe(renderCodexReviewRule(marker));
@@ -136,8 +147,10 @@ describe("Codex trusted workflow launcher install", () => {
 					encoding: "utf8",
 					env: {
 						...process.env,
+						HOME: join(fixture, "empty-home"),
 						GOLDBAND_HOME: stateRoot,
 						GOLDBAND_ROOT: poisonRoot,
+						GOLDBAND_RULES_DIR: join(poisonRoot, "rules"),
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
@@ -164,6 +177,7 @@ describe("Codex trusted workflow launcher install", () => {
 					encoding: "utf8",
 					env: {
 						...process.env,
+						HOME: join(fixture, "empty-home"),
 						GOLDBAND_HOME: stateRoot,
 						GOLDBAND_ROOT: poisonRoot,
 						GOLDBAND_TRUSTED_BROWSER_EXECUTABLE: poisonCodex,

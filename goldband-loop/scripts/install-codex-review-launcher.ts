@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import {
 	copyFileSync,
+	cpSync,
 	chmodSync,
 	existsSync,
 	mkdirSync,
@@ -200,7 +201,22 @@ export function installCodexReviewLauncher(
 	const launcherEntry = join(sourceRoot, "bin", "goldband.ts");
 	const runtimeEntry = join(sourceRoot, "workflows", "run.ts");
 	const browserServerEntry = join(sourceRoot, "browse", "src", "server.ts");
-	for (const required of [launcherEntry, runtimeEntry, browserServerEntry]) {
+	const rulesResolverSource = join(
+		sourceRoot,
+		"..",
+		"hooks",
+		"scripts",
+		"lib",
+		"rules-resolver.js",
+	);
+	const rulesSource = join(sourceRoot, "..", "rules");
+	for (const required of [
+		launcherEntry,
+		runtimeEntry,
+		browserServerEntry,
+		rulesResolverSource,
+		join(rulesSource, "manifest.json"),
+	]) {
 		if (!existsSync(required)) throw new Error(`required source missing: ${required}`);
 	}
 
@@ -228,11 +244,19 @@ export function installCodexReviewLauncher(
 			if (!existsSync(source)) throw new Error(`review asset missing: ${source}`);
 			copyFileSync(source, join(stageRoot, "review", asset));
 		}
+		const stagedRulesResolver = join(
+			stageRoot,
+			"review",
+			"rules-resolver.js",
+		);
+		const stagedRulesDirectory = join(stageRoot, "review", "rules");
+		copyFileSync(rulesResolverSource, stagedRulesResolver);
+		cpSync(rulesSource, stagedRulesDirectory, { recursive: true });
 		writeFileSync(
 			join(stageRoot, "trusted-runtime.json"),
 			`${JSON.stringify(
 				{
-					schemaVersion: 1,
+					schemaVersion: 2,
 					codexExecutable: codexPath,
 					browserExecutable: join(runtimeRoot, "browse", "browse"),
 					browserServerScript: join(
@@ -242,6 +266,12 @@ export function installCodexReviewLauncher(
 						"server.js",
 					),
 					bunExecutable: bunPath,
+					rulesResolverScript: join(
+						runtimeRoot,
+						"review",
+						"rules-resolver.js",
+					),
+					rulesDirectory: join(runtimeRoot, "review", "rules"),
 				},
 				null,
 				2,

@@ -8,6 +8,7 @@ import {
 	readFileSync,
 	realpathSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -38,6 +39,11 @@ type TrustedBrowserRuntime = {
 	browserExecutable: string;
 	browserServerScript: string;
 	bunExecutable: string;
+};
+
+type TrustedRulesRuntime = {
+	rulesResolverScript: string;
+	rulesDirectory: string;
 };
 
 type ReviewRuntimeResolutionOptions = {
@@ -223,6 +229,7 @@ function reviewCode(args: string[]): number {
 	const runtimeArgs = buildReviewRuntimeArgs(args);
 	const reviewEnvironment = prepareReviewProcessEnvironment(process.env);
 	const trustedCodexExecutable = resolveTrustedCodexExecutable();
+	if (trustedCodexExecutable) resolveTrustedRulesRuntime();
 	if (trustedCodexExecutable) {
 		reviewEnvironment.env[TRUSTED_CODEX_EXECUTABLE_ENV] =
 			trustedCodexExecutable;
@@ -262,6 +269,7 @@ function browserSession(args: string[]): number {
 	const runtimeFile = resolveWorkflowRuntimeFile();
 	const runtimeEnvironment = prepareReviewProcessEnvironment(process.env);
 	const trustedBrowser = resolveTrustedBrowserRuntime();
+	if (trustedBrowser) resolveTrustedRulesRuntime();
 	if (host === "codex" && !trustedBrowser) {
 		throw new Error(
 			"trusted Codex browser runtime is not installed; rerun ./install.sh workflow-codex",
@@ -395,6 +403,25 @@ export function resolveTrustedBrowserRuntime(
 	};
 }
 
+export function resolveTrustedRulesRuntime(
+	entryFile = fileURLToPath(import.meta.url),
+): TrustedRulesRuntime | undefined {
+	const resolved = readTrustedRuntimeConfig(entryFile);
+	if (!resolved) return undefined;
+	return {
+		rulesResolverScript: requireTrustedFile(
+			resolved.configFile,
+			"rulesResolverScript",
+			resolved.config.rulesResolverScript,
+		),
+		rulesDirectory: requireTrustedDirectory(
+			resolved.configFile,
+			"rulesDirectory",
+			resolved.config.rulesDirectory,
+		),
+	};
+}
+
 function readTrustedRuntimeConfig(entryFile: string):
 	| {
 			configFile: string;
@@ -408,7 +435,7 @@ function readTrustedRuntimeConfig(entryFile: string):
 		string,
 		unknown
 	>;
-	if (config.schemaVersion !== 1) {
+	if (config.schemaVersion !== 2) {
 		throw new Error(`trusted runtime configuration is invalid: ${configFile}`);
 	}
 	return { configFile, config };
@@ -438,6 +465,20 @@ function requireTrustedFile(
 		);
 	}
 	return realpathSync(value);
+}
+
+function requireTrustedDirectory(
+	configFile: string,
+	field: string,
+	value: unknown,
+): string {
+	const directory = requireTrustedFile(configFile, field, value);
+	if (!statSync(directory).isDirectory()) {
+		throw new Error(
+			`trusted runtime configuration field ${field} is not a directory: ${configFile}`,
+		);
+	}
+	return directory;
 }
 
 function hasExplicitStateRoot(env: NodeJS.ProcessEnv): boolean {

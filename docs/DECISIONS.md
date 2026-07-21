@@ -1124,7 +1124,8 @@ trusted admissions normally and never asks for `require_escalated` approval.
 Implementation contract:
 
 - `goldband-loop/setup --host codex` bundles the public launcher and typed
-  workflow owner, browser client, and bundled browser server into
+  workflow owner, browser client, bundled browser server, Rules resolver, and
+  an immutable Rules snapshot into
   `~/.codex/goldband/workflow-runtime`; these are real files, not links into the
   Goldband checkout.
 - The installer records the absolute Bun and launcher paths in

@@ -307,18 +307,18 @@ process.stdout.write(marker.argvPrefix[0] + "\t" + marker.argvPrefix[1] + "\t" +
 ' "$marker" 2>/dev/null || true)"
     IFS=$'\t' read -r bun_path launcher_path marker_rule runtime_root <<<"$marker_values"
     local trusted_config="$runtime_root/trusted-runtime.json"
-    local config_values config_bun codex_path browser_path browser_server
+    local config_values config_bun codex_path browser_path browser_server rules_resolver rules_directory
     config_values="$(node -e '
 const fs = require("node:fs");
 const config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-if (config.schemaVersion !== 1) process.exit(2);
-for (const field of ["bunExecutable", "codexExecutable", "browserExecutable", "browserServerScript"]) {
+if (config.schemaVersion !== 2) process.exit(2);
+for (const field of ["bunExecutable", "codexExecutable", "browserExecutable", "browserServerScript", "rulesResolverScript", "rulesDirectory"]) {
   if (typeof config[field] !== "string" || !config[field]) process.exit(2);
 }
-process.stdout.write([config.bunExecutable, config.codexExecutable, config.browserExecutable, config.browserServerScript].join("\t"));
+process.stdout.write([config.bunExecutable, config.codexExecutable, config.browserExecutable, config.browserServerScript, config.rulesResolverScript, config.rulesDirectory].join("\t"));
 ' "$trusted_config" 2>/dev/null || true)"
-    IFS=$'\t' read -r config_bun codex_path browser_path browser_server <<<"$config_values"
-    if [ ! -x "$bun_path" ] || [ "$config_bun" != "$bun_path" ] || [ ! -x "$codex_path" ] || [ ! -f "$launcher_path" ] || [ ! -f "$trusted_config" ] || [ ! -x "$browser_path" ] || [ ! -f "$browser_server" ] || [ "$marker_rule" != "$rule" ]; then
+    IFS=$'\t' read -r config_bun codex_path browser_path browser_server rules_resolver rules_directory <<<"$config_values"
+    if [ ! -x "$bun_path" ] || [ "$config_bun" != "$bun_path" ] || [ ! -x "$codex_path" ] || [ ! -f "$launcher_path" ] || [ ! -f "$trusted_config" ] || [ ! -x "$browser_path" ] || [ ! -f "$browser_server" ] || [ ! -f "$rules_resolver" ] || [ ! -d "$rules_directory" ] || [ ! -f "$rules_directory/manifest.json" ] || [ "$marker_rule" != "$rule" ]; then
         echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — marker target missing or inconsistent"
         echo "    建議: 重跑 ./install.sh workflow-codex。"
         GOLDBAND_STATUS_EXIT_CODE=2
