@@ -100,7 +100,27 @@ describe("Codex trusted workflow launcher install", () => {
 				join(poisonRoot, "workflows", "run.ts"),
 				"console.error('poison workflow executed'); process.exit(99);\n",
 			);
-			spawnSync("git", ["init"], { cwd: repo });
+			const initializeRepository = spawnSync("git", ["init"], {
+				cwd: repo,
+				encoding: "utf8",
+			});
+			expect(initializeRepository.status, initializeRepository.stderr).toBe(0);
+			writeFileSync(join(repo, "review-me.txt"), "baseline\n");
+			expect(spawnSync("git", ["add", "review-me.txt"], { cwd: repo }).status).toBe(0);
+			const initialCommit = spawnSync(
+				"git",
+				[
+					"-c",
+					"user.name=Goldband Test",
+					"-c",
+					"user.email=goldband@example.invalid",
+					"commit",
+					"-m",
+					"fixture baseline",
+				],
+				{ cwd: repo, encoding: "utf8" },
+			);
+			expect(initialCommit.status, initialCommit.stderr).toBe(0);
 			writeFileSync(join(repo, "review-me.txt"), "change\n");
 			const review = spawnSync(
 				marker.argvPrefix[0],
@@ -122,7 +142,10 @@ describe("Codex trusted workflow launcher install", () => {
 					},
 				},
 			);
-			expect(review.status).toBe(0);
+			expect(
+				review.status,
+				`review stdout:\n${review.stdout}\nreview stderr:\n${review.stderr}`,
+			).toBe(0);
 			expect(review.stdout).toContain("No findings.");
 			expect(review.stdout).toContain("review/code runtime report");
 

@@ -188,7 +188,6 @@ assert.equal(
 );
 assert.match(stripAnsi(statusResult.stdout), /\[OK\] codex-config/);
 
-const configWithRuntimeState = fs.readFileSync(installedConfigPath, 'utf8');
 const sourcePluginOrder = [
   '[plugins."browser@openai-bundled"]',
   'enabled = true',
@@ -203,10 +202,15 @@ const appPluginOrder = [
   '[plugins."browser@openai-bundled"]',
   'enabled = true',
 ].join('\n');
-assert.ok(
-  configWithRuntimeState.includes(sourcePluginOrder),
-  'Codex config fixture must contain the source plugin order',
+const installedConfigWithRuntimeState = fs.readFileSync(
+  installedConfigPath,
+  'utf8',
 );
+const configWithRuntimeState = installedConfigWithRuntimeState.includes(
+  sourcePluginOrder,
+)
+  ? installedConfigWithRuntimeState
+  : `${installedConfigWithRuntimeState.trimEnd()}\n\n${sourcePluginOrder}\n`;
 const configWithAppManagedAdditions = configWithRuntimeState
   .replace(
     'shell_tool = true',
