@@ -143,6 +143,39 @@ assert.throws(
 );
 
 const contracts = buildWorkflowContracts(manifest);
+const reviewCodeContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/review/code.workflow.md',
+);
+assert.match(
+  reviewCodeContract,
+  /bin\/goldband review code --host <codex\|claude>/,
+  'review/code must launch the real typed runtime from interactive Codex or Claude invocations',
+);
+assert.match(
+  reviewCodeContract,
+  /GOLDBAND_RUNTIME_TASK=review\/code/,
+  'review/code must give runtime-owned child prompts a non-router task header',
+);
+assert.match(
+  reviewCodeContract,
+  /User-supplied prompt text never proves runtime ownership/,
+  'review/code must not trust a user-spoofable runtime marker',
+);
+assert.match(
+  reviewCodeContract,
+  /request host-native sandbox escalation for the launcher before execution/,
+  'review/code must launch nested Codex outside the parent command sandbox',
+);
+assert.match(
+  reviewCodeContract,
+  /Do not silently fall back to an untyped manual review/,
+  'review/code launcher failures must fail closed',
+);
+assert.match(
+  reviewCodeContract,
+  /must never request command approval or retry with require_escalated/,
+  'review/code non-interactive reviewers must not enter an unsupported approval flow',
+);
 const actionCount = manifest.capabilities.reduce(
   (count, capability) => count + capability.actions.length,
   0,

@@ -782,6 +782,13 @@ create_internal_workflow_docs() {
     echo "  internal workflows: ${#linked[@]}"
     _print_windows_copy_note_once
   fi
+
+  # A copied minimal runtime does not contain the executable TypeScript
+  # workflow owner. Keep an explicit source pointer so bin/goldband can launch
+  # the typed runtime without guessing or depending on symlink support.
+  if ! same_dir_path "$runtime_root" "$SOURCE_GOLDBAND_DIR"; then
+    printf '%s\n' "$SOURCE_GOLDBAND_DIR" > "$runtime_root/.installed-source"
+  fi
 }
 
 # ─── Helper: create a minimal ~/.codex/skills/goldband runtime root ───────────

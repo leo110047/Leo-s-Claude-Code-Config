@@ -49,6 +49,7 @@ export type WorkflowContext = {
   runId: string;
   workflow: WorkflowDefinition;
   cwd: string;
+  passStartedAtMonotonicMs?: number;
   input?: unknown;
   options: WorkflowRunOptions;
   artifacts: string[];
@@ -97,6 +98,8 @@ export type WorkflowRunOptions = {
   worktree?: boolean;
   includeUntracked?: boolean;
   specialists?: 'off' | 'auto' | 'all';
+  reviewHostTimeoutMs?: number;
+  reviewPassTimeoutMs?: number;
   inputFile?: string;
   goldbandHome?: string;
   cwd?: string;

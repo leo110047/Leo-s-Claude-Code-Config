@@ -25,6 +25,7 @@ export type WorkflowRunResult = {
 type WorkflowPass = {
   runId: string;
   workflow: WorkflowDefinition;
+  startedAtMonotonicMs: number;
   options: WorkflowRunOptions;
   artifacts: string[];
   iterationContext?: IterationContext;
@@ -175,6 +176,7 @@ async function createWorkflowPass(
   return {
     runId: pass.runId ?? randomUUID(),
     workflow,
+    startedAtMonotonicMs: performance.now(),
     options,
     artifacts: [],
     iterationContext: pass.iterationContext,
@@ -312,6 +314,7 @@ function stepContext(pass: WorkflowPass, input: unknown): WorkflowContext {
     runId: pass.runId,
     workflow: pass.workflow,
     cwd: pass.options.cwd || process.cwd(),
+    passStartedAtMonotonicMs: pass.startedAtMonotonicMs,
     input,
     options: pass.options,
     artifacts: pass.artifacts,

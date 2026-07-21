@@ -817,3 +817,132 @@ Revisit triggers:
   precondition, authorization boundary, side effect, and readback requirement.
 - A high-risk operation is removed entirely rather than retained as a mode of
   an active action.
+
+## 2026-07-20: Interactive Review Must Enter the Typed Runtime
+
+Decision: an interactive Codex or Claude `$goldband review code` invocation
+must launch the executable review owner before reporting findings. The thin
+workflow contract selects the runtime; it does not perform a second manual
+review in the parent agent.
+
+Implementation contract:
+
+- `bin/goldband review code --host <codex|claude>` is the public launcher. It
+  forces real mode and defaults to the whole current worktree when the user
+  does not name a narrower scope.
+- The launcher resolves `workflows/run.ts` from the active source root or the
+  installed runtime's `.installed-source`; missing runtime ownership fails
+  explicitly.
+- User-supplied prompt text never proves runtime ownership. Runtime-owned child
+  prompts use the dedicated non-router `GOLDBAND_RUNTIME_TASK=review/code`
+  header, perform the supplied review inline, and never invoke `$goldband`
+  again.
+- The launcher probes the evidence root before starting. If the default
+  `~/.goldband` root is blocked by the caller's filesystem sandbox, it uses a
+  private temporary state root and reports the evidence as ephemeral. An
+  explicitly configured state root remains fail-closed when it is not writable.
+- A Codex parent session requests host-native sandbox escalation for the
+  launcher command before execution. Codex applies its command sandbox to all
+  descendants, while the nested `codex exec` CLI must initialize Codex state
+  and app-server resources. This one parent-session admission is separate from
+  child reviewer command approval; the child remains read-only with approval
+  set to `never`.
+- Codex subprocesses use `--ask-for-approval never` with the read-only sandbox.
+  Core and specialist prompts prohibit `require_escalated`; blocked dynamic
+  verification is reported as unavailable instead of attempting an approval
+  flow that non-interactive `codex exec` cannot service.
+- Codex reviewers also use `--ignore-user-config`, an explicit empty
+  `mcp_servers` override, and `--ephemeral`. Authentication still comes from
+  `CODEX_HOME`, but user/project customization cannot expose external MCP tools
+  or persist a reviewer session.
+- Claude subprocesses use `--safe-mode` plus a read-only tool allowlist so
+  repository or user hooks, plugins, MCP servers, and other executable
+  customizations cannot create side effects. The prompt tells the reviewer to
+  inspect applicable `AGENTS.md` and `CLAUDE.md` files explicitly with read-only
+  tools because safe mode disables their automatic loading.
+- Review input is bounded to 2 MiB. Git collection uses an explicit larger
+  process buffer and converts overflow into a scope-narrowing error instead of
+  leaking the host runtime's `ENOBUFS` failure.
+- Review scope is validated by one shared contract at both the public launcher
+  and typed runtime boundary. `--base --worktree` is the only valid combined
+  primary scope; `--include-untracked` is a modifier but cannot be combined
+  with `--diff-file`, which is already a complete supplied artifact.
+- Complete-pass deadlines use `performance.now()` from pass creation through
+  every Git and host timeout. Wall-clock timestamps remain evidence metadata
+  only, so system-clock changes cannot extend the runtime budget.
+- Untracked paths are collected with `git ls-files -z` and parsed on NUL
+  boundaries. Legal filenames containing newlines, tabs, quotes, or backslashes
+  therefore reach the same containment and content checks as ordinary paths.
+- Core and specialist prompts are delivered over child stdin, never as command
+  arguments. The full 2 MiB input contract therefore does not depend on the
+  host operating system's smaller `ARG_MAX` limit.
+- `--diff-file` and untracked-file collection accept only stable regular files.
+  They reject symbolic links and special files, validate the opened inode, and
+  read through that same no-follow file descriptor. Descriptor metadata is
+  checked again after the final read so pathname swaps and same-inode writes
+  both fail closed instead of producing mixed review input.
+- An automatic launcher or runtime failure is terminal. The parent agent must
+  not silently fall back to an untyped manual review or claim complete
+  coverage.
+- Ordinary review keeps automatic specialist selection. A strict or exhaustive
+  request explicitly adds `--specialists all`, whose incomplete coverage fails
+  closed.
+- A real host call defaults to twelve minutes. A complete review pass is bounded
+  to twelve minutes with specialists off, twenty minutes in auto mode, and
+  thirty minutes only for explicit `--specialists all` coverage. Validated CLI
+  overrides may narrow or extend those budgets within 60 to 1800 seconds; the
+  host-call timeout cannot exceed the pass timeout.
+
+Assumptions:
+
+- Codex and Claude continue to honor selected skill contracts and can execute
+  the installed `bin/goldband` launcher.
+- The workflow installer keeps `.installed-source` authoritative for copied
+  minimal runtimes.
+- Real host review remains read-only and structured through the existing host
+  adapters.
+
+Consequences:
+
+- Interactive review now uses deterministic diff collection, typed finding
+  validation, runtime evidence, and the selected specialist policy.
+- A normal review invocation may take longer and consume additional host model
+  calls; exhaustive specialist review costs more and remains explicit.
+- Normal auto reviews fail within a bounded twenty-minute pass instead of silently
+  inheriting the exhaustive thirty-minute ceiling. Timeout telemetry makes
+  later tuning evidence-driven rather than another hard-coded guess.
+- An optional auto specialist reaching the pass deadline degrades to a recorded
+  coverage diagnostic while preserving completed core findings. Explicit
+  exhaustive coverage still fails closed when any specialist is incomplete.
+- Hosts outside Codex and Claude continue to use their supported prompt path
+  until they gain a real typed adapter.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep the thin skill as a manual checklist | Leaves runtime entry, scope, evidence, and specialist dispatch dependent on model discretion. |
+| Launch the runtime from a prompt-routing hook | Generic review hints can fire for explanatory questions and are not the owner of long-running model subprocesses. |
+| Put a raw `bun workflows/run.ts` command in every installed contract | Couples prompt surfaces to source layout and breaks copied minimal runtimes. |
+| Silently fall back when the launcher fails | Produces a review that looks complete without typed runtime evidence. |
+| Keep one two-minute timeout for every mode | The measured real Codex pass exhausted it before producing findings, while it provided no whole-pass budget for specialist fan-out. |
+| Give every review a thirty-minute timeout | Makes ordinary review stalls too slow to diagnose and hides prompt or dispatch regressions. |
+
+Failure signals:
+
+- `$goldband review code` returns findings without a real-host runtime report or
+  artifacts.
+- A runtime-owned reviewer starts another `goldband review code` process.
+- A copied installation cannot resolve the executable workflow source.
+- Launcher failure is followed by an untyped manual approval.
+- Auto review approaches its twenty-minute deadline or repeatedly exhausts the
+  twelve-minute host-call budget.
+
+Revisit triggers:
+
+- Codex or Claude provides a native skill-to-executable binding that removes
+  the need for a prompt-directed launcher.
+- A host supports typed review directly without spawning its CLI adapter.
+- Measured cost or latency justifies a different default specialist policy.
+- At least twenty comparable real-host runs provide a stable latency
+  distribution that justifies replacing the initial timeout budgets.

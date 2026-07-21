@@ -18,6 +18,7 @@ export function assertInstalledManagedWorktreeSurface(home) {
       env: { ...process.env, HOME: home },
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /goldband review code --host <claude\|codex>/);
     assert.match(result.stdout, /goldband worktree create <name>/);
     assert.match(result.stdout, /goldband worktree finish <name>/);
   }

@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,14 +30,19 @@ import {
 import type { EvaluationSignalSnapshot } from '../workflows/types';
 import {
   buildReviewPrompt,
+  MAX_REVIEW_DIFF_BYTES,
   reviewSignalFromOutput,
   reviewSteps,
+  untrackedFileDiff,
 } from '../workflows/review';
 import { qaChecksSchema } from '../workflows/schema';
 import {
+  adapterFor,
   MockHostAdapter,
   claudeRunJsonArgs,
   codexRunJsonArgs,
+  MAX_HOST_DIAGNOSTIC_BYTES,
+  MAX_HOST_STRUCTURED_OUTPUT_BYTES,
   runProcess,
 } from '../workflows/host-adapter';
 import {
@@ -52,6 +59,11 @@ import {
   coreReviewRules,
   specialistReviewRules,
 } from '../workflows/review-rules';
+import {
+  DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+  createReviewTimeBudget,
+  resolveReviewTimeoutPolicy,
+} from '../workflows/review-timeouts';
 
 const ROOT = resolve(import.meta.dir, '..');
 const PROJECT_ROOT = resolve(ROOT, '..');
@@ -963,7 +975,86 @@ describe('workflow runtime', () => {
     expect(telemetry.rulesBytes).toBeGreaterThan(0);
     expect(telemetry.promptBytes).toBeGreaterThan(telemetry.rulesBytes);
     expect(Array.isArray(telemetry.selectedSpecialists)).toBe(true);
+    expect(telemetry.hostTimeoutMs).toBe(12 * 60 * 1000);
+    expect(telemetry.passTimeoutMs).toBe(20 * 60 * 1000);
+    expect(telemetry.specialistMode).toBe('auto');
     expect(JSON.stringify(telemetry)).not.toContain('Architecture and Integration Boundaries');
+  });
+
+  test('review timeout policy keeps normal review bounded by specialist mode', () => {
+    expect(resolveReviewTimeoutPolicy({ specialists: 'off' })).toEqual({
+      specialistMode: 'off',
+      hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+      passTimeoutMs: 12 * 60 * 1000,
+    });
+    expect(resolveReviewTimeoutPolicy({})).toEqual({
+      specialistMode: 'auto',
+      hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+      passTimeoutMs: 20 * 60 * 1000,
+    });
+    expect(resolveReviewTimeoutPolicy({ specialists: 'all' })).toEqual({
+      specialistMode: 'all',
+      hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+      passTimeoutMs: 30 * 60 * 1000,
+    });
+  });
+
+  test('review timeout overrides fail closed when invalid or internally inconsistent', () => {
+    expect(() => resolveReviewTimeoutPolicy({ reviewHostTimeoutMs: 59_000 }))
+      .toThrow('--review-host-timeout-seconds must be between 60 and 1800 seconds');
+    expect(() => resolveReviewTimeoutPolicy({ reviewPassTimeoutMs: 1_801_000 }))
+      .toThrow('--review-pass-timeout-seconds must be between 60 and 1800 seconds');
+    expect(() => resolveReviewTimeoutPolicy({
+      reviewHostTimeoutMs: 10 * 60 * 1000,
+      reviewPassTimeoutMs: 8 * 60 * 1000,
+    })).toThrow(
+      '--review-host-timeout-seconds cannot exceed --review-pass-timeout-seconds',
+    );
+  });
+
+  test('review time budget caps host calls at the remaining pass deadline', () => {
+    let now = 0;
+    const budget = createReviewTimeBudget({}, () => now);
+    expect(budget.nextHostTimeoutMs()).toBe(DEFAULT_REVIEW_HOST_TIMEOUT_MS);
+    now = 10 * 60 * 1000;
+    expect(budget.nextHostTimeoutMs()).toBe(10 * 60 * 1000);
+    now = 20 * 60 * 1000;
+    expect(() => budget.nextHostTimeoutMs()).toThrow(
+      'review/code auto pass timed out after 1200000ms',
+    );
+    expect(() => budget.completeSpecialistPhase()).not.toThrow();
+
+    let exhaustiveNow = 0;
+    const exhaustive = createReviewTimeBudget(
+      { specialists: 'all' },
+      () => exhaustiveNow,
+    );
+    exhaustiveNow = 30 * 60 * 1000;
+    expect(() => exhaustive.completeSpecialistPhase()).toThrow(
+      'review/code all pass timed out after 1800000ms',
+    );
+
+    const inherited = createReviewTimeBudget(
+      { specialists: 'off' },
+      () => 90_000,
+      0,
+    );
+    expect(inherited.remainingPassTimeoutMs()).toBe(630_000);
+  });
+
+  test('review time budget uses monotonic elapsed time instead of wall-clock timestamps', () => {
+    const originalDateNow = Date.now;
+    let wallClockNow = 10_000_000;
+    Date.now = () => wallClockNow;
+    try {
+      const budget = createReviewTimeBudget({ specialists: 'off' });
+      const beforeRollback = budget.remainingPassTimeoutMs();
+      wallClockNow -= 60 * 60 * 1000;
+      const afterRollback = budget.remainingPassTimeoutMs();
+      expect(afterRollback).toBeLessThanOrEqual(beforeRollback);
+    } finally {
+      Date.now = originalDateNow;
+    }
   });
 
   test('review/code loop converges after previous findings reach zero', async () => {
@@ -1052,6 +1143,61 @@ describe('workflow runtime', () => {
     const badSpecialists = runCli(['review/code', '--specialists', 'banana']);
     expect(badSpecialists.status).toBe(2);
     expect(badSpecialists.stderr).toContain('invalid --specialists: banana');
+
+    const partialTimeout = runCli([
+      'review/code',
+      '--review-host-timeout-seconds',
+      '60seconds',
+    ]);
+    expect(partialTimeout.status).toBe(2);
+    expect(partialTimeout.stderr).toContain(
+      '--review-host-timeout-seconds requires a whole number of seconds',
+    );
+
+    const excessiveTimeout = runCli([
+      'review/code',
+      '--review-pass-timeout-seconds',
+      '1801',
+    ]);
+    expect(excessiveTimeout.status).toBe(2);
+    expect(excessiveTimeout.stderr).toContain(
+      '--review-pass-timeout-seconds must be between 60 and 1800 seconds',
+    );
+
+    const invertedTimeouts = runCli([
+      'review/code',
+      '--review-host-timeout-seconds',
+      '600',
+      '--review-pass-timeout-seconds',
+      '480',
+    ]);
+    expect(invertedTimeouts.status).toBe(2);
+    expect(invertedTimeouts.stderr).toContain(
+      '--review-host-timeout-seconds cannot exceed --review-pass-timeout-seconds',
+    );
+
+    const wrongWorkflow = runCli([
+      'system/health',
+      '--review-pass-timeout-seconds',
+      '600',
+    ]);
+    expect(wrongWorkflow.status).toBe(2);
+    expect(wrongWorkflow.stderr).toContain(
+      'review timeout options are only valid for review/code',
+    );
+
+    for (const scopes of [
+      ['--staged', '--diff-file', 'empty.diff'],
+      ['--worktree', '--diff-file', 'empty.diff'],
+      ['--base', 'origin/main', '--diff-file', 'empty.diff'],
+      ['--staged', '--worktree'],
+      ['--staged', '--base', 'origin/main'],
+      ['--diff-file', 'empty.diff', '--include-untracked'],
+    ]) {
+      const conflictingScope = runCli(['review/code', ...scopes]);
+      expect(conflictingScope.status).toBe(2);
+      expect(conflictingScope.stderr).toContain('conflicting review scope flags');
+    }
   });
 
   test('CLI warns when max-iterations is provided without loop', () => {
@@ -1097,6 +1243,34 @@ describe('workflow runtime', () => {
           '+',
         ].join('\n'),
       }));
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('worktree diff includes exact untracked paths containing newline and tab', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(join(repo, 'line\nbreak.ts'), 'newline filename marker\n');
+      writeFileSync(join(repo, 'tab\tname.ts'), 'tab filename marker\n');
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { worktree: true },
+      });
+
+      const diff = String((output as { diff: string }).diff);
+      expect(diff).toContain('newline filename marker');
+      expect(diff).toContain('tab filename marker');
+      expect(diff).toContain('line\nbreak.ts');
+      expect(diff).toContain('tab\tname.ts');
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
@@ -1161,6 +1335,128 @@ describe('workflow runtime', () => {
     }
   });
 
+  test('worktree diff never follows an untracked symlink outside the repository', async () => {
+    if (process.platform === 'win32') return;
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      const external = join(tmpHome, 'outside-customer-records.txt');
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(external, 'ordinary confidential customer record\n');
+      symlinkSync(external, join(repo, 'notes.txt'));
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { worktree: true },
+      });
+
+      const diff = String((output as { diff: string }).diff);
+      expect(diff).toContain('skipped untracked file: symbolic link');
+      expect(diff).toContain('notes.txt');
+      expect(diff).not.toContain('ordinary confidential customer record');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('untracked file collection rejects a symlink swap after validation', () => {
+    if (process.platform === 'win32') return;
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      const file = join(repo, 'notes.txt');
+      const external = join(tmpHome, 'outside-swap-target.txt');
+      writeFileSync(file, 'safe original\n');
+      writeFileSync(external, 'ordinary confidential swap target\n');
+
+      const diff = untrackedFileDiff(
+        repo,
+        realpathSync(repo),
+        'notes.txt',
+        { includedBytes: 0 },
+        () => {
+          rmSync(file);
+          symlinkSync(external, file);
+        },
+      );
+
+      expect(diff).toContain('file changed or became unreadable');
+      expect(diff).not.toContain('ordinary confidential swap target');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('untracked file collection rejects same-inode changes during descriptor reads', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      const file = join(repo, 'notes.txt');
+      writeFileSync(file, 'original marker\n'.repeat(7_000));
+
+      const diff = untrackedFileDiff(
+        repo,
+        realpathSync(repo),
+        'notes.txt',
+        { includedBytes: 0 },
+        () => {},
+        () => writeFileSync(file, 'replacement marker\n'),
+      );
+
+      expect(diff).toContain('file changed or became unreadable');
+      expect(diff).not.toContain('original marker');
+      expect(diff).not.toContain('replacement marker');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('diff-file rejects a FIFO without blocking', () => {
+    if (process.platform === 'win32') return;
+    const fifo = join(tmpHome, 'review.diff.fifo');
+    const created = spawnSync('mkfifo', [fifo], { encoding: 'utf8' });
+    expect(created.status).toBe(0);
+    const step = reviewSteps.find((item) => item.name === 'collect-diff');
+
+    expect(() => step!.run({
+      runId: 'test-run',
+      workflow: getWorkflow('review/code'),
+      cwd: ROOT,
+      artifacts: [],
+      options: { diffFile: fifo },
+    })).toThrow('review/code diff file must be a regular file');
+  });
+
+  test('large tracked diffs fail with the explicit review size contract', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      for (const name of ['one.txt', 'two.txt']) {
+        writeFileSync(join(repo, name), `${'a'.repeat(700_000)}\n`);
+      }
+      commitAll(repo, 'initial');
+      for (const name of ['one.txt', 'two.txt']) {
+        writeFileSync(join(repo, name), `${'b'.repeat(700_000)}\n`);
+      }
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+
+      expect(() => step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { worktree: true },
+      })).toThrow(
+        `review/code diff exceeds ${MAX_REVIEW_DIFF_BYTES} byte limit; narrow the review scope`,
+      );
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   test('worktree diff includes staged tracked changes', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
     try {
@@ -1187,6 +1483,140 @@ describe('workflow runtime', () => {
       expect(result.diff).toContain('+changed');
     } finally {
       rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('review diff collection disables repository diff.external helpers', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      const helper = join(repo, 'external-diff.sh');
+      const sentinel = join(repo, 'external-diff-ran');
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(
+        helper,
+        `#!/usr/bin/env bash\nprintf touched > ${JSON.stringify(sentinel)}\n`,
+      );
+      chmodSync(helper, 0o755);
+      spawnSync('git', ['config', 'diff.external', helper], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      writeFileSync(join(repo, 'tracked.txt'), 'changed\n');
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { worktree: true },
+      });
+
+      expect(String((output as { diff: string }).diff)).toContain('+changed');
+      expect(existsSync(sentinel)).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('review diff collection disables repository textconv helpers', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
+    try {
+      const helper = join(repo, 'textconv.sh');
+      const sentinel = join(repo, 'textconv-ran');
+      spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+      writeFileSync(join(repo, '.gitattributes'), '*.txt diff=malicious\n');
+      writeFileSync(join(repo, 'tracked.txt'), 'initial\n');
+      commitAll(repo, 'initial');
+      writeFileSync(
+        helper,
+        [
+          '#!/usr/bin/env bash',
+          `printf touched > ${JSON.stringify(sentinel)}`,
+          'cat "$1"',
+          '',
+        ].join('\n'),
+      );
+      chmodSync(helper, 0o755);
+      spawnSync('git', ['config', 'diff.malicious.textconv', helper], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      writeFileSync(join(repo, 'tracked.txt'), 'changed\n');
+
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+      const output = await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: repo,
+        artifacts: [],
+        options: { worktree: true },
+      });
+
+      expect(String((output as { diff: string }).diff)).toContain('+changed');
+      expect(existsSync(sentinel)).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('review Git collection consumes the workflow pass deadline', () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-git-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeGit = join(fakeBin, 'git');
+      writeFileSync(fakeGit, '#!/usr/bin/env bash\nsleep 1\n');
+      chmodSync(fakeGit, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+
+      expect(() => step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: ROOT,
+        passStartedAtMonotonicMs: performance.now() - 59_950,
+        artifacts: [],
+        options: {
+          worktree: true,
+          specialists: 'off',
+          reviewHostTimeoutMs: 60_000,
+          reviewPassTimeoutMs: 60_000,
+        },
+      })).toThrow('review/code off pass timed out after 60000ms');
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('review Git collection disables partial-clone lazy fetches', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-git-'));
+    const previousPath = process.env.PATH;
+    try {
+      const sentinel = join(fakeBin, 'lazy-fetch-env');
+      const fakeGit = join(fakeBin, 'git');
+      writeFileSync(
+        fakeGit,
+        `#!/usr/bin/env bash\nprintf '%s' "\${GIT_NO_LAZY_FETCH:-}" > ${JSON.stringify(sentinel)}\n`,
+      );
+      chmodSync(fakeGit, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+      const step = reviewSteps.find((item) => item.name === 'collect-diff');
+
+      await step!.run({
+        runId: 'test-run',
+        workflow: getWorkflow('review/code'),
+        cwd: ROOT,
+        artifacts: [],
+        options: { staged: true },
+      });
+
+      expect(readFileSync(sentinel, 'utf8')).toBe('1');
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
     }
   });
 
@@ -1246,33 +1676,37 @@ describe('workflow runtime', () => {
       '+provider permission installer change',
     ].join('\n');
     const core = buildReviewPrompt(ctx, diff);
-    expect(core.split('\n')[0]).toBe('$goldband review code');
+    expect(core.split('\n')[0]).toBe('GOLDBAND_RUNTIME_TASK=review/code');
     expect(core).toContain('# Shared Review Rubric');
     expect(core).toContain('# Shared Finding Shape');
     expect(core).toContain('# Read-Only Review Checklist');
     expect(core).toContain('# Security Boundaries');
     expect(core).toContain('# Git Workflow');
     expect(core).toContain('# Semantic Review Criteria');
+    expect(core).toContain('never request command approval or use require_escalated');
+    expect(core).toContain('inspect applicable AGENTS.md and CLAUDE.md');
 
     const security = buildSpecialistPrompt(ctx, diff, 'security');
     expect(security).toContain('# Security Boundaries');
     expect(security).toContain('# Semantic Review Criteria');
     expect(security).not.toContain('# Git Workflow');
     expect(security).toContain('inspect the repository outside the diff');
+    expect(security).toContain('never request command approval or use require_escalated');
 
     const hostParity = buildSpecialistPrompt(ctx, diff, 'api-host-parity');
     expect(hostParity).toContain('# Git Workflow');
     expect(hostParity).toContain('# Security Boundaries');
   });
 
-  test('real review prompt uses the formal capability interface header', () => {
+  test('real review child prompt uses a runtime-owned non-router header', () => {
     const ctx = {
       ...workflowContext(),
       options: { mode: 'real' as const, host: 'codex' as const },
     };
     const prompt = buildReviewPrompt(ctx, 'diff --git a/a.ts b/a.ts');
-    expect(prompt.split('\n')[0]).toBe('$goldband review code');
-    expect(prompt.split('\n')[0]).not.toContain('review/code');
+    expect(prompt.split('\n')[0]).toBe('GOLDBAND_RUNTIME_TASK=review/code');
+    expect(prompt).not.toContain('$goldband review code');
+    expect(prompt).not.toContain('GOLDBAND_TYPED_RUNTIME_ACTIVE');
   });
 
   test('review Rules payload budgets use measured headroom and fail closed on aggregate fan-out', () => {
@@ -1405,7 +1839,21 @@ describe('workflow runtime', () => {
   });
 
   test('Codex JSON adapter args enforce read-only sandbox and output schema', () => {
-    const args = codexRunJsonArgs('prompt text', '/tmp/schema.json', '/tmp/out.json');
+    const args = codexRunJsonArgs('/tmp/schema.json', '/tmp/out.json');
+    expect(args).toContain('--ignore-user-config');
+    expect(args.indexOf('--ignore-user-config')).toBeGreaterThan(args.indexOf('exec'));
+    expect(args).toContain('--ephemeral');
+    expect(args.slice(args.indexOf('-c'), args.indexOf('-c') + 2)).toEqual([
+      '-c',
+      'mcp_servers={}',
+    ]);
+    expect(
+      args.slice(
+        args.indexOf('--ask-for-approval'),
+        args.indexOf('--ask-for-approval') + 2,
+      ),
+    ).toEqual(['--ask-for-approval', 'never']);
+    expect(args.indexOf('--ask-for-approval')).toBeLessThan(args.indexOf('exec'));
     expect(args).toContain('--sandbox');
     expect(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2)).toEqual([
       '--sandbox',
@@ -1415,10 +1863,13 @@ describe('workflow runtime', () => {
     expect(args).toContain('/tmp/schema.json');
     expect(args).toContain('-o');
     expect(args).toContain('/tmp/out.json');
+    expect(args.at(-1)).toBe('-');
+    expect(args).not.toContain('prompt text');
   });
 
-  test('Claude JSON adapter args deny mutating tools and cap budget', () => {
-    const args = claudeRunJsonArgs('prompt text', { type: 'object' });
+  test('Claude JSON adapter disables customizations, denies mutating tools, and caps budget', () => {
+    const args = claudeRunJsonArgs({ type: 'object' });
+    expect(args).toContain('--safe-mode');
     expect(args.slice(args.indexOf('--disallowedTools'), args.indexOf('--disallowedTools') + 2)).toEqual([
       '--disallowedTools',
       'Bash,Edit,Write',
@@ -1431,15 +1882,80 @@ describe('workflow runtime', () => {
       '--tools',
       'Read,Glob,Grep',
     ]);
+    expect(args).not.toContain('prompt text');
+  });
+
+  test('Codex and Claude adapters pass prompts above argv limits through stdin', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeCodex = join(fakeBin, 'codex');
+      const fakeClaude = join(fakeBin, 'claude');
+      writeFileSync(fakeCodex, [
+        '#!/usr/bin/env bash',
+        'set -euo pipefail',
+        'output=""',
+        'ignored_config=0',
+        'stdin_prompt=0',
+        'while [ "$#" -gt 0 ]; do',
+        '  if [ "$1" = "-o" ]; then output="$2"; shift 2; continue; fi',
+        '  if [ "$1" = "--ignore-user-config" ]; then ignored_config=1; fi',
+        '  if [ "$1" = "-" ]; then stdin_prompt=1; fi',
+        '  shift',
+        'done',
+        'test "$ignored_config" = 1',
+        'test "$stdin_prompt" = 1',
+        'bytes=$(wc -c | tr -d " ")',
+        'test "$bytes" -gt 1048576',
+        'printf \'%s\\n\' \'{"findings":[]}\' > "$output"',
+        '',
+      ].join('\n'));
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env bash',
+        'set -euo pipefail',
+        'bytes=$(wc -c | tr -d " ")',
+        'test "$bytes" -gt 1048576',
+        'printf \'%s\\n\' \'{"result":"{\\"findings\\":[]}"}\'',
+        '',
+      ].join('\n'));
+      chmodSync(fakeCodex, 0o755);
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+      const prompt = 'p'.repeat(1_100_000);
+      const schema = { type: 'object' };
+
+      const codex = await adapterFor('codex').runJson(
+        prompt,
+        schema,
+        ROOT,
+        { timeoutMs: 5_000 },
+      );
+      const claude = await adapterFor('claude').runJson(
+        prompt,
+        schema,
+        ROOT,
+        { timeoutMs: 5_000 },
+      );
+
+      expect(codex.parsed).toEqual({ findings: [] });
+      expect(claude.parsed).toEqual({ findings: [] });
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
   });
 
   test('runProcess executes the host in the target cwd', async () => {
     const result = await runProcess(
       process.execPath,
       ['-e', 'process.stdout.write(process.cwd())'],
-      1000,
-      100,
-      tmpHome,
+      {
+        timeoutMs: 1000,
+        killGraceMs: 100,
+        cwd: tmpHome,
+        stdoutMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+        stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+      },
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(realpathSync(tmpHome));
@@ -1450,8 +1966,12 @@ describe('workflow runtime', () => {
     const result = await runProcess(
       process.execPath,
       ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'],
-      20,
-      20,
+      {
+        timeoutMs: 20,
+        killGraceMs: 20,
+        stdoutMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+        stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+      },
     );
     expect(Date.now() - started).toBeLessThan(2000);
     expect(result.status).toBeNull();
@@ -1475,7 +1995,12 @@ describe('workflow runtime', () => {
       'setInterval(() => {}, 1000);',
     ].join('\n');
 
-    await runProcess(process.execPath, ['-e', parent], 50, 50);
+    await runProcess(process.execPath, ['-e', parent], {
+      timeoutMs: 50,
+      killGraceMs: 50,
+      stdoutMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+      stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+    });
     const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10);
     let alive = true;
     try {
@@ -1485,6 +2010,94 @@ describe('workflow runtime', () => {
     }
     if (alive) process.kill(pid, 'SIGKILL');
     expect(alive).toBe(false);
+  });
+
+  test('Codex adapter ignores bounded JSONL diagnostics and parses the final output file', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeCodex = join(fakeBin, 'codex');
+      writeFileSync(fakeCodex, [
+        '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
+        'const args = process.argv.slice(2);',
+        'const output = args[args.indexOf("-o") + 1];',
+        `process.stdout.write('x'.repeat(${MAX_HOST_DIAGNOSTIC_BYTES * 2}));`,
+        'fs.writeFileSync(output, JSON.stringify({ findings: [] }));',
+        '',
+      ].join('\n'));
+      chmodSync(fakeCodex, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      const result = await adapterFor('codex').runJson(
+        'review prompt',
+        { type: 'object' },
+        ROOT,
+        { timeoutMs: 5_000 },
+      );
+
+      expect(result.parsed).toEqual({ findings: [] });
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('Codex adapter rejects an oversized final structured result', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeCodex = join(fakeBin, 'codex');
+      writeFileSync(fakeCodex, [
+        '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
+        'const args = process.argv.slice(2);',
+        'const output = args[args.indexOf("-o") + 1];',
+        `fs.writeFileSync(output, 'x'.repeat(${MAX_HOST_STRUCTURED_OUTPUT_BYTES + 1}));`,
+        '',
+      ].join('\n'));
+      chmodSync(fakeCodex, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      await expect(adapterFor('codex').runJson(
+        'review prompt',
+        { type: 'object' },
+        ROOT,
+        { timeoutMs: 5_000 },
+      )).rejects.toThrow(
+        `codex structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
+      );
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('Claude adapter fails clearly when structured stdout exceeds its bound', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        `process.stdout.write('x'.repeat(${MAX_HOST_STRUCTURED_OUTPUT_BYTES + 1}));`,
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      await expect(adapterFor('claude').runJson(
+        'review prompt',
+        { type: 'object' },
+        ROOT,
+        { timeoutMs: 5_000 },
+      )).rejects.toThrow(
+        `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
+      );
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
   });
 
   test('review findings schema rejects invalid optional field types', () => {

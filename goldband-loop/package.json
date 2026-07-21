@@ -23,7 +23,7 @@
     "dev": "bun run browse/src/cli.ts",
     "server": "bun run browse/src/server.ts",
     "test": "bun run test:free",
-    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/review-specialist-dispatch.test.ts",
+    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/review-specialist-dispatch.test.ts test/goldband-review-cli.test.ts",
     "test:free": "bun run scripts/test-free-shards.ts",
     "test:windows": "bun run scripts/test-free-shards.ts --windows-only",
     "test:ml": "bun test browse/test/security-bunnative.test.ts browse/test/security-bench.test.ts",

@@ -40,6 +40,45 @@ describe('process supervisor', () => {
     expect(result).toEqual({ exitCode: 7, reason: 'exit', signal: null });
   });
 
+  test('keeps only a bounded tail from a 32 MiB child stdout stream', async () => {
+    const maxBytes = 64 * 1024;
+    const result = await superviseCommand(
+      process.execPath,
+      [
+        '-e',
+        `process.stdout.write('x'.repeat(32 * 1024 * 1024)); process.stdout.write('TAIL');`,
+      ],
+      {
+        timeoutMs: 5_000,
+        captureOutput: {
+          stdoutMaxBytes: maxBytes,
+          stderrMaxBytes: maxBytes,
+        },
+        stdout: { write() {} },
+        stderr: { write() {} },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdoutTruncated).toBe(true);
+    expect(Buffer.byteLength(result.stdout)).toBeLessThanOrEqual(maxBytes);
+    expect(result.stdout).toEndWith('TAIL');
+    expect(result.stderrTruncated).toBe(false);
+  });
+
+  test('rejects output capture without explicit byte limits', () => {
+    expect(() => superviseCommand(
+      process.execPath,
+      ['-e', 'process.exit(0)'],
+      {
+        timeoutMs: 2_000,
+        captureOutput: true,
+      } as never,
+    )).toThrow(
+      'captureOutput requires explicit stdoutMaxBytes and stderrMaxBytes limits',
+    );
+  });
+
   test('kills the complete process group after the wall-clock timeout', async () => {
     if (process.platform === 'win32') return;
     const dir = makeTempDir();

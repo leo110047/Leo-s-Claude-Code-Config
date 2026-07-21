@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
-import type { HostAdapter } from './host-adapter';
+import { REVIEW_NON_INTERACTIVE_COMMAND_POLICY } from '../lib/review-runtime-contract';
+import type { HostAdapter, HostRunOptions } from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
   specialistReviewRules,
   type RulesBundle,
   type RulesSnapshot,
 } from './review-rules';
+import { DEFAULT_REVIEW_HOST_TIMEOUT_MS } from './review-timeouts';
 import type { ReviewFinding, WorkflowContext } from './types';
 
 const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
@@ -114,6 +116,9 @@ export async function runParallelSpecialistReview(
   schema: unknown,
   mode: SpecialistMode = 'auto',
   prepared?: PreparedSpecialistReview,
+  hostRunOptions: () => HostRunOptions = () => ({
+    timeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+  }),
 ): Promise<ReviewFinding[]> {
   const selection = prepared?.selection ?? selectReviewSpecialists(diff, mode);
   if (mode === 'off') {
@@ -143,6 +148,7 @@ export async function runParallelSpecialistReview(
       prompt,
       schema,
       ctx.cwd,
+      hostRunOptions(),
     );
     return normalizeSpecialistFindings(unwrapFindings(result.parsed), specialist);
   });
@@ -222,6 +228,7 @@ export function buildSpecialistPrompt(
   return [
     `GOLDBAND_REVIEW_SPECIALIST=${specialist}`,
     'Read-only specialist review. Do not edit files. Do not run repair workflows.',
+    REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
     'Use the diff to define scope, then inspect the repository outside the diff when needed to trace authoritative owners, producers, consumers, routes, registrations, facades, and sibling implementations.',
     'Repository inspection is read-only. Never mutate files or repository state.',
     `Responsibility: ${SPECIALIST_GUIDANCE[specialist]}`,
