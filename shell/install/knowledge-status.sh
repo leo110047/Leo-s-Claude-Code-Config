@@ -5,8 +5,8 @@ show_knowledge_system_status() {
     local workflow_codex_dir="$2"
     show_knowledge_runtime_status "Claude" "$workflow_claude_dir"
     show_knowledge_runtime_status "Codex" "$workflow_codex_dir"
-    show_prior_knowledge_status "Claude" "$workflow_claude_dir"
-    show_prior_knowledge_status "Codex" "$workflow_codex_dir"
+    show_knowledge_recall_status "Claude" "$workflow_claude_dir"
+    show_knowledge_recall_status "Codex" "$workflow_codex_dir"
     show_mcp_knowledge_query_status
 }
 
@@ -24,38 +24,17 @@ show_knowledge_runtime_status() {
     fi
 }
 
-show_prior_knowledge_status() {
+show_knowledge_recall_status() {
     local label="$1"
     local runtime_dir="$2"
-    if knowledge_runtime_contains "$runtime_dir" "Prior Knowledge" && \
-       knowledge_runtime_contains "$runtime_dir" "goldband-knowledge search"; then
-        echo -e "  ${GREEN}[OK]${NC} Knowledge $label workflow recall ({{PRIOR_KNOWLEDGE}})"
+    local knowledge_bin="$runtime_dir/bin/goldband-knowledge"
+    local recall_contract="$runtime_dir/workflows/knowledge/recall.workflow.md"
+    if [ -x "$knowledge_bin" ] && [ -f "$recall_contract" ] && \
+       grep -Fqx '# $goldband knowledge recall' "$recall_contract" 2>/dev/null; then
+        echo -e "  ${GREEN}[OK]${NC} Knowledge $label workflow recall (knowledge/recall)"
     else
         echo -e "  ${YELLOW}[未完整]${NC} Knowledge $label workflow recall not detected"
     fi
-}
-
-knowledge_runtime_contains() {
-    local runtime_dir="$1"
-    local needle="$2"
-    local paths=()
-    local path file
-    [ -d "$runtime_dir" ] || return 1
-    [ -e "$runtime_dir/review" ] && paths+=("$runtime_dir/review")
-    [ -e "$runtime_dir/qa" ] && paths+=("$runtime_dir/qa")
-    [ -e "$runtime_dir/workflows" ] && paths+=("$runtime_dir/workflows")
-    [ "${#paths[@]}" -gt 0 ] || return 1
-    for path in "${paths[@]}"; do
-        if [ -f "$path" ] && grep -q "$needle" "$path" 2>/dev/null; then
-            return 0
-        fi
-        if [ -d "$path" ]; then
-            while IFS= read -r file; do
-                grep -q "$needle" "$file" 2>/dev/null && return 0
-            done < <(find -L "$path" -type f -name '*.md' 2>/dev/null)
-        fi
-    done
-    return 1
 }
 
 show_mcp_knowledge_query_status() {

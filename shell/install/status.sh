@@ -281,8 +281,23 @@ show_codex_install_status() {
 show_codex_config_status() {
     if is_generated_codex_config "$CODEX_CONFIG_FILE"; then
         if ! is_current_generated_codex_config "$CODEX_CONFIG_FILE"; then
-            echo -e "  ${RED}[stale]${NC} codex-config — managed content differs from current sources"
-            echo "    建議: 重跑 ./install.sh codex-config。"
+            case "$CODEX_CONFIG_FRESHNESS_REASON" in
+                invalid-toml)
+                    echo -e "  ${RED}[invalid]${NC} codex-config — installed config.toml is not valid TOML"
+                    echo "    修正 TOML syntax 後再重跑 ./install.sh status。"
+                    ;;
+                syntax-unverifiable)
+                    echo -e "  ${RED}[unverifiable]${NC} codex-config — TOML parser unavailable"
+                    echo "    需要 Python 3.11+ tomllib（python3、python 或 py -3）。"
+                    ;;
+                source-missing|source-unsupported)
+                    echo -e "  ${RED}[unverifiable]${NC} codex-config — Goldband config source cannot be projected safely"
+                    ;;
+                *)
+                    echo -e "  ${RED}[stale]${NC} codex-config — managed content differs from current sources"
+                    echo "    建議: 重跑 ./install.sh codex-config。"
+                    ;;
+            esac
             GOLDBAND_STATUS_EXIT_CODE=2
         elif [ -f "$REPO_DIR/codex/local/config.toml" ]; then
             echo -e "  ${GREEN}[OK]${NC} codex-config (generated base + local overlay)"
@@ -308,7 +323,7 @@ show_codex_profiles_status() {
         [ -f "$profile_file" ] || continue
         profile_total=$((profile_total + 1))
         local profile_dest="$CODEX_DIR/$(basename "$profile_file")"
-        if repo_path_installed_from "$profile_file" "$profile_dest"; then
+        if codex_profile_installed_from "$profile_file" "$profile_dest"; then
             profile_installed=$((profile_installed + 1))
             if [ ! -L "$profile_dest" ]; then
                 profile_copy_count=$((profile_copy_count + 1))

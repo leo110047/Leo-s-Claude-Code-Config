@@ -946,3 +946,82 @@ Revisit triggers:
 - Measured cost or latency justifies a different default specialist policy.
 - At least twenty comparable real-host runs provide a stable latency
   distribution that justifies replacing the initial timeout budgets.
+
+## 2026-07-21: Codex Config Freshness Follows Key Ownership
+
+Decision: treat the generated Codex config as a shared file with key-level
+ownership. Goldband requires every key/value emitted by `codex/config.toml` and
+`codex/local/config.toml` to remain present with the expected value, but it does
+not claim additional keys or tables written by Codex App. Host-maintained
+`marketplaces.*.last_updated` values are explicitly volatile and excluded from
+freshness comparison.
+
+Implementation contract:
+
+- `is_current_generated_codex_config` keeps the generated header as the file
+  identity check, validates the complete installed file with Python `tomllib`,
+  then compares a deterministic projection of Goldband-owned TOML records
+  instead of comparing the complete file text.
+- Missing Python 3.11+ `tomllib` support makes syntax health `unverifiable` and
+  exits `2`; syntax validation never degrades to a permissive text scan.
+- Additional root keys, table keys, MCP servers, plugins, and desktop settings
+  are allowed because absence from Goldband source means Goldband does not own
+  them.
+- Missing or changed Goldband-owned records still report `stale` and make
+  `install.sh status` exit `2`.
+- Every Goldband-owned table/key must occur exactly once; duplicate managed
+  keys fail closed even when one duplicate retains the expected value.
+- Codex profile files retain their stricter source comparison because they are
+  policy artifacts, not shared App configuration. Only their declared runtime
+  state sections are excluded.
+- App-support status reuses the same freshness predicate; it does not maintain
+  a second ownership policy.
+
+Assumptions:
+
+- Goldband's generated main config continues to use single-line TOML
+  assignments for owned values.
+- A Python 3.11+ entrypoint is available as `python3`, `python`, or Windows
+  `py -3` when a green config health verdict is required.
+- Codex App may add or reorder valid TOML content but does not remove or rewrite
+  Goldband-owned values without creating meaningful drift.
+- Marketplace update timestamps remain host-maintained metadata rather than
+  Goldband policy.
+
+Consequences:
+
+- Codex App integrations can evolve without causing false stale status or
+  encouraging users to overwrite working App configuration.
+- Invalid installed TOML is reported separately from source drift, before any
+  ownership comparison can return `[OK]`.
+- Goldband still detects policy drift in models, approvals, sandboxing,
+  features, agents, local project trust, and other source-declared values.
+- New multiline Goldband-owned values require extending the projection parser
+  and its regression coverage before they can be used safely.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep whole-file comparison and enumerate every App-generated block to strip | Couples Goldband to volatile App implementation details and recreates false positives whenever the App adds a field. |
+| Treat the generated marker as sufficient | Misses real changes to Goldband-owned policy. |
+| Reinstall the repo config whenever App content appears | Can erase valid MCP, plugin, browser, Computer Use, and desktop state. |
+| Copy current App additions into `codex/local/config.toml` | Freezes volatile host state into repo-local policy and still drifts on later App updates. |
+| Treat lines with no `=` as invalid in the AWK projection | Catches one malformed shape but still misses duplicate keys, malformed arrays, strings, and other TOML syntax errors. |
+
+Failure signals:
+
+- `install.sh status` reports stale after Codex App only adds or reorders keys.
+- Invalid installed TOML is reported `[OK]` or is reduced to ordinary managed
+  drift instead of the explicit `invalid` state.
+- A changed or missing Goldband-owned key still reports `[OK]`.
+- A profile policy change is ignored as if it were App-owned state.
+- An owned multiline TOML value is introduced without a parser/test update.
+
+Revisit triggers:
+
+- Codex provides a documented native split between user policy and App runtime
+  state files.
+- Goldband adopts a portable TOML parser as an installer dependency.
+- Codex App begins rewriting Goldband-owned keys semantically without preserving
+  their textual value representation.
