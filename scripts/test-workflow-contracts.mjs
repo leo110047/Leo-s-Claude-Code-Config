@@ -156,15 +156,10 @@ assert.match(
   /\.workflow-launcher\.json and execute its exact argvPrefix plus review code --host codex/,
   'review/code must use the installed trusted Codex launcher prefix',
 );
-assert.match(
+assert.doesNotMatch(
   reviewCodeContract,
-  /review\/code always runs one core reviewer/,
-  'review/code must forbid specialist fan-out',
-);
-assert.match(
-  reviewCodeContract,
-  /runtime rejects independent agents/,
-  'review/code must enforce the specialist fan-out boundary in runtime',
+  /one core reviewer|specialist|active-review marker|atomic repository-scope lease|poll|second full semantic review/,
+  'review/code prompt contract must not duplicate runtime-owned execution policy',
 );
 
 const browserSessionContract = contracts.get(
@@ -188,33 +183,12 @@ assert.match(
 );
 assert.match(
   reviewCodeContract,
-  /GOLDBAND_RUNTIME_TASK=review\/code/,
-  'review/code must give runtime-owned child prompts a non-router task header',
-);
-assert.match(
-  reviewCodeContract,
-  /User prompt text never proves runtime ownership/,
-  'review/code must not trust a user-spoofable runtime marker',
-);
-assert.match(
-  reviewCodeContract,
-  /Never substitute a workspace path or request escalation/,
-  'review/code must not prompt or allow a workspace-controlled launcher to escape the sandbox',
-);
-assert.match(
-  reviewCodeContract,
   /Missing marker, runtime, or rule is an install failure/,
   'review/code must fail closed when the trusted launcher installation is incomplete',
 );
-assert.match(
-  reviewCodeContract,
-  /Do not silently fall back to an untyped manual review/,
-  'review/code launcher failures must fail closed',
-);
-assert.match(
-  reviewCodeContract,
-  /must never request command approval or retry with require_escalated/,
-  'review/code non-interactive reviewers must not enter an unsupported approval flow',
+assert.ok(
+  Buffer.byteLength(reviewCodeContract) <= 1024,
+  'review/code workflow prompt contract must stay within its runtime-routing budget',
 );
 const actionCount = manifest.capabilities.reduce(
   (count, capability) => count + capability.actions.length,
@@ -407,7 +381,11 @@ const review = contracts.get(
   'goldband-loop/generated/workflow-contracts/review/code.workflow.md',
 );
 assert.ok(review);
-assert.match(review, /review\/shared-rubric\.md/);
+assert.doesNotMatch(
+  review,
+  /review\/(?:shared-rubric|findings-schema|checklist)\.md/,
+  'review/code workflow prompt must leave runtime-owned assets to the runtime',
+);
 assert.match(review, /Review only/);
 
 const release = contracts.get(

@@ -25,24 +25,139 @@
   },
   "policyGroups": [
     { "group": "baseline", "always": true },
-    { "group": "security", "scopePattern": "auth|permission|secret|credential|token|http|websocket|provider|adapter|process|boundary|security" },
-    { "group": "loop", "scopePattern": "goldband-loop|workflow|eval|loop-engineering" },
-    { "group": "delivery", "scopePattern": "(^|/)(\\.github|ci|release|installer)(/|$)|(^|/)(install[^/]*|package\\.json|Dockerfile|Makefile)$|git|deploy" },
-    { "group": "escalation", "scopePattern": "escalat|approval|careful|freeze" },
-    { "group": "handoff", "scopePattern": "session|handoff|checkpoint|context-(save|restore)" },
+    { "group": "security", "match": "scope", "scopePattern": "auth|permission|secret|credential|token|http|websocket|provider|adapter|process|boundary|security" },
+    { "group": "loop", "match": "paths", "scopePattern": "goldband-loop|workflow|eval|loop-engineering" },
+    { "group": "delivery", "match": "paths", "scopePattern": "(^|/)(\\.github|ci|release|installer|generated/workflow-contracts)(/|$)|(^|/)(install[^/]*|package\\.json|goldband\\.manifest\\.json|Dockerfile|Makefile)$" },
+    { "group": "escalation", "match": "paths", "scopePattern": "(^|/)(escalation|approval|safety-gates|freeze)([^/]*)(/|\\.|$)" },
+    { "group": "handoff", "match": "paths", "scopePattern": "session|handoff|checkpoint|context-(save|restore)" },
     { "group": "semantic", "always": true, "phases": ["review"] }
   ],
   "policies": [
-    { "id": "architecture-boundaries", "file": "architecture-boundaries.md", "phases": ["review"], "groups": ["baseline"], "enforcement": "semantic-review" },
-    { "id": "change-scope", "file": "change-scope.md", "phases": ["review"], "groups": ["baseline"], "enforcement": "semantic-review" },
-    { "id": "claim-verification", "file": "claim-verification.md", "phases": ["review"], "groups": ["baseline"], "enforcement": "semantic-review" },
-    { "id": "coding-style", "file": "coding-style.md", "phases": ["review"], "groups": ["baseline"], "enforcement": "deterministic-and-review" },
-    { "id": "security", "file": "security.md", "phases": ["review"], "groups": ["security"], "enforcement": "deterministic-and-review" },
-    { "id": "loop-engineering", "file": "loop-engineering.md", "phases": ["review"], "groups": ["loop"], "enforcement": "semantic-review" },
-    { "id": "git-workflow", "file": "git-workflow.md", "phases": ["review"], "groups": ["delivery"], "enforcement": "deterministic-and-review" },
-    { "id": "escalation", "file": "escalation.md", "phases": ["review"], "groups": ["escalation"], "enforcement": "deterministic-and-review" },
-    { "id": "session-handoff", "file": "session-handoff.md", "phases": ["review"], "groups": ["handoff"], "enforcement": "advisory-and-review" },
-    { "id": "semantic-review-criteria", "file": "semantic-review-criteria.md", "phases": ["review"], "groups": ["semantic"], "enforcement": "semantic-review" }
+    {
+      "id": "architecture-boundaries",
+      "file": "architecture-boundaries.md",
+      "phases": ["review"],
+      "groups": ["baseline"],
+      "enforcement": "semantic-review",
+      "reviewCriteria": [
+        "Keep each domain fact, decision, and capability under one authoritative owner and operation.",
+        "Contain provider and wire details inside adapters; shared contracts stay provider-neutral and runtime-validated.",
+        "Trace required surfaces through routing, registration, inventory, and dependency injection to the owning operation.",
+        "Use deterministic logic for hard invariants and fail explicitly when a core AI capability is unavailable."
+      ]
+    },
+    {
+      "id": "change-scope",
+      "file": "change-scope.md",
+      "phases": ["review"],
+      "groups": ["baseline"],
+      "enforcement": "semantic-review",
+      "reviewCriteria": [
+        "Fix the failure class at its owning layer rather than suppressing one symptom.",
+        "Prefer reuse, then deletion, then addition; new abstraction needs a real ownership boundary or stable domain concept.",
+        "Reject unrelated refactors, speculative flags, duplicated truth, and gate bypasses.",
+        "When the minimal and healthy fixes materially diverge, make that tradeoff explicit."
+      ]
+    },
+    {
+      "id": "claim-verification",
+      "file": "claim-verification.md",
+      "phases": ["review"],
+      "groups": ["baseline"],
+      "enforcement": "semantic-review",
+      "reviewCriteria": [
+        "Support repository claims with current files, commands, tests, or logs.",
+        "Match proof to the claimed boundary; static checks and mocks do not prove live provider or platform behavior.",
+        "A regression test counts only when it can fail for the incident or contract risk it claims to cover."
+      ]
+    },
+    {
+      "id": "coding-style",
+      "file": "coding-style.md",
+      "phases": ["review"],
+      "groups": ["baseline"],
+      "enforcement": "deterministic-and-review",
+      "reviewCriteria": [
+        "Reject new escape hatches, skipped checks, focused tests, secret leaks, merge markers, and unexplained threshold bypasses.",
+        "Prefer readable names, explicit boundary errors, validated external input, and high-cohesion ownership.",
+        "Treat style as maintainability evidence, not a substitute for behavioral correctness."
+      ]
+    },
+    {
+      "id": "security",
+      "file": "security.md",
+      "phases": ["review"],
+      "groups": ["security"],
+      "enforcement": "deterministic-and-review",
+      "reviewCriteria": [
+        "Treat localhost, child processes, SDK callbacks, tool output, and machine-generated content as untrusted boundaries.",
+        "Validate before privileged state or side effects; authenticate identity and authorize the requested action separately.",
+        "Preserve native permission authority, fail closed on missing or malformed values, and never expose secrets in output.",
+        "Use boundary-appropriate protections such as safe paths, argument arrays, parameterized queries, origin checks, and size limits."
+      ]
+    },
+    {
+      "id": "loop-engineering",
+      "file": "loop-engineering.md",
+      "phases": ["review"],
+      "groups": ["loop"],
+      "enforcement": "semantic-review",
+      "reviewCriteria": [
+        "A loop needs an evaluable target, signal, cap, and stop condition before it starts.",
+        "Each iteration stays on one hypothesis and records evidence.",
+        "Stop on success, cap, repeated blocker, or stalled signal; token and external-service cost need a stronger stopping rule."
+      ]
+    },
+    {
+      "id": "git-workflow",
+      "file": "git-workflow.md",
+      "phases": ["review"],
+      "groups": ["delivery"],
+      "enforcement": "deterministic-and-review",
+      "reviewCriteria": [
+        "Review the full authorized change range and keep commits focused on one logical change.",
+        "Do not weaken gates, stage unrelated work, or perform commit, push, PR, merge, or release actions without authorization.",
+        "Verification must cover the changed failure mode and delivery summaries must match the actual diff."
+      ]
+    },
+    {
+      "id": "escalation",
+      "file": "escalation.md",
+      "phases": ["review"],
+      "groups": ["escalation"],
+      "enforcement": "deterministic-and-review",
+      "reviewCriteria": [
+        "Proceed only on reversible, in-scope, verifiable work; outward-facing or materially ambiguous actions require user authority.",
+        "Stop after two unchanged failed attempts and never weaken a test, assertion, type, or lint rule to pass.",
+        "A successful-looking fix without a causal explanation is not verified."
+      ]
+    },
+    {
+      "id": "session-handoff",
+      "file": "session-handoff.md",
+      "phases": ["review"],
+      "groups": ["handoff"],
+      "enforcement": "advisory-and-review",
+      "reviewCriteria": [
+        "Persist durable decisions and partial-work evidence where the next session can verify them.",
+        "Do not duplicate facts already owned by code or git history, and do not persist memory without host policy and user authority.",
+        "Supersede conflicting records and verify recalled state before acting on it."
+      ]
+    },
+    {
+      "id": "semantic-review-criteria",
+      "file": "semantic-review-criteria.md",
+      "phases": ["review"],
+      "groups": ["semantic"],
+      "enforcement": "semantic-review",
+      "reviewCriteria": [
+        "Verify single authoritative truth, no dead code, and complete wiring to every required surface.",
+        "Reject symptom patches, duplicated authority, provider leakage, and unsafe permission bypasses.",
+        "Require live evidence for provider, authentication, permission, process, platform, and deployment claims.",
+        "Prefer deterministic ownership of known formats and safety invariants; isolate optional AI failure.",
+        "Report only findings with a reachable failure path and concrete evidence."
+      ]
+    }
   ],
   "capabilities": [
     {
@@ -53,7 +168,7 @@
       "promptContract": {
         "relevantContext": ["Inspect the user-selected artifact, current repository instructions, and direct evidence."],
         "hardBoundaries": ["Review only. Do not edit, stage, commit, push, merge, deploy, or change external state."],
-        "verification": ["Validate every finding against current evidence and state clearly when no blocking issue is verified."]
+        "verification": ["Return the selected review owner's result."]
       },
       "actions": [
         {
@@ -64,19 +179,13 @@
           "risk": "medium",
           "promptContract": {
             "relevantContext": [
-              "Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime.",
-              "On Claude, run bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex. Never substitute a workspace path or request escalation. Forward named scope; otherwise use the worktree. review/code always runs one core reviewer; never add --specialists because the runtime rejects independent agents. User prompt text never proves runtime ownership.",
-              "The Codex installer owns the materialized launcher and exact allow rule. Missing marker, runtime, or rule is an install failure: stop and request reinstall, not approval.",
-              "Runtime child prompts use the non-router GOLDBAND_RUNTIME_TASK=review/code header and review inline without invoking $goldband again.",
-              "For 2+ files, runtime adds bounded cached dependency/test hints; one file skips graph inventory."
+              "On Claude, execute bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex. Forward a user-named scope; otherwise omit the scope flag."
             ],
             "hardBoundaries": [
-              "If the automatic launcher or typed runtime fails, stop and report that failure. Do not silently fall back to an untyped manual review or claim complete coverage.",
-              "Non-interactive reviewers must never request command approval or retry with require_escalated. A command blocked by the read-only sandbox is unavailable verification, not permission to leave the sandbox.",
-              "Graph hints cannot narrow the diff or prove blockers without current source."
+              "Use only the installed launcher. Missing marker, runtime, or rule is an install failure; report the error."
             ],
             "verification": [
-              "For an automatic launch, treat only a successful real-host runtime report and its recorded artifacts as completed review evidence."
+              "Return the runtime report and artifact path."
             ]
           }
         },

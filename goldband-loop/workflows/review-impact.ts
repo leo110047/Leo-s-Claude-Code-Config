@@ -89,7 +89,7 @@ const MAX_IMPACT_FILES = 80;
 const MAX_DIRECT_DEPENDENCIES = 120;
 const MAX_DIAGNOSTICS = 20;
 const IMPACT_DEPTH = 2;
-const MAX_PROMPT_IMPACT_BYTES = 48 * 1024;
+const MAX_PROMPT_IMPACT_BYTES = 8 * 1024;
 export const WIDE_IMPACT_FILE_THRESHOLD = 8;
 
 const RESOLUTION_EXTENSIONS = [
@@ -183,8 +183,7 @@ export function formatReviewImpactContext(impact: ReviewImpactContext): string {
 
 function promptImpactProjection(impact: ReviewImpactContext): Record<string, unknown> {
   const projection: Record<string, unknown> = {
-    ...impact,
-    changedFiles: [...impact.changedFiles],
+    status: impact.status,
     directDependencies: [...impact.directDependencies],
     impactedFiles: [...impact.impactedFiles],
     observedTestFiles: [...impact.observedTestFiles],
@@ -196,7 +195,7 @@ function promptImpactProjection(impact: ReviewImpactContext): Record<string, unk
       impactedFiles: impact.impactedFiles.length,
       observedTestFiles: impact.observedTestFiles.length,
       filesWithoutObservedTests: impact.filesWithoutObservedTests.length,
-      bounded: false,
+      bounded: impact.truncated,
     },
   };
   const arrayFields = [
@@ -205,7 +204,6 @@ function promptImpactProjection(impact: ReviewImpactContext): Record<string, unk
     'observedTestFiles',
     'filesWithoutObservedTests',
     'diagnostics',
-    'changedFiles',
   ];
   while (Buffer.byteLength(JSON.stringify(projection)) > MAX_PROMPT_IMPACT_BYTES) {
     let reduced = false;

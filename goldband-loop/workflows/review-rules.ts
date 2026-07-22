@@ -1,5 +1,5 @@
-import { createRequire } from 'node:module';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,12 @@ export type RulesBundle = {
 export type RulesSnapshot = {
   repoRoot: string;
   rulesDir: string;
-  manifest: { rules: Array<{ id: string }> };
+  manifest: {
+    rules: Array<{
+      id: string;
+      reviewCriteria?: string[];
+    }>;
+  };
   rulesById: Readonly<Record<string, RuleRecord>>;
 };
 
@@ -35,14 +40,15 @@ export type ReviewPromptTelemetry = {
   host: string;
   rulesCount: number;
   rulesBytes: number;
+  diffBytes: number;
   promptBytes: number;
+  promptOverheadBytes: number;
   selectedSpecialists: [];
   aggregateRulesBytes: number;
 };
 
-// Measured 2026-07-11 core baseline: 23,262 bytes. This limit provides
-// headroom without allowing silent truncation.
-export const MAX_REVIEW_RULES_BYTES = 32 * 1024;
+export const MAX_REVIEW_RULES_BYTES = 16 * 1024;
+const MAX_REVIEW_CRITERIA_BYTES_PER_RULE = 1024;
 
 const require = createRequire(import.meta.url);
 
@@ -121,8 +127,12 @@ function withTrustedRulesDirectory(
 export function assertRulesPayloadBudget(
   bundle: RulesBundle,
   label: string,
+  snapshot?: RulesSnapshot,
 ): string {
-  const text = rulesResolver.formatRulesBundle(bundle);
+  const projectedBundle = snapshot
+    ? projectRulesForReview(bundle, snapshot)
+    : bundle;
+  const text = rulesResolver.formatRulesBundle(projectedBundle);
   const actualBytes = Buffer.byteLength(text);
   if (actualBytes > MAX_REVIEW_RULES_BYTES) {
     throw new Error(
@@ -136,14 +146,20 @@ export function coreReviewRules(
   repoRoot: string,
   diff: string,
   snapshot?: RulesSnapshot,
+  paths = reviewPathsFromDiff(diff),
 ) {
+  const activeSnapshot = snapshot ?? createReviewRulesSnapshot(repoRoot);
   const bundle = rulesResolver.resolveRules(withTrustedRulesDirectory({
     repoRoot,
     phase: 'review',
     scope: diff,
-    snapshot,
+    paths,
+    snapshot: activeSnapshot,
   }));
-  return { bundle, text: assertRulesPayloadBudget(bundle, 'core') };
+  return {
+    bundle,
+    text: assertRulesPayloadBudget(bundle, 'core', activeSnapshot),
+  };
 }
 
 export function createReviewRulesSnapshot(repoRoot: string): RulesSnapshot {
@@ -156,16 +172,59 @@ export function buildReviewPromptTelemetry(options: {
   host: string;
   corePrompt: string;
   coreBundle: RulesBundle;
+  coreRulesText: string;
+  diff: string;
 }): ReviewPromptTelemetry {
-  const bundleBytes = (bundle: RulesBundle) =>
-    Buffer.byteLength(rulesResolver.formatRulesBundle(bundle));
-  const coreRulesBytes = bundleBytes(options.coreBundle);
+  const coreRulesBytes = Buffer.byteLength(options.coreRulesText);
+  const diffBytes = Buffer.byteLength(options.diff);
+  const promptBytes = Buffer.byteLength(options.corePrompt);
   return {
     host: options.host,
     rulesCount: options.coreBundle.rules.length,
     rulesBytes: coreRulesBytes,
-    promptBytes: Buffer.byteLength(options.corePrompt),
+    diffBytes,
+    promptBytes,
+    promptOverheadBytes: promptBytes - diffBytes,
     selectedSpecialists: [],
     aggregateRulesBytes: coreRulesBytes,
   };
+}
+
+function projectRulesForReview(
+  bundle: RulesBundle,
+  snapshot: RulesSnapshot,
+): RulesBundle {
+  const criteriaById = new Map(
+    snapshot.manifest.rules.map((rule) => [rule.id, rule.reviewCriteria]),
+  );
+  const rules = bundle.rules.map((rule) => {
+    const criteria = criteriaById.get(rule.id);
+    if (!criteria || criteria.length === 0 || criteria.some((item) => !item.trim())) {
+      throw new Error(`review Criteria missing for Rule ${rule.id}`);
+    }
+    const content = [
+      '# Review Criteria',
+      ...criteria.map((criterion) => `- ${criterion.trim()}`),
+      '',
+      `Read the full policy at ${rule.sourceFile} only when a finding depends on details not represented here.`,
+    ].join('\n');
+    const bytes = Buffer.byteLength(content);
+    if (bytes > MAX_REVIEW_CRITERIA_BYTES_PER_RULE) {
+      throw new Error(
+        `review Criteria exceeds budget for Rule ${rule.id}: actualBytes=${bytes} limit=${MAX_REVIEW_CRITERIA_BYTES_PER_RULE}`,
+      );
+    }
+    return { ...rule, content };
+  });
+  return { ...bundle, rules };
+}
+
+function reviewPathsFromDiff(diff: string): string[] {
+  const paths = new Set<string>();
+  for (const line of diff.split('\n')) {
+    if (!line.startsWith('diff --git ')) continue;
+    const match = line.match(/ b\/(.+)$/);
+    if (match?.[1]) paths.add(match[1]);
+  }
+  return [...paths].sort();
 }

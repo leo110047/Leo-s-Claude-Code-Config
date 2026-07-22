@@ -15,4 +15,4 @@ Review security and trust boundaries.
 
 ## Verification
 
-- Validate every finding against current evidence and state clearly when no blocking issue is verified.
+- Return the selected review owner's result.

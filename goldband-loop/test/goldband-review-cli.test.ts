@@ -7,6 +7,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -17,6 +18,11 @@ import {
 	prepareReviewProcessEnvironment,
 	resolveReviewRuntimeFile,
 } from "../bin/goldband.ts";
+import {
+	acquireReviewExecutionLease,
+	releaseReviewExecutionLease,
+} from "../lib/review-execution-lease";
+import { REVIEW_ACTIVE_ENV } from "../lib/review-runtime-contract";
 
 describe("goldband review code launcher", () => {
 	test("runs the real typed pipeline through the Codex host adapter", () => {
@@ -47,6 +53,8 @@ describe("goldband review code launcher", () => {
 					'test -n "$output"',
 					'test "$approval" = "never"',
 					'test "$sandbox" = "read-only"',
+					`test -n "\${${REVIEW_ACTIVE_ENV}:-}"`,
+					'printf \'%s\\n\' \'{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":800,"output_tokens":75,"total_tokens":1275}}\'',
 					'printf \'%s\\n\' \'{"findings":[]}\' > "$output"',
 				].join("\n"),
 			);
@@ -94,7 +102,224 @@ describe("goldband review code launcher", () => {
 			expect(telemetry.passTimeoutMs).toBe(600_000);
 			expect(telemetry.specialistMode).toBe("off");
 			expect(telemetry.selectedSpecialists).toEqual([]);
+			expect(telemetry.diffBytes).toBeGreaterThan(0);
+			expect(telemetry.promptOverheadBytes).toBeLessThanOrEqual(20 * 1024);
+			const usageFile = readdirSync(telemetryDir).find((file) =>
+				file.endsWith("-review-host-usage.json"),
+			);
+			const usage = JSON.parse(
+				readFileSync(join(telemetryDir, usageFile as string), "utf8"),
+			);
+			expect(usage).toMatchObject({
+				host: "codex",
+				available: true,
+				inputTokens: 1200,
+				cachedInputTokens: 800,
+				outputTokens: 75,
+				totalTokens: 1275,
+			});
 			expect(readFileSync(callLog, "utf8").trim().split("\n")).toHaveLength(1);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("nested review is rejected before launching any runtime or host", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-nested-"));
+		try {
+			const fakeBin = join(fixture, "bin");
+			const fakeCodex = join(fakeBin, "codex");
+			const callLog = join(fixture, "codex-calls.log");
+			mkdirSync(fakeBin, { recursive: true });
+			writeFileSync(
+				fakeCodex,
+				`#!/usr/bin/env bash\nprintf '%s\\n' call >> "${callLog}"\n`,
+			);
+			chmodSync(fakeCodex, 0o755);
+
+			const result = spawnSync(
+				resolve(import.meta.dir, "../bin/goldband"),
+				["review", "code", "--host", "codex"],
+				{
+					cwd: fixture,
+					encoding: "utf8",
+					env: {
+						...process.env,
+						[REVIEW_ACTIVE_ENV]: "parent-review-token",
+						PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+					},
+				},
+			);
+
+			expect(result.status).toBe(1);
+			expect(result.stderr).toContain("cannot start inside an active review");
+			expect(existsSync(callLog)).toBe(false);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("same repository and scope cannot hold two active review leases", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-lease-"));
+		try {
+			const stateRoot = join(fixture, "state");
+			const nestedDirectory = join(fixture, "packages", "app");
+			mkdirSync(join(fixture, ".git"));
+			mkdirSync(nestedDirectory, { recursive: true });
+			const first = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--worktree"],
+			);
+			try {
+				expect(() =>
+					acquireReviewExecutionLease(
+						stateRoot,
+						nestedDirectory,
+						["review", "code", "--worktree"],
+					),
+				).toThrow("already running for this repository and scope");
+			} finally {
+				releaseReviewExecutionLease(first);
+			}
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("equivalent base plus worktree scopes share one lease regardless of flag order", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-lease-order-"));
+		try {
+			const stateRoot = join(fixture, "state");
+			mkdirSync(join(fixture, ".git"));
+			const first = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--base", "origin/main", "--worktree"],
+			);
+			try {
+				expect(() =>
+					acquireReviewExecutionLease(
+						stateRoot,
+						fixture,
+						["review", "code", "--worktree", "--base", "origin/main"],
+					),
+				).toThrow("already running for this repository and scope");
+			} finally {
+				releaseReviewExecutionLease(first);
+			}
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("equivalent diff-file scopes use the invocation directory", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-diff-lease-"));
+		try {
+			const stateRoot = join(fixture, "state");
+			const packageDirectory = join(fixture, "packages", "app");
+			mkdirSync(join(fixture, ".git"));
+			mkdirSync(packageDirectory, { recursive: true });
+			writeFileSync(join(packageDirectory, "change.diff"), "diff fixture\n");
+			const first = acquireReviewExecutionLease(
+				stateRoot,
+				packageDirectory,
+				["review", "code", "--diff-file", "change.diff"],
+			);
+			try {
+				expect(() =>
+					acquireReviewExecutionLease(
+						stateRoot,
+						fixture,
+						["review", "code", "--diff-file", "packages/app/change.diff"],
+					),
+				).toThrow("already running for this repository and scope");
+			} finally {
+				releaseReviewExecutionLease(first);
+			}
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("different scopes may run concurrently and stale leases recover", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-lease-scope-"));
+		try {
+			const stateRoot = join(fixture, "state");
+			const worktree = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--worktree"],
+			);
+			const staged = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--staged"],
+			);
+			releaseReviewExecutionLease(worktree);
+			releaseReviewExecutionLease(staged);
+
+			const stale = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--base", "origin/main"],
+				{ pid: 999_999, isProcessAlive: () => false },
+			);
+			const replacement = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--base", "origin/main"],
+				{ isProcessAlive: () => false },
+			);
+			releaseReviewExecutionLease(stale);
+			expect(existsSync(replacement.file)).toBe(true);
+			releaseReviewExecutionLease(replacement);
+			expect(existsSync(replacement.file)).toBe(false);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("stale recovery cannot delete a concurrently replaced live lease", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-lease-race-"));
+		try {
+			const stateRoot = join(fixture, "state");
+			mkdirSync(join(fixture, ".git"));
+			const stale = acquireReviewExecutionLease(
+				stateRoot,
+				fixture,
+				["review", "code", "--worktree"],
+				{ pid: 999_999, isProcessAlive: () => false },
+			);
+
+			let winner: ReturnType<typeof acquireReviewExecutionLease> | undefined;
+			expect(() =>
+				acquireReviewExecutionLease(
+					stateRoot,
+					fixture,
+					["review", "code", "--worktree"],
+					{
+						isProcessAlive: (pid) => pid !== 999_999,
+						afterStaleLeaseRead: () => {
+							winner = acquireReviewExecutionLease(
+								stateRoot,
+								fixture,
+								["review", "code", "--worktree"],
+								{ isProcessAlive: () => false },
+							);
+						},
+					},
+				),
+			).toThrow("already running for this repository and scope");
+
+			expect(winner).toBeDefined();
+			expect(JSON.parse(readFileSync(stale.file, "utf8")).token).toBe(
+				winner?.token,
+			);
+			releaseReviewExecutionLease(stale);
+			expect(existsSync(stale.file)).toBe(true);
+			releaseReviewExecutionLease(winner as NonNullable<typeof winner>);
+			expect(existsSync(stale.file)).toBe(false);
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}
@@ -112,14 +337,13 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
-	test("preserves explicit scope and loop options", () => {
+	test("preserves explicit scope", () => {
 		expect(
 			buildReviewRuntimeArgs([
 				"--host",
 				"codex",
 				"--base",
 				"origin/main",
-				"--loop",
 			]),
 		).toEqual([
 			"review",
@@ -130,8 +354,13 @@ describe("goldband review code launcher", () => {
 			"codex",
 			"--base",
 			"origin/main",
-			"--loop",
 		]);
+	});
+
+	test("rejects repeated review loops before launching the runtime", () => {
+		expect(() =>
+			buildReviewRuntimeArgs(["--host", "codex", "--loop"]),
+		).toThrow("--loop is disabled to prevent repeated full-diff model calls");
 	});
 
 	test("rejects independent specialist agents before launching the runtime", () => {
@@ -240,6 +469,7 @@ describe("goldband review code launcher", () => {
 				{},
 				{
 					home: join(fixture, "blocked-home"),
+					coordinationRoot: join(fixture, "review-coordination"),
 					createTemporaryRoot: () => temporaryRoot,
 					probeStateRoot: (root) => {
 						probed.push(root);
@@ -254,6 +484,9 @@ describe("goldband review code launcher", () => {
 
 			expect(result.durability).toBe("ephemeral");
 			expect(result.evidenceRoot).toBe(temporaryRoot);
+			expect(result.coordinationRoot).toBe(
+				realpathSync(join(fixture, "review-coordination")),
+			);
 			expect(result.env.GOLDBAND_HOME).toBe(temporaryRoot);
 			expect(result.env.GOLDBAND_REVIEW_EVIDENCE_DURABILITY).toBe(
 				"ephemeral",
@@ -262,6 +495,80 @@ describe("goldband review code launcher", () => {
 				join(fixture, "blocked-home", ".goldband"),
 				temporaryRoot,
 			]);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("durable evidence and review coordination use separate roots", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-durable-"));
+		try {
+			const evidenceRoot = join(fixture, "evidence");
+			const coordinationRoot = join(fixture, "coordination");
+			const result = prepareReviewProcessEnvironment(
+				{ GOLDBAND_HOME: evidenceRoot },
+				{ coordinationRoot },
+			);
+
+			expect(result.durability).toBe("durable");
+			expect(result.evidenceRoot).toBe(evidenceRoot);
+			expect(result.coordinationRoot).toBe(realpathSync(coordinationRoot));
+			expect(result.coordinationRoot).not.toBe(result.evidenceRoot);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("ephemeral evidence roots share one stable review coordination root", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-coordination-"));
+		try {
+			const coordinationRoot = join(fixture, "coordination");
+			const blockedHome = join(fixture, "blocked-home");
+			const prepare = (temporaryRoot: string) =>
+				prepareReviewProcessEnvironment(
+					{},
+					{
+						home: blockedHome,
+						coordinationRoot,
+						createTemporaryRoot: () => temporaryRoot,
+						probeStateRoot: (root) => {
+							if (root === join(blockedHome, ".goldband")) {
+								throw Object.assign(new Error("sandbox blocked"), {
+									code: "EPERM",
+								});
+							}
+							mkdirSync(root, { recursive: true });
+						},
+					},
+				);
+			const firstEnvironment = prepare(join(fixture, "evidence-one"));
+			const secondEnvironment = prepare(join(fixture, "evidence-two"));
+			expect(firstEnvironment.evidenceRoot).not.toBe(
+				secondEnvironment.evidenceRoot,
+			);
+			expect(firstEnvironment.coordinationRoot).toBe(
+				realpathSync(coordinationRoot),
+			);
+			expect(secondEnvironment.coordinationRoot).toBe(
+				realpathSync(coordinationRoot),
+			);
+
+			const first = acquireReviewExecutionLease(
+				firstEnvironment.coordinationRoot,
+				fixture,
+				["review", "code", "--worktree"],
+			);
+			try {
+				expect(() =>
+					acquireReviewExecutionLease(
+						secondEnvironment.coordinationRoot,
+						fixture,
+						["review", "code", "--worktree"],
+					),
+				).toThrow("already running for this repository and scope");
+			} finally {
+				releaseReviewExecutionLease(first);
+			}
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}

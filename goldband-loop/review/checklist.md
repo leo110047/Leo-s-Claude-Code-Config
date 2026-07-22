@@ -1,48 +1,6 @@
-# Read-Only Review Checklist
+# Semantic Review Checklist
 
-## Instructions
-
-Review the diff for concrete issues. Cite `file:line` when available. Flag only
-real problems with evidence. Do not edit files, apply patches, commit, push,
-or run repair workflows.
-
-Use `shared-rubric.md` as the canonical taxonomy, severity standard, finding
-shape, and merge rule source. The one core reviewer owns every category below
-inside the same repository-reading context; it must not delegate categories to
-independent agents.
-
-## Finding validity gate
-
-Only report a finding when all three are present:
-
-- an exact `file:line`;
-- a concrete input or runtime state and a reachable execution path;
-- the incorrect result, expected result, and practical impact.
-
-A suspicious pattern, style preference, generic best practice, or unsupported
-test gap is not a finding.
-
-## Output Format
-
-```
-[P1] Short problem title — path/to/file.ts:42
-
-When <input/state>, execution reaches <path> and produces <actual> instead of
-<expected>, causing <impact>.
-
-Evidence: <specific diff/code/test/config evidence>
-Fix: <one-sentence healthy fix>
-Verify: <command, test, readback, or manual check>
-```
-
-If no issues survive the validity gate, output `No findings.` and briefly name
-the high-risk paths that were actually traced.
-
-Always include:
-
-`Read-only review: no files were modified.`
-
-## Core Review Categories
+Apply the shared rubric's evidence gate while tracing the relevant categories.
 
 ### Problem-Fix Correctness
 

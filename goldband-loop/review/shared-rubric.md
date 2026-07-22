@@ -1,12 +1,8 @@
 # Shared Review Rubric
 
-This is the canonical review standard for normal `/review` and the review
-content consumed by `cross-review`. Execution semantics differ:
-
-- `/review` is read-only findings review. It never edits source files and never
-  signs a gate.
-- `cross-review` uses this standard inside its own gate contract, verdict
-  marker, reviewed-sha, rounds, implementer responses, and escalation flow.
+This is the canonical semantic judgment standard for normal `/review` and
+`cross-review`. Execution, permissions, output shape, aggregation, and gate
+behavior belong to their runtimes.
 
 ## Taxonomy
 
@@ -42,10 +38,6 @@ Use the lowest severity supported by concrete evidence.
 - `info`: skipped/degraded coverage, useful context, or an unverified issue that
   is not supported enough to stay high severity.
 
-`review/code` has one core reviewer. Category and specialist metadata may remain
-in findings for compatibility, but the runtime must not dispatch independent
-specialist agents.
-
 High or critical findings without concrete evidence must be downgraded to
 `info`. Findings that need human judgment because the supplied evidence is
 insufficient should be reported as `info` in normal `/review` and as `ESCALATE`
@@ -67,11 +59,3 @@ scores.
 `blocking` means "must be fixed before landing" in normal `/review`. It does
 not sign or block the session by itself. `cross-review` maps blocking findings
 into its own verdict rules.
-
-## Merge Rules
-
-- Deduplicate by file, line, category, and failure scenario.
-- Merge duplicate findings by preserving the strongest severity and most
-  specific evidence.
-- Record every contributing specialist.
-- Sort findings by severity, then file, line, and category.

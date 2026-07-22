@@ -5,12 +5,7 @@ import { defineWorkflow } from './definition';
 import { ownedRuntimeSteps } from './owned-runtime';
 import { workflowAssetPath } from './paths';
 import { captureQaIterationState, qaSignalFromOutput, qaSteps, qaTargetMet } from './qa';
-import {
-  captureReviewIterationState,
-  reviewSignalFromOutput,
-  reviewSteps,
-  reviewTargetMet,
-} from './review';
+import { reviewSignalFromOutput, reviewSteps } from './review';
 import { objectSchema } from './schema';
 import type { WorkflowDefinition, WorkflowStep } from './types';
 
@@ -133,9 +128,7 @@ function evaluationFor(name: string): string {
 }
 
 function stopConditionsFor(name: string): string[] {
-  if (name === 'review/code') {
-    return ['findings-converged', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
-  }
+  if (name === 'review/code') return ['iteration-cap'];
   if (name === 'qa/app') {
     return ['target-met', 'same-blocker-repeated', 'no-improvement', 'iteration-cap'];
   }
@@ -143,7 +136,7 @@ function stopConditionsFor(name: string): string[] {
 }
 
 function iterationCapFor(name: string): number {
-  if (name === 'review/code' || name === 'qa/app') return 2;
+  if (name === 'qa/app') return 2;
   return 1;
 }
 
@@ -174,8 +167,6 @@ function loopHooksFor(name: string): Partial<WorkflowDefinition> {
   if (name === 'review/code') {
     return {
       evaluateSignal: reviewSignalFromOutput,
-      isTargetMet: reviewTargetMet,
-      captureIterationState: captureReviewIterationState,
     };
   }
   if (name === 'qa/app') {

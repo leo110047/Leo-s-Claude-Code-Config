@@ -1,27 +1,24 @@
 # TODO
 
-## P0 - 補完 workflow convergence loop real-mode 驗證
+## P0 - 補完 QA convergence loop real-mode 驗證
 
-目前狀態：runtime-owned convergence loop 的 deterministic 基礎已完成；剩餘 P0
-是把 mock coverage 推進到真實 host 的 live evidence。不可再把 controller、stop
-predicate 或逐輪 evidence 列為尚未實作，也不可用 fixture 冒充 real-mode E2E。
+目前狀態：`review/code` 已改為強制 single-pass，避免完整 diff 被多輪重送；
+convergence loop 只保留給 `qa/app`。剩餘 P0 是把 QA mock coverage 推進到真實
+browser evidence，不可用 fixture 冒充 real-mode E2E。
 
 ### 已完成
 
 - [x] runtime 自主驅動多輪，不需要 caller 手動提供 iteration 或 blocker 狀態。
 - [x] `target-met`、`iteration-cap`、`same-blocker-repeated`、
   `no-improvement` stop predicates 與 regression tests。
-- [x] `review/code` 把前輪 findings 帶入下一輪，並輸出 signal trail、stop reason
-  與 machine-readable `loop-summary`。
 - [x] `qa/app` typed mock adapter 只重跑 failed checks，並驗證 check schema。
-- [x] CLI 保留 single-pass 預設，且 `--max-iterations` 不可超過 registry cap。
+- [x] `review/code` launcher 與 typed workflow 都拒絕 `--loop`。
+- [x] QA 的 `--max-iterations` 不可超過 registry cap。
 - [x] 每輪 JSONL evidence 包含 `iteration` 與 `signalSnapshot`。
 - [x] `goldband-loop/workflows/README.md` 已描述目前實際 loop 行為。
 
 ### 待辦
 
-- [ ] 執行 `review/code` real LLM convergence E2E，保存真實 host、命令、退出狀態、
-  JSONL evidence 與 artifacts；host、授權、網路或 budget 不足時明確標記 blocked。
 - [ ] 執行 `qa/app` real browser E2E；把 checks 接到已 typed 的
   `browser/session` evidence contract。在完成前維持 unsupported，不可把 mock
   check 或 Playwright setup 當成 runtime 支援。
@@ -31,7 +28,7 @@ predicate 或逐輪 evidence 列為尚未實作，也不可用 fixture 冒充 re
 ### 驗收標準
 
 - [x] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
-- [x] `review/code` 與 `qa/app` mock 多輪整合測試都有逐輪 evidence。
+- [x] `qa/app` mock 多輪整合測試有逐輪 evidence。
 - [ ] real-mode 驗證結果有可重跑的 pass、blocked 或 unsupported evidence。
 - [ ] live evidence、registry 狀態、runtime 行為與文件一致。
 
