@@ -7,8 +7,9 @@ real problems with evidence. Do not edit files, apply patches, commit, push,
 or run repair workflows.
 
 Use `shared-rubric.md` as the canonical taxonomy, severity standard, finding
-shape, and merge rule source. This checklist gives the core review pass; the
-specialist passes cover the same taxonomy from narrower responsibilities.
+shape, and merge rule source. The one core reviewer owns every category below
+inside the same repository-reading context; it must not delegate categories to
+independent agents.
 
 ## Finding validity gate
 

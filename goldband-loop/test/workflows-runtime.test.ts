@@ -47,18 +47,13 @@ import {
   runProcess,
 } from '../workflows/host-adapter';
 import {
-  REVIEW_SPECIALISTS,
   aggregateReviewFindings,
-  buildSpecialistPrompt,
-  selectReviewSpecialists,
 } from '../workflows/review-engine';
 import {
-  MAX_REVIEW_AGGREGATE_RULES_BYTES,
   MAX_REVIEW_RULES_BYTES,
   assertRulesPayloadBudget,
   buildReviewPromptTelemetry,
   coreReviewRules,
-  specialistReviewRules,
 } from '../workflows/review-rules';
 import {
   DEFAULT_REVIEW_HOST_TIMEOUT_MS,
@@ -1008,29 +1003,28 @@ describe('workflow runtime', () => {
     expect(telemetry.rulesCount).toBeGreaterThan(0);
     expect(telemetry.rulesBytes).toBeGreaterThan(0);
     expect(telemetry.promptBytes).toBeGreaterThan(telemetry.rulesBytes);
-    expect(Array.isArray(telemetry.selectedSpecialists)).toBe(true);
+    expect(telemetry.selectedSpecialists).toEqual([]);
     expect(telemetry.hostTimeoutMs).toBe(12 * 60 * 1000);
-    expect(telemetry.passTimeoutMs).toBe(20 * 60 * 1000);
-    expect(telemetry.specialistMode).toBe('auto');
+    expect(telemetry.passTimeoutMs).toBe(12 * 60 * 1000);
+    expect(telemetry.specialistMode).toBe('off');
     expect(JSON.stringify(telemetry)).not.toContain('Architecture and Integration Boundaries');
   });
 
-  test('review timeout policy keeps normal review bounded by specialist mode', () => {
+  test('review timeout policy permits only the single-reviewer mode', () => {
     expect(resolveReviewTimeoutPolicy({ specialists: 'off' })).toEqual({
       specialistMode: 'off',
       hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
       passTimeoutMs: 12 * 60 * 1000,
     });
     expect(resolveReviewTimeoutPolicy({})).toEqual({
-      specialistMode: 'auto',
+      specialistMode: 'off',
       hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
-      passTimeoutMs: 20 * 60 * 1000,
+      passTimeoutMs: 12 * 60 * 1000,
     });
-    expect(resolveReviewTimeoutPolicy({ specialists: 'all' })).toEqual({
-      specialistMode: 'all',
-      hostTimeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
-      passTimeoutMs: 30 * 60 * 1000,
-    });
+    expect(() => resolveReviewTimeoutPolicy({ specialists: 'auto' }))
+      .toThrow('independent specialist agents are disabled');
+    expect(() => resolveReviewTimeoutPolicy({ specialists: 'all' }))
+      .toThrow('independent specialist agents are disabled');
   });
 
   test('review timeout overrides fail closed when invalid or internally inconsistent', () => {
@@ -1051,23 +1045,11 @@ describe('workflow runtime', () => {
     const budget = createReviewTimeBudget({}, () => now);
     expect(budget.nextHostTimeoutMs()).toBe(DEFAULT_REVIEW_HOST_TIMEOUT_MS);
     now = 10 * 60 * 1000;
-    expect(budget.nextHostTimeoutMs()).toBe(10 * 60 * 1000);
-    now = 20 * 60 * 1000;
+    expect(budget.nextHostTimeoutMs()).toBe(2 * 60 * 1000);
+    now = 12 * 60 * 1000;
     expect(() => budget.nextHostTimeoutMs()).toThrow(
-      'review/code auto pass timed out after 1200000ms',
+      'review/code off pass timed out after 720000ms',
     );
-    expect(() => budget.completeSpecialistPhase()).not.toThrow();
-
-    let exhaustiveNow = 0;
-    const exhaustive = createReviewTimeBudget(
-      { specialists: 'all' },
-      () => exhaustiveNow,
-    );
-    exhaustiveNow = 30 * 60 * 1000;
-    expect(() => exhaustive.completeSpecialistPhase()).toThrow(
-      'review/code all pass timed out after 1800000ms',
-    );
-
     const inherited = createReviewTimeBudget(
       { specialists: 'off' },
       () => 90_000,
@@ -1718,7 +1700,7 @@ describe('workflow runtime', () => {
     expect(result).toEqual([]);
   });
 
-  test('core and specialist review prompts inject checklist, schema, rubric, and selected Rules', () => {
+  test('core review prompt injects the complete checklist, schema, rubric, and selected Rules', () => {
     const ctx = {
       runId: 'rules-prompt-test',
       workflow: getWorkflow('review/code'),
@@ -1741,16 +1723,6 @@ describe('workflow runtime', () => {
     expect(core).toContain('never request command approval or use require_escalated');
     expect(core).toContain('inspect applicable AGENTS.md and CLAUDE.md');
 
-    const security = buildSpecialistPrompt(ctx, diff, 'security');
-    expect(security).toContain('# Security Boundaries');
-    expect(security).toContain('# Semantic Review Criteria');
-    expect(security).not.toContain('# Git Workflow');
-    expect(security).toContain('inspect the repository outside the diff');
-    expect(security).toContain('never request command approval or use require_escalated');
-
-    const hostParity = buildSpecialistPrompt(ctx, diff, 'api-host-parity');
-    expect(hostParity).toContain('# Git Workflow');
-    expect(hostParity).toContain('# Security Boundaries');
   });
 
   test('real review child prompt uses a runtime-owned non-router header', () => {
@@ -1764,15 +1736,11 @@ describe('workflow runtime', () => {
     expect(prompt).not.toContain('GOLDBAND_TYPED_RUNTIME_ACTIVE');
   });
 
-  test('review Rules payload budgets use measured headroom and fail closed on aggregate fan-out', () => {
+  test('review Rules payload budget uses measured headroom and fails closed', () => {
     const core = coreReviewRules(PROJECT_ROOT, 'provider installer change');
-    const security = specialistReviewRules(PROJECT_ROOT, 'security');
     const coreBytes = Buffer.byteLength(core.text);
-    const securityBytes = Buffer.byteLength(security.text);
     expect(coreBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
-    expect(securityBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
     expect(MAX_REVIEW_RULES_BYTES).toBeGreaterThanOrEqual(32 * 1024);
-    expect(MAX_REVIEW_AGGREGATE_RULES_BYTES).toBeGreaterThan(124_353);
 
     expect(() =>
       assertRulesPayloadBudget(
@@ -1793,47 +1761,24 @@ describe('workflow runtime', () => {
       ),
     ).toThrow('Rules payload exceeds budget');
 
-    const specialistPrompts = Array.from({ length: 12 }, () => ({
-      prompt: security.text,
-      bundle: security.bundle,
-    }));
-    expect(() =>
-      buildReviewPromptTelemetry({
-        host: 'codex',
-        corePrompt: core.text,
-        coreBundle: core.bundle,
-        specialistPrompts,
-        selectedSpecialists: Array.from(
-          { length: 12 },
-          () => 'security' as const,
-        ),
-      }),
-    ).toThrow('aggregate Rules payload exceeds budget');
+    expect(buildReviewPromptTelemetry({
+      host: 'codex',
+      corePrompt: core.text,
+      coreBundle: core.bundle,
+    })).toMatchObject({
+      selectedSpecialists: [],
+      aggregateRulesBytes: coreBytes,
+    });
   });
 
-  test('review specialist selection includes every matched auto specialist', () => {
-    const selection = selectReviewSpecialists([
-      'diff --git a/goldband-loop/workflows/host-adapter.ts b/goldband-loop/workflows/host-adapter.ts',
-      '+codex exec --sandbox read-only',
-      '+schema migration with rollback',
-      '+performance cache stampede',
-      'diff --git a/goldband.manifest.json b/goldband.manifest.json',
-      '+allowed-tools:',
-    ].join('\n'));
-
-    expect(selection.selected).toEqual([
-      'security',
-      'performance',
-      'migration-data',
-      'api-host-parity',
-    ]);
-    expect(selection.skipped.every((item) => item.reason === 'diff scope not relevant')).toBe(true);
-  });
-
-  test('review specialist selection supports explicit all mode', () => {
-    const selection = selectReviewSpecialists('+tiny docs change', 'all');
-    expect(selection.selected).toEqual([...REVIEW_SPECIALISTS]);
-    expect(selection.skipped).toEqual([]);
+  test('review/code rejects independent specialist modes before collecting the diff', async () => {
+    await expect(runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      cwd: ROOT,
+      goldbandHome: tmpHome,
+      diffFile: 'test/fixtures/workflows/review.diff',
+      specialists: 'auto',
+    })).rejects.toThrow('independent specialist agents are disabled');
   });
 
   test('review aggregation dedupes, merges specialists, downgrades unsupported blockers, and sorts deterministically', () => {

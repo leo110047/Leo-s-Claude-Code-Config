@@ -11,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getWorkflow } from '../workflows/registry';
-import { selectReviewSpecialists } from '../workflows/review-engine';
 import {
   collectReviewImpactContext,
   formatReviewImpactContext,
@@ -65,7 +64,7 @@ describe('review impact graph', () => {
           diff: '+core\n+other',
           changedFiles: ['src/core.ts', 'src/other.ts'],
         },
-        createReviewTimeBudget({ specialists: 'auto' }),
+        createReviewTimeBudget({}),
       );
 
       expect(first.impact.status).toBe('analyzed');
@@ -86,8 +85,8 @@ describe('review impact graph', () => {
       ]);
       expect(first.impact.observedTestFiles).toEqual(['tests/consumer.test.ts']);
       expect(first.impact.filesWithoutObservedTests).toEqual(['src/other.ts']);
-      expect(selectReviewSpecialists('+ordinary change', 'auto', first.impact).selected)
-        .toContain('testing');
+      expect(formatReviewImpactContext(first.impact))
+        .toContain('"filesWithoutObservedTests":["src/other.ts"]');
 
       const second = collectReviewImpactContext(
         workflowContext(repo, goldbandHome, 'second-pass'),
@@ -96,7 +95,7 @@ describe('review impact graph', () => {
           diff: '+core\n+other',
           changedFiles: ['src/core.ts', 'src/other.ts'],
         },
-        createReviewTimeBudget({ specialists: 'auto' }),
+        createReviewTimeBudget({}),
       );
 
       expect(second.impact.parsedFiles).toBe(0);
@@ -124,20 +123,15 @@ describe('review impact graph', () => {
     expect(formatted).toContain('permission to omit any diff path');
   });
 
-  test('routes wide graph impact to maintainability review', () => {
+  test('keeps wide graph impact visible to the core reviewer', () => {
     const impactedFiles = Array.from({ length: WIDE_IMPACT_FILE_THRESHOLD }, (_, index) => ({
       file: `src/dependent-${index}.ts`,
       distance: 1,
       changedFiles: ['src/a.ts'],
       test: false,
     }));
-    const selection = selectReviewSpecialists(
-      '+ordinary change',
-      'auto',
-      impactFixture({ impactedFiles }),
-    );
-
-    expect(selection.selected).toContain('maintainability');
+    const formatted = formatReviewImpactContext(impactFixture({ impactedFiles }));
+    expect(formatted).toContain(`src/dependent-${WIDE_IMPACT_FILE_THRESHOLD - 1}.ts`);
   });
 
   test('bounds prompt graph bytes and rejects paths outside the repository', () => {
@@ -183,7 +177,7 @@ describe('review impact graph', () => {
           diff: '+many imports\n+other',
           changedFiles: ['src/many-imports.ts', 'src/other.ts'],
         },
-        createReviewTimeBudget({ specialists: 'auto' }),
+        createReviewTimeBudget({}),
       );
 
       expect(result.impact.status).toBe('degraded');
@@ -205,7 +199,7 @@ describe('review impact graph', () => {
       collectReviewImpactContext(
         workflowContext(repo, goldbandHome, 'cache-primer'),
         input,
-        createReviewTimeBudget({ specialists: 'auto' }),
+        createReviewTimeBudget({}),
       );
       const cacheDirectory = join(goldbandHome, 'review-impact');
       const cacheFile = join(cacheDirectory, readdirSync(cacheDirectory)[0] as string);
@@ -214,7 +208,7 @@ describe('review impact graph', () => {
       const result = collectReviewImpactContext(
         workflowContext(repo, goldbandHome, 'corrupt-cache'),
         input,
-        createReviewTimeBudget({ specialists: 'auto' }),
+        createReviewTimeBudget({}),
       );
 
       expect(result.impact.status).toBe('degraded');

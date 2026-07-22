@@ -23,7 +23,6 @@ when required fields are missing or a runnable action has no owner.
 bun run workflows/run.ts <capability> <action> \
   [--loop] [--max-iterations <n>] \
   [--mode mock|real] [--host mock|claude|codex] \
-  [--specialists off|auto|all] \
   [--review-host-timeout-seconds <60-1800>] \
   [--review-pass-timeout-seconds <60-1800>] \
   [--input <file>] [--base <ref>] \
@@ -42,8 +41,8 @@ when the target is met, the same blocker repeats, the signal stops improving,
 or the registry iteration cap is reached. A CLI cap may lower but never raise
 the registry cap.
 
-`review/code` supports typed diff collection, validated findings, specialist
-dispatch, and convergence. `qa/app` currently provides a typed mock adapter;
+`review/code` supports typed diff collection, validated findings, and
+convergence. `qa/app` currently provides a typed mock adapter;
 real browser QA remains unsupported until its checks consume the typed
 `browser/session` evidence contract.
 
@@ -96,8 +95,11 @@ For Codex, the installer-owned exact `allow` rule admits the trusted launcher
 outside the parent command sandbox without a prompt, so nested `codex exec` can
 initialize Codex state and app-server resources. The non-interactive child
 reviewer remains `read-only` with approval set to `never`.
-Strict or exhaustive requests add `--specialists all`; ordinary review keeps
-the runtime's `auto` specialist selection.
+Every `review/code` run launches exactly one core reviewer. The public launcher
+does not expose specialist fan-out, the shared runtime contract rejects
+`--specialists auto|all` before host launch, and the production review owner has
+no parallel specialist dispatch path. `--specialists off` is accepted only as a
+backwards-compatible no-op by the internal CLI.
 
 Before host dispatch, `review/code` collects changed paths with the diff; Git
 scopes use NUL-delimited path output, while a supplied patch derives paths from
@@ -105,8 +107,8 @@ its file headers.
 When two or more paths changed, the runtime builds a bounded repository-local
 dependency view from Git-tracked source files and the reviewed untracked paths.
 It follows common static import/source forms, walks reverse dependencies to
-depth two, identifies observed test dependents, and can route missing-test or
-wide-impact signals to the relevant automatic specialists. The persistent
+depth two, identifies observed test dependents, and passes missing-test or
+wide-impact signals to the core reviewer. The persistent
 index lives under `${GOLDBAND_HOME:-$HOME/.goldband}/review-impact/`; it is
 Goldband runtime state and is not installed into, or supplied by, the child
 reviewer. A one-file review skips inventory and index work entirely.
@@ -137,17 +139,13 @@ Both host adapters receive the complete review prompt over stdin rather than a
 command argument, so the 2 MiB review-input contract does not exceed the host
 operating system's `ARG_MAX` limit.
 
-Each real host call has a twelve-minute default timeout. A complete `run-review`
-pass is limited to twelve minutes with specialists off, twenty minutes in auto
-mode, and thirty minutes only for explicit exhaustive coverage. The timeout
-flags override one pass, must remain between 60 and 1800 seconds, and the host
-timeout cannot exceed the pass timeout. Evidence telemetry records the resolved
-mode and both timeout budgets so latency can be tuned from real runs.
+The single real host call and complete `run-review` pass each have a
+twelve-minute default timeout. The timeout flags override one pass, must remain
+between 60 and 1800 seconds, and the host timeout cannot exceed the pass
+timeout. Evidence telemetry records the fixed `off` compatibility mode and both
+timeout budgets so latency can be tuned from real runs.
 Pass elapsed time uses a monotonic clock; wall-clock changes affect evidence
 timestamps but cannot extend the configured deadline.
-When an optional `auto` specialist consumes the remaining pass budget, the
-runtime preserves the completed core and specialist results plus a non-blocking
-coverage diagnostic. Explicit `--specialists all` coverage still fails closed.
 
 ## Owner input contracts
 

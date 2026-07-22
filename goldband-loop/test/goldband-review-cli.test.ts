@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -23,6 +24,7 @@ describe("goldband review code launcher", () => {
 		try {
 			const fakeBin = join(fixture, "bin");
 			const fakeCodex = join(fakeBin, "codex");
+			const callLog = join(fixture, "codex-calls.log");
 			const repo = join(fixture, "repo");
 			const stateRoot = join(fixture, "state");
 			mkdirSync(fakeBin, { recursive: true });
@@ -35,6 +37,7 @@ describe("goldband review code launcher", () => {
 					'output=""',
 					'approval=""',
 					'sandbox=""',
+					'printf "%s\\n" call >> "$GOLDBAND_TEST_CALL_LOG"',
 					'while [ "$#" -gt 0 ]; do',
 					'  if [ "$1" = "-o" ]; then output="$2"; shift 2; continue; fi',
 					'  if [ "$1" = "--ask-for-approval" ]; then approval="$2"; shift 2; continue; fi',
@@ -69,6 +72,7 @@ describe("goldband review code launcher", () => {
 					env: {
 						...process.env,
 						GOLDBAND_HOME: stateRoot,
+						GOLDBAND_TEST_CALL_LOG: callLog,
 						PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
 					},
 				},
@@ -88,6 +92,9 @@ describe("goldband review code launcher", () => {
 			expect(telemetry.host).toBe("codex");
 			expect(telemetry.hostTimeoutMs).toBe(240_000);
 			expect(telemetry.passTimeoutMs).toBe(600_000);
+			expect(telemetry.specialistMode).toBe("off");
+			expect(telemetry.selectedSpecialists).toEqual([]);
+			expect(readFileSync(callLog, "utf8").trim().split("\n")).toHaveLength(1);
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}
@@ -105,15 +112,13 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
-	test("preserves explicit scope and exhaustive specialist options", () => {
+	test("preserves explicit scope and loop options", () => {
 		expect(
 			buildReviewRuntimeArgs([
 				"--host",
 				"codex",
 				"--base",
 				"origin/main",
-				"--specialists",
-				"all",
 				"--loop",
 			]),
 		).toEqual([
@@ -125,10 +130,55 @@ describe("goldband review code launcher", () => {
 			"codex",
 			"--base",
 			"origin/main",
-			"--specialists",
-			"all",
 			"--loop",
 		]);
+	});
+
+	test("rejects independent specialist agents before launching the runtime", () => {
+		for (const mode of ["auto", "all"]) {
+			expect(() =>
+				buildReviewRuntimeArgs([
+					"--host",
+					"codex",
+					"--specialists",
+					mode,
+				]),
+			).toThrow("independent specialist agents are disabled");
+		}
+	});
+
+	test("rejected specialist mode starts zero Codex processes", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-blocked-fanout-"));
+		try {
+			const fakeBin = join(fixture, "bin");
+			const fakeCodex = join(fakeBin, "codex");
+			const callLog = join(fixture, "codex-calls.log");
+			mkdirSync(fakeBin, { recursive: true });
+			writeFileSync(
+				fakeCodex,
+				`#!/usr/bin/env bash\nprintf '%s\\n' call >> "${callLog}"\n`,
+			);
+			chmodSync(fakeCodex, 0o755);
+
+			const result = spawnSync(
+				resolve(import.meta.dir, "../bin/goldband"),
+				["review", "code", "--host", "codex", "--specialists", "auto"],
+				{
+					cwd: fixture,
+					encoding: "utf8",
+					env: {
+						...process.env,
+						PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+					},
+				},
+			);
+
+			expect(result.status).toBe(1);
+			expect(result.stderr).toContain("independent specialist agents are disabled");
+			expect(existsSync(callLog)).toBe(false);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
 	});
 
 	test("rejects conflicting review scopes before launching the runtime", () => {

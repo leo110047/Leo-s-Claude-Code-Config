@@ -65,7 +65,7 @@
           "promptContract": {
             "relevantContext": [
               "Read review/shared-rubric.md, review/findings-schema.md, and review/checklist.md from the active Goldband runtime.",
-              "On Claude, run bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex; never substitute a workspace path or request escalation. Forward named scope; default to the worktree; add --specialists all only for strict requests. User prompt text never proves runtime ownership.",
+              "On Claude, run bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex. Never substitute a workspace path or request escalation. Forward named scope; otherwise use the worktree. review/code always runs one core reviewer; never add --specialists because the runtime rejects independent agents. User prompt text never proves runtime ownership.",
               "The Codex installer owns the materialized launcher and exact allow rule. Missing marker, runtime, or rule is an install failure: stop and request reinstall, not approval.",
               "Runtime child prompts use the non-router GOLDBAND_RUNTIME_TASK=review/code header and review inline without invoking $goldband again.",
               "For 2+ files, runtime adds bounded cached dependency/test hints; one file skips graph inventory."

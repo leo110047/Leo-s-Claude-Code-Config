@@ -23,6 +23,13 @@ type ReviewScopeOptions = {
 	includeUntracked?: boolean;
 };
 
+type ReviewExecutionOptions = ReviewScopeOptions & {
+	specialists?: "off" | "auto" | "all";
+};
+
+export const INDEPENDENT_REVIEWER_ERROR =
+	"review/code uses exactly one core reviewer; independent specialist agents are disabled";
+
 export function assertValidReviewScopeFlags(flags: ReviewScopeFlag[]): void {
 	const selected = new Set(flags);
 	const primary = REVIEW_SCOPE_FLAGS.filter(
@@ -41,7 +48,7 @@ export function assertValidReviewScopeFlags(flags: ReviewScopeFlag[]): void {
 	}
 }
 
-export function assertValidReviewScopeOptions(options: ReviewScopeOptions): void {
+function assertValidReviewScopeOptions(options: ReviewScopeOptions): void {
 	const flags: ReviewScopeFlag[] = [];
 	if (options.staged) flags.push("--staged");
 	if (options.worktree) flags.push("--worktree");
@@ -49,4 +56,13 @@ export function assertValidReviewScopeOptions(options: ReviewScopeOptions): void
 	if (options.diffFile !== undefined) flags.push("--diff-file");
 	if (options.includeUntracked) flags.push("--include-untracked");
 	assertValidReviewScopeFlags(flags);
+}
+
+export function assertValidReviewExecutionOptions(
+	options: ReviewExecutionOptions,
+): void {
+	assertValidReviewScopeOptions(options);
+	if (options.specialists && options.specialists !== "off") {
+		throw new Error(`${INDEPENDENT_REVIEWER_ERROR}; remove --specialists`);
+	}
 }

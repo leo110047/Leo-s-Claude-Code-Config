@@ -42,11 +42,9 @@ Use the lowest severity supported by concrete evidence.
 - `info`: skipped/degraded coverage, useful context, or an unverified issue that
   is not supported enough to stay high severity.
 
-A failed optional specialist pass is degraded review coverage, not a code
-defect, so it remains `info` and non-blocking. When the caller explicitly
-requests exhaustive coverage with `--specialists all`, the runtime must fail if
-any specialist cannot complete instead of representing the incomplete review
-only as an informational finding.
+`review/code` has one core reviewer. Category and specialist metadata may remain
+in findings for compatibility, but the runtime must not dispatch independent
+specialist agents.
 
 High or critical findings without concrete evidence must be downgraded to
 `info`. Findings that need human judgment because the supplied evidence is
