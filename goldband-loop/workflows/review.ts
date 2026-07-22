@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
-  assertValidReviewScopeOptions,
+  assertValidReviewExecutionOptions,
   REVIEW_EVIDENCE_DURABILITY_ENV,
   REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
   REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
@@ -24,9 +24,6 @@ import { adapterFor } from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
-  type PreparedSpecialistReview,
-  prepareSpecialistReview,
-  runParallelSpecialistReview,
   unwrapFindings,
 } from './review-engine';
 import {
@@ -105,7 +102,7 @@ export function captureReviewIterationState(
 }
 
 function collectDiff(ctx: WorkflowContext): ReviewDiffInput {
-  assertValidReviewScopeOptions(ctx.options);
+  assertValidReviewExecutionOptions(ctx.options);
   const timeBudget = createReviewTimeBudget(
     ctx.options,
     undefined,
@@ -162,20 +159,11 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
   const coreRules = coreReviewRules(ctx.cwd, input.diff, rulesSnapshot);
   const prompt = buildReviewPrompt(ctx, input.diff, coreRules, input.impact);
-  const specialistMode = ctx.options.specialists ?? 'auto';
-  const specialistReview = prepareSpecialistReview(
-    ctx,
-    input.diff,
-    specialistMode,
-    rulesSnapshot,
-    input.impact,
-  );
   recordReviewPromptTelemetry(
     ctx,
     adapter.name,
     prompt,
     coreRules.bundle,
-    specialistReview,
     timeBudget.policy,
     input.impact,
   );
@@ -186,17 +174,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     { timeoutMs: timeBudget.nextHostTimeoutMs() },
   );
   const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
-  const specialistFindings = await runParallelSpecialistReview(
-    ctx,
-    adapter,
-    input.diff,
-    findingsEnvelopeJsonSchema,
-    specialistMode,
-    specialistReview,
-    () => ({ timeoutMs: timeBudget.nextHostTimeoutMs() }),
-  );
-  timeBudget.completeSpecialistPhase();
-  return aggregateReviewFindings([...coreFindings, ...specialistFindings]);
+  return aggregateReviewFindings(coreFindings);
 }
 
 function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
@@ -658,7 +636,6 @@ function recordReviewPromptTelemetry(
   host: string,
   corePrompt: string,
   coreBundle: RulesBundle,
-  specialistReview: PreparedSpecialistReview,
   timeoutPolicy: ReviewTimeoutPolicy,
   impact: ReviewImpactContext,
 ): void {
@@ -667,8 +644,6 @@ function recordReviewPromptTelemetry(
       host,
       corePrompt,
       coreBundle,
-      specialistPrompts: specialistReview.items,
-      selectedSpecialists: specialistReview.selection.selected,
     }),
     specialistMode: timeoutPolicy.specialistMode,
     hostTimeoutMs: timeoutPolicy.hostTimeoutMs,

@@ -1201,3 +1201,79 @@ Revisit triggers:
   removes the outer command admission entirely.
 - Codex changes rule precedence, matching, or sandbox behavior.
 - The typed runtime no longer needs host state outside the parent sandbox.
+
+## 2026-07-22: Review Runtime Forbids Independent Specialist Agents
+
+Decision: supersede the automatic-specialist default in the earlier interactive
+review decision. Every `review/code` run launches exactly one core reviewer.
+Independent specialist dispatch is removed from the production owner, and both
+the public launcher and shared runtime contract reject `--specialists auto|all`
+before any review host starts.
+
+Context:
+
+- A specialist is another full host-model call with its own prompt and a copy of
+  the complete review diff, not a zero-cost checklist inside the core reviewer.
+- Machine-local evidence on 2026-07-22 recorded 26 review passes selecting 129
+  specialists. The core prompts alone contained more than 43 MB before counting
+  the duplicated specialist prompts.
+- The core reviewer already receives the shared rubric and can evaluate the full
+  finding taxonomy in one reusable repository context.
+- Automatic keyword and impact-graph routing can identify possible review lenses,
+  but it cannot authorize another full model call or prove user consent to the
+  quota cost.
+
+Implementation contract:
+
+- `review.ts` contains one host call and no specialist prompt preparation,
+  selection, concurrency, or dispatch path.
+- `review-runtime-contract.ts` is the shared execution gate. Omitted mode and
+  the legacy `off` no-op are valid; `auto` and `all` fail before diff collection
+  or host dispatch.
+- The public `bin/goldband` launcher does not advertise the option and applies
+  the same rejection before it starts the workflow runtime.
+- The manifest and checklist assign every review category to the one core
+  reviewer in the same repository-reading context.
+- Real-host regression coverage counts exactly one host invocation; bypass tests
+  prove rejected modes produce zero host invocations.
+
+Assumptions:
+
+- One core reviewer with the complete shared rubric is the correct default for
+  ordinary code review.
+- Independent second opinions need a separate, explicit capability with its own
+  visible cost contract; they are not a hidden mode of ordinary code review.
+
+Consequences:
+
+- Ordinary review no longer hides parallel model fan-out or repeatedly sends the
+  same diff to multiple child reviewers.
+- Specialist names remain only as optional finding metadata for compatibility;
+  they no longer correspond to child processes in this workflow.
+- A single reviewer may miss an issue that an independent second opinion would
+  find. That tradeoff is explicit rather than paid silently on every review.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep `auto` as the default and add a warning | A warning does not prevent hidden quota use or prove informed consent. |
+| Keep automatic fan-out but cap it at one specialist | Still turns a normal review into multiple host calls and leaves an agent-opened bypass. |
+| Keep `auto` or `all` as opt-in flags | The runtime cannot prove the parent agent did not add the flag itself; prompt-level consent is not enforcement. |
+| Keep dormant dispatch code behind a guard | A future caller or refactor can bypass the guard; deleting the production path gives one authoritative owner. |
+| Let the parent agent decide whether to append `auto` | Makes quota behavior prompt-dependent instead of runtime-enforced. |
+
+Failure signals:
+
+- Any `review/code` path contains more than one host invocation.
+- `--specialists auto|all` reaches diff collection or host dispatch instead of
+  failing at the boundary.
+- Default telemetry reports a selected specialist.
+- Generated contracts or CLI help advertise independent specialist dispatch.
+
+Revisit triggers:
+
+- The runtime can reuse one model context across lenses without starting another
+  host call or resending the full diff.
+- A separate user-visible cross-review capability gains an enforceable quota
+  authorization contract and bounded inputs.

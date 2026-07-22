@@ -3,7 +3,6 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ReviewSpecialist } from './review-engine';
 
 type RuleRecord = {
   id: string;
@@ -37,16 +36,13 @@ export type ReviewPromptTelemetry = {
   rulesCount: number;
   rulesBytes: number;
   promptBytes: number;
-  selectedSpecialists: ReviewSpecialist[];
+  selectedSpecialists: [];
   aggregateRulesBytes: number;
 };
 
-// Measured 2026-07-11 all-groups baseline: core 23,262 bytes; largest
-// specialist 17,785 bytes; all specialists plus core 124,353 bytes. These
-// limits provide about 41% core and 32% full-fan-out headroom without silent
-// truncation.
+// Measured 2026-07-11 core baseline: 23,262 bytes. This limit provides
+// headroom without allowing silent truncation.
 export const MAX_REVIEW_RULES_BYTES = 32 * 1024;
-export const MAX_REVIEW_AGGREGATE_RULES_BYTES = 160 * 1024;
 
 const require = createRequire(import.meta.url);
 
@@ -122,12 +118,6 @@ function withTrustedRulesDirectory(
     : options;
 }
 
-function specialistScope(specialist: ReviewSpecialist): string {
-  if (specialist === 'security') return 'security auth permission provider boundary';
-  if (specialist === 'api-host-parity') return 'installer git provider adapter host parity';
-  return specialist;
-}
-
 export function assertRulesPayloadBudget(
   bundle: RulesBundle,
   label: string,
@@ -156,20 +146,6 @@ export function coreReviewRules(
   return { bundle, text: assertRulesPayloadBudget(bundle, 'core') };
 }
 
-export function specialistReviewRules(
-  repoRoot: string,
-  specialist: ReviewSpecialist,
-  snapshot?: RulesSnapshot,
-) {
-  const bundle = rulesResolver.resolveRules(withTrustedRulesDirectory({
-    repoRoot,
-    phase: 'review',
-    scope: specialistScope(specialist),
-    snapshot,
-  }));
-  return { bundle, text: assertRulesPayloadBudget(bundle, specialist) };
-}
-
 export function createReviewRulesSnapshot(repoRoot: string): RulesSnapshot {
   return rulesResolver.createRulesSnapshot(
     withTrustedRulesDirectory({ repoRoot }),
@@ -180,34 +156,16 @@ export function buildReviewPromptTelemetry(options: {
   host: string;
   corePrompt: string;
   coreBundle: RulesBundle;
-  specialistPrompts: Array<{ prompt: string; bundle: RulesBundle }>;
-  selectedSpecialists: ReviewSpecialist[];
 }): ReviewPromptTelemetry {
   const bundleBytes = (bundle: RulesBundle) =>
     Buffer.byteLength(rulesResolver.formatRulesBundle(bundle));
   const coreRulesBytes = bundleBytes(options.coreBundle);
-  const aggregateRulesBytes =
-    coreRulesBytes +
-    options.specialistPrompts.reduce(
-      (total, item) => total + bundleBytes(item.bundle),
-      0,
-    );
-  if (aggregateRulesBytes > MAX_REVIEW_AGGREGATE_RULES_BYTES) {
-    throw new Error(
-      `review aggregate Rules payload exceeds budget: specialists=${options.selectedSpecialists.join(',')} actualBytes=${aggregateRulesBytes} limit=${MAX_REVIEW_AGGREGATE_RULES_BYTES}`,
-    );
-  }
   return {
     host: options.host,
     rulesCount: options.coreBundle.rules.length,
     rulesBytes: coreRulesBytes,
-    promptBytes:
-      Buffer.byteLength(options.corePrompt) +
-      options.specialistPrompts.reduce(
-        (total, item) => total + Buffer.byteLength(item.prompt),
-        0,
-      ),
-    selectedSpecialists: options.selectedSpecialists,
-    aggregateRulesBytes,
+    promptBytes: Buffer.byteLength(options.corePrompt),
+    selectedSpecialists: [],
+    aggregateRulesBytes: coreRulesBytes,
   };
 }

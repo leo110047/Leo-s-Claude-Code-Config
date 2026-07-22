@@ -1,10 +1,9 @@
 import { performance } from 'node:perf_hooks';
+import { assertValidReviewExecutionOptions } from '../lib/review-runtime-contract';
 import type { WorkflowRunOptions } from './types';
 
-type ReviewSpecialistMode = 'off' | 'auto' | 'all';
-
 export type ReviewTimeoutPolicy = {
-  specialistMode: ReviewSpecialistMode;
+  specialistMode: 'off';
   hostTimeoutMs: number;
   passTimeoutMs: number;
 };
@@ -14,29 +13,25 @@ export type ReviewTimeBudget = {
   remainingPassTimeoutMs(): number;
   nextHostTimeoutMs(): number;
   assertWithinDeadline(): void;
-  completeSpecialistPhase(): void;
 };
 
 export const DEFAULT_REVIEW_HOST_TIMEOUT_MS = 12 * 60 * 1000;
 const MIN_REVIEW_TIMEOUT_MS = 60 * 1000;
 const MAX_REVIEW_TIMEOUT_MS = 30 * 60 * 1000;
 
-const DEFAULT_REVIEW_PASS_TIMEOUT_MS: Record<ReviewSpecialistMode, number> = {
-  off: 12 * 60 * 1000,
-  auto: 20 * 60 * 1000,
-  all: 30 * 60 * 1000,
-};
+const DEFAULT_REVIEW_PASS_TIMEOUT_MS = 12 * 60 * 1000;
 
 export function resolveReviewTimeoutPolicy(
   options: WorkflowRunOptions,
 ): ReviewTimeoutPolicy {
-  const specialistMode = options.specialists ?? 'auto';
+  assertValidReviewExecutionOptions(options);
+  const specialistMode = 'off' as const;
   const hostTimeoutMs = validatedTimeout(
     options.reviewHostTimeoutMs ?? DEFAULT_REVIEW_HOST_TIMEOUT_MS,
     '--review-host-timeout-seconds',
   );
   const passTimeoutMs = validatedTimeout(
-    options.reviewPassTimeoutMs ?? DEFAULT_REVIEW_PASS_TIMEOUT_MS[specialistMode],
+    options.reviewPassTimeoutMs ?? DEFAULT_REVIEW_PASS_TIMEOUT_MS,
     '--review-pass-timeout-seconds',
   );
   if (hostTimeoutMs > passTimeoutMs) {
@@ -74,9 +69,6 @@ export function createReviewTimeBudget(
       return Math.min(policy.hostTimeoutMs, remainingPassTimeoutMs());
     },
     assertWithinDeadline,
-    completeSpecialistPhase() {
-      if (policy.specialistMode === 'all') assertWithinDeadline();
-    },
   };
 }
 

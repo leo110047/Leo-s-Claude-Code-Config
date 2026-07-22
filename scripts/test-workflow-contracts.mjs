@@ -156,6 +156,16 @@ assert.match(
   /\.workflow-launcher\.json and execute its exact argvPrefix plus review code --host codex/,
   'review/code must use the installed trusted Codex launcher prefix',
 );
+assert.match(
+  reviewCodeContract,
+  /review\/code always runs one core reviewer/,
+  'review/code must forbid specialist fan-out',
+);
+assert.match(
+  reviewCodeContract,
+  /runtime rejects independent agents/,
+  'review/code must enforce the specialist fan-out boundary in runtime',
+);
 
 const browserSessionContract = contracts.get(
   'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',
@@ -188,7 +198,7 @@ assert.match(
 );
 assert.match(
   reviewCodeContract,
-  /never substitute a workspace path or request escalation/,
+  /Never substitute a workspace path or request escalation/,
   'review/code must not prompt or allow a workspace-controlled launcher to escape the sandbox',
 );
 assert.match(

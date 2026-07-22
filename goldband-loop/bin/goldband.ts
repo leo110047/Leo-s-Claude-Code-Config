@@ -26,6 +26,7 @@ import {
 } from "../lib/managed-worktree-boundary";
 import {
 	assertValidReviewScopeFlags,
+	INDEPENDENT_REVIEWER_ERROR,
 	REVIEW_SCOPE_FLAGS,
 	REVIEW_EVIDENCE_DURABILITY_ENV,
 	REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
@@ -70,7 +71,7 @@ const TRUSTED_BROWSER_EXECUTABLE_ENV =
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--specialists off|auto|all] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--loop]",
+		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--loop]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
@@ -170,6 +171,15 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			throw new Error(
 				"review code always uses real mode; --mode is not accepted",
 			);
+		}
+		if (arg === "--specialists") {
+			const value = args[index + 1];
+			if (!value) throw new Error("--specialists requires a value");
+			if (value !== "off") {
+				throw new Error(`${INDEPENDENT_REVIEWER_ERROR}; remove --specialists`);
+			}
+			index += 1;
+			continue;
 		}
 		if (REVIEW_SCOPE_FLAGS.includes(arg as ReviewScopeFlag)) {
 			scopeFlags.push(arg as ReviewScopeFlag);

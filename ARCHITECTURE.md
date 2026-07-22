@@ -90,10 +90,11 @@ Concrete ownership signals include:
 `hooks/scripts/lib/rules-resolver.js` is the provider-neutral, read-only
 resolver used by both Claude and Codex review workflows.
 
-Each review creates one immutable snapshot of the current Rule text. The core
-prompt, selected specialist prompts, and prompt telemetry all consume that same
-snapshot; the next review creates a fresh one. Manifest-owned group selectors
-decide applicability, so Rule membership is not duplicated in resolver code.
+Each review creates one immutable snapshot of the current Rule text. The single
+core prompt and prompt telemetry consume that same snapshot; the next review
+creates a fresh one. The `review/code` workflow does not support independent
+specialist agents. Manifest-owned group selectors decide applicability, so Rule
+membership is not duplicated in resolver code.
 The resolver, prompt payload budget, manifest coverage, installed dependency
 inventory, and generated plugin assets are deterministic gates. Codex installs
 the resolver at `~/.codex/review-runtime/rules-resolver.js`, outside the hook

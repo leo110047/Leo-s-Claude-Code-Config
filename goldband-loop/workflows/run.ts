@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { assertValidReviewScopeOptions } from '../lib/review-runtime-contract';
+import { assertValidReviewExecutionOptions } from '../lib/review-runtime-contract';
 import { getWorkflow } from './registry';
 import { runWorkflowLoop } from './loop';
 import { resolveReviewTimeoutPolicy } from './review-timeouts';
@@ -75,7 +75,7 @@ function validateOptions(
   }
   if (`${capability}/${action}` === 'review/code') {
     try {
-      assertValidReviewScopeOptions(options);
+      assertValidReviewExecutionOptions(options);
       resolveReviewTimeoutPolicy(options);
     } catch (error) {
       usageError(error instanceof Error ? error.message : String(error));
@@ -120,7 +120,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {
