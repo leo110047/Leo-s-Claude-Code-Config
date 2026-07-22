@@ -144,7 +144,7 @@ describe('review impact graph', () => {
     }));
     const formatted = formatReviewImpactContext(impactFixture({ impactedFiles }));
 
-    expect(Buffer.byteLength(formatted)).toBeLessThan(50 * 1024);
+    expect(Buffer.byteLength(formatted)).toBeLessThan(9 * 1024);
     expect(formatted).toContain('"bounded":true');
     expect(() => reviewInputSchema.validate({
       source: 'fixture',

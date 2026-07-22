@@ -244,8 +244,8 @@ Implementation contract:
 Decision: `rules/*.md` remains the policy-content source of truth. A
 metadata-only `rules/manifest.json` selects applicable Rules for programmatic
 code review. Each review reads the current Rule text once into an immutable
-snapshot shared by its core prompt, specialist prompts, and prompt telemetry.
-The next review creates a fresh snapshot.
+snapshot shared by its single core prompt and prompt telemetry. The next review
+creates a fresh snapshot.
 
 Implementation contract:
 
@@ -833,24 +833,19 @@ Implementation contract:
 - The launcher resolves `workflows/run.ts` from the active source root or the
   installed runtime's `.installed-source`; missing runtime ownership fails
   explicitly.
-- User-supplied prompt text never proves runtime ownership. Runtime-owned child
-  prompts use the dedicated non-router `GOLDBAND_RUNTIME_TASK=review/code`
-  header, perform the supplied review inline, and never invoke `$goldband`
-  again.
+- User-supplied prompt text never proves runtime ownership. The launcher marks
+  the child environment with `GOLDBAND_REVIEW_ACTIVE`, and nested launchers fail
+  before starting another runtime or host.
 - The launcher probes the evidence root before starting. If the default
   `~/.goldband` root is blocked by the caller's filesystem sandbox, it uses a
   private temporary state root and reports the evidence as ephemeral. An
   explicitly configured state root remains fail-closed when it is not writable.
-- A Codex parent session requests host-native sandbox escalation for the
-  launcher command before execution. Codex applies its command sandbox to all
-  descendants, while the nested `codex exec` CLI must initialize Codex state
-  and app-server resources. This one parent-session admission is separate from
-  child reviewer command approval; the child remains read-only with approval
-  set to `never`.
+- The installed Codex launcher has an exact machine-local allow rule. Missing
+  launcher, runtime, or rule is an install failure rather than a request for
+  ad-hoc escalation. The child remains read-only with approval set to `never`.
 - Codex subprocesses use `--ask-for-approval never` with the read-only sandbox.
-  Core and specialist prompts prohibit `require_escalated`; blocked dynamic
-  verification is reported as unavailable instead of attempting an approval
-  flow that non-interactive `codex exec` cannot service.
+  Command approval and mutating capability are removed by the host adapter, not
+  by child prompt prose.
 - Codex reviewers also use `--ignore-user-config`, an explicit empty
   `mcp_servers` override, and `--ephemeral`. Authentication still comes from
   `CODEX_HOME`, but user/project customization cannot expose external MCP tools
@@ -873,9 +868,9 @@ Implementation contract:
 - Untracked paths are collected with `git ls-files -z` and parsed on NUL
   boundaries. Legal filenames containing newlines, tabs, quotes, or backslashes
   therefore reach the same containment and content checks as ordinary paths.
-- Core and specialist prompts are delivered over child stdin, never as command
-  arguments. The full 2 MiB input contract therefore does not depend on the
-  host operating system's smaller `ARG_MAX` limit.
+- The single core prompt is delivered over child stdin, never as a command
+  argument. The full 2 MiB input contract therefore does not depend on the host
+  operating system's smaller `ARG_MAX` limit.
 - `--diff-file` and untracked-file collection accept only stable regular files.
   They reject symbolic links and special files, validate the opened inode, and
   read through that same no-follow file descriptor. Descriptor metadata is
@@ -1030,7 +1025,7 @@ Revisit triggers:
 
 Decision: Goldband owns a bounded, persistent file dependency-impact graph in
 the typed `review/code` parent runtime. It is built only when at least two files
-changed, before host dispatch, and is passed to core and specialist prompts as
+changed, before host dispatch, and is passed to the single core prompt as
 advisory inspection context. It is not an MCP server, child-reviewer plugin, or
 independent source of findings.
 
@@ -1050,12 +1045,12 @@ Implementation contract:
 - Graph status is `analyzed`, `degraded`, or `skipped`. Limits and unreadable or
   unstable inputs become diagnostics rather than silently implying complete
   coverage.
-- Core and specialist prompts state that graph output is structural hinting
-  only. The diff remains complete review scope, and a blocking finding still
-  requires current source evidence and a reachable failure path.
-- Automatic specialist selection may add `testing` when a changed source file
-  has no observed reverse test dependency, and `maintainability` when the
-  bounded impact set is wide or truncated.
+- The core prompt treats graph output as structural hinting only. The diff
+  remains complete review scope, and a blocking finding still requires current
+  source evidence and a reachable failure path.
+- Missing observed test dependencies and wide or truncated impact remain
+  deterministic signals in the core review context; they do not dispatch
+  independent specialists.
 - Each pass emits an impact JSON artifact and telemetry for skip reason, parsed
   and reused files, edges, affected files, tests, truncation, and diagnostics.
 
@@ -1277,3 +1272,122 @@ Revisit triggers:
   host call or resending the full diff.
 - A separate user-visible cross-review capability gains an enforceable quota
   authorization contract and bounded inputs.
+
+## 2026-07-22: Review Launches Are Single-Owner and Non-Recursive
+
+Decision: make the typed runtime the owner of every deterministic review
+execution rule. A public `review/code` launch owns one active child runtime.
+That child cannot launch another review, and another session cannot concurrently
+review the same canonical repository and scope. Prompts contain only launcher
+routing that the outer host must perform and semantic judgment that code cannot
+perform.
+
+Context:
+
+- A live Codex review launched a second complete `review/code` process from
+  inside the core reviewer. Both runs received the same 310 KB prompt and same
+  diff digest, so the second run duplicated cost without adding a distinct
+  review contract.
+- Workflow and child prompts repeated launch count, polling, read-only,
+  approval, schema, specialist, timeout, and recursion rules even after the
+  runtime owned those constraints. The duplicate prose increased input tokens
+  and overstated what the outer interactive host could enforce.
+- Prompt text is not an execution boundary.
+
+Implementation contract:
+
+- The launcher fails before runtime or host startup when
+  `GOLDBAND_REVIEW_ACTIVE` is present. The marker is injected only into the
+  launched runtime environment and is inherited by its model process.
+- Before spawning the runtime, the launcher atomically acquires an owner-only
+  lease keyed by canonical repository plus normalized review scope. A live
+  matching lease rejects duplicate sessions. Stale replacement first acquires
+  a separate exclusive recovery lock, re-reads the current owner, writes a
+  same-directory replacement, and atomically renames it over the stale lease.
+  Contenders never unlink a lease they merely observed earlier. The owner
+  releases its token-matched lease in a `finally` block.
+- Durable and ephemeral evidence both use a separate stable, owner-only
+  coordination root under the canonical OS temp directory, so evidence-root
+  aliases and independent fallback roots still contend on the same lease.
+- Relative `--diff-file` scopes are canonicalized from the invocation directory,
+  matching the runtime's actual diff-file resolution.
+- Scope flags are parsed into the runtime's effective structured options and
+  serialized in a fixed field order, so equivalent `--base` plus `--worktree`
+  invocations contend on one lease regardless of CLI argument order.
+- Different explicit scopes may run concurrently. Host choice, timeout values,
+  and polling behavior do not create a second scope for the same diff.
+- The launcher and host adapter own real mode, the single host call, nested and
+  duplicate rejection, read-only capability, approval policy, timeout, output
+  schema, aggregation, validation, telemetry, and report rendering.
+- `review/code --loop` is rejected by the public launcher and unsupported by the
+  typed workflow definition. Repeated full-diff passes require a separate,
+  explicit capability and cost contract.
+- The generated workflow contract contains only installed-launcher routing,
+  scope forwarding, failure reporting, and report handoff. The child prompt
+  contains only semantic rubric, applicable Rules, impact context, repository
+  instruction discovery and the scoped diff.
+- The full scoped diff remains in the prompt and fails explicitly above 256 KiB.
+  Runtime-selected Rules use manifest-owned compact review criteria and expose
+  their full policy source for on-demand inspection. Path-only groups cannot be
+  activated by incidental prose inside the diff. Impact context is bounded to
+  8 KiB and total non-diff prompt overhead is bounded to 20 KiB.
+- Prompt telemetry records diff, Rules, impact, static criteria, total, and
+  overhead bytes. Host adapters separately persist numeric input, cache,
+  output, total-token, model, and cost fields when exposed by the CLI; raw host
+  JSONL and prompt content are not retained as usage telemetry.
+- Review strictness remains owned by the shared rubric, checklist, applicable
+  Rules snapshot, impact context, full scoped diff, and concrete failure-path
+  requirement. This decision removes duplicate execution, not review criteria.
+
+Assumptions:
+
+- Public review execution goes through the installed Goldband launcher.
+- The durable state root and fallback coordination root are private to the local
+  user, and process liveness is a sufficient stale-lease signal for local
+  duplicate suppression.
+- A user who explicitly selects different scopes intends separate reviews.
+
+Consequences:
+
+- A reviewer that tries to invoke Goldband again receives an immediate error
+  before another model process starts.
+- Two sessions cannot silently spend quota on the same repository and scope at
+  the same time, including when each uses a different ephemeral evidence root.
+- A killed launcher can leave a lease file, but the next launch recovers it when
+  the recorded process is no longer alive. A crashed recovery attempt fails
+  closed instead of allowing another paid reviewer to race through cleanup.
+- Runtime-owned instructions and the duplicate Markdown finding schema no
+  longer consume model input. Full diff, applicable Rules, and semantic criteria
+  remain because they affect review quality.
+- Outer-host polling and post-report behavior cannot be constrained by the child
+  process. The prompt only tells the outer host how to launch and return the
+  runtime result; native host lifecycle controls would be required for a hard
+  outer-session boundary.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Add only stronger prompt wording | The observed reviewer ignored equivalent guidance and started another runtime. |
+| Block every concurrent review in a repository | Prevents intentional staged and base-scope reviews that do not duplicate the same input contract. |
+| Keep runtime rules duplicated in prompts | Adds tokens without adding enforcement and makes runtime drift harder to see. |
+| Remove the full diff, applicable Rules, or semantic checklist | Changes review coverage before recall quality has been benchmarked. |
+
+Failure signals:
+
+- A model process carrying `GOLDBAND_REVIEW_ACTIVE` starts another public review
+  runtime or host model.
+- Two live leases exist for the same canonical repository and normalized scope.
+- The review workflow contract exceeds its 1 KiB routing budget or contains
+  specialist, lease, polling, or second-pass execution prose.
+- The child prompt contains runtime task markers, read-only, approval, launcher,
+  recursion, or output-schema instructions.
+- Token use remains approximately doubled for a single launch with no nested or
+  duplicate process evidence.
+
+Revisit triggers:
+
+- The host provides a native, non-bypassable child capability allowlist that can
+  replace the environment marker.
+- Review inputs gain a measured chunking or context-cache design with defect
+  recall parity against the current full-scope prompt.

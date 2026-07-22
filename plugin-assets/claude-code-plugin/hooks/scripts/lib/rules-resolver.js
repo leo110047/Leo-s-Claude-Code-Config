@@ -90,6 +90,12 @@ function validateGroupSelector(selector) {
   if (selector.phases && !Array.isArray(selector.phases)) {
     throw new Error(`invalid Rules group selector phases: ${selector.group}`);
   }
+  if (
+    selector.match !== undefined &&
+    !['all', 'paths', 'scope'].includes(selector.match)
+  ) {
+    throw new Error(`invalid Rules group selector match: ${selector.group}`);
+  }
   if (!hasPattern) return;
   try {
     new RegExp(selector.scopePattern, 'i');
@@ -163,10 +169,10 @@ function scopeText(options = {}) {
 
 function selectedRuleIds(manifest, options = {}) {
   const phase = options.phase || 'review';
-  const text = scopeText(options);
   const selectedGroups = new Set();
   for (const selector of manifest.groupSelectors) {
     if (selector.phases && !selector.phases.includes(phase)) continue;
+    const text = selectorScopeText(selector, options);
     if (
       selector.always === true ||
       new RegExp(selector.scopePattern, 'i').test(text)
@@ -181,6 +187,14 @@ function selectedRuleIds(manifest, options = {}) {
         rule.groups.some((group) => selectedGroups.has(group)),
     )
     .map((rule) => rule.id);
+}
+
+function selectorScopeText(selector, options) {
+  if (selector.match === 'paths') return (options.paths || []).join('\n');
+  if (selector.match === 'scope') {
+    return [options.command || '', options.scope || ''].join('\n');
+  }
+  return scopeText(options);
 }
 
 function createRulesSnapshot(options = {}) {

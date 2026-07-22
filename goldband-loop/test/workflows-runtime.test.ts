@@ -32,6 +32,7 @@ import {
   buildReviewPrompt,
   changedFilesFromPatch,
   MAX_REVIEW_DIFF_BYTES,
+  MAX_REVIEW_PROMPT_OVERHEAD_BYTES,
   reviewSignalFromOutput,
   reviewSteps,
   untrackedFileDiff,
@@ -39,11 +40,12 @@ import {
 import { qaChecksSchema } from '../workflows/schema';
 import {
   adapterFor,
-  MockHostAdapter,
   claudeRunJsonArgs,
   codexRunJsonArgs,
   MAX_HOST_DIAGNOSTIC_BYTES,
   MAX_HOST_STRUCTURED_OUTPUT_BYTES,
+  parseClaudeJson,
+  parseCodexUsage,
   runProcess,
 } from '../workflows/host-adapter';
 import {
@@ -895,7 +897,7 @@ describe('workflow runtime', () => {
     expect(result.stopReason).toBe('same-blocker-repeated');
   });
 
-  test('review same-blocker key ignores summary wording changes', () => {
+  test('review blocker key ignores summary wording changes', () => {
     const workflow = getWorkflow('review/code');
     const previousSignal = reviewSignalFromOutput([{
       file: 'src/example.ts',
@@ -914,13 +916,6 @@ describe('workflow runtime', () => {
 
     expect(previousSignal?.blockerKey).not.toContain('First wording');
     expect(previousSignal?.blockerKey).toBe(currentSignal?.blockerKey);
-    const decision = evaluateStopConditions(workflow, {
-      iteration: 2,
-      previousSignal,
-      stopHistory: [],
-    }, currentSignal!);
-    expect(decision.condition).toBe('same-blocker-repeated');
-    expect(decision.matched).toBe(true);
   });
 
   test('no-improvement stops when signal score is flat', async () => {
@@ -1073,40 +1068,14 @@ describe('workflow runtime', () => {
     }
   });
 
-  test('review/code loop converges after previous findings reach zero', async () => {
-    const result = await runWorkflowLoop(getWorkflow('review/code'), {
-      mode: 'mock',
-      cwd: ROOT,
-      goldbandHome: tmpHome,
-      diffFile: 'test/fixtures/workflows/review.diff',
+  test('review/code runtime rejects loops before the first model pass', () => {
+    const result = runCli(['review/code', '--loop', '--mode', 'mock'], {
+      GOLDBAND_HOME: tmpHome,
     });
 
-    expect(result.iterationCount).toBe(2);
-    expect(result.stopReason).toBe('findings-converged');
-    expect(result.signalTrail.map((entry) => signalCount(entry.signal))).toEqual([2, 0]);
-
-    const runEvents = readJsonl('review/code').filter((event) => event.runId === result.runId);
-    expect(runEvents.some((event) => event.step === 'loop-summary')).toBe(true);
-    expect(runEvents.filter((event) => event.step === 'run-review').map((event) => event.iteration))
-      .toEqual([1, 2]);
-    const secondReview = runEvents.find((event) => event.step === 'run-review' && event.iteration === 2);
-    expect(secondReview?.signalSnapshot.findingCount).toBe(0);
-
-    const reportArtifacts = runEvents
-      .filter((event) => event.step === 'render-report')
-      .map((event) => event.artifacts.find((file) => file.endsWith('.md')));
-    expect(reportArtifacts).toHaveLength(2);
-    expect(reportArtifacts[0]).toContain('iteration-1.md');
-    expect(reportArtifacts[1]).toContain('iteration-2.md');
-    expect(reportArtifacts[0]).not.toBe(reportArtifacts[1]);
-  });
-
-  test('mock review adapter reads exact loop iteration token', async () => {
-    const adapter = new MockHostAdapter();
-    const result = await adapter.runJson('GOLDBAND_LOOP_ITERATION=12', {});
-    const findings = (result.parsed as { findings: unknown[] }).findings;
-
-    expect(findings).toHaveLength(1);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('review/code does not support --loop');
+    expect(existsSync(evidencePath('review/code', { goldbandHome: tmpHome }))).toBe(false);
   });
 
   test('qa/app loop reruns only failed checks', async () => {
@@ -1134,12 +1103,11 @@ describe('workflow runtime', () => {
   });
 
   test('loop max iterations cannot exceed registry cap', async () => {
-    await expect(runWorkflowLoop(getWorkflow('review/code'), {
+    await expect(runWorkflowLoop(getWorkflow('qa/app'), {
       mode: 'mock',
       cwd: ROOT,
       goldbandHome: tmpHome,
       maxIterations: 3,
-      diffFile: 'test/fixtures/workflows/review.diff',
     })).rejects.toThrow('cannot exceed registry cap');
   });
 
@@ -1468,6 +1436,7 @@ describe('workflow runtime', () => {
   });
 
   test('large tracked diffs fail with the explicit review size contract', () => {
+    expect(MAX_REVIEW_DIFF_BYTES).toBe(256 * 1024);
     const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-repo-'));
     try {
       spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
@@ -1700,7 +1669,7 @@ describe('workflow runtime', () => {
     expect(result).toEqual([]);
   });
 
-  test('core review prompt injects the complete checklist, schema, rubric, and selected Rules', () => {
+  test('core review prompt contains judgment inputs without runtime-owned control prose', () => {
     const ctx = {
       runId: 'rules-prompt-test',
       workflow: getWorkflow('review/code'),
@@ -1713,34 +1682,49 @@ describe('workflow runtime', () => {
       '+provider permission installer change',
     ].join('\n');
     const core = buildReviewPrompt(ctx, diff);
-    expect(core.split('\n')[0]).toBe('GOLDBAND_RUNTIME_TASK=review/code');
     expect(core).toContain('# Shared Review Rubric');
-    expect(core).toContain('# Shared Finding Shape');
-    expect(core).toContain('# Read-Only Review Checklist');
-    expect(core).toContain('# Security Boundaries');
-    expect(core).toContain('# Git Workflow');
-    expect(core).toContain('# Semantic Review Criteria');
-    expect(core).toContain('never request command approval or use require_escalated');
-    expect(core).toContain('inspect applicable AGENTS.md and CLAUDE.md');
+    expect(core).toContain('# Semantic Review Checklist');
+    expect(core).toContain('RULE_ID: security');
+    expect(core).toContain('RULE_ID: git-workflow');
+    expect(core).toContain('RULE_ID: semantic-review-criteria');
+    expect(core).toContain('# Review Criteria');
+    expect(core).toContain('Inspect applicable AGENTS.md and CLAUDE.md');
+    expect(core).not.toContain('# Shared Finding Shape');
+    expect(core).not.toContain('GOLDBAND_RUNTIME_TASK=review/code');
+    expect(core).not.toContain('Read-only review.');
+    expect(core).not.toContain('never request command approval');
+    expect(core).not.toContain('Never invoke Goldband');
+    expect(core).not.toContain('Return only JSON');
 
+    const judgmentOnly = buildReviewPrompt(ctx, '', {
+      ...coreReviewRules(PROJECT_ROOT, ''),
+      text: '',
+    });
+    expect(Buffer.byteLength(judgmentOnly)).toBeLessThanOrEqual(8 * 1024);
+    expect(Buffer.byteLength(core) - Buffer.byteLength(diff))
+      .toBeLessThanOrEqual(MAX_REVIEW_PROMPT_OVERHEAD_BYTES);
   });
 
-  test('real review child prompt uses a runtime-owned non-router header', () => {
+  test('real review child prompt does not carry launcher or router instructions', () => {
     const ctx = {
       ...workflowContext(),
       options: { mode: 'real' as const, host: 'codex' as const },
     };
     const prompt = buildReviewPrompt(ctx, 'diff --git a/a.ts b/a.ts');
-    expect(prompt.split('\n')[0]).toBe('GOLDBAND_RUNTIME_TASK=review/code');
+    expect(prompt).not.toContain('GOLDBAND_RUNTIME_TASK=review/code');
     expect(prompt).not.toContain('$goldband review code');
     expect(prompt).not.toContain('GOLDBAND_TYPED_RUNTIME_ACTIVE');
+    expect(prompt).not.toContain('--ask-for-approval');
+    expect(prompt).not.toContain('--sandbox');
   });
 
   test('review Rules payload budget uses measured headroom and fails closed', () => {
     const core = coreReviewRules(PROJECT_ROOT, 'provider installer change');
     const coreBytes = Buffer.byteLength(core.text);
     expect(coreBytes).toBeLessThan(MAX_REVIEW_RULES_BYTES);
-    expect(MAX_REVIEW_RULES_BYTES).toBeGreaterThanOrEqual(32 * 1024);
+    expect(MAX_REVIEW_RULES_BYTES).toBe(16 * 1024);
+    expect(core.text).toContain('# Review Criteria');
+    expect(core.text).not.toContain('## Enforcement Surfaces');
 
     expect(() =>
       assertRulesPayloadBudget(
@@ -1765,10 +1749,23 @@ describe('workflow runtime', () => {
       host: 'codex',
       corePrompt: core.text,
       coreBundle: core.bundle,
+      coreRulesText: core.text,
+      diff: '',
     })).toMatchObject({
       selectedSpecialists: [],
       aggregateRulesBytes: coreBytes,
     });
+
+    const pathRouted = coreReviewRules(
+      PROJECT_ROOT,
+      'diff --git a/goldband-loop/example.ts b/goldband-loop/example.ts\n+approval session deploy',
+      undefined,
+      ['goldband-loop/example.ts'],
+    );
+    expect(pathRouted.bundle.ruleIds).toContain('loop-engineering');
+    expect(pathRouted.bundle.ruleIds).not.toContain('escalation');
+    expect(pathRouted.bundle.ruleIds).not.toContain('session-handoff');
+    expect(pathRouted.bundle.ruleIds).not.toContain('git-workflow');
   });
 
   test('review/code rejects independent specialist modes before collecting the diff', async () => {
@@ -1839,6 +1836,10 @@ describe('workflow runtime', () => {
   });
 
   test('Codex JSON adapter args enforce read-only sandbox and output schema', () => {
+    expect(adapterFor('codex').capabilities).toEqual({
+      readOnlyEnforced: true,
+      parallelDispatch: false,
+    });
     const args = codexRunJsonArgs('/tmp/schema.json', '/tmp/out.json');
     expect(args).toContain('--ignore-user-config');
     expect(args.indexOf('--ignore-user-config')).toBeGreaterThan(args.indexOf('exec'));
@@ -1883,6 +1884,42 @@ describe('workflow runtime', () => {
       'Read,Glob,Grep',
     ]);
     expect(args).not.toContain('prompt text');
+  });
+
+  test('host adapters extract numeric usage without retaining event payloads', () => {
+    expect(parseCodexUsage([
+      '{"type":"item.completed","item":{"text":"ignored"}}',
+      '{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":800,"output_tokens":75,"total_tokens":1275}}',
+    ].join('\n'))).toEqual({
+      source: 'codex-jsonl',
+      inputTokens: 1200,
+      cachedInputTokens: 800,
+      cacheCreationInputTokens: undefined,
+      outputTokens: 75,
+      totalTokens: 1275,
+      costUsd: undefined,
+      model: undefined,
+    });
+    expect(parseClaudeJson(JSON.stringify({
+      result: '{"findings":[]}',
+      model: 'claude-fixture',
+      total_cost_usd: 0.12,
+      usage: {
+        input_tokens: 900,
+        cache_read_input_tokens: 500,
+        cache_creation_input_tokens: 100,
+        output_tokens: 50,
+      },
+    })).usage).toEqual({
+      source: 'claude-json',
+      inputTokens: 900,
+      cachedInputTokens: 500,
+      cacheCreationInputTokens: 100,
+      outputTokens: 50,
+      totalTokens: undefined,
+      costUsd: 0.12,
+      model: 'claude-fixture',
+    });
   });
 
   test('Codex and Claude adapters pass prompts above argv limits through stdin', async () => {

@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+	chmodSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -26,12 +29,18 @@ import {
 } from "../lib/managed-worktree-boundary";
 import {
 	assertValidReviewScopeFlags,
+	assertReviewNotNested,
 	INDEPENDENT_REVIEWER_ERROR,
+	REVIEW_ACTIVE_ENV,
 	REVIEW_SCOPE_FLAGS,
 	REVIEW_EVIDENCE_DURABILITY_ENV,
 	REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
 	type ReviewScopeFlag,
 } from "../lib/review-runtime-contract";
+import {
+	acquireReviewExecutionLease,
+	releaseReviewExecutionLease,
+} from "../lib/review-execution-lease";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
 
 type ReviewHost = "claude" | "codex";
@@ -55,23 +64,24 @@ type ReviewRuntimeResolutionOptions = {
 type ReviewProcessEnvironment = {
 	env: NodeJS.ProcessEnv;
 	evidenceRoot: string;
+	coordinationRoot: string;
 	durability: "durable" | "ephemeral";
 };
 
 type ReviewProcessEnvironmentOptions = {
 	home?: string;
+	coordinationRoot?: string;
 	createTemporaryRoot?: () => string;
 	probeStateRoot?: (root: string) => void;
 };
 
 const TRUSTED_CODEX_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_CODEX_EXECUTABLE";
-const TRUSTED_BROWSER_EXECUTABLE_ENV =
-	"GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
+const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--loop]",
+		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
@@ -172,6 +182,11 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 				"review code always uses real mode; --mode is not accepted",
 			);
 		}
+		if (arg === "--loop") {
+			throw new Error(
+				"review code is single-pass; --loop is disabled to prevent repeated full-diff model calls",
+			);
+		}
 		if (arg === "--specialists") {
 			const value = args[index + 1];
 			if (!value) throw new Error("--specialists requires a value");
@@ -235,6 +250,7 @@ function installedSourceRoot(runtimeRoot: string): string | undefined {
 }
 
 function reviewCode(args: string[]): number {
+	assertReviewNotNested(process.env);
 	const runtimeFile = resolveWorkflowRuntimeFile();
 	const runtimeArgs = buildReviewRuntimeArgs(args);
 	const reviewEnvironment = prepareReviewProcessEnvironment(process.env);
@@ -249,27 +265,34 @@ function reviewCode(args: string[]): number {
 			`Goldband review: durable state root is not writable in this sandbox; evidence will use sandbox-safe temporary root ${reviewEnvironment.evidenceRoot}.`,
 		);
 	}
-	const result = spawnSync(process.execPath, [runtimeFile, ...runtimeArgs], {
-		cwd: process.cwd(),
-		env: reviewEnvironment.env,
-		stdio: "inherit",
-	});
-	if (result.error) throw result.error;
-	if (result.status === null) {
-		throw new Error(
-			`review runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
-		);
+	const lease = acquireReviewExecutionLease(
+		reviewEnvironment.coordinationRoot,
+		process.cwd(),
+		runtimeArgs,
+	);
+	reviewEnvironment.env[REVIEW_ACTIVE_ENV] = lease.token;
+	try {
+		const result = spawnSync(process.execPath, [runtimeFile, ...runtimeArgs], {
+			cwd: process.cwd(),
+			env: reviewEnvironment.env,
+			stdio: "inherit",
+		});
+		if (result.error) throw result.error;
+		if (result.status === null) {
+			throw new Error(
+				`review runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
+			);
+		}
+		return result.status;
+	} finally {
+		releaseReviewExecutionLease(lease);
 	}
-	return result.status;
 }
 
 function browserSession(args: string[]): number {
 	const hostFlag = args[0];
 	const host = args[1];
-	if (
-		hostFlag !== "--host" ||
-		(host !== "claude" && host !== "codex")
-	) {
+	if (hostFlag !== "--host" || (host !== "claude" && host !== "codex")) {
 		throw new Error(
 			"browser session requires --host claude or --host codex before the browser command",
 		);
@@ -356,7 +379,14 @@ export function prepareReviewProcessEnvironment(
 	const probe = options.probeStateRoot ?? probeWritableStateRoot;
 	try {
 		probe(evidenceRoot);
-		return { env: cleanEnv, evidenceRoot, durability: "durable" };
+		return {
+			env: cleanEnv,
+			evidenceRoot,
+			coordinationRoot: prepareTemporaryReviewCoordinationRoot(
+				options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+			),
+			durability: "durable",
+		};
 	} catch (error) {
 		if (explicitRoot || !isStateRootPermissionError(error)) throw error;
 	}
@@ -365,16 +395,51 @@ export function prepareReviewProcessEnvironment(
 		? options.createTemporaryRoot()
 		: mkdtempSync(join(tmpdir(), "goldband-review-state-"));
 	probe(temporaryRoot);
+	const coordinationRoot = prepareTemporaryReviewCoordinationRoot(
+		options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+	);
 	return {
 		env: {
 			...cleanEnv,
 			GOLDBAND_HOME: temporaryRoot,
-			[REVIEW_EVIDENCE_DURABILITY_ENV]:
-				REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
+			[REVIEW_EVIDENCE_DURABILITY_ENV]: REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
 		},
 		evidenceRoot: temporaryRoot,
+		coordinationRoot,
 		durability: "ephemeral",
 	};
+}
+
+function defaultReviewCoordinationRoot(home = homedir()): string {
+	const identity =
+		typeof process.getuid === "function"
+			? String(process.getuid())
+			: createHash("sha256").update(home).digest("hex").slice(0, 12);
+	return join(
+		realpathSync(tmpdir()),
+		`goldband-review-coordination-${identity}`,
+	);
+}
+
+function prepareTemporaryReviewCoordinationRoot(root: string): string {
+	mkdirSync(root, { recursive: true, mode: 0o700 });
+	const metadata = lstatSync(root);
+	if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+		throw new Error(
+			`review coordination root must be a real directory: ${root}`,
+		);
+	}
+	if (
+		typeof process.getuid === "function" &&
+		metadata.uid !== process.getuid()
+	) {
+		throw new Error(
+			`review coordination root is not owned by the current user: ${root}`,
+		);
+	}
+	chmodSync(root, 0o700);
+	probeWritableStateRoot(root);
+	return realpathSync(root);
 }
 
 export function resolveTrustedCodexExecutable(
@@ -465,11 +530,7 @@ function requireTrustedFile(
 	field: string,
 	value: unknown,
 ): string {
-	if (
-		typeof value !== "string" ||
-		!isAbsolute(value) ||
-		!existsSync(value)
-	) {
+	if (typeof value !== "string" || !isAbsolute(value) || !existsSync(value)) {
 		throw new Error(
 			`trusted runtime configuration field ${field} is invalid: ${configFile}`,
 		);

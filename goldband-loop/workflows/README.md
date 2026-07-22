@@ -41,8 +41,8 @@ when the target is met, the same blocker repeats, the signal stops improving,
 or the registry iteration cap is reached. A CLI cap may lower but never raise
 the registry cap.
 
-`review/code` supports typed diff collection, validated findings, and
-convergence. `qa/app` currently provides a typed mock adapter;
+`review/code` supports one typed diff-collection and model-review pass with
+validated findings. It rejects `--loop`; `qa/app` currently provides a typed mock adapter;
 real browser QA remains unsupported until its checks consume the typed
 `browser/session` evidence contract.
 
@@ -58,11 +58,12 @@ The trusted snapshot also pins the installed Codex CLI by absolute path, so a
 reviewed repository cannot replace the nested reviewer through `PATH`.
 
 The launcher forces real mode and defaults to the whole current worktree when
-the user does not name a narrower scope. User-supplied prompt text never proves
-runtime ownership. Runtime-owned child prompts use the dedicated non-router
-`GOLDBAND_RUNTIME_TASK=review/code` header and do not invoke `$goldband` again.
-Launcher or runtime failure is terminal and must not silently fall back to an
-untyped manual review.
+the user does not name a narrower scope. It rejects specialist fan-out and
+`--loop`, marks the child environment as an active review, and atomically leases
+the canonical repository plus normalized scope before starting the single host
+call. Child prompts contain semantic judgment inputs; read-only tools, approval,
+output schema, timeout, and non-recursion are runtime-owned. Launcher or runtime
+failure is terminal.
 
 Codex CLI browser work uses the same trusted launcher followed by
 `browser session --host codex <command> [args...]`. It does not depend on the
@@ -90,7 +91,9 @@ containing tabs, newlines, quotes, or backslashes are not silently omitted.
 The launcher probes the evidence root before starting. If the default
 `~/.goldband` root is blocked by the caller's filesystem sandbox, review runs
 with a private temporary state root and reports that evidence as ephemeral.
-An explicitly configured state root still fails closed when it is not writable.
+Durable and ephemeral evidence both use a separate owner-only coordination root
+under the canonical OS temp directory. An explicitly configured state root still
+fails closed when it is not writable.
 For Codex, the installer-owned exact `allow` rule admits the trusted launcher
 outside the parent command sandbox without a prompt, so nested `codex exec` can
 initialize Codex state and app-server resources. The non-interactive child
@@ -121,10 +124,8 @@ artifact plus graph telemetry so stale, skipped, and bounded coverage remain
 visible.
 
 Codex review subprocesses run with `--ask-for-approval never` and a read-only
-sandbox. Reviewer prompts prohibit `require_escalated`: when a test or other
-command needs writes, the reviewer records that verification as unavailable and
-continues from read-only evidence instead of requesting an approval that
-`codex exec` cannot service.
+sandbox. Commands that require writes or approval are unavailable by runtime
+capability rather than prompt instruction.
 They also use `--ignore-user-config`, an empty `mcp_servers` override, and
 `--ephemeral`: authentication remains available from `CODEX_HOME`, while user
 customizations, external MCP tools, and persistent reviewer sessions do not.
@@ -180,6 +181,14 @@ Untracked diff materialization is a trust boundary. The runtime skips binary,
 oversized, non-UTF-8, or secret-like content and records a no-content marker.
 Unsupported high-severity findings are downgraded instead of presented as
 verified blockers.
+
+Review prompts keep the complete scoped diff, capped at 256 KiB so oversized
+changes fail explicitly instead of consuming unbounded quota. Runtime-selected
+Rules use compact review criteria with links to their full policy sources, the
+impact projection is bounded to 8 KiB, and all non-diff prompt material must
+remain within a 20 KiB overhead budget. Prompt telemetry records component
+bytes; host telemetry records numeric token/cache/output/cost fields when the
+selected CLI exposes them, without retaining model event payloads.
 
 ## Verification
 

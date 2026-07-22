@@ -10,12 +10,24 @@ import { join } from 'node:path';
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import type { ReviewFinding } from './types';
 
-export type HostResult = {
+type HostResult = {
   text: string;
   parsed?: unknown;
+  usage?: HostUsage;
 };
 
-export type HostRunOptions = {
+export type HostUsage = {
+  source: 'codex-jsonl' | 'claude-json';
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  costUsd?: number;
+  model?: string;
+};
+
+type HostRunOptions = {
   timeoutMs: number;
 };
 
@@ -53,14 +65,14 @@ export type HostAdapter = {
   ): Promise<HostResult>;
 };
 
-const READ_ONLY_PARALLEL_CAPABILITIES = {
+const READ_ONLY_SINGLE_REVIEW_CAPABILITIES = {
   readOnlyEnforced: true,
-  parallelDispatch: true,
+  parallelDispatch: false,
 };
 
-export class MockHostAdapter implements HostAdapter {
+class MockHostAdapter implements HostAdapter {
   name = 'mock' as const;
-  capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
+  capabilities = READ_ONLY_SINGLE_REVIEW_CAPABILITIES;
 
   async runJson(
     prompt = '',
@@ -75,15 +87,8 @@ export class MockHostAdapter implements HostAdapter {
 }
 
 function mockFindingsForPrompt(prompt: string): ReviewFinding[] {
-  const iteration = loopIteration(prompt);
-  if (iteration === 1) return [mockFinding(1), mockFinding(2)];
-  if (iteration === 2) return [];
+  void prompt;
   return [mockFinding(1)];
-}
-
-function loopIteration(prompt: string): number | undefined {
-  const match = prompt.match(/^GOLDBAND_LOOP_ITERATION=(\d+)$/m);
-  return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
 function mockFinding(index: number): ReviewFinding {
@@ -101,7 +106,7 @@ function mockFinding(index: number): ReviewFinding {
 
 class CodexHostAdapter implements HostAdapter {
   name = 'codex' as const;
-  capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
+  capabilities = READ_ONLY_SINGLE_REVIEW_CAPABILITIES;
 
   async runJson(
     prompt: string,
@@ -127,7 +132,7 @@ class CodexHostAdapter implements HostAdapter {
         },
       );
       if (result.status !== 0) throw new Error(processFailureMessage(result));
-      return readStructuredResult(outputFile);
+      return readStructuredResult(outputFile, parseCodexUsage(result.stdout));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -136,7 +141,7 @@ class CodexHostAdapter implements HostAdapter {
 
 class ClaudeHostAdapter implements HostAdapter {
   name = 'claude' as const;
-  capabilities = READ_ONLY_PARALLEL_CAPABILITIES;
+  capabilities = READ_ONLY_SINGLE_REVIEW_CAPABILITIES;
 
   async runJson(
     prompt: string,
@@ -265,7 +270,10 @@ function boundedUtf8Tail(
   return { text: buffer.subarray(start).toString('utf8'), truncated: true };
 }
 
-function readStructuredResult(outputFile: string): HostResult {
+function readStructuredResult(
+  outputFile: string,
+  usage?: HostUsage,
+): HostResult {
   const size = statSync(outputFile).size;
   if (size > MAX_HOST_STRUCTURED_OUTPUT_BYTES) {
     throw new Error(
@@ -274,7 +282,7 @@ function readStructuredResult(outputFile: string): HostResult {
   }
   const text = readFileSync(outputFile, 'utf8').trim();
   if (!text) throw new Error('codex structured output file is empty');
-  return { text, parsed: JSON.parse(text) };
+  return { text, parsed: JSON.parse(text), usage };
 }
 
 function processFailureMessage(result: RunProcessResult): string {
@@ -288,10 +296,101 @@ function processFailureMessage(result: RunProcessResult): string {
     : message;
 }
 
-function parseClaudeJson(stdout: string): HostResult {
+export function parseClaudeJson(stdout: string): HostResult {
   const parsed = JSON.parse(stdout);
+  const parsedRecord = recordValue(parsed) ?? {};
+  const baseUsage = usageFromCandidate(
+    parsedRecord.usage,
+    'claude-json',
+    parsedRecord.model,
+  );
+  const usage = baseUsage
+    ? {
+        ...baseUsage,
+        costUsd: baseUsage.costUsd ?? numericValue(
+          parsedRecord,
+          'total_cost_usd',
+          'cost_usd',
+          'costUsd',
+        ),
+      }
+    : undefined;
   if (typeof parsed.result === 'string') {
-    return { text: parsed.result, parsed: JSON.parse(parsed.result) };
+    return { text: parsed.result, parsed: JSON.parse(parsed.result), usage };
   }
-  return { text: stdout, parsed };
+  return { text: stdout, parsed, usage };
+}
+
+export function parseCodexUsage(stdout: string): HostUsage | undefined {
+  const lines = stdout.split('\n').filter(Boolean).reverse();
+  for (const line of lines) {
+    let event: unknown;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!event || typeof event !== 'object') continue;
+    const item = event as Record<string, unknown>;
+    const candidates = [
+      item.usage,
+      recordValue(item.data)?.usage,
+      recordValue(item.turn)?.usage,
+    ];
+    for (const candidate of candidates) {
+      const usage = usageFromCandidate(candidate, 'codex-jsonl', item.model);
+      if (usage) return usage;
+    }
+  }
+  return undefined;
+}
+
+function usageFromCandidate(
+  candidate: unknown,
+  source: HostUsage['source'],
+  modelCandidate?: unknown,
+): HostUsage | undefined {
+  const usage = recordValue(candidate);
+  if (!usage) return undefined;
+  const result: HostUsage = {
+    source,
+    inputTokens: numericValue(usage, 'input_tokens', 'inputTokens'),
+    cachedInputTokens: numericValue(
+      usage,
+      'cached_input_tokens',
+      'cachedInputTokens',
+      'cache_read_input_tokens',
+    ),
+    cacheCreationInputTokens: numericValue(
+      usage,
+      'cache_creation_input_tokens',
+      'cacheCreationInputTokens',
+    ),
+    outputTokens: numericValue(usage, 'output_tokens', 'outputTokens'),
+    totalTokens: numericValue(usage, 'total_tokens', 'totalTokens'),
+    costUsd: numericValue(usage, 'total_cost_usd', 'cost_usd', 'costUsd'),
+    model: typeof modelCandidate === 'string' ? modelCandidate : undefined,
+  };
+  const hasMeasurement = Object.entries(result)
+    .some(([key, value]) => key !== 'source' && value !== undefined);
+  return hasMeasurement ? result : undefined;
+}
+
+function numericValue(
+  value: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : undefined;
 }

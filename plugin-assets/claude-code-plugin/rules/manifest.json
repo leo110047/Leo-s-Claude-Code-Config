@@ -7,22 +7,27 @@
     },
     {
       "group": "security",
+      "match": "scope",
       "scopePattern": "auth|permission|secret|credential|token|http|websocket|provider|adapter|process|boundary|security"
     },
     {
       "group": "loop",
+      "match": "paths",
       "scopePattern": "goldband-loop|workflow|eval|loop-engineering"
     },
     {
       "group": "delivery",
-      "scopePattern": "(^|/)(\\.github|ci|release|installer)(/|$)|(^|/)(install[^/]*|package\\.json|Dockerfile|Makefile)$|git|deploy"
+      "match": "paths",
+      "scopePattern": "(^|/)(\\.github|ci|release|installer|generated/workflow-contracts)(/|$)|(^|/)(install[^/]*|package\\.json|goldband\\.manifest\\.json|Dockerfile|Makefile)$"
     },
     {
       "group": "escalation",
-      "scopePattern": "escalat|approval|careful|freeze"
+      "match": "paths",
+      "scopePattern": "(^|/)(escalation|approval|safety-gates|freeze)([^/]*)(/|\\.|$)"
     },
     {
       "group": "handoff",
+      "match": "paths",
       "scopePattern": "session|handoff|checkpoint|context-(save|restore)"
     },
     {
@@ -42,6 +47,12 @@
       ],
       "groups": [
         "baseline"
+      ],
+      "reviewCriteria": [
+        "Keep each domain fact, decision, and capability under one authoritative owner and operation.",
+        "Contain provider and wire details inside adapters; shared contracts stay provider-neutral and runtime-validated.",
+        "Trace required surfaces through routing, registration, inventory, and dependency injection to the owning operation.",
+        "Use deterministic logic for hard invariants and fail explicitly when a core AI capability is unavailable."
       ]
     },
     {
@@ -52,6 +63,12 @@
       ],
       "groups": [
         "baseline"
+      ],
+      "reviewCriteria": [
+        "Fix the failure class at its owning layer rather than suppressing one symptom.",
+        "Prefer reuse, then deletion, then addition; new abstraction needs a real ownership boundary or stable domain concept.",
+        "Reject unrelated refactors, speculative flags, duplicated truth, and gate bypasses.",
+        "When the minimal and healthy fixes materially diverge, make that tradeoff explicit."
       ]
     },
     {
@@ -62,6 +79,11 @@
       ],
       "groups": [
         "baseline"
+      ],
+      "reviewCriteria": [
+        "Support repository claims with current files, commands, tests, or logs.",
+        "Match proof to the claimed boundary; static checks and mocks do not prove live provider or platform behavior.",
+        "A regression test counts only when it can fail for the incident or contract risk it claims to cover."
       ]
     },
     {
@@ -72,6 +94,11 @@
       ],
       "groups": [
         "baseline"
+      ],
+      "reviewCriteria": [
+        "Reject new escape hatches, skipped checks, focused tests, secret leaks, merge markers, and unexplained threshold bypasses.",
+        "Prefer readable names, explicit boundary errors, validated external input, and high-cohesion ownership.",
+        "Treat style as maintainability evidence, not a substitute for behavioral correctness."
       ]
     },
     {
@@ -82,6 +109,12 @@
       ],
       "groups": [
         "security"
+      ],
+      "reviewCriteria": [
+        "Treat localhost, child processes, SDK callbacks, tool output, and machine-generated content as untrusted boundaries.",
+        "Validate before privileged state or side effects; authenticate identity and authorize the requested action separately.",
+        "Preserve native permission authority, fail closed on missing or malformed values, and never expose secrets in output.",
+        "Use boundary-appropriate protections such as safe paths, argument arrays, parameterized queries, origin checks, and size limits."
       ]
     },
     {
@@ -92,6 +125,11 @@
       ],
       "groups": [
         "loop"
+      ],
+      "reviewCriteria": [
+        "A loop needs an evaluable target, signal, cap, and stop condition before it starts.",
+        "Each iteration stays on one hypothesis and records evidence.",
+        "Stop on success, cap, repeated blocker, or stalled signal; token and external-service cost need a stronger stopping rule."
       ]
     },
     {
@@ -102,6 +140,11 @@
       ],
       "groups": [
         "delivery"
+      ],
+      "reviewCriteria": [
+        "Review the full authorized change range and keep commits focused on one logical change.",
+        "Do not weaken gates, stage unrelated work, or perform commit, push, PR, merge, or release actions without authorization.",
+        "Verification must cover the changed failure mode and delivery summaries must match the actual diff."
       ]
     },
     {
@@ -112,6 +155,11 @@
       ],
       "groups": [
         "escalation"
+      ],
+      "reviewCriteria": [
+        "Proceed only on reversible, in-scope, verifiable work; outward-facing or materially ambiguous actions require user authority.",
+        "Stop after two unchanged failed attempts and never weaken a test, assertion, type, or lint rule to pass.",
+        "A successful-looking fix without a causal explanation is not verified."
       ]
     },
     {
@@ -122,6 +170,11 @@
       ],
       "groups": [
         "handoff"
+      ],
+      "reviewCriteria": [
+        "Persist durable decisions and partial-work evidence where the next session can verify them.",
+        "Do not duplicate facts already owned by code or git history, and do not persist memory without host policy and user authority.",
+        "Supersede conflicting records and verify recalled state before acting on it."
       ]
     },
     {
@@ -132,6 +185,13 @@
       ],
       "groups": [
         "semantic"
+      ],
+      "reviewCriteria": [
+        "Verify single authoritative truth, no dead code, and complete wiring to every required surface.",
+        "Reject symptom patches, duplicated authority, provider leakage, and unsafe permission bypasses.",
+        "Require live evidence for provider, authentication, permission, process, platform, and deployment claims.",
+        "Prefer deterministic ownership of known formats and safety invariants; isolate optional AI failure.",
+        "Report only findings with a reachable failure path and concrete evidence."
       ]
     }
   ]

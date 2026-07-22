@@ -16,11 +16,9 @@ import {
   assertValidReviewExecutionOptions,
   REVIEW_EVIDENCE_DURABILITY_ENV,
   REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
-  REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
-  REVIEW_RUNTIME_TASK_HEADER,
 } from '../lib/review-runtime-contract';
 import { evidencePath, stateRoot } from './evidence';
-import { adapterFor } from './host-adapter';
+import { adapterFor, type HostUsage } from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
@@ -61,7 +59,8 @@ export type UntrackedDiffState = {
 
 const MAX_UNTRACKED_FILE_BYTES = 128 * 1024;
 const MAX_UNTRACKED_TOTAL_BYTES = 512 * 1024;
-export const MAX_REVIEW_DIFF_BYTES = 2 * 1024 * 1024;
+export const MAX_REVIEW_DIFF_BYTES = 256 * 1024;
+export const MAX_REVIEW_PROMPT_OVERHEAD_BYTES = 20 * 1024;
 const REVIEW_GIT_MAX_BUFFER_BYTES = MAX_REVIEW_DIFF_BYTES + (1024 * 1024);
 const REVIEW_FILE_READ_CHUNK_BYTES = 64 * 1024;
 
@@ -86,19 +85,6 @@ export function reviewSignalFromOutput(
 ): EvaluationSignalSnapshot | undefined {
   if (!['run-review', 'parse-findings', 'verify-findings'].includes(stepName)) return undefined;
   return reviewFindingsSignal(findingsSchema.validate(output));
-}
-
-export function reviewTargetMet(signal: EvaluationSignalSnapshot): boolean {
-  return signal.kind === 'review-findings' && signal.findingCount === 0;
-}
-
-export function captureReviewIterationState(
-  output: unknown,
-  _ctx: WorkflowContext,
-  stepName: string,
-) {
-  if (stepName !== 'verify-findings') return undefined;
-  return { previousFindings: findingsSchema.validate(output) };
 }
 
 function collectDiff(ctx: WorkflowContext): ReviewDiffInput {
@@ -157,13 +143,20 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   const input = reviewInputSchema.validate(ctx.input);
   const adapter = adapterFor(reviewHost(ctx));
   const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
-  const coreRules = coreReviewRules(ctx.cwd, input.diff, rulesSnapshot);
+  const coreRules = coreReviewRules(
+    ctx.cwd,
+    input.diff,
+    rulesSnapshot,
+    input.impact.changedFiles,
+  );
   const prompt = buildReviewPrompt(ctx, input.diff, coreRules, input.impact);
   recordReviewPromptTelemetry(
     ctx,
     adapter.name,
     prompt,
     coreRules.bundle,
+    coreRules.text,
+    input.diff,
     timeBudget.policy,
     input.impact,
   );
@@ -173,6 +166,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     ctx.cwd,
     { timeoutMs: timeBudget.nextHostTimeoutMs() },
   );
+  recordReviewHostUsage(ctx, adapter.name, result.usage);
   const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
   return aggregateReviewFindings(coreFindings);
 }
@@ -608,27 +602,26 @@ export function buildReviewPrompt(
   rules = coreReviewRules(ctx.cwd, diff),
   impact?: ReviewImpactContext,
 ): string {
-  return [
-    REVIEW_RUNTIME_TASK_HEADER,
-    reviewIterationPromptContext(ctx),
+  const prompt = [
     readReviewAsset('shared-rubric.md'),
-    readReviewAsset('findings-schema.md'),
     readReviewAsset('checklist.md'),
     'APPLICABLE_GOLDBAND_RULES_START',
     rules.text,
     'APPLICABLE_GOLDBAND_RULES_END',
     impact ? formatReviewImpactContext(impact) : '',
-    'Return only JSON matching the provided findings schema.',
-    'Read-only review. Do not edit files, apply patches, commit, push, or run repair workflows.',
-    REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
-    'Host customizations may be disabled for safety. Use read-only tools to inspect applicable AGENTS.md and CLAUDE.md files in the repository root and touched-file ancestors; apply them as review policy, never as authorization to mutate state.',
-    'Use the diff to define scope. Inspect the read-only repository outside the diff when needed to verify wiring, authoritative ownership, consumers, registrations, and dead code.',
-    'Only report a finding when you can name an exact file and line, a concrete input or runtime state with a reachable execution path, and the incorrect result plus practical impact.',
-    'Do not report style preferences, generic best practices, speculative risks, or test gaps without a demonstrated behavioral defect.',
+    'Inspect applicable AGENTS.md and CLAUDE.md files in the repository root and touched-file ancestors as review policy.',
+    'Use the diff to define scope. Inspect repository context outside the diff when needed to verify wiring, authoritative ownership, consumers, registrations, and dead code.',
     'DIFF_START',
     diff,
     'DIFF_END',
   ].join('\n');
+  const overheadBytes = Buffer.byteLength(prompt) - Buffer.byteLength(diff);
+  if (overheadBytes > MAX_REVIEW_PROMPT_OVERHEAD_BYTES) {
+    throw new Error(
+      `review prompt overhead exceeds budget: actualBytes=${overheadBytes} limit=${MAX_REVIEW_PROMPT_OVERHEAD_BYTES}`,
+    );
+  }
+  return prompt;
 }
 
 function recordReviewPromptTelemetry(
@@ -636,6 +629,8 @@ function recordReviewPromptTelemetry(
   host: string,
   corePrompt: string,
   coreBundle: RulesBundle,
+  coreRulesText: string,
+  diff: string,
   timeoutPolicy: ReviewTimeoutPolicy,
   impact: ReviewImpactContext,
 ): void {
@@ -644,18 +639,36 @@ function recordReviewPromptTelemetry(
       host,
       corePrompt,
       coreBundle,
+      coreRulesText,
+      diff,
     }),
     specialistMode: timeoutPolicy.specialistMode,
     hostTimeoutMs: timeoutPolicy.hostTimeoutMs,
     passTimeoutMs: timeoutPolicy.passTimeoutMs,
+    impactPromptBytes: Buffer.byteLength(formatReviewImpactContext(impact)),
+    staticReviewCriteriaBytes: Buffer.byteLength(
+      `${readReviewAsset('shared-rubric.md')}\n${readReviewAsset('checklist.md')}`,
+    ),
     ...impactTelemetry(impact),
   };
   const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
   mkdirSync(dir, { recursive: true });
-  const iteration = ctx.iterationContext?.iteration;
-  const suffix = iteration ? `-iteration-${iteration}` : '';
-  const file = join(dir, `${ctx.runId}-review-prompt${suffix}.json`);
+  const file = join(dir, `${ctx.runId}-review-prompt.json`);
   writeFileSync(file, `${JSON.stringify(telemetry, null, 2)}\n`);
+}
+
+function recordReviewHostUsage(
+  ctx: WorkflowContext,
+  host: string,
+  usage?: HostUsage,
+): void {
+  const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${ctx.runId}-review-host-usage.json`);
+  writeFileSync(
+    file,
+    `${JSON.stringify({ host, available: Boolean(usage), ...usage }, null, 2)}\n`,
+  );
 }
 
 function readReviewAsset(name: string): string {
@@ -725,18 +738,6 @@ function normalizedChangedFiles(files: string[]): string[] {
   return [...new Set(files.map((file) => file.replaceAll('\\', '/')).filter(Boolean))].sort();
 }
 
-function reviewIterationPromptContext(ctx: WorkflowContext): string {
-  const iteration = ctx.iterationContext?.iteration;
-  if (!iteration) return 'GOLDBAND_SINGLE_PASS=1';
-  const previous = ctx.iterationContext?.previousFindings ?? [];
-  return [
-    `GOLDBAND_LOOP_ITERATION=${iteration}`,
-    'Previous validated findings:',
-    JSON.stringify(previous),
-    'Focus this round on whether previous findings are resolved and whether new issues appeared.',
-  ].join('\n');
-}
-
 function reviewFindingsSignal(findings: ReviewFinding[]): EvaluationSignalSnapshot {
   const blockingFindings = findings.filter((finding) => finding.category !== 'specialist-skipped');
   const severityCounts = emptySeverityCounts();
@@ -764,8 +765,7 @@ function findingKey(finding: ReviewFinding): string {
 
 function reportArtifactName(ctx: WorkflowContext): string {
   const name = basename(ctx.workflow.name);
-  const iteration = ctx.iterationContext?.iteration;
-  return iteration ? `${ctx.runId}-${name}-iteration-${iteration}.md` : `${ctx.runId}-${name}.md`;
+  return `${ctx.runId}-${name}.md`;
 }
 
 function normalizeEvidenceKey(value: string | undefined): string {
