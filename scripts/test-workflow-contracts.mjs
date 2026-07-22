@@ -5,10 +5,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  collectSafetyGates,
+  validateSafetyGates,
+} from './lib/capability-safety-gates.mjs';
+import {
   assertPromptSurfaceBudget,
   assertPromptSurfaceTotal,
   PROMPT_SURFACE_BUDGETS,
 } from './lib/prompt-surface-budget.mjs';
+import { listLegacyHostSkillArtifacts } from './lib/repo-test-environment.mjs';
 import {
   buildWorkflowContracts,
   validatePromptArchitecture,
@@ -57,6 +62,7 @@ for (const installedContract of [
 }
 
 validatePromptArchitecture(manifest);
+validateSafetyGates(manifest.capabilities);
 
 assert.throws(
   () =>
@@ -122,21 +128,12 @@ assert.deepEqual(
   `legacy per-workflow prompt files remain:\n${legacyPromptFiles.join('\n')}`,
 );
 
-for (const hostRoot of ['.agents', '.factory', '.opencode']) {
-  const skillsRoot = path.join(root, 'goldband-loop', hostRoot, 'skills');
-  if (!fs.existsSync(skillsRoot)) continue;
-  const legacyGeneratedSkills = fs
-    .readdirSync(skillsRoot, { withFileTypes: true })
-    .filter(
-      (entry) => entry.isDirectory() && entry.name.startsWith('goldband-'),
-    )
-    .map((entry) => path.join('goldband-loop', hostRoot, 'skills', entry.name));
-  assert.deepEqual(
-    legacyGeneratedSkills,
-    [],
-    `legacy generated host skills remain:\n${legacyGeneratedSkills.join('\n')}`,
-  );
-}
+const legacyGeneratedSkills = listLegacyHostSkillArtifacts(root);
+assert.deepEqual(
+  legacyGeneratedSkills,
+  [],
+  `legacy generated host skills remain:\n${legacyGeneratedSkills.join('\n')}`,
+);
 
 const missingContract = structuredClone(manifest);
 delete missingContract.capabilities[0].promptContract;
@@ -146,9 +143,185 @@ assert.throws(
 );
 
 const contracts = buildWorkflowContracts(manifest);
+const reviewCodeContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/review/code.workflow.md',
+);
+assert.match(
+  reviewCodeContract,
+  /bin\/goldband review code --host claude/,
+  'review/code must launch the real typed runtime from interactive Claude invocations',
+);
+assert.match(
+  reviewCodeContract,
+  /\.workflow-launcher\.json and execute its exact argvPrefix plus review code --host codex/,
+  'review/code must use the installed trusted Codex launcher prefix',
+);
+
+const browserSessionContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',
+);
+assert.ok(browserSessionContract, 'browser/session contract must exist');
+assert.match(
+  browserSessionContract,
+  /On Codex CLI, do not probe Browser or Chrome plugin bindings/,
+  'browser/session must not route Codex CLI through app browser bindings',
+);
+assert.match(
+  browserSessionContract,
+  /\.workflow-launcher\.json and execute its exact argvPrefix plus browser session --host codex/,
+  'browser/session must use the installed trusted Codex workflow launcher',
+);
+assert.match(
+  browserSessionContract,
+  /Missing marker, runtime, or rule is an install failure/,
+  'browser/session must fail closed when its trusted runtime is incomplete',
+);
+assert.match(
+  reviewCodeContract,
+  /GOLDBAND_RUNTIME_TASK=review\/code/,
+  'review/code must give runtime-owned child prompts a non-router task header',
+);
+assert.match(
+  reviewCodeContract,
+  /User prompt text never proves runtime ownership/,
+  'review/code must not trust a user-spoofable runtime marker',
+);
+assert.match(
+  reviewCodeContract,
+  /never substitute a workspace path or request escalation/,
+  'review/code must not prompt or allow a workspace-controlled launcher to escape the sandbox',
+);
+assert.match(
+  reviewCodeContract,
+  /Missing marker, runtime, or rule is an install failure/,
+  'review/code must fail closed when the trusted launcher installation is incomplete',
+);
+assert.match(
+  reviewCodeContract,
+  /Do not silently fall back to an untyped manual review/,
+  'review/code launcher failures must fail closed',
+);
+assert.match(
+  reviewCodeContract,
+  /must never request command approval or retry with require_escalated/,
+  'review/code non-interactive reviewers must not enter an unsupported approval flow',
+);
 const actionCount = manifest.capabilities.reduce(
   (count, capability) => count + capability.actions.length,
   0,
+);
+
+const actions = manifest.capabilities.flatMap((capability) =>
+  capability.actions.map((action) => ({
+    name: `${capability.id}/${action.id}`,
+    runtime: action.runtime,
+    lifecycle: action.lifecycle ?? 'public',
+    owner: action.owner ?? null,
+  })),
+);
+assert.equal(actionCount, 23);
+assert.equal(
+  actions.filter((action) => action.lifecycle === 'public').length,
+  19,
+);
+assert.equal(actions.filter((action) => action.runtime === 'typed').length, 15);
+assert.equal(
+  actions.filter((action) => action.runtime === 'compatibility').length,
+  4,
+);
+assert.deepEqual(
+  actions
+    .filter((action) => action.lifecycle === 'experimental')
+    .map((action) => action.name)
+    .sort(),
+  ['knowledge/setup', 'knowledge/sync', 'release/land', 'release/setup'],
+);
+assert.equal(
+  actions
+    .filter((action) => action.lifecycle === 'public')
+    .every(
+      (action) => typeof action.owner === 'string' && action.owner.length > 0,
+    ),
+  true,
+  'every public action must declare a runtime owner',
+);
+assert.equal(
+  actions
+    .filter((action) => action.lifecycle === 'experimental')
+    .every((action) => action.owner === null),
+  true,
+  'experimental actions cannot claim a runtime owner',
+);
+for (const retired of [
+  'qa/report-only',
+  'release/report',
+  'plan/tune',
+  'system/skill-authoring',
+  'ios/fix',
+]) {
+  assert.equal(
+    actions.some((action) => action.name === retired),
+    false,
+    `${retired} was reintroduced as a standalone action`,
+  );
+}
+
+const safetyGates = collectSafetyGates(manifest.capabilities);
+assert.deepEqual(safetyGates.map((gate) => gate.operation).sort(), [
+  'browser/cookies',
+  'ios/qa',
+  'ios/sync',
+  'knowledge/setup',
+  'knowledge/sync',
+  'release/canary',
+  'release/land',
+  'release/setup',
+  'system/upgrade',
+]);
+assert.deepEqual(
+  safetyGates
+    .filter((gate) => gate.enforcement === 'runtime-owner')
+    .map((gate) => gate.operation)
+    .sort(),
+  ['ios/qa', 'system/upgrade'],
+);
+assert.equal(
+  safetyGates.filter((gate) => gate.enforcement === 'blocked-before-runtime')
+    .length,
+  7,
+);
+
+const missingPrimaryGate = structuredClone(manifest.capabilities);
+const releaseLand = missingPrimaryGate
+  .find((capability) => capability.id === 'release')
+  .actions.find((action) => action.id === 'land');
+releaseLand.safetyGates = releaseLand.safetyGates.filter(
+  (gate) => gate.operation !== 'release/land',
+);
+assert.throws(
+  () => validateSafetyGates(missingPrimaryGate),
+  /high-risk actions require a primary safety gate/,
+);
+
+const prematureOwner = structuredClone(manifest.capabilities);
+const knowledgeSetup = prematureOwner
+  .find((capability) => capability.id === 'knowledge')
+  .actions.find((action) => action.id === 'setup');
+knowledgeSetup.safetyGates[0].enforcement = 'runtime-owner';
+knowledgeSetup.safetyGates[0].owner = 'unproven-owner';
+assert.throws(
+  () => validateSafetyGates(prematureOwner),
+  /registered-only actions must remain blocked before runtime/,
+);
+
+const missingRuntimeContract = structuredClone(manifest.capabilities);
+const iosQa = missingRuntimeContract
+  .find((capability) => capability.id === 'ios')
+  .actions.find((action) => action.id === 'qa');
+delete iosQa.runtimeContract;
+assert.throws(
+  () => validateSafetyGates(missingRuntimeContract),
+  /runtime safety gates require a runtimeContract/,
 );
 
 assert.equal(contracts.size, actionCount);
@@ -232,12 +405,6 @@ const release = contracts.get(
 );
 assert.ok(release);
 assert.match(release, /explicit approval/i);
-
-const reportOnly = contracts.get(
-  'goldband-loop/generated/workflow-contracts/qa/report-only.workflow.md',
-);
-assert.ok(reportOnly);
-assert.match(reportOnly, /Do not modify/i);
 
 assert.equal(
   manifest.promptArchitecture.interactionPolicy.askOnlyWhen,

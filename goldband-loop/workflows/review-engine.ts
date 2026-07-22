@@ -1,11 +1,18 @@
 import { readFileSync } from 'node:fs';
-import type { HostAdapter } from './host-adapter';
+import { REVIEW_NON_INTERACTIVE_COMMAND_POLICY } from '../lib/review-runtime-contract';
+import type { HostAdapter, HostRunOptions } from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
-  specialistReviewRules,
+  formatReviewImpactContext,
+  type ReviewImpactContext,
+  WIDE_IMPACT_FILE_THRESHOLD,
+} from './review-impact';
+import {
   type RulesBundle,
   type RulesSnapshot,
+  specialistReviewRules,
 } from './review-rules';
+import { DEFAULT_REVIEW_HOST_TIMEOUT_MS } from './review-timeouts';
 import type { ReviewFinding, WorkflowContext } from './types';
 
 const REVIEW_SEVERITIES: ReviewFinding['severity'][] = [
@@ -63,7 +70,11 @@ const SPECIALIST_GUIDANCE: Record<ReviewSpecialist, string> = {
     'Check duplicated logic, abstraction fit, module boundaries, naming, and long-term maintenance risk.',
 };
 
-export function selectReviewSpecialists(diff: string, mode: SpecialistMode = 'auto'): SpecialistSelection {
+export function selectReviewSpecialists(
+  diff: string,
+  mode: SpecialistMode = 'auto',
+  impact?: ReviewImpactContext,
+): SpecialistSelection {
   if (mode === 'off') {
     return {
       selected: [],
@@ -93,6 +104,16 @@ export function selectReviewSpecialists(diff: string, mode: SpecialistMode = 'au
   if (/\b(performance|n\+1|bundle|cache stampede|memory pressure|latency regression|hot path)\b/.test(lower)) {
     selected.push('performance');
   }
+  if (impact && impact.status !== 'skipped' && impact.filesWithoutObservedTests.length > 0) {
+    selected.push('testing');
+  }
+  if (
+    impact &&
+    impact.status !== 'skipped' &&
+    (impact.truncated || impact.impactedFiles.length >= WIDE_IMPACT_FILE_THRESHOLD)
+  ) {
+    selected.push('maintainability');
+  }
 
   const selectedSet = new Set(selected);
 
@@ -114,6 +135,9 @@ export async function runParallelSpecialistReview(
   schema: unknown,
   mode: SpecialistMode = 'auto',
   prepared?: PreparedSpecialistReview,
+  hostRunOptions: () => HostRunOptions = () => ({
+    timeoutMs: DEFAULT_REVIEW_HOST_TIMEOUT_MS,
+  }),
 ): Promise<ReviewFinding[]> {
   const selection = prepared?.selection ?? selectReviewSpecialists(diff, mode);
   if (mode === 'off') {
@@ -143,6 +167,7 @@ export async function runParallelSpecialistReview(
       prompt,
       schema,
       ctx.cwd,
+      hostRunOptions(),
     );
     return normalizeSpecialistFindings(unwrapFindings(result.parsed), specialist);
   });
@@ -168,13 +193,14 @@ export function prepareSpecialistReview(
   diff: string,
   mode: SpecialistMode = 'auto',
   snapshot?: RulesSnapshot,
+  impact?: ReviewImpactContext,
 ): PreparedSpecialistReview {
-  const selection = selectReviewSpecialists(diff, mode);
+  const selection = selectReviewSpecialists(diff, mode, impact);
   const items = selection.selected.map((specialist) => {
     const rules = specialistReviewRules(ctx.cwd, specialist, snapshot);
     return {
       specialist,
-      prompt: buildSpecialistPrompt(ctx, diff, specialist, rules),
+      prompt: buildSpecialistPrompt(ctx, diff, specialist, rules, impact),
       bundle: rules.bundle,
     };
   });
@@ -215,6 +241,7 @@ export function buildSpecialistPrompt(
   diff: string,
   specialist: ReviewSpecialist,
   rules = specialistReviewRules(ctx.cwd, specialist),
+  impact?: ReviewImpactContext,
 ): string {
   const sharedRubric = readSharedReviewAsset('shared-rubric.md');
   const schemaAsset = readSharedReviewAsset('findings-schema.md');
@@ -222,6 +249,7 @@ export function buildSpecialistPrompt(
   return [
     `GOLDBAND_REVIEW_SPECIALIST=${specialist}`,
     'Read-only specialist review. Do not edit files. Do not run repair workflows.',
+    REVIEW_NON_INTERACTIVE_COMMAND_POLICY,
     'Use the diff to define scope, then inspect the repository outside the diff when needed to trace authoritative owners, producers, consumers, routes, registrations, facades, and sibling implementations.',
     'Repository inspection is read-only. Never mutate files or repository state.',
     `Responsibility: ${SPECIALIST_GUIDANCE[specialist]}`,
@@ -232,6 +260,7 @@ export function buildSpecialistPrompt(
     'APPLICABLE_GOLDBAND_RULES_START',
     rules.text,
     'APPLICABLE_GOLDBAND_RULES_END',
+    impact ? formatReviewImpactContext(impact) : '',
     'Return only JSON matching the supplied output schema: {"findings":[...]}',
     'Only report a finding when you can name an exact file and line, a concrete input or runtime state with a reachable execution path, and the incorrect result plus practical impact.',
     'Do not report style preferences, generic best practices, speculative risks, or test gaps without a demonstrated behavioral defect.',

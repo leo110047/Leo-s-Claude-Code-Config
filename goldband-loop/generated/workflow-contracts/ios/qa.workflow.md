@@ -16,3 +16,13 @@ Run iOS QA.
 ## Verification
 
 - Use the relevant build, test, simulator, screenshot, or project-state evidence and report untested device coverage.
+
+## Runtime contract
+
+Modes and required inputs:
+
+- `qa`: `targetScope`, `checks`
+
+Outputs: `simulator-inventory`, `qa-evidence-artifact`, `untested-device-coverage`.
+
+Side effects:

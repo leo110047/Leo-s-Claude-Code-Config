@@ -157,7 +157,7 @@ The remote agent then hits `POST /auth/mint` against the daemon's tailnet listen
 
 ## Step 6: Ship a release build
 
-Before you ship to TestFlight or the App Store, run `/goldband ios clean`. It removes the `DebugBridge` SPM dependency and strips the `#if DEBUG` wiring from your `@main` App. The structural guard in `Package.swift` (`condition: .when(configuration: .debug)`) means a Release build wouldn't link the bridge even if you forgot to clean up, but `/goldband ios clean` gives you a tidy diff to review and ship.
+Before you ship to TestFlight or the App Store, run `/goldband ios qa` and include the release-cleanup check. It verifies that the `DebugBridge` SPM dependency and `#if DEBUG` wiring are absent from the release surface. The structural guard in `Package.swift` (`condition: .when(configuration: .debug)`) means a Release build wouldn't link the bridge even if cleanup was missed, but the QA evidence gives you a tidy diff to review and ship.
 
 ## Common failures
 
@@ -175,6 +175,6 @@ Before you ship to TestFlight or the App Store, run `/goldband ios clean`. It re
 
 ## What this gets you
 
-You can write an agent loop in any language that speaks HTTP. Take a screenshot, ask a model what to do, send a tap. Capture state snapshots before and after to record deterministic fixtures for `/goldband ios fix` regression tests. Add a colleague to the allowlist and they drive your iPhone from their laptop over Tailscale without ever touching the hardware. Plug the same daemon into CI by minting a `tag:ci` session token with mutate-tier capability and a 24-hour TTL.
+You can write an agent loop in any language that speaks HTTP. Take a screenshot, ask a model what to do, send a tap. Capture state snapshots before and after as deterministic `/goldband ios qa` regression evidence, then repair verified failures in the same requested work. Add a colleague to the allowlist and they drive your iPhone from their laptop over Tailscale without ever touching the hardware. Plug the same daemon into CI by minting a `tag:ci` session token with mutate-tier capability and a 24-hour TTL.
 
 The whole stack is a Mac you already own, an iPhone you already own, a free Apple developer account, and goldband. No paid testing service. No simulator drift. The thing the user sees is what the agent drives.

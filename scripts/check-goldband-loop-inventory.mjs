@@ -12,6 +12,7 @@ import {
   GENERATED_RUNTIME_BINARY_SOURCES,
 } from './lib/goldband-source-inventory.mjs';
 import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
+import { assertInstalledManagedWorktreeSurface } from './lib/managed-worktree-install-check.mjs';
 import { assertInstalledWorkflowDocuments } from './lib/workflow-contract-install-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +48,7 @@ const RETIRED_SHIP_REFERENCE_ALLOWLIST = [
   'goldband-loop/test/uninstall.test.ts',
   'scripts/check-goldband-loop-inventory.mjs',
   'scripts/test-workflow-integration.sh',
+  'scripts/test-workflow-integration-fixture.sh',
 ];
 const RETIRED_LOOP_CI_ASSETS = [
   '.github/actionlint.yaml',
@@ -75,6 +77,7 @@ function main() {
     runInstall(tmpHome, 'workflow');
     runInstall(tmpHome, 'workflow-codex');
     assertInstalledStandardInventory(tmpHome, inventory, capabilityContract);
+    assertInstalledManagedWorktreeSurface(tmpHome);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });

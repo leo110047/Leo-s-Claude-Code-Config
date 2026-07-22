@@ -7,9 +7,9 @@ flow, and a layered prompt-injection defense — all behind a compiled CLI that
 prints plain text to stdout. ~100-200ms per call. Zero context-token overhead.
 
 If you've used goldband in the last release or two, the productivity loop is the
-new headline: `/goldband browser scrape <intent>` drives a page once,
-`/goldband system skill-authoring` codifies the flow into a deterministic
-Playwright script, and the next `/goldband browser scrape` on the
+new headline: `/goldband browser session <intent>` drives a page once, the
+browser skill authoring tool codifies the flow into a deterministic
+Playwright script, and the next `/goldband browser session` on the
 same intent runs in ~200ms instead of ~30 seconds of agent re-exploration.
 
 ---
@@ -31,9 +31,9 @@ $B text                          # get clean page text
 $B screenshot /tmp/hn.png
 
 # Codify a repeated flow
-/goldband browser scrape latest hacker news stories
-/goldband system skill-authoring              # writes ~/.goldband/browser-skills/hn-front/...
-/goldband browser scrape hacker news front page # second call: 200ms via the codified skill
+/goldband browser session latest hacker news stories
+# Use the browser skill authoring tool; it writes ~/.goldband/browser-skills/hn-front/...
+/goldband browser session hacker news front page # second call: 200ms via the codified skill
 
 # Watch Claude work in real time
 $B connect                       # headed Chromium + Side Panel extension
@@ -87,7 +87,7 @@ Three escalating modes:
 
 - **Headless** (default). Daemon runs Chromium with no visible window. Fastest,
   cheapest, what capabilities like `/goldband qa app`,
-  `/goldband review design`, and `/goldband benchmark workflow` use by
+  `/goldband design consult`, and `/goldband benchmark workflow` use by
   default.
 - **Headed via `$B connect`**. Same daemon, but Chromium is visible (rebranded
   as "Goldband Loop Browser") with the Side Panel extension auto-loaded. You watch
@@ -105,7 +105,7 @@ The shipped headline of v1.19.0.0. Two Goldband capability actions wrap the
 browser-skills runtime so the second time you ask Claude to scrape a page, it
 runs in ~200ms.
 
-### `/goldband browser scrape <intent>`
+### `/goldband browser session <intent>`
 
 One entry point for pulling page data. Three paths under the hood:
 
@@ -114,18 +114,18 @@ One entry point for pulling page data. Three paths under the hood:
    and runs `$B skill run <name>` if a confident match exists.
 2. **Prototype path (~30s)** — no match, agent drives the page with `$B goto`,
    `$B text`, `$B html`, `$B links`, etc., returns the JSON, and appends a
-   one-line "run `/goldband system skill-authoring`" suggestion.
+   one-line suggestion to use the browser skill authoring tool.
 3. **Mutating-intent handoff** — verbs like *submit*, *click*, and *fill*
-   route to `/goldband browser session`. `/goldband browser scrape` remains
+   remain behind the browser tool's native approval path. Read-only session work remains
    read-only by contract.
 
-### `/goldband system skill-authoring`
+### Browser skill authoring tool
 
-Codifies the most recent successful `/goldband browser scrape` prototype into
+Codifies the most recent successful `/goldband browser session` prototype into
 a permanent browser-skill on disk. Eleven steps, three locked contracts:
 
 - **D1 — Provenance guard.** Walks back ≤10 agent turns for a clearly-bounded
-  `/goldband browser scrape` result. Refuses with one specific message if cold. No silent
+  `/goldband browser session` result. Refuses with one specific message if cold. No silent
   synthesis from chat fragments.
 - **D2 — Synthesis input slice.** Extracts ONLY the final-attempt `$B` calls
   that produced the JSON the user accepted, plus the user's intent string.
@@ -456,12 +456,12 @@ exit if exceeded). Matches `gh` / `kubectl` / `docker` conventions.
 
 Each skill ships its own copy of `browse-client.ts` at `_lib/browse-client.ts`,
 byte-identical to the canonical `browse/src/browse-client.ts`.
-`/goldband system skill-authoring`
+The browser skill authoring tool
 copies the canonical SDK alongside every generated script. Each skill is
 fully self-contained: copy the directory anywhere, it runs. Version drift
 impossible — the SDK is frozen at the version the skill was authored against.
 
-### Atomic write discipline (`/goldband system skill-authoring` D3)
+### Atomic write discipline (browser skill authoring D3)
 
 `browse/src/browser-skill-write.ts` provides three primitives:
 
@@ -545,7 +545,7 @@ and bookmarks stays untouched.
 
 ### CDP-aware skills
 
-When in real-browser mode, `/goldband qa app` and `/goldband review design`
+When in real-browser mode, `/goldband qa app` and `/goldband design consult`
 automatically skip
 cookie import prompts and headless workarounds — the headed browser already
 has whatever session you logged into.
@@ -685,7 +685,7 @@ by a 26-command allowlist, scoped tokens, and a denial log.
 ### How it works
 
 ```bash
-/goldband browser pair          # generates a setup key, prints connection instructions
+/goldband browser session       # use $B pair-agent to generate a setup key
 # Copy the instructions to the remote agent
 # Remote agent runs:
 #   POST <tunnel-url>/connect with setup key → gets a scoped token (24h, single client)
@@ -1101,7 +1101,7 @@ $B ux-audit
 Returns JSON with site identity, navigation, headings (capped 50), text
 blocks, interactive elements (capped 200) — page structure for behavioral
 analysis without dumping the full HTML. Used by `/goldband qa app` and
-`/goldband review design`
+`/goldband design consult`
 for cheap coverage maps.
 
 ---
@@ -1237,7 +1237,7 @@ browser-skills/
     ├── fixtures/hn-2026-04-26.html
     └── script.test.ts
 
-generated/workflow-contracts/    # thin browser/scrape and system/skill-authoring contracts
+generated/workflow-contracts/    # thin capability contracts, including browser/session and document/generate
 ```
 
 ---
@@ -1311,7 +1311,7 @@ re-capture the fixture, update the parser test. `bun test` validates the
 SKILL.md contract (sibling SDK byte-identity, frontmatter schema).
 
 For an agent-written skill: drive the page once with
-`/goldband browser scrape <intent>`, run `/goldband system skill-authoring`,
+`/goldband browser session <intent>`, use the browser skill authoring tool,
 and accept the proposed name in the approval gate. The skill
 lands at `~/.goldband/browser-skills/<name>/` after the test passes.
 
@@ -1337,10 +1337,10 @@ cp browse/dist/browse ~/.claude/skills/goldband/browse/dist/browse
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — system-level architecture, dual-listener tunnel design, prompt-injection defense threat model
 - [`CLAUDE.md`](CLAUDE.md) — project-level instructions, sidebar architecture notes, security-stack constraints
-- [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for `/goldband browser pair` (setup keys, scoped tokens, denial log)
+- [`docs/REMOTE_BROWSER_ACCESS.md`](docs/REMOTE_BROWSER_ACCESS.md) — operator guide for the `$B pair-agent` session command (setup keys, scoped tokens, denial log)
 - [`docs/designs/BROWSER_SKILLS_V1.md`](docs/designs/BROWSER_SKILLS_V1.md) — design doc for browser-skills runtime (Phase 1 + 2a + roadmap)
-- [`browser/scrape` workflow contract](generated/workflow-contracts/browser/scrape.workflow.md) — match-or-prototype data extraction
-- [`system/skill-authoring` workflow contract](generated/workflow-contracts/system/skill-authoring.workflow.md) — codify the last scrape into a permanent skill
+- [`browser/session` workflow contract](generated/workflow-contracts/browser/session.workflow.md) — read-only browser session delegation
+- [`document/generate` workflow contract](generated/workflow-contracts/document/generate.workflow.md) — deterministic documentation audit artifacts
 - [`TODOS.md`](TODOS.md) — remaining browser resolver, eval, and sandbox work
 
 ---

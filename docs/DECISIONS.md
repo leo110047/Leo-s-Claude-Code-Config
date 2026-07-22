@@ -1,5 +1,196 @@
 # Goldband Decisions
 
+## 2026-07-16: Repository Runtime Tests Require Bun 1.3.11 and Explicit Bootstrap
+
+Decision: treat Bun 1.3.11 as the minimum supported Goldband Loop runtime and
+make repository test setup an explicit, deterministic bootstrap step. The root
+test entrypoint remains offline and non-mutating; it fails early with one
+remediation command when declared dependencies, the Bun minimum, or retired
+ignored host artifacts are not ready.
+
+Implementation contract:
+
+- `goldband-loop/package.json` owns the Bun minimum and exact package-manager
+  version. Setup reads the minimum from that contract and rejects older Bun
+  before build, cleanup, or install side effects.
+- CI pins the same Bun release on every platform. macOS runs the focused real
+  PTY/WebSocket test plus the workflow and complete free runtime suites.
+- `npm run bootstrap:test` installs the root, `mcp/server`, and
+  `goldband-loop` lockfiles with their package-native installers. It also
+  removes entries from ignored legacy host skill roots only when the shared
+  retired inventory or a managed marker proves Goldband ownership. The root
+  `goldband` skill, unrelated entries, and unknown same-prefix skills remain.
+- `npm test` performs an offline preflight and reports all missing prerequisites
+  before starting the fail-fast suite runner. Focused `--suite` runs remain
+  available for diagnostics without requiring unrelated package setup.
+
+Assumptions:
+
+- Bun 1.3.11 or newer preserves the verified macOS PTY and WebSocket behavior.
+- `npm ci` and `bun install --frozen-lockfile` remain the authoritative clean
+  installers for their respective lockfiles.
+- The tracked retired-entry inventory remains the authoritative migration list;
+  new managed entries carry an explicit marker instead of claiming a prefix.
+
+Consequences:
+
+- A checkout that only ran root `npm ci` now gets a precise MCP/Loop dependency
+  error instead of failing later because nested `tsc` is absent.
+- Developers run one explicit bootstrap after clone, lockfile changes, or
+  installer migrations; ordinary test reruns do not access the network or
+  silently rewrite the checkout.
+- Bun 1.2.x is no longer advertised as supported. Environments pinned below
+  1.3.11 must upgrade before setup or the full runtime suite.
+- macOS CI takes longer because it now owns the same runtime confidence expected
+  from Linux instead of validating only installer and Playwright setup paths.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep `engines.bun >=1.0.0` and patch only the two tests | The failures reproduce in Bun 1.2.21 but pass unchanged in 1.3.11; weakening the runtime tests would preserve a false support claim. |
+| Let `npm test` install missing dependencies automatically | Makes a validation command networked and mutating, and hides checkout/bootstrap drift. |
+| Convert the root package to mixed npm/Bun workspaces | Does not give npm authoritative ownership of the Bun lockfile and expands the packaging change beyond the failure. |
+| Ignore legacy generated host artifacts in contract tests | Leaves removed public entrypoints on upgraded checkouts and makes installed state differ from clean state. |
+
+Failure signals:
+
+- A supported Bun release fails the focused macOS PTY/WebSocket round trip.
+- CI, setup instructions, `packageManager`, and `engines.bun` name different
+  Bun versions.
+- `npm run bootstrap:test && npm test` fails on a clean supported checkout due
+  to missing declared dependencies or ignored legacy artifacts.
+- Cleanup removes the root `goldband` skill, unrelated host entries, or unknown
+  same-prefix entries without a managed marker.
+
+Revisit triggers:
+
+- A newer Bun release is adopted after the same cross-platform suite passes.
+- Bun documents a lower stable release with equivalent PTY/WebSocket behavior
+  and the focused test verifies it on macOS.
+- The repository adopts one package manager and lockfile owner for all nested
+  packages, making the explicit multi-package bootstrap unnecessary.
+
+## 2026-07-16: Managed Agent Worktrees Use an OS Sandbox and Brokered Finish
+
+Decision: keep the public worktree interface to `goldband worktree create` and
+`goldband worktree finish`. `create` opens the agent inside a host OS sandbox
+where working files are writable but all Git metadata and the source worktree
+are read-only. `finish` is the only Git-writing path and runs outside that
+sandbox after the user exits the managed shell.
+
+Implementation contract:
+
+- Leases, locks, scratch indexes, checkouts, and finish evidence live under the
+  canonical real path of the declared Goldband state root at
+  `~/.goldband/worktrees/` by default. Every lease, policy, and validation path
+  uses that same canonical root, including macOS `/var` to `/private/var`
+  resolution and user-supplied symlink aliases.
+- The lease records canonical repository, source branch/worktree, base commit,
+  common Git directory, per-worktree Git directory, enforcement boundary, and
+  evidence target. Control files are owner-only.
+- `create` accepts only a clean source worktree on a normal branch, creates a
+  detached worktree, creates no branch, and probes the boundary before exposing
+  the interactive shell.
+- macOS uses Seatbelt to deny writes to source/Git/control state and every
+  recorded broker input. Linux uses a read-only root through bubblewrap. Both
+  expose a separate writable agent scratch directory while broker scratch stays
+  read-only to the agent. Unsupported platforms, missing runtimes, failed
+  probes, and nested hosts that cannot establish the boundary fail closed
+  instead of falling back to hook-only enforcement.
+- Claude Code and Codex run inside the same inherited process boundary. Their
+  PreToolUse adapters and the global `pre-commit` hook are early diagnostics,
+  not authorization owners.
+- The managed shell instructs Codex to use `--sandbox danger-full-access` and
+  Claude Code to apply `sandbox.enabled=false`. This disables only the nested
+  OS sandbox that macOS cannot reliably establish; ordinary permission prompts
+  and hooks remain active, and neither setting can bypass the outer boundary.
+- `finish` validates the lease/marker, unchanged branch/base, clean source,
+  Git locks, detached managed HEAD, tracked/untracked changes, and ignored
+  files. It also compares source ignored paths with the prepared candidate tree
+  immediately before integration. A file/directory collision stops and
+  preserves the worktree, so ignored source content cannot be overwritten or
+  removed by `updateInstead`.
+- A broker-owned temporary index and object directory create the candidate in
+  lease scratch. A local `receive-pack` quarantines those objects, accepts only
+  a fast-forward of the checked-out original branch, and updates its clean
+  worktree. Failed receives do not promote the candidate into the source object
+  store. The managed worktree is removed only after commit, tree, branch, and
+  clean-worktree readback succeed.
+- At `create`, the broker pins a canonical trusted Git executable, captures the
+  user identity, resolves only source/common-Git-owned local config and hook
+  paths, and records their digest. The outer OS policy makes that executable,
+  Goldband runtime, source config/hooks, global Git config inputs, and installed
+  launcher/runtime paths read-only to the agent.
+- At `finish`, every broker Git subprocess uses the pinned executable and an
+  allowlisted environment with isolated `HOME`/XDG config, ignored system and
+  global Git config, fixed identity, trusted `PATH`, and explicit hook/fsmonitor
+  settings. The local receiver additionally pins the source-owned `hooksPath`,
+  rejects non-fast-forwards, and uses `updateInstead`. The client-side
+  `pre-push` hook remains disabled; receiver-side hooks still run only from the
+  recorded source-owned hook root.
+- Integration and cleanup are recoverable states. Before durable integration,
+  every failure preserves the worktree. After integration, the lease remains
+  until cleanup and evidence persistence succeed. If the broker process stops
+  after preparing a scratch candidate but before receive, the next `finish`
+  discards that candidate and rebuilds it from the still-present worktree.
+
+Assumptions:
+
+- The user starts agents from the shell opened by `create` and runs `finish`
+  only after exiting it.
+- Seatbelt and bubblewrap continue to enforce restrictions on all descendants;
+  a same-permission host user outside the sandbox is intentionally trusted.
+- Source-branch movement and source-worktree edits are external concurrent
+  changes and must stop, not merge heuristically.
+
+Consequences:
+
+- Direct `git commit`, `--no-verify`, absolute-path Git, scripts,
+  `commit-tree`, `update-ref`, and index writes share one filesystem denial
+  instead of depending on command parsing.
+- Tests that need temporary files receive a lease-owned scratch directory.
+  Tests needing arbitrary writes outside the worktree may fail and must not be
+  granted Git metadata access as a workaround.
+- A failed receive discards the scratch candidate and Git's receive quarantine,
+  so the source repository gains neither an unreachable commit nor a temporary
+  ref. The editable worktree remains available for retry.
+- Windows installation can distribute the CLI, but `create` fails closed there
+  until a verified native boundary is implemented.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| PreToolUse or `pre-commit` only | `--no-verify`, absolute Git paths, scripts, and plumbing commands bypass command-level checks. |
+| chmod/ACL under the same user | The agent can restore permissions; it is not a durable authority boundary. |
+| An environment-variable finish override | Agent-controlled environment is not authorization. |
+| A normal task branch per worktree | Expands the public model and leaves refs the agent can mutate. |
+| Automatic active-agent detection | Host session death is not reliable enough; the user explicitly starts finish. |
+
+Failure signals:
+
+- A boundary probe can write the `.git` pointer, worktree Git directory,
+  common Git directory, source worktree, or lease-control state.
+- A managed agent changes refs or index state with any Git executable or
+  indirect script.
+- A managed agent can modify the pinned Git executable, Goldband broker runtime,
+  installed launcher/runtime, global Git config, or recorded source hook/config
+  inputs after `create`.
+- `finish` proceeds after source movement, dirty state, ignored files, Git lock
+  contention, an ignored source/candidate collision, changed broker config,
+  invalid marker/manifest, or failed readback.
+- Claude and Codex installs expose different CLI or hook/runtime assets.
+
+Revisit triggers:
+
+- Codex or Claude exposes a stable host-owned broker API that can replace the
+  inherited shell boundary without weakening it.
+- Windows gains a verified filesystem sandbox with equivalent descendant and
+  Git-metadata restrictions.
+- Git gains an atomic worktree-aware transaction that can replace the current
+  prepare/fast-forward/readback sequence.
+
 ## 2026-07-15: Installed Workflow Prompts Are Thin Manifest Contracts
 
 Decision: generate every installed
@@ -459,3 +650,554 @@ Revisit triggers:
   failure cannot be solved at the state owner.
 - A lifecycle transition gains a concrete user decision or deterministic
   enforcement contract that cannot be expressed elsewhere.
+
+## 2026-07-16: Capability Surface Requires Proven Runtime Ownership
+
+Decision: reduce the formal capability inventory from 51 actions to 23. Expose
+19 public actions and retain four high-risk actions only as hidden experimental
+inventory. A runnable action must declare one runtime owner in the manifest;
+an experimental action cannot claim an owner.
+
+Implementation contract:
+
+- Remove 28 overlapping action names instead of preserving aliases. Their
+  useful behavior becomes a mode, lens, command, or stage of the remaining
+  review, plan, browser, document, safety, and iOS owners.
+- Generated routing and activation hints contain only public actions.
+  Experimental actions remain in the engineering inventory and thin contract
+  projection, but are not discoverable or runnable.
+- Typed owner steps validate structured input, write JSONL evidence, persist
+  state atomically where state exists, and return explicit completed or blocked
+  readback.
+- Compatibility actions remain mock-only and fail closed in real mode.
+- High-risk work cannot hide outward side effects inside a workflow child
+  process. In particular, `system/upgrade` owns preflight and readback while the
+  host's native tool and approval layer owns `git pull` and setup execution.
+
+The resulting inventory is 15 typed, four compatibility, and four experimental
+registered-only actions. The experimental set is `release/land`,
+`release/setup`, `knowledge/setup`, and `knowledge/sync`.
+
+Why:
+
+- A prompt contract and formal name are not runtime capability. Without an
+  owner, validated state, evidence, and a stop condition, the interface
+  overstates product maturity.
+- Separate lifecycle from runtime maturity. This keeps high-risk work visible
+  to maintainers without advertising unfinished operations to users.
+- Folding lenses and phases into stable owners reduces routing ambiguity and
+  migration cost while preserving the underlying behavior.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep all 51 actions and label 46 experimental | Leaves the oversized public vocabulary and duplicate ownership model intact. |
+| Change only manifest runtime labels | Produces typed-looking entries with no action-specific validation, state, or evidence owner. |
+| Preserve removed actions as compatibility aliases | Violates the no-alias capability decision and keeps old contracts alive indefinitely. |
+| Let `system/upgrade` run `git pull` after an input boolean | A JSON field is not native host approval and would hide an outward side effect inside Bun. |
+
+Failure signals:
+
+- Router or activation output contains an experimental action.
+- A runnable manifest action has no owner, or a registered-only action claims
+  one.
+- Removed action names return through active documentation or generated
+  contracts.
+- A typed owner accepts malformed real-mode input, writes non-atomic state, or
+  reports completion without readback evidence.
+- High-risk runtime code executes a network, release, setup, or sync side
+  effect behind the host permission boundary.
+
+Revisit triggers:
+
+- Release obtains a deployment-neutral approval, rollback, and readback owner.
+- GBrain setup and sync obtain secret-safe interaction schemas plus resumable
+  checkpoint and round-trip verification contracts.
+- Compatibility actions gain action-specific typed schemas and real-mode
+  evidence.
+
+## 2026-07-16: Runtime Completion Must Reflect Effective Host State
+
+Decision: host-scoped workflows may report completion only after reading back
+the state that the host actually consumes. Public menus are generated per host,
+and runtime invocation independently enforces manifest `hostSupport`.
+
+Implementation contract:
+
+- `safety/guard`, `safety/freeze`, and `safety/unfreeze` are Claude-only and
+  delegate to the existing session-scoped careful-mode and freeze-mode owner.
+  Completion requires owner readback; an actual PreToolUse `Edit` regression
+  test proves freeze enforcement.
+- `system/health` inspects the selected host's installed runtime under `HOME`,
+  including required files, `.installed-source`, `.installed-contract`, and
+  source/install fingerprint drift. Source checkout health is not installation
+  health.
+- `plan/create` remains Claude-only. Codex menus, hints, and planner guidance do
+  not advertise it, while runtime rejects a Codex invocation.
+- `document/generate` owns a typed `audit` mode with required unified-diff input,
+  deterministic coverage and PR-section artifacts, and a native approval gate
+  for PR mutation. The workflow does not generate documentation or mutate PRs.
+- Context checkpoint indexes include repository/worktree identity and branch;
+  restore selects the current branch's latest checkpoint.
+- Active-document tests validate local Markdown link targets, not only
+  capability invocation strings.
+
+Failure signals:
+
+- A safety action is completed while the corresponding hook decision still
+  allows the protected operation.
+- An empty or stale installed runtime passes `system/health` because source
+  files are healthy.
+- A host menu advertises an action excluded by its manifest `hostSupport`.
+- Documentation audit mutates a PR without native approval or claims it wrote
+  docs that it only analyzed.
+- Saving branch B makes branch A's latest checkpoint unreachable.
+
+## 2026-07-16: High-Risk Operations Require Verifiable Runtime Gates
+
+Decision: keep one manifest-owned safety contract for each of the nine
+high-risk operations identified before capability convergence. A retired action
+name may remain only as an internal operation ID mapped to its active action and
+mode; it does not become a public route or compatibility alias.
+
+Implementation contract:
+
+- `release/land`, `release/setup`, `release/canary`, `browser/cookies`,
+  `knowledge/setup`, `knowledge/sync`, `system/upgrade`, `ios/qa`, and
+  `ios/sync` each declare authorization, preconditions, side effects, readback,
+  enforcement state, and gate owner in `goldband.manifest.json`.
+- Every high-risk action must have a primary gate. Nested high-risk modes on a
+  lower-risk action require their own operation gate.
+- A registered-only action cannot declare `runtime-owner` enforcement. A
+  runtime-owned gate must match the action's declared runtime owner.
+- `blocked-before-runtime` is executable policy: browser cookie commands and
+  the iOS sync mode stop during runtime admission before an owner step runs.
+- `system/upgrade` and read-only `ios/qa` have operation-specific verifiers.
+  Definition fails when their declared preconditions, side effects, readback,
+  authorization, or owner drift from the implemented verifier contract.
+- Runtime input validation happens before the owner. A gate writes successful
+  `verified` evidence only after the owner output and trusted artifact satisfy
+  every declared readback. A blocked or mock-only owner writes `pending` with
+  `skipped` status, never successful gate evidence.
+- `ios/qa` requires an explicit project, scheme, device scope, and supplied QA
+  checks. It never fabricates mock passing evidence and reports untested device
+  coverage in the trusted QA artifact.
+- `system/upgrade` requires an explicit preflight or readback phase. Preflight
+  remains pending through native approval; only a matching completed preflight,
+  version/head transition, and setup readback can verify the gate.
+- Generated capability contracts and documentation include the safety
+  inventory so installer fingerprints and source checks detect drift.
+
+Why:
+
+- A prompt instruction to ask for approval is not an enforcement boundary.
+- Restoring removed action aliases would undo capability convergence, while
+  forgetting their risk contracts would make future modes easier to integrate
+  unsafely.
+- Owner identity alone is not safety evidence. Contract inputs, owner output,
+  provenance-bound artifacts, and readback must agree before verification.
+
+Failure signals:
+
+- A high-risk action has no primary gate or two actions claim the same safety
+  operation.
+- A registered-only operation claims an owner or becomes runnable.
+- Cookie import or iOS synchronization reaches an owner step while its gate is
+  blocked.
+- A typed high-risk action records `verified` before its declared readback is
+  validated, or a blocked/mock execution records successful gate evidence.
+- A runtime-owner gate declares a contract item its operation-specific verifier
+  does not implement.
+- Retired operation IDs reappear in generated menus or routing hints.
+
+Revisit triggers:
+
+- A blocked operation gains a typed owner that implements every declared
+  precondition, authorization boundary, side effect, and readback requirement.
+- A high-risk operation is removed entirely rather than retained as a mode of
+  an active action.
+
+## 2026-07-20: Interactive Review Must Enter the Typed Runtime
+
+Decision: an interactive Codex or Claude `$goldband review code` invocation
+must launch the executable review owner before reporting findings. The thin
+workflow contract selects the runtime; it does not perform a second manual
+review in the parent agent.
+
+Implementation contract:
+
+- `bin/goldband review code --host <codex|claude>` is the public launcher. It
+  forces real mode and defaults to the whole current worktree when the user
+  does not name a narrower scope.
+- The launcher resolves `workflows/run.ts` from the active source root or the
+  installed runtime's `.installed-source`; missing runtime ownership fails
+  explicitly.
+- User-supplied prompt text never proves runtime ownership. Runtime-owned child
+  prompts use the dedicated non-router `GOLDBAND_RUNTIME_TASK=review/code`
+  header, perform the supplied review inline, and never invoke `$goldband`
+  again.
+- The launcher probes the evidence root before starting. If the default
+  `~/.goldband` root is blocked by the caller's filesystem sandbox, it uses a
+  private temporary state root and reports the evidence as ephemeral. An
+  explicitly configured state root remains fail-closed when it is not writable.
+- A Codex parent session requests host-native sandbox escalation for the
+  launcher command before execution. Codex applies its command sandbox to all
+  descendants, while the nested `codex exec` CLI must initialize Codex state
+  and app-server resources. This one parent-session admission is separate from
+  child reviewer command approval; the child remains read-only with approval
+  set to `never`.
+- Codex subprocesses use `--ask-for-approval never` with the read-only sandbox.
+  Core and specialist prompts prohibit `require_escalated`; blocked dynamic
+  verification is reported as unavailable instead of attempting an approval
+  flow that non-interactive `codex exec` cannot service.
+- Codex reviewers also use `--ignore-user-config`, an explicit empty
+  `mcp_servers` override, and `--ephemeral`. Authentication still comes from
+  `CODEX_HOME`, but user/project customization cannot expose external MCP tools
+  or persist a reviewer session.
+- Claude subprocesses use `--safe-mode` plus a read-only tool allowlist so
+  repository or user hooks, plugins, MCP servers, and other executable
+  customizations cannot create side effects. The prompt tells the reviewer to
+  inspect applicable `AGENTS.md` and `CLAUDE.md` files explicitly with read-only
+  tools because safe mode disables their automatic loading.
+- Review input is bounded to 2 MiB. Git collection uses an explicit larger
+  process buffer and converts overflow into a scope-narrowing error instead of
+  leaking the host runtime's `ENOBUFS` failure.
+- Review scope is validated by one shared contract at both the public launcher
+  and typed runtime boundary. `--base --worktree` is the only valid combined
+  primary scope; `--include-untracked` is a modifier but cannot be combined
+  with `--diff-file`, which is already a complete supplied artifact.
+- Complete-pass deadlines use `performance.now()` from pass creation through
+  every Git and host timeout. Wall-clock timestamps remain evidence metadata
+  only, so system-clock changes cannot extend the runtime budget.
+- Untracked paths are collected with `git ls-files -z` and parsed on NUL
+  boundaries. Legal filenames containing newlines, tabs, quotes, or backslashes
+  therefore reach the same containment and content checks as ordinary paths.
+- Core and specialist prompts are delivered over child stdin, never as command
+  arguments. The full 2 MiB input contract therefore does not depend on the
+  host operating system's smaller `ARG_MAX` limit.
+- `--diff-file` and untracked-file collection accept only stable regular files.
+  They reject symbolic links and special files, validate the opened inode, and
+  read through that same no-follow file descriptor. Descriptor metadata is
+  checked again after the final read so pathname swaps and same-inode writes
+  both fail closed instead of producing mixed review input.
+- An automatic launcher or runtime failure is terminal. The parent agent must
+  not silently fall back to an untyped manual review or claim complete
+  coverage.
+- Ordinary review keeps automatic specialist selection. A strict or exhaustive
+  request explicitly adds `--specialists all`, whose incomplete coverage fails
+  closed.
+- A real host call defaults to twelve minutes. A complete review pass is bounded
+  to twelve minutes with specialists off, twenty minutes in auto mode, and
+  thirty minutes only for explicit `--specialists all` coverage. Validated CLI
+  overrides may narrow or extend those budgets within 60 to 1800 seconds; the
+  host-call timeout cannot exceed the pass timeout.
+
+Assumptions:
+
+- Codex and Claude continue to honor selected skill contracts and can execute
+  the installed `bin/goldband` launcher.
+- The workflow installer keeps `.installed-source` authoritative for copied
+  minimal runtimes.
+- Real host review remains read-only and structured through the existing host
+  adapters.
+
+Consequences:
+
+- Interactive review now uses deterministic diff collection, typed finding
+  validation, runtime evidence, and the selected specialist policy.
+- A normal review invocation may take longer and consume additional host model
+  calls; exhaustive specialist review costs more and remains explicit.
+- Normal auto reviews fail within a bounded twenty-minute pass instead of silently
+  inheriting the exhaustive thirty-minute ceiling. Timeout telemetry makes
+  later tuning evidence-driven rather than another hard-coded guess.
+- An optional auto specialist reaching the pass deadline degrades to a recorded
+  coverage diagnostic while preserving completed core findings. Explicit
+  exhaustive coverage still fails closed when any specialist is incomplete.
+- Hosts outside Codex and Claude continue to use their supported prompt path
+  until they gain a real typed adapter.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep the thin skill as a manual checklist | Leaves runtime entry, scope, evidence, and specialist dispatch dependent on model discretion. |
+| Launch the runtime from a prompt-routing hook | Generic review hints can fire for explanatory questions and are not the owner of long-running model subprocesses. |
+| Put a raw `bun workflows/run.ts` command in every installed contract | Couples prompt surfaces to source layout and breaks copied minimal runtimes. |
+| Silently fall back when the launcher fails | Produces a review that looks complete without typed runtime evidence. |
+| Keep one two-minute timeout for every mode | The measured real Codex pass exhausted it before producing findings, while it provided no whole-pass budget for specialist fan-out. |
+| Give every review a thirty-minute timeout | Makes ordinary review stalls too slow to diagnose and hides prompt or dispatch regressions. |
+
+Failure signals:
+
+- `$goldband review code` returns findings without a real-host runtime report or
+  artifacts.
+- A runtime-owned reviewer starts another `goldband review code` process.
+- A copied installation cannot resolve the executable workflow source.
+- Launcher failure is followed by an untyped manual approval.
+- Auto review approaches its twenty-minute deadline or repeatedly exhausts the
+  twelve-minute host-call budget.
+
+Revisit triggers:
+
+- Codex or Claude provides a native skill-to-executable binding that removes
+  the need for a prompt-directed launcher.
+- A host supports typed review directly without spawning its CLI adapter.
+- Measured cost or latency justifies a different default specialist policy.
+- At least twenty comparable real-host runs provide a stable latency
+  distribution that justifies replacing the initial timeout budgets.
+
+## 2026-07-21: Codex Config Freshness Follows Key Ownership
+
+Decision: treat the generated Codex config as a shared file with key-level
+ownership. Goldband requires every key/value emitted by `codex/config.toml` and
+`codex/local/config.toml` to remain present with the expected value, but it does
+not claim additional keys or tables written by Codex App. Host-maintained
+`marketplaces.*.last_updated` values are explicitly volatile and excluded from
+freshness comparison.
+
+Implementation contract:
+
+- `is_current_generated_codex_config` keeps the generated header as the file
+  identity check, validates the complete installed file with Python `tomllib`,
+  then compares a deterministic projection of Goldband-owned TOML records
+  instead of comparing the complete file text.
+- Missing Python 3.11+ `tomllib` support makes syntax health `unverifiable` and
+  exits `2`; syntax validation never degrades to a permissive text scan.
+- Additional root keys, table keys, MCP servers, plugins, and desktop settings
+  are allowed because absence from Goldband source means Goldband does not own
+  them.
+- Missing or changed Goldband-owned records still report `stale` and make
+  `install.sh status` exit `2`.
+- Every Goldband-owned table/key must occur exactly once; duplicate managed
+  keys fail closed even when one duplicate retains the expected value.
+- Codex profile files retain their stricter source comparison because they are
+  policy artifacts, not shared App configuration. Only their declared runtime
+  state sections are excluded.
+- App-support status reuses the same freshness predicate; it does not maintain
+  a second ownership policy.
+
+Assumptions:
+
+- Goldband's generated main config continues to use single-line TOML
+  assignments for owned values.
+- A Python 3.11+ entrypoint is available as `python3`, `python`, or Windows
+  `py -3` when a green config health verdict is required.
+- Codex App may add or reorder valid TOML content but does not remove or rewrite
+  Goldband-owned values without creating meaningful drift.
+- Marketplace update timestamps remain host-maintained metadata rather than
+  Goldband policy.
+
+Consequences:
+
+- Codex App integrations can evolve without causing false stale status or
+  encouraging users to overwrite working App configuration.
+- Invalid installed TOML is reported separately from source drift, before any
+  ownership comparison can return `[OK]`.
+- Goldband still detects policy drift in models, approvals, sandboxing,
+  features, agents, local project trust, and other source-declared values.
+- New multiline Goldband-owned values require extending the projection parser
+  and its regression coverage before they can be used safely.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep whole-file comparison and enumerate every App-generated block to strip | Couples Goldband to volatile App implementation details and recreates false positives whenever the App adds a field. |
+| Treat the generated marker as sufficient | Misses real changes to Goldband-owned policy. |
+| Reinstall the repo config whenever App content appears | Can erase valid MCP, plugin, browser, Computer Use, and desktop state. |
+| Copy current App additions into `codex/local/config.toml` | Freezes volatile host state into repo-local policy and still drifts on later App updates. |
+| Treat lines with no `=` as invalid in the AWK projection | Catches one malformed shape but still misses duplicate keys, malformed arrays, strings, and other TOML syntax errors. |
+
+Failure signals:
+
+- `install.sh status` reports stale after Codex App only adds or reorders keys.
+- Invalid installed TOML is reported `[OK]` or is reduced to ordinary managed
+  drift instead of the explicit `invalid` state.
+- A changed or missing Goldband-owned key still reports `[OK]`.
+- A profile policy change is ignored as if it were App-owned state.
+- An owned multiline TOML value is introduced without a parser/test update.
+
+Revisit triggers:
+
+- Codex provides a documented native split between user policy and App runtime
+  state files.
+- Goldband adopts a portable TOML parser as an installer dependency.
+- Codex App begins rewriting Goldband-owned keys semantically without preserving
+  their textual value representation.
+
+## 2026-07-21: Review Impact Graph Is Parent-Runtime Infrastructure
+
+Decision: Goldband owns a bounded, persistent file dependency-impact graph in
+the typed `review/code` parent runtime. It is built only when at least two files
+changed, before host dispatch, and is passed to core and specialist prompts as
+advisory inspection context. It is not an MCP server, child-reviewer plugin, or
+independent source of findings.
+
+Implementation contract:
+
+- Git-backed `collect-diff` scopes emit exact changed paths alongside the
+  authoritative diff; supplied patch artifacts derive paths from file headers.
+- One changed file returns `skipped: single-file` before repository inventory or
+  graph-cache access. Zero paths and changes without supported source types have
+  separate explicit skip reasons.
+- Multi-file review inventories Git-tracked files plus reviewed changed paths,
+  parses bounded regular source files without following symlinks, resolves
+  common local dependency forms, and walks reverse impact to depth two.
+- The cache is stored under Goldband state, keyed by the real repository root,
+  validated on load, updated atomically, and reused by file identity and
+  metadata signature. It never modifies the reviewed repository.
+- Graph status is `analyzed`, `degraded`, or `skipped`. Limits and unreadable or
+  unstable inputs become diagnostics rather than silently implying complete
+  coverage.
+- Core and specialist prompts state that graph output is structural hinting
+  only. The diff remains complete review scope, and a blocking finding still
+  requires current source evidence and a reachable failure path.
+- Automatic specialist selection may add `testing` when a changed source file
+  has no observed reverse test dependency, and `maintainability` when the
+  bounded impact set is wide or truncated.
+- Each pass emits an impact JSON artifact and telemetry for skip reason, parsed
+  and reused files, edges, affected files, tests, truncation, and diagnostics.
+
+Assumptions:
+
+- Common local import patterns provide useful prioritization without claiming a
+  language-complete semantic graph.
+- Git-tracked inventory is the safest default repository boundary; only
+  untracked paths already admitted into the review diff may enter the graph.
+- File metadata signatures are adequate for cache invalidation because a file
+  is reread whenever identity, size, modification time, or change time differs.
+
+Consequences:
+
+- Multi-file review can inspect indirect consumers and likely test coverage
+  earlier without giving child reviewers network, MCP, or persistent state.
+- Single-file changes retain direct-review context efficiency and avoid a full
+  repository scan.
+- Unsupported languages, dynamic imports, aliases, generated wiring, and
+  relationships beyond the depth/output bounds can be absent; that absence is
+  never treated as proof of safety.
+- The parent runtime now owns a cache and graph artifact lifecycle that must
+  remain bounded, injection-safe, and covered by workflow tests.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Install the referenced graph MCP or parser stack into each reviewer child | Violates child isolation, adds external runtime dependencies, and duplicates persistent state across host adapters. |
+| Run graph construction for every review | The repository scan can cost more context and latency than direct inspection for a one-file change. |
+| Let graph reachability define review scope or findings | Static extraction is incomplete and would turn missing edges into false assurance. |
+| Keep only an in-memory graph | Repeats repository parsing on every review and discards useful bounded reuse. |
+| Use a language-complete parser immediately | Adds a large dependency and maintenance surface before Goldband has measured language-specific precision needs. |
+
+Failure signals:
+
+- A one-file review creates or reads the persistent graph index.
+- A graph path is used to omit a changed diff path or to report a blocker
+  without current source evidence.
+- Ignored or unrelated untracked files enter the graph.
+- Cache corruption, file churn, or repository size produces silent partial
+  coverage instead of `degraded` evidence.
+- Review latency or prompt size materially regresses on ordinary multi-file
+  changes.
+
+Revisit triggers:
+
+- Real review telemetry shows graph construction or prompt overhead outweighs
+  useful affected-path discovery.
+- A supported language repeatedly misses high-value edges that require a proper
+  parser or project configuration resolver.
+- Measured repository scale requires incremental background indexing, a tighter
+  bound, or an explicit opt-out.
+- Host runtimes gain a trustworthy native dependency graph with equivalent
+  isolation, bounds, and evidence semantics.
+
+## 2026-07-21: Codex Workflows Use Installer-Owned Exact Admissions
+
+Decision: supersede the parent-escalation clause of “Interactive Review Must
+Enter the Typed Runtime” for Codex. A global Codex install materializes a
+Goldband workflow launcher outside the active workspace and installs exact
+machine-local `allow` rules for only that launcher’s `review code --host codex`
+prefix and enumerated browser inspection commands. Interactive Codex runs those
+trusted admissions normally and never asks for `require_escalated` approval.
+
+Implementation contract:
+
+- `goldband-loop/setup --host codex` bundles the public launcher and typed
+  workflow owner, browser client, bundled browser server, Rules resolver, and
+  an immutable Rules snapshot into
+  `~/.codex/goldband/workflow-runtime`; these are real files, not links into the
+  Goldband checkout.
+- The installer records the absolute Bun and launcher paths in
+  `~/.codex/skills/goldband/.workflow-launcher.json` and generates
+  `~/.codex/rules/goldband-workflows.rules` from the same values.
+- The snapshot records the installed Codex CLI by absolute path. The launcher
+  removes caller-provided override state and the host adapter uses the pinned
+  executable instead of resolving `codex` from the reviewed process `PATH`.
+- The rules fix the Bun executable, materialized launcher, capability, action,
+  `--host`, and `codex` argv prefix. Review scope and timeout suffixes remain
+  available. Browser rules additionally fix an enumerated inspection command;
+  navigation and wait commands do not match automatic admission.
+- Codex CLI browser work always enters Goldband's browser owner. It never probes
+  Codex App Browser/Chrome bindings. The owner admits navigation and inspection
+  commands while rejecting outward-effect operations, but navigation remains
+  on Codex's native approval path because it can reach localhost/private origins.
+- The workflow reads and executes the installed marker exactly. It never
+  substitutes `bin/goldband` from the current workspace or falls back to a
+  manual review.
+- Reinstall stages a complete snapshot, swaps the previous runtime to a backup,
+  and restores it if activation fails. Status validates the same pinned Codex
+  executable used by review and probes policy through that executable. Uninstall
+  removes the snapshot and Goldband-owned rule.
+- Missing or inconsistent launcher state fails closed with a reinstall
+  instruction. A broader or more restrictive host/admin policy remains outside
+  this contract and may still override the generated rule.
+
+Assumptions:
+
+- Codex continues to interpret an exact `allow` rule as permission to run the
+  matching command outside the sandbox without prompting.
+- The user trusts the Goldband installer to refresh its own runtime; reviewed
+  repositories do not have write access to the installed snapshot or rule.
+- The nested reviewer retains its existing read-only sandbox and `never`
+  approval policy after the parent launcher is admitted.
+
+Consequences:
+
+- `$goldband review code` no longer enters a contradictory flow where the user
+  approves escalation but the session’s `approval_policy=never` rejects the
+  same request.
+- `$goldband browser session` works in Codex CLI without an app-hosted browser
+  provider. Inspection commands can run without prompting; navigation requires
+  Codex's normal approval because the Chromium daemon can reach local services.
+- Updating Goldband must rebuild the trusted snapshot; source edits alone do
+  not change the admitted executable until reinstall.
+- The install adds the bundled workflow entrypoints, browser client/server, and
+  review assets under `~/.codex/goldband`.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Allow `bin/goldband` by relative path | A workspace can replace that path and inherit the allow decision. |
+| Allow the installed skill’s symlinked `bin/goldband` | The link resolves back into the writable Goldband checkout and has the same spoofing boundary. |
+| Keep asking for `require_escalated` | Sessions with `approval_policy=never` cannot honor the prompt even after textual user consent. |
+| Use Codex App Browser/Chrome plugins from CLI | The CLI session has no registered browser provider even when plugin metadata is installed. |
+| Allow every `bun`, `browse`, or `codex exec` invocation | Grants a general sandbox escape far beyond the typed workflows. |
+
+Failure signals:
+
+- Either exact installed workflow command does not resolve to `allow` in
+  `codex execpolicy check`.
+- A source-tree launcher or unrelated Goldband command matches the generated
+  rule.
+- Reinstall leaves the marker, snapshot, and rule pointing to different paths.
+- Review or browser work asks the user for sandbox escalation despite a healthy
+  installation.
+
+Revisit triggers:
+
+- Codex gains a native trusted skill executable or scoped child-agent API that
+  removes the outer command admission entirely.
+- Codex changes rule precedence, matching, or sandbox behavior.
+- The typed runtime no longer needs host state outside the parent sandbox.

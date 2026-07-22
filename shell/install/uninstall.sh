@@ -140,6 +140,8 @@ uninstall_codex_paths() {
         "$CODEX_HOOKS_FILE"
         "$CODEX_HOOKS_DIR"
         "$CODEX_RULES_DIR"
+        "$CODEX_DIR/goldband/workflow-runtime"
+        "$CODEX_DIR/goldband/review-runtime"
     )
     local profile_path
     while IFS= read -r profile_path; do

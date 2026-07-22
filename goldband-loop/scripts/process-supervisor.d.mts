@@ -12,15 +12,22 @@ type SuperviseOptions = {
   completionExitGraceMs?: number;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  captureOutput?: boolean;
+  captureOutput?: false | {
+    stdoutMaxBytes: number;
+    stderrMaxBytes: number;
+  };
   label?: string;
   stderr?: OutputSink;
   stdout?: OutputSink;
   stdio?: StdioOptions;
+  input?: string | Buffer;
 };
 
 type CapturingOptions = SuperviseOptions & {
-  captureOutput: true;
+  captureOutput: {
+    stdoutMaxBytes: number;
+    stderrMaxBytes: number;
+  };
 };
 
 export type SuperviseResult = {
@@ -32,6 +39,8 @@ export type SuperviseResult = {
 export type CapturedSuperviseResult = SuperviseResult & {
   stdout: string;
   stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
   forceKilled: boolean;
 };
 

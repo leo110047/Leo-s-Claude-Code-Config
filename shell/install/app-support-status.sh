@@ -8,20 +8,47 @@ show_app_surface_status() {
 
 show_codex_app_shared_config_status() {
     local missing=()
+    local stale=()
+    local invalid=()
+    local unverifiable=()
 
-    is_generated_codex_config "$CODEX_CONFIG_FILE" || missing+=("~/.codex/config.toml")
-    repo_path_installed_from "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE" || missing+=("~/.codex/hooks.json")
-    repo_path_installed_from "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR" || missing+=("~/.codex/hooks")
-    repo_path_installed_from "$REPO_DIR/codex/AGENTS.md" "$CODEX_AGENTS_FILE" || missing+=("~/.codex/AGENTS.md")
+    if [ ! -e "$CODEX_CONFIG_FILE" ]; then
+        missing+=("~/.codex/config.toml")
+    elif ! is_current_generated_codex_config "$CODEX_CONFIG_FILE"; then
+        case "$CODEX_CONFIG_FRESHNESS_REASON" in
+            invalid-toml) invalid+=("~/.codex/config.toml") ;;
+            syntax-unverifiable|source-missing|source-unsupported) unverifiable+=("~/.codex/config.toml") ;;
+            *) stale+=("~/.codex/config.toml") ;;
+        esac
+    fi
+    if [ ! -e "$CODEX_HOOKS_FILE" ]; then
+        missing+=("~/.codex/hooks.json")
+    elif ! repo_path_installed_from "$REPO_DIR/codex/hooks.json" "$CODEX_HOOKS_FILE"; then
+        stale+=("~/.codex/hooks.json")
+    fi
+    if [ ! -e "$CODEX_HOOKS_DIR" ]; then
+        missing+=("~/.codex/hooks")
+    elif ! repo_path_installed_from "$REPO_DIR/codex/hooks" "$CODEX_HOOKS_DIR"; then
+        stale+=("~/.codex/hooks")
+    fi
+    if [ ! -e "$CODEX_AGENTS_FILE" ]; then
+        missing+=("~/.codex/AGENTS.md")
+    elif ! repo_path_installed_from "$REPO_DIR/codex/AGENTS.md" "$CODEX_AGENTS_FILE"; then
+        stale+=("~/.codex/AGENTS.md")
+    fi
     if ! [ -d "$CODEX_SKILLS_DIR" ] || ! [ -f "$CODEX_SKILL_PROFILE_FILE" ]; then
         missing+=("~/.agents/skills")
     fi
 
-    if [ "${#missing[@]}" -eq 0 ]; then
+    if [ "${#missing[@]}" -eq 0 ] && [ "${#stale[@]}" -eq 0 ] && \
+       [ "${#invalid[@]}" -eq 0 ] && [ "${#unverifiable[@]}" -eq 0 ]; then
         echo -e "  ${GREEN}[OK]${NC} Codex app compatible shared config (codex-full surfaces installed)"
     else
         echo -e "  ${YELLOW}[未完整]${NC} Codex app compatible shared config — 建議重跑 ./install.sh codex-full"
-        echo "    missing: $(join_by_comma "${missing[@]}")"
+        [ "${#missing[@]}" -eq 0 ] || echo "    missing: $(join_by_comma "${missing[@]}")"
+        [ "${#stale[@]}" -eq 0 ] || echo "    stale: $(join_by_comma "${stale[@]}")"
+        [ "${#invalid[@]}" -eq 0 ] || echo "    invalid: $(join_by_comma "${invalid[@]}")"
+        [ "${#unverifiable[@]}" -eq 0 ] || echo "    unverifiable: $(join_by_comma "${unverifiable[@]}")"
     fi
 }
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
+import { assertValidReviewScopeOptions } from '../lib/review-runtime-contract';
 import { getWorkflow } from './registry';
 import { runWorkflowLoop } from './loop';
+import { resolveReviewTimeoutPolicy } from './review-timeouts';
 import { runWorkflow } from './runtime';
 import type { WorkflowRunOptions } from './types';
 
@@ -34,16 +36,22 @@ function parseArgs(args: string[]): { capability: string; action: string; option
     else if (arg === '--worktree') options.worktree = true;
     else if (arg === '--include-untracked') options.includeUntracked = true;
     else if (arg === '--specialists') options.specialists = takeValue(args, ++index, arg) as WorkflowRunOptions['specialists'];
+    else if (arg === '--review-host-timeout-seconds') options.reviewHostTimeoutMs = takeSeconds(args, ++index, arg);
+    else if (arg === '--review-pass-timeout-seconds') options.reviewPassTimeoutMs = takeSeconds(args, ++index, arg);
     else if (arg === '--loop') loop = true;
     else if (arg === '--max-iterations') options.maxIterations = takeNumber(args, ++index, arg);
     else usageError(`unknown argument: ${arg}`);
   }
-  validateOptions(options);
+  validateOptions(capability, action, options);
 
   return { capability, action, options, loop };
 }
 
-function validateOptions(options: WorkflowRunOptions): void {
+function validateOptions(
+  capability: string,
+  action: string,
+  options: WorkflowRunOptions,
+): void {
   if (options.mode && !['mock', 'real'].includes(options.mode)) {
     usageError(`invalid --mode: ${options.mode}`);
   }
@@ -58,6 +66,20 @@ function validateOptions(options: WorkflowRunOptions): void {
   }
   if (options.specialists && !['off', 'auto', 'all'].includes(options.specialists)) {
     usageError(`invalid --specialists: ${options.specialists}`);
+  }
+  const hasReviewTimeoutOverride =
+    options.reviewHostTimeoutMs !== undefined ||
+    options.reviewPassTimeoutMs !== undefined;
+  if (hasReviewTimeoutOverride && `${capability}/${action}` !== 'review/code') {
+    usageError('review timeout options are only valid for review/code');
+  }
+  if (`${capability}/${action}` === 'review/code') {
+    try {
+      assertValidReviewScopeOptions(options);
+      resolveReviewTimeoutPolicy(options);
+    } catch (error) {
+      usageError(error instanceof Error ? error.message : String(error));
+    }
   }
 }
 
@@ -79,6 +101,18 @@ function takeNumber(args: string[], index: number, flag: string): number {
   return value;
 }
 
+function takeSeconds(args: string[], index: number, flag: string): number {
+  const raw = takeValue(args, index, flag);
+  if (!/^\d+$/.test(raw)) {
+    usageError(`${flag} requires a whole number of seconds`);
+  }
+  const seconds = Number(raw);
+  if (!Number.isSafeInteger(seconds) || seconds < 60 || seconds > 1800) {
+    usageError(`${flag} must be between 60 and 1800 seconds`);
+  }
+  return seconds * 1000;
+}
+
 function usageError(message: string): never {
   console.error(message);
   usage();
@@ -86,7 +120,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--specialists off|auto|all] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

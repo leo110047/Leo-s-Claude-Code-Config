@@ -1,90 +1,94 @@
 # TODO
 
-## P0 - 補完 workflow convergence loop runtime
+## P0 - 補完 workflow convergence loop real-mode 驗證
 
-目前狀態：workflow convergence loop 的實作只完成了一部分。後續要補齊 runtime
-自主多輪執行、stop condition predicate、逐輪 evidence、real-mode 驗證、以及文件同步。
-目標是讓 loop 真的由 `goldband-loop/workflows/` runtime 擁有，而不是靠 markdown
-指示或模型自律來完成「跑一輪、檢查、再跑下一輪」。
+目前狀態：runtime-owned convergence loop 的 deterministic 基礎已完成；剩餘 P0
+是把 mock coverage 推進到真實 host 的 live evidence。不可再把 controller、stop
+predicate 或逐輪 evidence 列為尚未實作，也不可用 fixture 冒充 real-mode E2E。
+
+### 已完成
+
+- [x] runtime 自主驅動多輪，不需要 caller 手動提供 iteration 或 blocker 狀態。
+- [x] `target-met`、`iteration-cap`、`same-blocker-repeated`、
+  `no-improvement` stop predicates 與 regression tests。
+- [x] `review/code` 把前輪 findings 帶入下一輪，並輸出 signal trail、stop reason
+  與 machine-readable `loop-summary`。
+- [x] `qa/app` typed mock adapter 只重跑 failed checks，並驗證 check schema。
+- [x] CLI 保留 single-pass 預設，且 `--max-iterations` 不可超過 registry cap。
+- [x] 每輪 JSONL evidence 包含 `iteration` 與 `signalSnapshot`。
+- [x] `goldband-loop/workflows/README.md` 已描述目前實際 loop 行為。
 
 ### 待辦
 
-- [ ] 重新做 gap audit：對照目前 `goldband-loop/workflows/` 的實作狀態，
-  標出 convergence loop 哪些已完成、部分完成、未完成、未驗證。
-
-- [ ] 確認 loop controller 真正由 runtime 自主驅動，不靠 caller 手動塞
-  `iteration` 或 `repeatedBlocker` 來假裝多輪。
-
-- [ ] 補齊 stop predicate 的可執行測試：
-  `target-met`、`iteration-cap`、`same-blocker-repeated`、`no-improvement`。
-
-- [ ] 補齊 `review/code` 多輪語意：
-  第一輪 findings 要能進入第二輪 context，第二輪要能判斷既有 findings 是否解掉、
-  是否出現新問題，最後輸出 machine-readable loop summary。
-
-- [ ] 補齊 `qa/app` 最小 typed adapter：
-  固定 mock check list、schema 驗證 pass/fail、第二輪只 rerun failed checks。
-  真 browser QA 不要硬搬進這次範圍；若未支援，要明確記 blocked / out of scope。
-
-- [ ] 補齊 CLI 行為驗證：
-  `--loop` 不破壞預設 single-pass，`--max-iterations` 在 real mode 只能調小、
-  不能超過 registry cap。
-
-- [ ] 補齊 evidence readback：
-  每輪 JSONL event 要有 `iteration`、`signalSnapshot`；結束時要有
-  `loop-summary`，能重建 signal trail 與 stop reason。
-
-- [ ] 補跑或補建測試：
-  loop controller unit tests、`review/code` mock 多輪整合測試、
-  `qa/app` mock 多輪整合測試、iteration cap 限制測試。
-
-- [ ] 補做 `review/code` real LLM e2e。
-  若 host、授權、網路、或 budget gate 無法執行，不可用 mock 冒充；要在結果中
-  明確標為 blocked / not verified。
-
-- [ ] 同步文件：
-  `ARCHITECTURE.md` 不可再宣稱 runner 只有 single-pass；
-  `goldband-loop/workflows/README.md` 要描述實際 loop 行為；
-  `goldband-loop/workflows/COVERAGE.md` 只在 runtime 狀態真的改變時同步。
-
-- [ ] 補完整驗證紀錄：
-  至少包含 focused runtime tests、`node scripts/check-code-style.mjs`、
-  必要時執行 `node scripts/generate-goldband-surfaces.mjs --check` 與
-  `node scripts/test-workflow-contracts.mjs`。
+- [ ] 執行 `review/code` real LLM convergence E2E，保存真實 host、命令、退出狀態、
+  JSONL evidence 與 artifacts；host、授權、網路或 budget 不足時明確標記 blocked。
+- [ ] 執行 `qa/app` real browser E2E；把 checks 接到已 typed 的
+  `browser/session` evidence contract。在完成前維持 unsupported，不可把 mock
+  check 或 Playwright setup 當成 runtime 支援。
+- [ ] 對 live runs 驗證 iteration context、stop reason 與 artifact readback，並把
+  結果同步到 architecture / coverage 文件。
 
 ### 驗收標準
 
-- [ ] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
-- [ ] `review/code` 與 `qa/app` 的 mock 多輪整合測試都有逐輪 evidence。
-- [ ] real-mode 驗證結果被誠實標記為 pass、blocked、或 not verified。
-- [ ] 文件描述、registry 狀態、runtime 行為三者一致。
-- [ ] 沒有直接編輯 generated workflow contracts 或 root `SKILL.md`。
+- [x] runtime 能在無 caller 介入下自主多輪執行並停在正確 stop condition。
+- [x] `review/code` 與 `qa/app` mock 多輪整合測試都有逐輪 evidence。
+- [ ] real-mode 驗證結果有可重跑的 pass、blocked 或 unsupported evidence。
+- [ ] live evidence、registry 狀態、runtime 行為與文件一致。
 
-## P1 - Workflow runtime migration
+## P1 - Experimental high-risk owners and compatibility migration
 
-把目前仍是 `registered-only` / `legacy-thin` 的 workflow 逐步接進
-`goldband-loop/workflows/` runtime。
+公開 surface 已從 51 個 actions 收斂成 19 個；另有 4 個 high-risk actions
+只留在 experimental inventory。公開 actions 現為 15 個 typed、4 個
+compatibility、0 個 registered-only。
 
 ### 背景
 
 `goldband-loop/workflows/COVERAGE.md` 是 runtime 覆蓋清單，不是一般 TODO 檔。
-後續真正要做的是依照 registry 的分級，把這些 workflow 從「只登記、執行時
-由 manifest-generated thin contract 交給模型」推進到 `compatibility` 或
-`typed` runtime。
+每個 runnable action 現在必須在 manifest 宣告 runtime owner；experimental
+action 不得宣告 owner，也不會出現在 router 或 activation hints。
+
+### 已完成
+
+- [x] 刪除 28 個重疊 action，不保留 alias；功能折回 review、plan、browser、
+  document、iOS 等 owner 的 mode 或階段。
+- [x] `browser/session`、`design/consult`、三個 safety actions、兩個 context
+  actions、`knowledge/recall`、`benchmark/workflow`、兩個 system actions 與
+  `ios/qa` 接上 typed owner steps、JSONL evidence 與 fail-closed input validation。
+- [x] `context/retro` 接上 compatibility runtime；`document/generate` 已升級為
+  typed audit owner，產生 coverage / PR-section artifacts，PR 更新停在原生核准邊界。
+- [x] `release/land`、`release/setup`、`knowledge/setup`、`knowledge/sync` 隱藏為
+  experimental，明確不可執行。
+- [x] `system/upgrade` 只做 preflight/readback；`git pull` 與 setup 必須經過
+  host 原生核准與工具執行，不藏在 workflow 子程序中。
+- [x] 收斂前的 9 個 high-risk operation 已有 manifest-owned safety gate：
+  7 個未有 owner 的 operation 維持 `blocked-before-runtime`；`system/upgrade`
+  與唯讀 `ios/qa` 只有在 operation-specific verifier 驗證 owner output 與 trusted
+  readback artifact 後才寫入 `verified`；mock 或尚待原生核准只會是 `pending`。
+  已刪除的
+  `release/canary`、`browser/cookies`、`ios/sync` 只作內部 operation inventory，
+  不恢復為公開 alias。
 
 ### 優先順序
 
-1. 先處理 browser / QA 類，讓檢查與 screenshot artifact 變成 typed evidence。
-2. 再處理 `plan-*` review 類，保留 HITL 邊界，但把可程式化檢查 typed 化。
-3. 高風險 deploy / setup / sync 類要先補 safety gate，再接 runtime。
-4. 其餘 low-risk workflow 等 core runtime 穩定後再排。
+1. 把 `qa/app` real mode 接到 typed browser evidence，完成 browser E2E。
+2. 將 4 個 compatibility actions 逐一替換成 action-specific typed schemas。
+3. 依既有 safety gate contract 為 release setup/land 建立原生 approval、
+   deployment readback 與 rollback owner。
+4. 依既有 safety gate contract 為 knowledge setup/sync 建立 secret-safe
+   interaction schema、sync checkpoint 與 round-trip readback owner；完成前保持
+   experimental。
 
 ### 驗收標準
 
-- [ ] `goldband-loop/workflows/registry.ts` 的 `integrationStatus` 與 runtime 實作一致。
-- [ ] 新接上的 workflow 能透過 `bun run workflows/run.ts <workflow>` 產生 JSONL evidence。
-- [ ] 若還不能 real mode 執行，必須 fail closed，不可假裝已支援。
-- [ ] `goldband-loop/workflows/COVERAGE.md` 只在 migration 狀態真的改變時同步更新。
+- [x] `goldband-loop/workflows/registry.ts` 的 `integrationStatus`、lifecycle、owner
+  與 runtime 實作一致。
+- [x] 新接上的 workflow 能透過正式 CLI 產生 JSONL evidence。
+- [x] 若還不能 real mode 執行，會 fail closed，不可假裝已支援。
+- [x] 每個 high-risk action 都有 primary gate；nested high-risk mode 也有獨立
+  operation gate，缺 gate、owner mismatch、declared contract 與 verifier drift，或
+  提早接 runtime 都會驗證失敗。
+- [x] `goldband-loop/workflows/COVERAGE.md` 由 manifest-generated capability report
+  投影，不維護第二份狀態。
 
 ## P1 - 補完 agent observability 消費端與 session trace
 

@@ -203,6 +203,9 @@ install_workflow_host() {
     cleanup_workflow_user_entries
     write_workflow_installed_versions "$host" "$version"
     write_workflow_installed_contracts "$host" "$repo_dir"
+    if ! is_windows_host; then
+        install_shell_launchers
+    fi
 }
 
 run_workflow_setup() {

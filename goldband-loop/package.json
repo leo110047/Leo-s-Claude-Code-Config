@@ -1,11 +1,13 @@
 {
   "name": "goldband",
   "version": "1.46.0.0",
+  "packageManager": "bun@1.3.11",
   "description": "Goldband Loop — Claude Code skills + fast headless browser. One repo, one install, entire AI engineering workflow.",
   "license": "MIT",
   "type": "module",
   "bin": {
     "browse": "./browse/dist/browse",
+    "goldband": "./bin/goldband",
     "make-pdf": "./make-pdf/dist/pdf"
   },
   "scripts": {
@@ -21,7 +23,7 @@
     "dev": "bun run browse/src/cli.ts",
     "server": "bun run browse/src/server.ts",
     "test": "bun run test:free",
-    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/review-specialist-dispatch.test.ts",
+    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/review-impact.test.ts test/review-specialist-dispatch.test.ts test/goldband-review-cli.test.ts test/codex-review-launcher-install.test.ts test/codex-workflow-status.test.ts",
     "test:free": "bun run scripts/test-free-shards.ts",
     "test:windows": "bun run scripts/test-free-shards.ts --windows-only",
     "test:ml": "bun test browse/test/security-bunnative.test.ts browse/test/security-bench.test.ts",
@@ -45,7 +47,7 @@
     "socks": "^2.8.8"
   },
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.3.11"
   },
   "keywords": [
     "browser",

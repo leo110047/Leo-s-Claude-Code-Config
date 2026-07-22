@@ -10,15 +10,19 @@ This is the full monty: every scenario, every flag, every helper bin, every trou
 
 ## The one-command install
 
+The high-risk setup automation is currently an experimental operator flow, so
+it is intentionally not exposed through the public capability router. Start
+with the detect-first helper:
+
 ```bash
-/goldband knowledge setup
+~/.claude/skills/goldband/bin/goldband-gbrain-detect
 ```
 
 That's it. The skill detects your current state, asks three questions at most, and walks you through install, init, MCP registration for Claude Code, and per-repo trust policy. On a clean Mac with nothing installed it finishes in under five minutes. On a Mac where something's already set up it takes seconds (it detects the existing state and skips done work).
 
 ## What you get after setup
 
-Once `/goldband knowledge setup` finishes, your coding agent has two retrieval surfaces it didn't have before:
+Once the GBrain operator setup finishes, your coding agent has two retrieval surfaces it didn't have before:
 
 - **Semantic code search across this repo.** `gbrain search "browser security canary"` returns ranked file regions, not exact-match grep hits. `gbrain code-def`, `code-refs`, `code-callers`, `code-callees` walk the call graph by symbol — useful when you don't know which file holds the implementation but you know what it does. The agent prefers these over Grep when the question is semantic; CLAUDE.md gets a `## GBrain Search Guidance` block that teaches it the routing rules.
 - **Cross-session memory.** Plans, retros, decisions, and learnings from past sessions live in `~/.goldband/` and (if you opted in to artifacts sync) get pushed to a private git repo that gbrain indexes. `gbrain search "what did we decide about auth?"` actually finds the prior CEO plan instead of you re-describing context every session.
@@ -45,7 +49,7 @@ Best for: fresh Supabase account, you want a clean new project with zero clickin
 
 At the end: explicit reminder to revoke the PAT at https://supabase.com/dashboard/account/tokens. The skill already discarded it from memory.
 
-**If you Ctrl-C mid-provision:** The SIGINT trap prints your in-flight project ref + a resume command. You can delete the orphan at the Supabase dashboard, or run `/goldband knowledge setup --resume-provision <ref>` to pick up where you left off.
+**If you Ctrl-C mid-provision:** The SIGINT trap prints your in-flight project ref + a resume command. You can delete the orphan at the Supabase dashboard, or resume polling with `goldband-gbrain-supabase-provision wait <ref>` after restoring its required secret environment.
 
 ### Path 2b: Supabase, create manually
 
@@ -59,9 +63,9 @@ Best for: try-it-first, no account, no cloud, no sharing. Or a dedicated "this M
 
 **What happens:** `gbrain init --pglite`. Brain lives at `~/.gbrain/brain.pglite`. No network calls for the init itself. Done in 30 seconds.
 
-**Embedding model.** When `VOYAGE_API_KEY` is set, goldband inits PGLite with `voyage-code-3` (1024-dim) — Voyage's code-specialized embedding model, which beats their general-purpose `voyage-4-large` and OpenAI `text-embedding-3-large` head-to-head on this codebase's symbol queries. Without `VOYAGE_API_KEY`, gbrain auto-selects (OpenAI 1536-dim when `OPENAI_API_KEY` is present, else falls down its provider chain). Either way, the embeddings call out to the chosen provider's API during sync — set the key for the provider you want before running `/goldband knowledge sync`.
+**Embedding model.** When `VOYAGE_API_KEY` is set, goldband inits PGLite with `voyage-code-3` (1024-dim) — Voyage's code-specialized embedding model, which beats their general-purpose `voyage-4-large` and OpenAI `text-embedding-3-large` head-to-head on this codebase's symbol queries. Without `VOYAGE_API_KEY`, gbrain auto-selects (OpenAI 1536-dim when `OPENAI_API_KEY` is present, else falls down its provider chain). Either way, the embeddings call out to the chosen provider's API during sync — set the key for the provider you want before running the GBrain sync helper.
 
-This is the best first choice if you just want to see what gbrain feels like before committing to cloud. You can always migrate later with `/goldband knowledge setup --switch`.
+This is the best first choice if you just want to see what gbrain feels like before committing to cloud. You can always migrate later with the operator migration procedure below.
 
 ### Path 4: Remote gbrain MCP (split-engine)
 
@@ -105,7 +109,7 @@ SSH and HTTPS remote variants collapse to the same key: `https://github.com/foo/
 **To change a policy:**
 
 ```bash
-/goldband knowledge setup --repo      # re-prompt for this repo only
+~/.claude/skills/goldband/bin/goldband-gbrain-repo-policy set "github.com/foo/bar" read-only
 
 # Or directly:
 ~/.claude/skills/goldband/bin/goldband-gbrain-repo-policy set "github.com/foo/bar" read-only
@@ -119,15 +123,15 @@ SSH and HTTPS remote variants collapse to the same key: `https://github.com/foo/
 
 Storage: `~/.goldband/gbrain-repo-policy.json`, mode 0600, schema-versioned so future migrations stay deterministic.
 
-## Keeping the brain current with `/goldband knowledge sync`
+## Keeping the brain current with the sync helper
 
-`/goldband knowledge setup` is one-time onboarding. `/goldband knowledge sync` is the action you run every time you want gbrain to see fresh changes in this repo's code.
+GBrain setup is one-time onboarding. The sync helper is the operator command you run every time you want gbrain to see fresh changes in this repo's code.
 
 ```bash
-/goldband knowledge sync                # incremental: mtime fast-path, ~seconds on a clean tree
-/goldband knowledge sync --full         # full reindex (~25-35 minutes on a big Mac)
-/goldband knowledge sync --code-only    # only the code stage; skip memory + brain-sync
-/goldband knowledge sync --dry-run      # preview what would sync; no writes
+~/.claude/skills/goldband/bin/goldband-gbrain-sync.ts                # incremental
+~/.claude/skills/goldband/bin/goldband-gbrain-sync.ts --full         # full reindex
+~/.claude/skills/goldband/bin/goldband-gbrain-sync.ts --code-only    # code stage only
+~/.claude/skills/goldband/bin/goldband-gbrain-sync.ts --dry-run      # preview only
 ```
 
 The skill runs three stages — code, memory, brain-sync — independently. A failure in one doesn't block the others. State persists to `~/.goldband/.gbrain-sync-state.json` so re-running picks up cleanly.
@@ -152,9 +156,8 @@ Re-runnable, idempotent, safe to run from multiple terminals on the same machine
 
 Picked PGLite and now want to join a team brain? One command:
 
-```bash
-/goldband knowledge setup --switch
-```
+Use `gbrain migrate --to supabase --url "$URL"` or
+`gbrain migrate --to pglite` after reviewing the destination and backup.
 
 The skill runs `gbrain migrate --to supabase --url "$URL"` wrapped in `timeout 180s`. Migration is bidirectional (Supabase → PGLite also works) and lossless — pages, chunks, embeddings, links, tags, and timeline all copy. Your original brain is preserved as a backup.
 
@@ -178,29 +181,28 @@ Secret-shaped content (AWS keys, GitHub tokens, PEM blocks, JWTs, bearer tokens)
 
 Full guide: [docs/gbrain-sync.md](docs/gbrain-sync.md). Error index: [docs/gbrain-sync-errors.md](docs/gbrain-sync-errors.md).
 
-`/goldband knowledge setup` offers to wire this up for you at the end of initial setup — it's one more AskUserQuestion, and it integrates with the same private-repo infrastructure.
+The experimental setup operator flow can wire this up at the end of initial setup; it remains outside the public capability router until its authorization and readback contract is typed.
 
 ## Cleanup orphan projects
 
 If you Ctrl-C'd mid-provision, tried three different names before settling on one, or otherwise accumulated gbrain-shaped Supabase projects you don't use, there's a subcommand for that:
 
-```bash
-/goldband knowledge setup --cleanup-orphans
-```
+Use `goldband-gbrain-supabase-provision list-orphans` to inspect candidates,
+then `delete-project` separately for each explicitly approved project.
 
 The skill re-collects a PAT (one-time, discarded after), lists every project in your Supabase account whose name starts with `gbrain` and whose ref doesn't match your active `~/.gbrain/config.json` pooler URL. For each orphan it asks per-project: *"Delete orphan project `<ref>` (`<name>`, created `<date>`)?"* — no batching, no "delete all" shortcut. The active brain is never offered for deletion.
 
 ## Command + flag reference
 
-### `/goldband knowledge setup` entry modes
+### Experimental setup operator modes
 
 | Invocation | What it does |
 |---|---|
-| `/goldband knowledge setup` | Full flow: detect state, pick path, install, init, MCP, policy, optional memory-sync |
-| `/goldband knowledge setup --repo` | Flip the per-remote trust policy for the current repo only |
-| `/goldband knowledge setup --switch` | Migrate engine (PGLite ↔ Supabase) without re-running the other steps |
-| `/goldband knowledge setup --resume-provision <ref>` | Resume a path-2a auto-provision that was interrupted during polling |
-| `/goldband knowledge setup --cleanup-orphans` | List + per-project delete of orphan Supabase projects |
+| Full setup | Detect state, pick path, install, init, MCP, policy, optional memory-sync |
+| Repo policy | Use `goldband-gbrain-repo-policy` for the current repo |
+| Switch engine | Use the reviewed `gbrain migrate` commands above |
+| Resume provision | Use `goldband-gbrain-supabase-provision wait <ref>` |
+| Cleanup orphans | List first, then delete each explicitly approved project |
 
 ### Bin helpers (for scripting)
 
@@ -254,7 +256,7 @@ Gbrain itself ships with these that goldband wraps:
 | `GBRAIN_INSTALL_DIR` | `goldband-gbrain-install` | Override default install path (`~/gbrain`) |
 | `GOLDBAND_HOME` | every bin helper | Override `~/.goldband` state dir. Heavy test use. |
 | `VOYAGE_API_KEY` | `gbrain embed` subprocess; goldband PGLite init | When set, goldband inits PGLite with `voyage-code-3` (1024-dim), Voyage's code-specialized embedding model. Beats `voyage-4-large` and OpenAI `text-embedding-3-large` head-to-head on this codebase's symbol queries. See CHANGELOG v1.43.1.0 for the A/B numbers. |
-| `OPENAI_API_KEY` | `gbrain embed` subprocess | Used for embeddings during `gbrain sync` / `/goldband knowledge sync` when `VOYAGE_API_KEY` is not set (gbrain's auto-selected fallback, `text-embedding-3-large` 1536-dim). Without either key, pages are imported structurally (symbol tables, chunks) but semantic search degrades — you'll see `[gbrain] embedding failed for code file ...` in the sync log. |
+| `OPENAI_API_KEY` | `gbrain embed` subprocess | Used for embeddings during GBrain sync when `VOYAGE_API_KEY` is not set (gbrain's auto-selected fallback, `text-embedding-3-large` 1536-dim). Without either key, pages are imported structurally (symbol tables, chunks) but semantic search degrades — you'll see `[gbrain] embedding failed for code file ...` in the sync log. |
 | `ANTHROPIC_API_KEY` | `claude-agent-sdk`, paid evals | Required for `bun run test:evals` and any direct `query()` call against Claude. |
 | `GOLDBAND_OPENAI_API_KEY` | `lib/conductor-env-shim.ts` | Conductor-injected fallback. Promoted to `OPENAI_API_KEY` when the canonical name is empty. |
 | `GOLDBAND_ANTHROPIC_API_KEY` | `lib/conductor-env-shim.ts` | Same pattern as above for Anthropic. |
@@ -265,7 +267,7 @@ If you run goldband inside a [Conductor](https://conductor.build) workspace, **C
 
 `lib/conductor-env-shim.ts` bridges the gap on the goldband side: when imported as a side effect (`import "../lib/conductor-env-shim";`), it promotes `GOLDBAND_FOO_API_KEY` to `FOO_API_KEY` for any subprocess that doesn't see the canonical name. The shim is already wired into:
 
-- `bin/goldband-gbrain-sync.ts` — so `/goldband knowledge sync` picks up OpenAI for embeddings
+- `bin/goldband-gbrain-sync.ts` — so the sync helper picks up OpenAI for embeddings
 - `bin/goldband-model-benchmark` — so `--judge` runs work without manual env mapping
 - `scripts/preflight-agent-sdk.ts` — so paid-eval auth probes work
 - `test/helpers/e2e-helpers.ts` — so `bun run test:evals` finds Anthropic
@@ -306,7 +308,7 @@ Another `gbrain` binary is earlier in PATH than the one the installer just linke
 - Prepend `~/.bun/bin` to PATH in your shell rc so the linked binary wins
 - Set `GBRAIN_INSTALL_DIR` to the shadowing binary's install directory and re-run
 
-Then re-run `/goldband knowledge setup`.
+Then re-run the detect-first installation procedure.
 
 ### "rejected direct-connection URL"
 
@@ -316,13 +318,11 @@ You pasted a `db.<ref>.supabase.co:5432` URL. Those are IPv6-only and fail in mo
 
 The Supabase project is still initializing. Your ref was printed in the exit message. Wait a minute, then:
 
-```bash
-/goldband knowledge setup --resume-provision <ref>
-```
+Resume with `goldband-gbrain-supabase-provision wait <ref>` after restoring the required secret environment.
 
 The skill re-collects a PAT, skips project creation, resumes polling.
 
-### "Another `/goldband knowledge setup` instance is running"
+### "Another GBrain setup instance is running"
 
 You have a stale lock directory. If you're sure no other instance is actually running:
 
@@ -340,7 +340,7 @@ You edited `~/.goldband/gbrain-repo-policy.json` by hand with legacy `allow` val
 
 `/goldband system health` treats that as yellow, not red. Check `gbrain doctor --json | jq .checks` to see which sub-checks are warning. Typical causes: resolver MECE overlap (skill names clashing) or DB connection not yet configured.
 
-### `/goldband knowledge sync` reports `OK` but `gbrain search` returns nothing semantic
+### The sync helper reports `OK` but `gbrain search` returns nothing semantic
 
 Embeddings probably failed during import. Symbol queries (`code-def`, `code-refs`) still work because they don't need embeddings, but `gbrain search "<terms>"` falls back to a degraded BM25 path. Look in the sync output for lines like:
 
@@ -348,7 +348,7 @@ Embeddings probably failed during import. Symbol queries (`code-def`, `code-refs
 [gbrain] embedding failed for code file <name>: OpenAI embedding requires OPENAI_API_KEY
 ```
 
-The fix is to put a provider API key in the process env before re-running. `VOYAGE_API_KEY` is preferred for code (goldband defaults PGLite to `voyage-code-3` when set); otherwise `OPENAI_API_KEY` falls back to `text-embedding-3-large`. On a bare Mac shell, source the key from `~/.zshrc` before calling. In Conductor, the `lib/conductor-env-shim.ts` shim promotes `GOLDBAND_ANTHROPIC_API_KEY` / `GOLDBAND_OPENAI_API_KEY` to their canonical names automatically; for `VOYAGE_API_KEY`, set it directly in your Conductor workspace env. Re-run `/goldband knowledge sync --code-only` to backfill embeddings on already-imported pages.
+The fix is to put a provider API key in the process env before re-running. `VOYAGE_API_KEY` is preferred for code (goldband defaults PGLite to `voyage-code-3` when set); otherwise `OPENAI_API_KEY` falls back to `text-embedding-3-large`. On a bare Mac shell, source the key from `~/.zshrc` before calling. In Conductor, the `lib/conductor-env-shim.ts` shim promotes `GOLDBAND_ANTHROPIC_API_KEY` / `GOLDBAND_OPENAI_API_KEY` to their canonical names automatically; for `VOYAGE_API_KEY`, set it directly in your Conductor workspace env. Re-run `goldband-gbrain-sync.ts --code-only` to backfill embeddings on already-imported pages.
 
 ### `gbrain sync` blocked at a commit hash — `FILE_TOO_LARGE`
 
@@ -362,7 +362,7 @@ Watermark advances past the offending commit. The same file fails again if it ch
 
 ### Switching PGLite → Supabase hangs
 
-Another goldband session in a sibling Conductor workspace may be holding a lock on your local PGLite file via its preamble's `goldband-brain-sync` call. Close other workspaces, re-run `/goldband knowledge setup --switch`. The timeout is bounded at 180s so you'll never actually wait forever.
+Another goldband session in a sibling Conductor workspace may be holding a lock on your local PGLite file via its preamble's `goldband-brain-sync` call. Close other workspaces, then re-run the reviewed `gbrain migrate` command. The timeout is bounded at 180s so you'll never actually wait forever.
 
 ## Why this design
 
@@ -374,12 +374,12 @@ Another goldband session in a sibling Conductor workspace may be holding a lock 
 
 **Why fail-hard on PATH shadowing instead of warn-and-continue?** A shadowed `gbrain` means every subsequent command calls a different binary than the one we just installed. That's a silent version-drift bug that surfaces as mysterious feature gaps weeks later. Setup skills have one job — set up a working environment. Refusing to install into a broken one is the setup-skill-correct behavior.
 
-**Why not auto-import every repo?** Privacy + noise. An auto-import preamble hook that ingests every repo you touch would: (a) leak work code into a shared brain without consent, and (b) clog search with throwaway repos. The per-remote policy makes ingestion an explicit, per-repo decision. `/goldband knowledge setup` doesn't install any auto-import hook today — but the policy store is forward-compatible for one later.
+**Why not auto-import every repo?** Privacy + noise. An auto-import preamble hook that ingests every repo you touch would: (a) leak work code into a shared brain without consent, and (b) clog search with throwaway repos. The per-remote policy makes ingestion an explicit, per-repo decision. The setup procedure doesn't install any auto-import hook today — but the policy store is forward-compatible for one later.
 
 ## Related skills + next steps
 
 - `/goldband system health` — includes a GBrain dimension (doctor status, sync queue depth, last-push age) in its 0-10 composite score. The dimension is omitted when gbrain isn't installed; running this action on a non-gbrain machine doesn't penalize that choice.
-- `/goldband system upgrade` — keeps goldband itself up to date. Does NOT upgrade gbrain independently. To bump gbrain, update `PINNED_COMMIT` in `bin/goldband-gbrain-install` and re-run `/goldband knowledge setup`.
+- `/goldband system upgrade` — keeps goldband itself up to date. Does NOT upgrade gbrain independently. To bump gbrain, update `PINNED_COMMIT` in `bin/goldband-gbrain-install` and re-run the detect-first installer.
 - `/goldband context retro` — weekly retrospective pulls learnings and plans from your gbrain when memory sync is on, letting the retro reference cross-machine history.
 
-Run `/goldband knowledge setup` and see what sticks.
+Run `goldband-gbrain-detect`, choose the documented operator path, and see what sticks.

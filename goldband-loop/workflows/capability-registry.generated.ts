@@ -1,5 +1,5 @@
 // AUTO-GENERATED from goldband.manifest.json. Do not edit.
-import type { HostName, RiskLevel } from './types';
+import type { HostName, RiskLevel, RuntimeActionContract, SafetyGateContract } from './types';
 
 export type CapabilityActionRecord = {
   capability: string;
@@ -8,6 +8,10 @@ export type CapabilityActionRecord = {
   description: string;
   contractPath: string;
   runtime: 'typed' | 'compatibility' | 'registered-only';
+  lifecycle: 'public' | 'experimental';
+  runtimeOwner: string | null;
+  runtimeContract: RuntimeActionContract | null;
+  safetyGates: SafetyGateContract[];
   riskLevel: RiskLevel;
   hostSupport: HostName[];
 };
@@ -20,6 +24,10 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Review a code diff.",
     "contractPath": "generated/workflow-contracts/review/code.workflow.md",
     "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "review-runtime",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -41,153 +49,10 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Review security and trust boundaries.",
     "contractPath": "generated/workflow-contracts/review/security.workflow.md",
     "runtime": "compatibility",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "design",
-    "name": "review/design",
-    "description": "Review visual and product design.",
-    "contractPath": "generated/workflow-contracts/review/design.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "devex",
-    "name": "review/devex",
-    "description": "Review developer experience.",
-    "contractPath": "generated/workflow-contracts/review/devex.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "opposite-host",
-    "name": "review/opposite-host",
-    "description": "Get an opposite-host second opinion.",
-    "contractPath": "generated/workflow-contracts/review/opposite-host.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "plan-ceo",
-    "name": "review/plan-ceo",
-    "description": "Review product scope and ambition.",
-    "contractPath": "generated/workflow-contracts/review/plan-ceo.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "plan-design",
-    "name": "review/plan-design",
-    "description": "Review a plan's design contract.",
-    "contractPath": "generated/workflow-contracts/review/plan-design.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "plan-devex",
-    "name": "review/plan-devex",
-    "description": "Review a plan's developer experience.",
-    "contractPath": "generated/workflow-contracts/review/plan-devex.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "review",
-    "action": "plan-engineering",
-    "name": "review/plan-engineering",
-    "description": "Review architecture and implementation plans.",
-    "contractPath": "generated/workflow-contracts/review/plan-engineering.workflow.md",
-    "runtime": "registered-only",
+    "lifecycle": "public",
+    "runtimeOwner": "prompt-contract-dispatch",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -209,6 +74,10 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Investigate code or runtime behavior.",
     "contractPath": "generated/workflow-contracts/investigate/code.workflow.md",
     "runtime": "compatibility",
+    "lifecycle": "public",
+    "runtimeOwner": "prompt-contract-dispatch",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -230,27 +99,10 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Run product QA and record evidence.",
     "contractPath": "generated/workflow-contracts/qa/app.workflow.md",
     "runtime": "typed",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "qa",
-    "action": "report-only",
-    "name": "qa/report-only",
-    "description": "Report QA findings without fixing.",
-    "contractPath": "generated/workflow-contracts/qa/report-only.workflow.md",
-    "runtime": "registered-only",
+    "lifecycle": "public",
+    "runtimeOwner": "qa-runtime",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -272,6 +124,51 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Merge, deploy, and verify.",
     "contractPath": "generated/workflow-contracts/release/land.workflow.md",
     "runtime": "registered-only",
+    "lifecycle": "experimental",
+    "runtimeOwner": null,
+    "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "release/land",
+        "mode": "land",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "clean-worktree",
+          "required-checks-passed",
+          "deployment-target-resolved",
+          "rollback-plan-recorded"
+        ],
+        "sideEffects": [
+          "merge",
+          "deploy"
+        ],
+        "readback": [
+          "merged-commit",
+          "deployment-health",
+          "rollback-signal"
+        ]
+      },
+      {
+        "operation": "release/canary",
+        "mode": "canary",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "not-required-read-only",
+        "preconditions": [
+          "deployment-identity-resolved",
+          "health-baseline-recorded",
+          "observation-window-bounded"
+        ],
+        "sideEffects": [],
+        "readback": [
+          "canary-health-samples",
+          "anomaly-decision",
+          "observation-window-complete"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -293,70 +190,34 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Configure deployment.",
     "contractPath": "generated/workflow-contracts/release/setup.workflow.md",
     "runtime": "registered-only",
+    "lifecycle": "experimental",
+    "runtimeOwner": null,
+    "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "release/setup",
+        "mode": "setup",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "deployment-target-resolved",
+          "current-config-readback",
+          "secret-references-only",
+          "rollback-plan-recorded"
+        ],
+        "sideEffects": [
+          "deployment-config-write",
+          "secret-binding-update"
+        ],
+        "readback": [
+          "effective-config-digest",
+          "secret-bindings-redacted",
+          "deployment-health"
+        ]
+      }
+    ],
     "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "release",
-    "action": "canary",
-    "name": "release/canary",
-    "description": "Monitor a deployment after release.",
-    "contractPath": "generated/workflow-contracts/release/canary.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "release",
-    "action": "report",
-    "name": "release/report",
-    "description": "Produce a landing report.",
-    "contractPath": "generated/workflow-contracts/release/report.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "release",
-    "action": "docs",
-    "name": "release/docs",
-    "description": "Update documentation for a release.",
-    "contractPath": "generated/workflow-contracts/release/docs.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
     "hostSupport": [
       "claude",
       "codex",
@@ -377,72 +238,13 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Create an implementation plan.",
     "contractPath": "generated/workflow-contracts/plan/create.workflow.md",
     "runtime": "compatibility",
+    "lifecycle": "public",
+    "runtimeOwner": "prompt-contract-dispatch",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude"
-    ]
-  },
-  {
-    "capability": "plan",
-    "action": "auto",
-    "name": "plan/auto",
-    "description": "Run the complete plan review pipeline.",
-    "contractPath": "generated/workflow-contracts/plan/auto.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "plan",
-    "action": "strategy",
-    "name": "plan/strategy",
-    "description": "Explore product direction and scope.",
-    "contractPath": "generated/workflow-contracts/plan/strategy.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "plan",
-    "action": "tune",
-    "name": "plan/tune",
-    "description": "Tune recurring planning questions.",
-    "contractPath": "generated/workflow-contracts/plan/tune.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
     ]
   },
   {
@@ -451,91 +253,32 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "browser/session",
     "description": "Use the persistent browser for interactive work.",
     "contractPath": "generated/workflow-contracts/browser/session.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "browser",
-    "action": "open",
-    "name": "browser/open",
-    "description": "Open a visible browser workbench.",
-    "contractPath": "generated/workflow-contracts/browser/open.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "browser",
-    "action": "scrape",
-    "name": "browser/scrape",
-    "description": "Extract content or media from a page.",
-    "contractPath": "generated/workflow-contracts/browser/scrape.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "browser",
-    "action": "cookies",
-    "name": "browser/cookies",
-    "description": "Import browser cookies for authenticated testing.",
-    "contractPath": "generated/workflow-contracts/browser/cookies.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "browser",
-    "action": "pair",
-    "name": "browser/pair",
-    "description": "Pair another agent with the browser.",
-    "contractPath": "generated/workflow-contracts/browser/pair.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "browse",
+    "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "browser/cookies",
+        "mode": "cookies",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "source-profile-resolved",
+          "domain-scope-explicit",
+          "credential-store-approval"
+        ],
+        "sideEffects": [
+          "session-cookie-import"
+        ],
+        "readback": [
+          "imported-domain-list",
+          "import-count",
+          "no-cookie-values-in-evidence"
+        ]
+      }
+    ],
     "riskLevel": "medium",
     "hostSupport": [
       "claude",
@@ -556,70 +299,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "design/consult",
     "description": "Define a design direction and system.",
     "contractPath": "generated/workflow-contracts/design/consult.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "design",
-    "action": "prototype",
-    "name": "design/prototype",
-    "description": "Generate an HTML design prototype.",
-    "contractPath": "generated/workflow-contracts/design/prototype.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "design",
-    "action": "explore",
-    "name": "design/explore",
-    "description": "Explore multiple design directions.",
-    "contractPath": "generated/workflow-contracts/design/explore.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "safety",
-    "action": "careful",
-    "name": "safety/careful",
-    "description": "Enable careful command handling.",
-    "contractPath": "generated/workflow-contracts/safety/careful.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "design-decision-store",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -638,63 +322,48 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "capability": "safety",
     "action": "guard",
     "name": "safety/guard",
-    "description": "Enable workflow-local safety rails.",
+    "description": "Enable careful-mode for a Claude session.",
     "contractPath": "generated/workflow-contracts/safety/guard.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "claude-hook-mode-state",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
+      "claude"
     ]
   },
   {
     "capability": "safety",
     "action": "freeze",
     "name": "safety/freeze",
-    "description": "Restrict edits to an approved scope.",
+    "description": "Enable read-only freeze-mode for a Claude session.",
     "contractPath": "generated/workflow-contracts/safety/freeze.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "claude-hook-mode-state",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
+      "claude"
     ]
   },
   {
     "capability": "safety",
     "action": "unfreeze",
     "name": "safety/unfreeze",
-    "description": "Remove an active edit restriction.",
+    "description": "Disable freeze-mode for a Claude session.",
     "contractPath": "generated/workflow-contracts/safety/unfreeze.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "claude-hook-mode-state",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
+      "claude"
     ]
   },
   {
@@ -703,7 +372,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "context/save",
     "description": "Save current working context.",
     "contractPath": "generated/workflow-contracts/context/save.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "context-checkpoint-store",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -724,7 +397,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "context/restore",
     "description": "Restore saved working context.",
     "contractPath": "generated/workflow-contracts/context/restore.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "context-checkpoint-store",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -745,7 +422,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "context/retro",
     "description": "Summarize recent work and lessons.",
     "contractPath": "generated/workflow-contracts/context/retro.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "compatibility",
+    "lifecycle": "public",
+    "runtimeOwner": "prompt-contract-dispatch",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -766,7 +447,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "knowledge/recall",
     "description": "Inspect Goldband learnings and knowledge.",
     "contractPath": "generated/workflow-contracts/knowledge/recall.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "goldband-knowledge",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -788,6 +473,33 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Configure GBrain integration.",
     "contractPath": "generated/workflow-contracts/knowledge/setup.workflow.md",
     "runtime": "registered-only",
+    "lifecycle": "experimental",
+    "runtimeOwner": null,
+    "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "knowledge/setup",
+        "mode": "setup",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "endpoint-resolved",
+          "repository-scope-explicit",
+          "secret-references-only",
+          "existing-config-readback"
+        ],
+        "sideEffects": [
+          "knowledge-config-write",
+          "credential-binding-update"
+        ],
+        "readback": [
+          "sanitized-config",
+          "connection-check",
+          "repository-scope"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -809,6 +521,35 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "description": "Synchronize GBrain knowledge.",
     "contractPath": "generated/workflow-contracts/knowledge/sync.workflow.md",
     "runtime": "registered-only",
+    "lifecycle": "experimental",
+    "runtimeOwner": null,
+    "runtimeContract": null,
+    "safetyGates": [
+      {
+        "operation": "knowledge/sync",
+        "mode": "sync",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "source-scope-explicit",
+          "destination-scope-explicit",
+          "review-status-verified",
+          "secret-scan-passed",
+          "resume-checkpoint-resolved"
+        ],
+        "sideEffects": [
+          "external-knowledge-write",
+          "sync-checkpoint-write"
+        ],
+        "readback": [
+          "synced-item-count",
+          "destination-digest",
+          "resume-checkpoint",
+          "rejected-item-count"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",
@@ -829,28 +570,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "benchmark/workflow",
     "description": "Benchmark product or workflow performance.",
     "contractPath": "generated/workflow-contracts/benchmark/workflow.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "benchmark",
-    "action": "models",
-    "name": "benchmark/models",
-    "description": "Compare model performance.",
-    "contractPath": "generated/workflow-contracts/benchmark/models.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "benchmark-evidence-aggregator",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -869,31 +593,30 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "capability": "document",
     "action": "generate",
     "name": "document/generate",
-    "description": "Generate product or module documentation.",
+    "description": "Audit documentation coverage and prepare documentation artifacts.",
     "contractPath": "generated/workflow-contracts/document/generate.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "documentation-audit",
+    "runtimeContract": {
+      "modes": [
+        "audit"
+      ],
+      "requiredInputs": {
+        "audit": [
+          "diffFile"
+        ]
+      },
+      "outputs": [
+        "coverage-artifact",
+        "pr-body-section-artifact"
+      ],
+      "sideEffects": {
+        "pr-body-update": "native-host-approval"
+      }
+    },
+    "safetyGates": [],
     "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "document",
-    "action": "pdf",
-    "name": "document/pdf",
-    "description": "Create a PDF artifact.",
-    "contractPath": "generated/workflow-contracts/document/pdf.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
     "hostSupport": [
       "claude",
       "codex",
@@ -913,7 +636,11 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "system/health",
     "description": "Inspect Goldband health and installation state.",
     "contractPath": "generated/workflow-contracts/system/health.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "goldband-installation",
+    "runtimeContract": null,
+    "safetyGates": [],
     "riskLevel": "low",
     "hostSupport": [
       "claude",
@@ -934,92 +661,62 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "system/upgrade",
     "description": "Upgrade Goldband.",
     "contractPath": "generated/workflow-contracts/system/upgrade.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "goldband-setup-gate",
+    "runtimeContract": {
+      "modes": [
+        "preflight",
+        "readback"
+      ],
+      "requiredInputs": {
+        "preflight": [
+          "phase"
+        ],
+        "readback": [
+          "phase",
+          "preflightId",
+          "oldVersion",
+          "newVersion",
+          "setupVerified"
+        ]
+      },
+      "outputs": [
+        "upgrade-preflight",
+        "installed-version",
+        "installed-head",
+        "setup-status"
+      ],
+      "sideEffects": {
+        "git-fast-forward": "native-host-approval",
+        "installer-execution": "native-host-approval"
+      }
+    },
+    "safetyGates": [
+      {
+        "operation": "system/upgrade",
+        "mode": "upgrade",
+        "enforcement": "runtime-owner",
+        "owner": "goldband-setup-gate",
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "trusted-installation",
+          "clean-worktree",
+          "upgrade-preflight-recorded"
+        ],
+        "sideEffects": [
+          "git-fast-forward",
+          "installer-execution"
+        ],
+        "readback": [
+          "installed-version",
+          "installed-head",
+          "setup-status",
+          "completed-preflight"
+        ]
+      }
+    ],
     "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "system",
-    "action": "skill-authoring",
-    "name": "system/skill-authoring",
-    "description": "Create or improve a Goldband workflow skill.",
-    "contractPath": "generated/workflow-contracts/system/skill-authoring.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "ios",
-    "action": "clean",
-    "name": "ios/clean",
-    "description": "Clean iOS project state.",
-    "contractPath": "generated/workflow-contracts/ios/clean.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "ios",
-    "action": "review",
-    "name": "ios/review",
-    "description": "Review iOS design and behavior.",
-    "contractPath": "generated/workflow-contracts/ios/review.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "medium",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "ios",
-    "action": "fix",
-    "name": "ios/fix",
-    "description": "Repair iOS implementation issues.",
-    "contractPath": "generated/workflow-contracts/ios/fix.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "low",
     "hostSupport": [
       "claude",
       "codex",
@@ -1039,28 +736,69 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "name": "ios/qa",
     "description": "Run iOS QA.",
     "contractPath": "generated/workflow-contracts/ios/qa.workflow.md",
-    "runtime": "registered-only",
-    "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "ios",
-    "action": "sync",
-    "name": "ios/sync",
-    "description": "Synchronize iOS project state.",
-    "contractPath": "generated/workflow-contracts/ios/sync.workflow.md",
-    "runtime": "registered-only",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "ios-qa-evidence",
+    "runtimeContract": {
+      "modes": [
+        "qa"
+      ],
+      "requiredInputs": {
+        "qa": [
+          "targetScope",
+          "checks"
+        ]
+      },
+      "outputs": [
+        "simulator-inventory",
+        "qa-evidence-artifact",
+        "untested-device-coverage"
+      ],
+      "sideEffects": {}
+    },
+    "safetyGates": [
+      {
+        "operation": "ios/qa",
+        "mode": "qa",
+        "enforcement": "runtime-owner",
+        "owner": "ios-qa-evidence",
+        "authorization": "not-required-read-only",
+        "preconditions": [
+          "darwin-platform",
+          "xcode-toolchain",
+          "target-scope-explicit",
+          "qa-checks-supplied"
+        ],
+        "sideEffects": [],
+        "readback": [
+          "simulator-inventory",
+          "qa-evidence-artifact",
+          "untested-device-coverage"
+        ]
+      },
+      {
+        "operation": "ios/sync",
+        "mode": "sync",
+        "enforcement": "blocked-before-runtime",
+        "owner": null,
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "project-identity-resolved",
+          "sync-target-explicit",
+          "pre-sync-diff-recorded",
+          "backup-or-rollback-recorded"
+        ],
+        "sideEffects": [
+          "xcode-project-sync",
+          "project-file-write"
+        ],
+        "readback": [
+          "post-sync-diff",
+          "project-file-digest",
+          "build-status"
+        ]
+      }
+    ],
     "riskLevel": "high",
     "hostSupport": [
       "claude",

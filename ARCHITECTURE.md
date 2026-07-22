@@ -107,6 +107,50 @@ the complete `cross-review/` directory next to `bin/`; explicit module discovery
 handles source checkouts and installed Codex/Claude runtime roots without
 assuming one fixed relative depth.
 
+### Managed Worktree Runtime
+
+`goldband-loop/lib/managed-worktree.ts` owns the managed-worktree lease,
+host boundary, integration transaction, and durable finish evidence. The public
+surface stays limited to `goldband worktree create <name>` and
+`goldband worktree finish <name> -m "<message>"`.
+
+`create` records the source branch and commit, creates a detached worktree under
+`~/.goldband/worktrees/checkouts/`, verifies an OS sandbox boundary, and opens
+an interactive shell inside it. The configured state root is realpath
+canonicalized before lease paths or sandbox rules are derived. The managed
+checkout is writable, while its
+`.git` pointer, per-worktree Git directory, common Git directory, source
+worktree, lease-control state, pinned Git executable, broker runtime, installed
+launchers, and Git config/hook resolution inputs are read-only. Claude Code,
+Codex, shell scripts, and low-level Git commands inherit the same process
+boundary. macOS Seatbelt explicitly denies writes to those inputs; Linux
+bubblewrap supplies a read-only root. Both expose a distinct writable agent
+scratch directory, while finish indexes, objects, and isolated broker home use
+a separate broker scratch directory that stays read-only to the agent.
+Unsupported or unavailable hosts fail closed before handing the worktree to an
+agent. Because macOS does not support nesting another Seatbelt policy reliably,
+Codex runs with
+`--sandbox danger-full-access` and Claude Code receives an additional setting
+with `sandbox.enabled=false` inside this shell. Their normal permission and hook
+layers remain active; only their inner OS sandbox is replaced by Goldband's
+already-active outer boundary.
+
+`finish` runs outside that shell. It locks and validates the lease, source
+worktree, source branch, base commit, ignored/untracked state, clean submodule
+worktrees, Git lock state, broker config digest, and collisions between source
+ignored content and the candidate tree. It builds the candidate tree through a
+broker-owned temporary index and quarantine object directory, then sends it to
+the source repository's local `receive-pack`. Every broker Git process uses the
+recorded canonical executable, isolated config/home, allowlisted environment,
+fixed identity, and explicit source-owned hook contract. Git promotes
+quarantined objects only when the unchanged original branch can be
+fast-forwarded and its clean checked-out worktree updated. The broker verifies
+the resulting commit/tree and clean source worktree, then removes the managed
+worktree and writes evidence under `~/.goldband/worktrees/evidence/`. Any
+pre-integration failure preserves the managed worktree and discards its
+quarantined candidate objects. PreToolUse and `pre-commit` checks are soft,
+early diagnostics only; the OS filesystem sandbox is the enforcement boundary.
+
 ### Claude Plugin Contract
 
 The Claude plugin is a generated distribution artifact, not a second source of

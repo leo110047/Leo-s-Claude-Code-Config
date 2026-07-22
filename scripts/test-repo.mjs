@@ -3,12 +3,23 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, relative } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
+import {
+  formatRepoTestPreflightFailure,
+  inspectRepoTestEnvironment,
+} from './lib/repo-test-environment.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const bunCmd = process.platform === 'win32' ? 'bun.exe' : 'bun';
 
 export const TEST_SUITES = [
+  suite({
+    id: 'root:test-environment',
+    label: 'Root repository test environment contract',
+    cwd: ROOT,
+    command: 'node',
+    args: ['scripts/test-repo-environment.mjs'],
+  }),
   suite({
     id: 'root:manifest',
     label: 'Root generated capability surfaces',
@@ -249,6 +260,13 @@ function main() {
   if (options.list || options.dryRun) {
     printSuiteList(suites);
     return 0;
+  }
+  if (options.suites.size === 0) {
+    const problems = inspectRepoTestEnvironment(ROOT);
+    if (problems.length > 0) {
+      console.error(formatRepoTestPreflightFailure(problems));
+      return 2;
+    }
   }
   const results = suites.map(runSuite);
   return printFinalSummary(results);

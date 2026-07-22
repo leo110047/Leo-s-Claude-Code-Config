@@ -185,8 +185,6 @@ error message goldband-brain may print, with problem / cause / fix for each.
 
 ## Under the hood
 
-For the architectural decisions behind this feature (allowlist vs
-denylist, daemon vs preamble-boundary sync, JSONL merge driver, privacy
-stop-gate), see the
-[approved plan](../system-instruction-you-are-working-jaunty-kahn.md) in
-the goldband plans directory.
+The implementation lives in the `goldband-brain-*` commands under `bin/`.
+Treat the current command behavior and its tests as authoritative; historical
+plans are not active runtime contracts.

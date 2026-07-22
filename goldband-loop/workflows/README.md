@@ -13,24 +13,29 @@ interface and prompt contracts are owned by `../goldband.manifest.json`.
 - Model: task decomposition, tool selection, and adaptation within the contract.
 
 Every registry entry has `contractPath`, target, evaluation signal, iteration
-cap, stop conditions, host support, risk level, integration status, entrypoint
-type, and evidence policy. `defineWorkflow()` fails when required fields are
-missing.
+cap, stop conditions, host support, risk level, lifecycle, integration status,
+entrypoint type, runtime owner, and evidence policy. `defineWorkflow()` fails
+when required fields are missing or a runnable action has no owner.
 
 ## Runtime CLI
 
 ```bash
-bun run workflows/run.ts <capability/action> \
+bun run workflows/run.ts <capability> <action> \
   [--loop] [--max-iterations <n>] \
   [--mode mock|real] [--host mock|claude|codex] \
+  [--specialists off|auto|all] \
+  [--review-host-timeout-seconds <60-1800>] \
+  [--review-pass-timeout-seconds <60-1800>] \
   [--input <file>] [--base <ref>] \
   [--staged|--worktree|--include-untracked|--diff-file <file>]
 ```
 
-Registered-only workflows are discoverable but not runnable. Compatibility
-workflows read their thin contract in mock mode and fail closed in real mode.
-Typed workflows may use real host adapters when their contract explicitly
-supports it.
+Public actions are discoverable. Experimental actions stay in the generated
+inventory for engineering tracking, but are excluded from routing and
+activation hints and are not runnable. They cannot claim a runtime owner.
+Compatibility workflows read their thin contract in mock mode and fail closed
+in real mode. Typed workflows may use real owner adapters when their contract
+explicitly supports it.
 
 The loop controller evaluates structured signals after each iteration and stops
 when the target is met, the same blocker repeats, the signal stops improving,
@@ -39,8 +44,128 @@ the registry cap.
 
 `review/code` supports typed diff collection, validated findings, specialist
 dispatch, and convergence. `qa/app` currently provides a typed mock adapter;
-real browser QA remains registered-only until its browser actions and artifacts
-are runtime-owned.
+real browser QA remains unsupported until its checks consume the typed
+`browser/session` evidence contract.
+
+Interactive Codex and Claude `$goldband review code` invocations must enter this
+runtime. Claude uses `bin/goldband review code --host claude`. Codex reads the
+installer-owned `~/.codex/skills/goldband/.workflow-launcher.json` and executes
+its exact `argvPrefix` followed by `review code --host codex`. The installed
+launcher is a materialized snapshot outside the reviewed workspace, and its
+machine-local rule allows only that exact Codex review prefix. The caller must
+not substitute a workspace path or request sandbox escalation. A missing
+marker, runtime, or rule is an installation failure and requires reinstall.
+The trusted snapshot also pins the installed Codex CLI by absolute path, so a
+reviewed repository cannot replace the nested reviewer through `PATH`.
+
+The launcher forces real mode and defaults to the whole current worktree when
+the user does not name a narrower scope. User-supplied prompt text never proves
+runtime ownership. Runtime-owned child prompts use the dedicated non-router
+`GOLDBAND_RUNTIME_TASK=review/code` header and do not invoke `$goldband` again.
+Launcher or runtime failure is terminal and must not silently fall back to an
+untyped manual review.
+
+Codex CLI browser work uses the same trusted launcher followed by
+`browser session --host codex <command> [args...]`. It does not depend on the
+Codex App's Browser or Chrome plugin bindings. The installed snapshot carries a
+materialized browser client and bundled server, so neither the launcher nor the
+daemon is resolved from the writable workspace. Exact rules auto-admit only
+inspection commands. Navigation (`goto`, `back`, `forward`, `reload`) and
+`wait` remain on Codex's native approval path so repository instructions cannot
+silently use the trusted launcher to reach localhost or private-network
+services. The runtime still rejects commands with outward effects.
+Claude uses `bin/goldband browser session --host claude` and the source-owned
+browser runtime.
+
+Review input has a 2 MiB limit. Larger Git diffs fail with an explicit request
+to narrow scope instead of a host-specific buffer error. `--diff-file` accepts
+only a stable regular file; untracked files are opened without following
+symbolic links, checked again after opening, and read from that same descriptor.
+The descriptor is checked again after reading, so an in-place write during
+collection fails closed instead of producing mixed input.
+Scope flags fail before host dispatch when they conflict; `--base --worktree`
+is the only combined primary scope, and `--include-untracked` cannot modify a
+supplied `--diff-file`. Untracked path discovery is NUL-delimited so filenames
+containing tabs, newlines, quotes, or backslashes are not silently omitted.
+
+The launcher probes the evidence root before starting. If the default
+`~/.goldband` root is blocked by the caller's filesystem sandbox, review runs
+with a private temporary state root and reports that evidence as ephemeral.
+An explicitly configured state root still fails closed when it is not writable.
+For Codex, the installer-owned exact `allow` rule admits the trusted launcher
+outside the parent command sandbox without a prompt, so nested `codex exec` can
+initialize Codex state and app-server resources. The non-interactive child
+reviewer remains `read-only` with approval set to `never`.
+Strict or exhaustive requests add `--specialists all`; ordinary review keeps
+the runtime's `auto` specialist selection.
+
+Before host dispatch, `review/code` collects changed paths with the diff; Git
+scopes use NUL-delimited path output, while a supplied patch derives paths from
+its file headers.
+When two or more paths changed, the runtime builds a bounded repository-local
+dependency view from Git-tracked source files and the reviewed untracked paths.
+It follows common static import/source forms, walks reverse dependencies to
+depth two, identifies observed test dependents, and can route missing-test or
+wide-impact signals to the relevant automatic specialists. The persistent
+index lives under `${GOLDBAND_HOME:-$HOME/.goldband}/review-impact/`; it is
+Goldband runtime state and is not installed into, or supplied by, the child
+reviewer. A one-file review skips inventory and index work entirely.
+
+The graph is deliberately advisory. Its paths prioritize source inspection but
+cannot narrow the diff, prove coverage, or support a blocking finding without
+current file evidence. File, byte, traversal-depth, and output limits produce
+an explicit `degraded` status and diagnostics. Every pass records a JSON graph
+artifact plus graph telemetry so stale, skipped, and bounded coverage remain
+visible.
+
+Codex review subprocesses run with `--ask-for-approval never` and a read-only
+sandbox. Reviewer prompts prohibit `require_escalated`: when a test or other
+command needs writes, the reviewer records that verification as unavailable and
+continues from read-only evidence instead of requesting an approval that
+`codex exec` cannot service.
+They also use `--ignore-user-config`, an empty `mcp_servers` override, and
+`--ephemeral`: authentication remains available from `CODEX_HOME`, while user
+customizations, external MCP tools, and persistent reviewer sessions do not.
+
+Claude review subprocesses run with `--safe-mode` and only `Read`, `Glob`, and
+`Grep`. This disables hooks, plugins, MCP servers, and other executable
+customizations. Because safe mode also disables automatic project instructions,
+the review prompt requires the child to inspect applicable `AGENTS.md` and
+`CLAUDE.md` files explicitly with those read-only tools.
+
+Both host adapters receive the complete review prompt over stdin rather than a
+command argument, so the 2 MiB review-input contract does not exceed the host
+operating system's `ARG_MAX` limit.
+
+Each real host call has a twelve-minute default timeout. A complete `run-review`
+pass is limited to twelve minutes with specialists off, twenty minutes in auto
+mode, and thirty minutes only for explicit exhaustive coverage. The timeout
+flags override one pass, must remain between 60 and 1800 seconds, and the host
+timeout cannot exceed the pass timeout. Evidence telemetry records the resolved
+mode and both timeout budgets so latency can be tuned from real runs.
+Pass elapsed time uses a monotonic clock; wall-clock changes affect evidence
+timestamps but cannot extend the configured deadline.
+When an optional `auto` specialist consumes the remaining pass budget, the
+runtime preserves the completed core and specialist results plus a non-blocking
+coverage diagnostic. Explicit `--specialists all` coverage still fails closed.
+
+## Owner input contracts
+
+Real mode reads structured JSON from `--input`. Required semantic content is
+produced by the model; runtime owners validate, gate, persist, and read it back.
+
+| Action | Runtime owner | Real-mode input |
+| --- | --- | --- |
+| `browser/session` | `browse` | Optional `command` and `args`; only non-outward-effect navigation and inspection commands are delegated. Mutations use the browser tool's native approval path. |
+| `design/consult` | `design-decision-store` | `brief` and `decisions` with typography, color, spacing, layout, and motion. |
+| `safety/guard` | `workflow-safety-state` | Optional `scope`. |
+| `safety/freeze` / `safety/unfreeze` | `freeze-hook-state` | Optional freeze `scope`; unfreeze reads the same state owner. |
+| `context/save` / `context/restore` | `context-checkpoint-store` | Save requires `summary`; restore reads the latest cwd-bound checkpoint and reports freshness. |
+| `knowledge/recall` | `goldband-knowledge` | Optional `query`, `domain`, and `limit`. |
+| `benchmark/workflow` | `benchmark-evidence-aggregator` | `label`, `metric`, `conditions`, `sourceEvidence`, and at least two numeric `samples`. |
+| `system/health` | `goldband-installation` | None; inspection is read-only. |
+| `system/upgrade` | `goldband-setup-gate` | Preflight persists an ID and emits command arrays for native host approval. Readback requires the preflight ID, old/new versions, and `setupVerified=true`; runtime never hides `git pull` inside a child process. |
+| `ios/qa` | `ios-qa-evidence` | User-visible `checks`; macOS real mode also verifies available simulator inventory. |
 
 ## Evidence
 
@@ -66,4 +191,4 @@ bun run typecheck
 bun run test:workflows
 ```
 
-See `COVERAGE.md` for typed, compatibility, and registered-only status.
+See `COVERAGE.md` for typed, compatibility, experimental, and owner status.

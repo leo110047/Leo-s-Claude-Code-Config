@@ -22,6 +22,7 @@ import { spawnTerminalAgent } from './terminal-agent-control';
 const config = resolveConfig();
 const IS_WINDOWS = process.platform === 'win32';
 const MAX_START_WAIT = IS_WINDOWS ? 15000 : (process.env.CI ? 30000 : 8000); // Node+Chromium takes longer on Windows
+const BUN_EXECUTABLE = process.env.BROWSE_BUN_EXECUTABLE || 'bun';
 
 export function resolveServerScript(
   env: Record<string, string | undefined> = process.env,
@@ -251,7 +252,7 @@ async function startServer(extraEnv?: Record<string, string>): Promise<ServerSta
     // which calls setsid() so the server becomes its own session leader
     // (PPID=1, STAT=Ss) and survives the spawning shell's exit. Mirrors
     // the Windows path's rationale — same root cause, different OS API.
-    nodeSpawn('bun', ['run', SERVER_SCRIPT], {
+    nodeSpawn(BUN_EXECUTABLE, ['run', SERVER_SCRIPT], {
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore'],
       env: { ...process.env, BROWSE_STATE_FILE: config.stateFile, BROWSE_PARENT_PID: parentPid, ...extraEnv },

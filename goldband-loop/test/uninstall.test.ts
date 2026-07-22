@@ -56,6 +56,12 @@ describe('goldband-uninstall', () => {
       fs.mkdirSync(path.join(mockHome, '.goldband', 'projects'), { recursive: true });
       fs.writeFileSync(path.join(mockHome, '.goldband', 'config.json'), '{}');
 
+      // Create the Goldband-owned trusted Codex workflow runtime and exact rules.
+      fs.mkdirSync(path.join(mockHome, '.codex', 'goldband', 'workflow-runtime'), { recursive: true });
+      fs.writeFileSync(path.join(mockHome, '.codex', 'goldband', 'workflow-runtime', 'launcher.js'), 'test');
+	  fs.mkdirSync(path.join(mockHome, '.codex', 'rules'), { recursive: true });
+      fs.writeFileSync(path.join(mockHome, '.codex', 'rules', 'goldband-workflows.rules'), 'test');
+
       // Create mock git repo
       fs.mkdirSync(mockGitRoot, { recursive: true });
       spawnSync('git', ['init', '-b', 'main'], { cwd: mockGitRoot, stdio: 'pipe' });
@@ -93,6 +99,8 @@ describe('goldband-uninstall', () => {
 
       // State should be removed
       expect(fs.existsSync(path.join(mockHome, '.goldband'))).toBe(false);
+      expect(fs.existsSync(path.join(mockHome, '.codex', 'goldband', 'workflow-runtime'))).toBe(false);
+      expect(fs.existsSync(path.join(mockHome, '.codex', 'rules', 'goldband-workflows.rules'))).toBe(false);
     });
 
     test('--keep-state preserves state directory', () => {

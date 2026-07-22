@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ReviewSpecialist } from './review-engine';
 
 type RuleRecord = {
@@ -48,13 +50,57 @@ export const MAX_REVIEW_AGGREGATE_RULES_BYTES = 160 * 1024;
 
 const require = createRequire(import.meta.url);
 
+type TrustedRulesRuntime = {
+  resolverScript: string;
+  rulesDirectory: string;
+};
+
+function loadTrustedRulesRuntime(): TrustedRulesRuntime | undefined {
+  const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const configFile = join(runtimeRoot, 'trusted-runtime.json');
+  if (!existsSync(configFile)) return undefined;
+
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `trusted review Rules configuration is invalid: ${configFile}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (config.schemaVersion !== 2) {
+    throw new Error(`trusted review Rules configuration has an unsupported schema: ${configFile}`);
+  }
+
+  const requirePath = (field: string, kind: 'file' | 'directory'): string => {
+    const value = config[field];
+    if (typeof value !== 'string' || !isAbsolute(value) || !existsSync(value)) {
+      throw new Error(`trusted review Rules configuration field ${field} is invalid: ${configFile}`);
+    }
+    const resolved = realpathSync(value);
+    const stats = statSync(resolved);
+    if ((kind === 'file' && !stats.isFile()) || (kind === 'directory' && !stats.isDirectory())) {
+      throw new Error(`trusted review Rules configuration field ${field} is not a ${kind}: ${configFile}`);
+    }
+    return resolved;
+  };
+
+  return {
+    resolverScript: requirePath('rulesResolverScript', 'file'),
+    rulesDirectory: requirePath('rulesDirectory', 'directory'),
+  };
+}
+
+const trustedRulesRuntime = loadTrustedRulesRuntime();
+
 function loadRulesResolver(): RulesResolver {
   const candidates = [
+    trustedRulesRuntime?.resolverScript,
     '../../hooks/scripts/lib/rules-resolver',
     join(homedir(), '.codex', 'review-runtime', 'rules-resolver.js'),
     join(homedir(), '.codex', 'hooks', 'shared', 'rules-resolver.js'),
     join(homedir(), '.claude', 'hooks', 'scripts', 'lib', 'rules-resolver.js'),
-  ];
+  ].filter((candidate): candidate is string => Boolean(candidate));
   const failures: string[] = [];
   for (const candidate of candidates) {
     try {
@@ -67,6 +113,14 @@ function loadRulesResolver(): RulesResolver {
 }
 
 const rulesResolver = loadRulesResolver();
+
+function withTrustedRulesDirectory(
+  options: Record<string, unknown>,
+): Record<string, unknown> {
+  return trustedRulesRuntime
+    ? { ...options, rulesDir: trustedRulesRuntime.rulesDirectory }
+    : options;
+}
 
 function specialistScope(specialist: ReviewSpecialist): string {
   if (specialist === 'security') return 'security auth permission provider boundary';
@@ -93,12 +147,12 @@ export function coreReviewRules(
   diff: string,
   snapshot?: RulesSnapshot,
 ) {
-  const bundle = rulesResolver.resolveRules({
+  const bundle = rulesResolver.resolveRules(withTrustedRulesDirectory({
     repoRoot,
     phase: 'review',
     scope: diff,
     snapshot,
-  });
+  }));
   return { bundle, text: assertRulesPayloadBudget(bundle, 'core') };
 }
 
@@ -107,17 +161,19 @@ export function specialistReviewRules(
   specialist: ReviewSpecialist,
   snapshot?: RulesSnapshot,
 ) {
-  const bundle = rulesResolver.resolveRules({
+  const bundle = rulesResolver.resolveRules(withTrustedRulesDirectory({
     repoRoot,
     phase: 'review',
     scope: specialistScope(specialist),
     snapshot,
-  });
+  }));
   return { bundle, text: assertRulesPayloadBudget(bundle, specialist) };
 }
 
 export function createReviewRulesSnapshot(repoRoot: string): RulesSnapshot {
-  return rulesResolver.createRulesSnapshot({ repoRoot });
+  return rulesResolver.createRulesSnapshot(
+    withTrustedRulesDirectory({ repoRoot }),
+  );
 }
 
 export function buildReviewPromptTelemetry(options: {

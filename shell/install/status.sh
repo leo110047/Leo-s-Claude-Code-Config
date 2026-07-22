@@ -275,15 +275,93 @@ show_codex_install_status() {
     show_repo_path_status "codex review Rules runtime" "$CODEX_REVIEW_RUNTIME_FILE" "$REPO_DIR/hooks/scripts/lib/rules-resolver.js" "codex-hooks"
     show_codex_rules_status
     show_codex_skills_status
+    show_codex_workflow_launcher_status
     show_mcp_token_status
+}
+
+codex_workflow_policy_allows() {
+    local codex_path="$1" rule="$2"
+    shift 2
+    "$codex_path" execpolicy check --rules "$rule" -- "$@" 2>/dev/null \
+        | grep -q '"decision":"allow"'
+}
+
+show_codex_workflow_launcher_status() {
+    local marker="$HOME/.codex/skills/goldband/.workflow-launcher.json"
+    local rule="$HOME/.codex/rules/goldband-workflows.rules"
+    local marker_values bun_path launcher_path marker_rule runtime_root
+    if [ ! -f "$marker" ] || [ ! -f "$rule" ]; then
+        echo -e "  ${YELLOW}[未安裝]${NC} trusted Codex workflow launcher — 重跑 ./install.sh workflow-codex"
+        return 0
+    fi
+    if ! command -v node >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}[無法檢查]${NC} trusted Codex workflow launcher — node 不可用"
+        return 0
+    fi
+    marker_values="$(node -e '
+const fs = require("node:fs");
+const marker = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (marker.schemaVersion !== 1 || !Array.isArray(marker.argvPrefix) || marker.argvPrefix.length !== 2) process.exit(2);
+if (typeof marker.ruleFile !== "string" || typeof marker.runtimeRoot !== "string") process.exit(2);
+process.stdout.write(marker.argvPrefix[0] + "\t" + marker.argvPrefix[1] + "\t" + marker.ruleFile + "\t" + marker.runtimeRoot);
+' "$marker" 2>/dev/null || true)"
+    IFS=$'\t' read -r bun_path launcher_path marker_rule runtime_root <<<"$marker_values"
+    local trusted_config="$runtime_root/trusted-runtime.json"
+    local config_values config_bun codex_path browser_path browser_server rules_resolver rules_directory
+    config_values="$(node -e '
+const fs = require("node:fs");
+const config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (config.schemaVersion !== 2) process.exit(2);
+for (const field of ["bunExecutable", "codexExecutable", "browserExecutable", "browserServerScript", "rulesResolverScript", "rulesDirectory"]) {
+  if (typeof config[field] !== "string" || !config[field]) process.exit(2);
+}
+process.stdout.write([config.bunExecutable, config.codexExecutable, config.browserExecutable, config.browserServerScript, config.rulesResolverScript, config.rulesDirectory].join("\t"));
+' "$trusted_config" 2>/dev/null || true)"
+    IFS=$'\t' read -r config_bun codex_path browser_path browser_server rules_resolver rules_directory <<<"$config_values"
+    if [ ! -x "$bun_path" ] || [ "$config_bun" != "$bun_path" ] || [ ! -x "$codex_path" ] || [ ! -f "$launcher_path" ] || [ ! -f "$trusted_config" ] || [ ! -x "$browser_path" ] || [ ! -f "$browser_server" ] || [ ! -f "$rules_resolver" ] || [ ! -d "$rules_directory" ] || [ ! -f "$rules_directory/manifest.json" ] || [ "$marker_rule" != "$rule" ]; then
+        echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — marker target missing or inconsistent"
+        echo "    建議: 重跑 ./install.sh workflow-codex。"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+    if ! codex_workflow_policy_allows "$codex_path" "$rule" "$bun_path" "$launcher_path" review code --host codex; then
+        echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — pinned Codex does not match the review allow rule"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+    if ! codex_workflow_policy_allows "$codex_path" "$rule" "$bun_path" "$launcher_path" browser session --host codex status; then
+        echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — pinned Codex does not match the browser allow rule"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+    echo -e "  ${GREEN}[OK]${NC} trusted Codex workflow launcher (pinned Codex + exact review/browser rules)"
 }
 
 show_codex_config_status() {
     if is_generated_codex_config "$CODEX_CONFIG_FILE"; then
-        if grep -q '^# Local overlay: none$' "$CODEX_CONFIG_FILE" 2>/dev/null; then
-            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base only)"
-        else
+        if ! is_current_generated_codex_config "$CODEX_CONFIG_FILE"; then
+            case "$CODEX_CONFIG_FRESHNESS_REASON" in
+                invalid-toml)
+                    echo -e "  ${RED}[invalid]${NC} codex-config — installed config.toml is not valid TOML"
+                    echo "    修正 TOML syntax 後再重跑 ./install.sh status。"
+                    ;;
+                syntax-unverifiable)
+                    echo -e "  ${RED}[unverifiable]${NC} codex-config — TOML parser unavailable"
+                    echo "    需要 Python 3.11+ tomllib（python3、python 或 py -3）。"
+                    ;;
+                source-missing|source-unsupported)
+                    echo -e "  ${RED}[unverifiable]${NC} codex-config — Goldband config source cannot be projected safely"
+                    ;;
+                *)
+                    echo -e "  ${RED}[stale]${NC} codex-config — managed content differs from current sources"
+                    echo "    建議: 重跑 ./install.sh codex-config。"
+                    ;;
+            esac
+            GOLDBAND_STATUS_EXIT_CODE=2
+        elif [ -f "$REPO_DIR/codex/local/config.toml" ]; then
             echo -e "  ${GREEN}[OK]${NC} codex-config (generated base + local overlay)"
+        else
+            echo -e "  ${GREEN}[OK]${NC} codex-config (generated base only)"
         fi
     elif [ -L "$CODEX_CONFIG_FILE" ]; then
         local target
@@ -304,7 +382,7 @@ show_codex_profiles_status() {
         [ -f "$profile_file" ] || continue
         profile_total=$((profile_total + 1))
         local profile_dest="$CODEX_DIR/$(basename "$profile_file")"
-        if repo_path_installed_from "$profile_file" "$profile_dest"; then
+        if codex_profile_installed_from "$profile_file" "$profile_dest"; then
             profile_installed=$((profile_installed + 1))
             if [ ! -L "$profile_dest" ]; then
                 profile_copy_count=$((profile_copy_count + 1))

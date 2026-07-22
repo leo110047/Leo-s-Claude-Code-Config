@@ -3,16 +3,16 @@
 
 ## Goal
 
-Enable workflow-local safety rails.
+Enable careful-mode for a Claude session.
 
 ## Relevant context
 
-- Inspect the current safety state and the exact scope the user wants protected or released.
+- Inspect the current Claude session ID and its existing careful-mode or freeze-mode state.
 
 ## Hard boundaries
 
-- Change only the requested safety boundary. Never silently widen permissions or edit scope.
+- Change only the requested session-scoped hook mode. Never report protection as active without owner readback.
 
 ## Verification
 
-- Read back the effective safety state and report the scope now allowed or blocked.
+- Read back the authoritative hook mode state and verify a representative PreToolUse decision when enforcement changed.

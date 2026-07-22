@@ -2,6 +2,7 @@ const { detectSecrets, isSecretScanExcluded } = require('./secret-patterns');
 const { isModeActive, setModeActive } = require('./mode-state');
 const { matchCarefulModeRisk } = require('./careful-mode-rules');
 const { matchFreezeModeBashViolation } = require('./freeze-mode-rules');
+const { managedWorktreeBashViolation } = require('./managed-worktree-policy');
 
 const PRETOOL_DENY_POLICIES = [
   {
@@ -12,6 +13,11 @@ const PRETOOL_DENY_POLICIES = [
     name: 'doc-file-blocker',
     description:
       'blocks ad hoc documentation file creation outside approved paths',
+  },
+  {
+    name: 'managed-worktree-commit-guard',
+    description:
+      'blocks direct Git metadata writes in Goldband-managed worktrees',
   },
 ];
 
@@ -293,6 +299,18 @@ function evaluateCarefulBashPolicy(context) {
 
 function evaluateBashPolicy(context) {
   const { command } = context;
+  const managedViolation = managedWorktreeBashViolation(command);
+  if (managedViolation) {
+    return {
+      decision: 'block',
+      blockedBy: 'managed-worktree-commit-guard',
+      logs: [
+        '[Hook] BLOCKED: Git writes are brokered in this managed worktree',
+        `[Hook] Reason: ${managedViolation.detail}`,
+        `[Hook] Command: ${command}`,
+      ],
+    };
+  }
   const modeDecision =
     evaluateReviewReadOnlyBashPolicy(context) ||
     evaluateFreezeBashPolicy(context) ||

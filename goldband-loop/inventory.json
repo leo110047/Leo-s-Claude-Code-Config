@@ -17,54 +17,14 @@
           "id": "code",
           "description": "Review a code diff.",
           "runtime": "typed",
+          "owner": "review-runtime",
           "risk": "medium"
         },
         {
           "id": "security",
           "description": "Review security and trust boundaries.",
           "runtime": "compatibility",
-          "risk": "medium"
-        },
-        {
-          "id": "design",
-          "description": "Review visual and product design.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "devex",
-          "description": "Review developer experience.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "opposite-host",
-          "description": "Get an opposite-host second opinion.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "plan-ceo",
-          "description": "Review product scope and ambition.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "plan-design",
-          "description": "Review a plan's design contract.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "plan-devex",
-          "description": "Review a plan's developer experience.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "plan-engineering",
-          "description": "Review architecture and implementation plans.",
-          "runtime": "registered-only",
+          "owner": "prompt-contract-dispatch",
           "risk": "medium"
         }
       ]
@@ -78,6 +38,7 @@
           "id": "code",
           "description": "Investigate code or runtime behavior.",
           "runtime": "compatibility",
+          "owner": "prompt-contract-dispatch",
           "risk": "medium"
         }
       ]
@@ -91,12 +52,7 @@
           "id": "app",
           "description": "Run product QA and record evidence.",
           "runtime": "typed",
-          "risk": "medium"
-        },
-        {
-          "id": "report-only",
-          "description": "Report QA findings without fixing.",
-          "runtime": "registered-only",
+          "owner": "qa-runtime",
           "risk": "medium"
         }
       ]
@@ -110,31 +66,81 @@
           "id": "land",
           "description": "Merge, deploy, and verify.",
           "runtime": "registered-only",
-          "risk": "high"
+          "lifecycle": "experimental",
+          "risk": "high",
+          "safetyGates": [
+            {
+              "operation": "release/land",
+              "mode": "land",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "clean-worktree",
+                "required-checks-passed",
+                "deployment-target-resolved",
+                "rollback-plan-recorded"
+              ],
+              "sideEffects": [
+                "merge",
+                "deploy"
+              ],
+              "readback": [
+                "merged-commit",
+                "deployment-health",
+                "rollback-signal"
+              ]
+            },
+            {
+              "operation": "release/canary",
+              "mode": "canary",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "not-required-read-only",
+              "preconditions": [
+                "deployment-identity-resolved",
+                "health-baseline-recorded",
+                "observation-window-bounded"
+              ],
+              "sideEffects": [],
+              "readback": [
+                "canary-health-samples",
+                "anomaly-decision",
+                "observation-window-complete"
+              ]
+            }
+          ]
         },
         {
           "id": "setup",
           "description": "Configure deployment.",
           "runtime": "registered-only",
-          "risk": "high"
-        },
-        {
-          "id": "canary",
-          "description": "Monitor a deployment after release.",
-          "runtime": "registered-only",
-          "risk": "high"
-        },
-        {
-          "id": "report",
-          "description": "Produce a landing report.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "docs",
-          "description": "Update documentation for a release.",
-          "runtime": "registered-only",
-          "risk": "low"
+          "lifecycle": "experimental",
+          "risk": "high",
+          "safetyGates": [
+            {
+              "operation": "release/setup",
+              "mode": "setup",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "deployment-target-resolved",
+                "current-config-readback",
+                "secret-references-only",
+                "rollback-plan-recorded"
+              ],
+              "sideEffects": [
+                "deployment-config-write",
+                "secret-binding-update"
+              ],
+              "readback": [
+                "effective-config-digest",
+                "secret-bindings-redacted",
+                "deployment-health"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -147,28 +153,11 @@
           "id": "create",
           "description": "Create an implementation plan.",
           "runtime": "compatibility",
+          "owner": "prompt-contract-dispatch",
           "risk": "low",
           "hostSupport": [
             "claude"
           ]
-        },
-        {
-          "id": "auto",
-          "description": "Run the complete plan review pipeline.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "strategy",
-          "description": "Explore product direction and scope.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "tune",
-          "description": "Tune recurring planning questions.",
-          "runtime": "registered-only",
-          "risk": "low"
         }
       ]
     },
@@ -180,32 +169,31 @@
         {
           "id": "session",
           "description": "Use the persistent browser for interactive work.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "open",
-          "description": "Open a visible browser workbench.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "scrape",
-          "description": "Extract content or media from a page.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "cookies",
-          "description": "Import browser cookies for authenticated testing.",
-          "runtime": "registered-only",
-          "risk": "high"
-        },
-        {
-          "id": "pair",
-          "description": "Pair another agent with the browser.",
-          "runtime": "registered-only",
-          "risk": "medium"
+          "runtime": "typed",
+          "owner": "browse",
+          "risk": "medium",
+          "safetyGates": [
+            {
+              "operation": "browser/cookies",
+              "mode": "cookies",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "source-profile-resolved",
+                "domain-scope-explicit",
+                "credential-store-approval"
+              ],
+              "sideEffects": [
+                "session-cookie-import"
+              ],
+              "readback": [
+                "imported-domain-list",
+                "import-count",
+                "no-cookie-values-in-evidence"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -217,19 +205,8 @@
         {
           "id": "consult",
           "description": "Define a design direction and system.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "prototype",
-          "description": "Generate an HTML design prototype.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "explore",
-          "description": "Explore multiple design directions.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "design-decision-store",
           "risk": "low"
         }
       ]
@@ -240,28 +217,34 @@
       "defaultAction": "guard",
       "actions": [
         {
-          "id": "careful",
-          "description": "Enable careful command handling.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
           "id": "guard",
-          "description": "Enable workflow-local safety rails.",
-          "runtime": "registered-only",
-          "risk": "low"
+          "description": "Enable careful-mode for a Claude session.",
+          "runtime": "typed",
+          "owner": "claude-hook-mode-state",
+          "risk": "low",
+          "hostSupport": [
+            "claude"
+          ]
         },
         {
           "id": "freeze",
-          "description": "Restrict edits to an approved scope.",
-          "runtime": "registered-only",
-          "risk": "low"
+          "description": "Enable read-only freeze-mode for a Claude session.",
+          "runtime": "typed",
+          "owner": "claude-hook-mode-state",
+          "risk": "low",
+          "hostSupport": [
+            "claude"
+          ]
         },
         {
           "id": "unfreeze",
-          "description": "Remove an active edit restriction.",
-          "runtime": "registered-only",
-          "risk": "low"
+          "description": "Disable freeze-mode for a Claude session.",
+          "runtime": "typed",
+          "owner": "claude-hook-mode-state",
+          "risk": "low",
+          "hostSupport": [
+            "claude"
+          ]
         }
       ]
     },
@@ -273,19 +256,22 @@
         {
           "id": "save",
           "description": "Save current working context.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "context-checkpoint-store",
           "risk": "low"
         },
         {
           "id": "restore",
           "description": "Restore saved working context.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "context-checkpoint-store",
           "risk": "low"
         },
         {
           "id": "retro",
           "description": "Summarize recent work and lessons.",
-          "runtime": "registered-only",
+          "runtime": "compatibility",
+          "owner": "prompt-contract-dispatch",
           "risk": "low"
         }
       ]
@@ -298,20 +284,73 @@
         {
           "id": "recall",
           "description": "Inspect Goldband learnings and knowledge.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "goldband-knowledge",
           "risk": "low"
         },
         {
           "id": "setup",
           "description": "Configure GBrain integration.",
           "runtime": "registered-only",
-          "risk": "high"
+          "lifecycle": "experimental",
+          "risk": "high",
+          "safetyGates": [
+            {
+              "operation": "knowledge/setup",
+              "mode": "setup",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "endpoint-resolved",
+                "repository-scope-explicit",
+                "secret-references-only",
+                "existing-config-readback"
+              ],
+              "sideEffects": [
+                "knowledge-config-write",
+                "credential-binding-update"
+              ],
+              "readback": [
+                "sanitized-config",
+                "connection-check",
+                "repository-scope"
+              ]
+            }
+          ]
         },
         {
           "id": "sync",
           "description": "Synchronize GBrain knowledge.",
           "runtime": "registered-only",
-          "risk": "high"
+          "lifecycle": "experimental",
+          "risk": "high",
+          "safetyGates": [
+            {
+              "operation": "knowledge/sync",
+              "mode": "sync",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "source-scope-explicit",
+                "destination-scope-explicit",
+                "review-status-verified",
+                "secret-scan-passed",
+                "resume-checkpoint-resolved"
+              ],
+              "sideEffects": [
+                "external-knowledge-write",
+                "sync-checkpoint-write"
+              ],
+              "readback": [
+                "synced-item-count",
+                "destination-digest",
+                "resume-checkpoint",
+                "rejected-item-count"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -323,13 +362,8 @@
         {
           "id": "workflow",
           "description": "Benchmark product or workflow performance.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "models",
-          "description": "Compare model performance.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "benchmark-evidence-aggregator",
           "risk": "low"
         }
       ]
@@ -341,15 +375,27 @@
       "actions": [
         {
           "id": "generate",
-          "description": "Generate product or module documentation.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "pdf",
-          "description": "Create a PDF artifact.",
-          "runtime": "registered-only",
-          "risk": "medium"
+          "description": "Audit documentation coverage and prepare documentation artifacts.",
+          "runtime": "typed",
+          "owner": "documentation-audit",
+          "risk": "low",
+          "runtimeContract": {
+            "modes": [
+              "audit"
+            ],
+            "requiredInputs": {
+              "audit": [
+                "diffFile"
+              ]
+            },
+            "outputs": [
+              "coverage-artifact",
+              "pr-body-section-artifact"
+            ],
+            "sideEffects": {
+              "pr-body-update": "native-host-approval"
+            }
+          }
         }
       ]
     },
@@ -361,20 +407,68 @@
         {
           "id": "health",
           "description": "Inspect Goldband health and installation state.",
-          "runtime": "registered-only",
+          "runtime": "typed",
+          "owner": "goldband-installation",
           "risk": "low"
         },
         {
           "id": "upgrade",
           "description": "Upgrade Goldband.",
-          "runtime": "registered-only",
-          "risk": "high"
-        },
-        {
-          "id": "skill-authoring",
-          "description": "Create or improve a Goldband workflow skill.",
-          "runtime": "registered-only",
-          "risk": "low"
+          "runtime": "typed",
+          "owner": "goldband-setup-gate",
+          "risk": "high",
+          "runtimeContract": {
+            "modes": [
+              "preflight",
+              "readback"
+            ],
+            "requiredInputs": {
+              "preflight": [
+                "phase"
+              ],
+              "readback": [
+                "phase",
+                "preflightId",
+                "oldVersion",
+                "newVersion",
+                "setupVerified"
+              ]
+            },
+            "outputs": [
+              "upgrade-preflight",
+              "installed-version",
+              "installed-head",
+              "setup-status"
+            ],
+            "sideEffects": {
+              "git-fast-forward": "native-host-approval",
+              "installer-execution": "native-host-approval"
+            }
+          },
+          "safetyGates": [
+            {
+              "operation": "system/upgrade",
+              "mode": "upgrade",
+              "enforcement": "runtime-owner",
+              "owner": "goldband-setup-gate",
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "trusted-installation",
+                "clean-worktree",
+                "upgrade-preflight-recorded"
+              ],
+              "sideEffects": [
+                "git-fast-forward",
+                "installer-execution"
+              ],
+              "readback": [
+                "installed-version",
+                "installed-head",
+                "setup-status",
+                "completed-preflight"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -384,34 +478,71 @@
       "defaultAction": "qa",
       "actions": [
         {
-          "id": "clean",
-          "description": "Clean iOS project state.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
-          "id": "review",
-          "description": "Review iOS design and behavior.",
-          "runtime": "registered-only",
-          "risk": "medium"
-        },
-        {
-          "id": "fix",
-          "description": "Repair iOS implementation issues.",
-          "runtime": "registered-only",
-          "risk": "low"
-        },
-        {
           "id": "qa",
           "description": "Run iOS QA.",
-          "runtime": "registered-only",
-          "risk": "high"
-        },
-        {
-          "id": "sync",
-          "description": "Synchronize iOS project state.",
-          "runtime": "registered-only",
-          "risk": "high"
+          "runtime": "typed",
+          "owner": "ios-qa-evidence",
+          "risk": "high",
+          "runtimeContract": {
+            "modes": [
+              "qa"
+            ],
+            "requiredInputs": {
+              "qa": [
+                "targetScope",
+                "checks"
+              ]
+            },
+            "outputs": [
+              "simulator-inventory",
+              "qa-evidence-artifact",
+              "untested-device-coverage"
+            ],
+            "sideEffects": {}
+          },
+          "safetyGates": [
+            {
+              "operation": "ios/qa",
+              "mode": "qa",
+              "enforcement": "runtime-owner",
+              "owner": "ios-qa-evidence",
+              "authorization": "not-required-read-only",
+              "preconditions": [
+                "darwin-platform",
+                "xcode-toolchain",
+                "target-scope-explicit",
+                "qa-checks-supplied"
+              ],
+              "sideEffects": [],
+              "readback": [
+                "simulator-inventory",
+                "qa-evidence-artifact",
+                "untested-device-coverage"
+              ]
+            },
+            {
+              "operation": "ios/sync",
+              "mode": "sync",
+              "enforcement": "blocked-before-runtime",
+              "owner": null,
+              "authorization": "native-host-approval",
+              "preconditions": [
+                "project-identity-resolved",
+                "sync-target-explicit",
+                "pre-sync-diff-recorded",
+                "backup-or-rollback-recorded"
+              ],
+              "sideEffects": [
+                "xcode-project-sync",
+                "project-file-write"
+              ],
+              "readback": [
+                "post-sync-diff",
+                "project-file-digest",
+                "build-status"
+              ]
+            }
+          ]
         }
       ]
     }
@@ -420,6 +551,7 @@
     "chrome-cdp",
     "dev-setup",
     "dev-teardown",
+    "goldband",
     "goldband-analytics",
     "goldband-artifacts-init",
     "goldband-artifacts-url",

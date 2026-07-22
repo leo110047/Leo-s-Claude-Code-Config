@@ -18,8 +18,12 @@ class ProcessSupervisor {
     this.shutdownExitCode = null;
     this.forceKillSent = false;
     this.outputTail = '';
-    this.capturedStdout = '';
-    this.capturedStderr = '';
+    this.capturedStdout = options.captureOutput
+      ? new BoundedOutputTail(options.captureOutput.stdoutMaxBytes)
+      : null;
+    this.capturedStderr = options.captureOutput
+      ? new BoundedOutputTail(options.captureOutput.stderrMaxBytes)
+      : null;
     this.useProcessGroup = process.platform !== 'win32';
     this.onSigint = () => this.terminate('signal', 130, 'received SIGINT');
     this.onSigterm = () => this.terminate('signal', 143, 'received SIGTERM');
@@ -32,6 +36,7 @@ class ProcessSupervisor {
       this.installSignalHandlers();
       if (!this.spawnChild()) return;
       this.attachChildHandlers();
+      this.writeInput();
       this.timeoutTimer = setTimeout(
         () =>
           this.terminate(
@@ -79,14 +84,33 @@ class ProcessSupervisor {
     );
   }
 
+  writeInput() {
+    if (this.options.input === undefined) return;
+    if (!this.child.stdin) {
+      this.writeStderr(
+        `[${this.options.label}] stdin transport was requested but the child has no writable stdin\n`,
+      );
+      this.terminate('spawn-error', 1, 'stdin transport unavailable');
+      return;
+    }
+    this.child.stdin.on('error', (error) => {
+      if (error?.code !== 'EPIPE') {
+        this.writeStderr(
+          `[${this.options.label}] failed to write child stdin: ${error.message}\n`,
+        );
+      }
+    });
+    this.child.stdin.end(this.options.input);
+  }
+
   forwardAndInspect(stream, destination, channel) {
     if (!stream) return;
     stream.setEncoding('utf8');
     stream.on('data', (chunk) => {
       destination.write(chunk);
       if (this.options.captureOutput) {
-        if (channel === 'stdout') this.capturedStdout += chunk;
-        else this.capturedStderr += chunk;
+        if (channel === 'stdout') this.capturedStdout.append(chunk);
+        else this.capturedStderr.append(chunk);
       }
       if (!this.shouldInspectCompletion()) return;
       this.outputTail = `${this.outputTail}${chunk}`.slice(-16_384);
@@ -207,8 +231,10 @@ class ProcessSupervisor {
     this.cleanup();
     const result = { exitCode, reason, signal };
     if (this.options.captureOutput) {
-      result.stdout = this.capturedStdout;
-      result.stderr = this.capturedStderr;
+      result.stdout = this.capturedStdout.text();
+      result.stderr = this.capturedStderr.text();
+      result.stdoutTruncated = this.capturedStdout.truncated;
+      result.stderrTruncated = this.capturedStderr.truncated;
       result.forceKilled = this.forceKillSent;
     }
     this.resolve(result);
@@ -216,7 +242,7 @@ class ProcessSupervisor {
 
   writeStderr(message) {
     this.options.stderr.write(message);
-    if (this.options.captureOutput) this.capturedStderr += message;
+    if (this.options.captureOutput) this.capturedStderr.append(message);
   }
 
   cleanup() {
@@ -232,6 +258,10 @@ class ProcessSupervisor {
 
 function normalizeOptions(options) {
   const completionPattern = options.completionPattern ?? null;
+  const input = options.input;
+  if (input !== undefined && typeof input !== 'string' && !Buffer.isBuffer(input)) {
+    throw new Error('input must be a string or Buffer');
+  }
   return {
     timeoutMs: positiveInteger(options.timeoutMs, 'timeoutMs'),
     killGraceMs: nonNegativeInteger(
@@ -249,15 +279,80 @@ function normalizeOptions(options) {
     ),
     cwd: options.cwd ?? process.cwd(),
     env: options.env ?? process.env,
-    captureOutput: Boolean(options.captureOutput),
+    captureOutput: normalizeCaptureOutput(options.captureOutput),
     label: options.label ?? 'goldband eval',
     stderr: options.stderr ?? process.stderr,
     stdout: options.stdout ?? process.stdout,
+    input,
     stdio:
       options.stdio ??
       (completionPattern || options.captureOutput
-        ? ['ignore', 'pipe', 'pipe']
-        : 'inherit'),
+        ? [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']
+        : input === undefined
+          ? 'inherit'
+          : ['pipe', 'inherit', 'inherit']),
+  };
+}
+
+class BoundedOutputTail {
+  constructor(maxBytes) {
+    this.maxBytes = maxBytes;
+    this.buffer = Buffer.alloc(0);
+    this.truncated = false;
+  }
+
+  append(chunk) {
+    const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (incoming.length >= this.maxBytes) {
+      const discardedExistingOutput = this.buffer.length > 0;
+      this.buffer = Buffer.from(incoming.subarray(incoming.length - this.maxBytes));
+      this.truncated = this.truncated || discardedExistingOutput ||
+        incoming.length > this.maxBytes;
+      return;
+    }
+
+    const combinedBytes = this.buffer.length + incoming.length;
+    if (combinedBytes > this.maxBytes) {
+      const retainedBytes = this.maxBytes - incoming.length;
+      this.buffer = Buffer.concat([
+        this.buffer.subarray(this.buffer.length - retainedBytes),
+        incoming,
+      ], this.maxBytes);
+      this.truncated = true;
+      return;
+    }
+
+    this.buffer = Buffer.concat([this.buffer, incoming], combinedBytes);
+  }
+
+  text() {
+    let start = 0;
+    while (
+      start < this.buffer.length &&
+      (this.buffer[start] & 0xc0) === 0x80
+    ) {
+      start += 1;
+    }
+    return this.buffer.subarray(start).toString('utf8');
+  }
+}
+
+function normalizeCaptureOutput(value) {
+  if (value === undefined || value === false) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(
+      'captureOutput requires explicit stdoutMaxBytes and stderrMaxBytes limits',
+    );
+  }
+  return {
+    stdoutMaxBytes: positiveInteger(
+      value.stdoutMaxBytes,
+      'captureOutput.stdoutMaxBytes',
+    ),
+    stderrMaxBytes: positiveInteger(
+      value.stderrMaxBytes,
+      'captureOutput.stderrMaxBytes',
+    ),
   };
 }
 

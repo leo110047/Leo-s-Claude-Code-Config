@@ -12,7 +12,24 @@ export type HostName =
 
 type EntrypointType = 'typed' | 'compatibility' | 'legacy-thin';
 type IntegrationStatus = 'integrated' | 'registered-only';
+type WorkflowLifecycle = 'public' | 'experimental';
 export type RiskLevel = 'low' | 'medium' | 'high';
+export type RuntimeActionContract = {
+  modes: string[];
+  requiredInputs: Record<string, string[]>;
+  outputs: string[];
+  sideEffects: Record<string, string>;
+};
+export type SafetyGateContract = {
+  operation: string;
+  mode: string;
+  enforcement: 'blocked-before-runtime' | 'runtime-owner';
+  owner: string | null;
+  authorization: 'native-host-approval' | 'not-required-read-only';
+  preconditions: string[];
+  sideEffects: string[];
+  readback: string[];
+};
 type StepKind = 'typed' | 'llm' | 'legacyPrompt';
 export type StepStatus = 'ok' | 'failed' | 'skipped';
 export type StopPredicateName =
@@ -32,6 +49,7 @@ export type WorkflowContext = {
   runId: string;
   workflow: WorkflowDefinition;
   cwd: string;
+  passStartedAtMonotonicMs?: number;
   input?: unknown;
   options: WorkflowRunOptions;
   artifacts: string[];
@@ -56,6 +74,10 @@ export type WorkflowDefinition = {
   contractPath: string;
   entrypointType: EntrypointType;
   integrationStatus: IntegrationStatus;
+  lifecycle: WorkflowLifecycle;
+  runtimeOwner: string | null;
+  runtimeContract: RuntimeActionContract | null;
+  safetyGates: SafetyGateContract[];
   hostSupport: HostName[];
   riskLevel: RiskLevel;
   evidencePolicy: string;
@@ -76,6 +98,8 @@ export type WorkflowRunOptions = {
   worktree?: boolean;
   includeUntracked?: boolean;
   specialists?: 'off' | 'auto' | 'all';
+  reviewHostTimeoutMs?: number;
+  reviewPassTimeoutMs?: number;
   inputFile?: string;
   goldbandHome?: string;
   cwd?: string;

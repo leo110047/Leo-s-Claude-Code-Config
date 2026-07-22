@@ -17,8 +17,9 @@ This repo has two layers:
 
 - root `goldband`: installer, Claude/Codex adapters, shared policy, hooks,
   rules, commands, portable skills, plugin/app distribution.
-- `goldband-loop/`: first-party workflow runtime for review, investigation, QA,
-  release, browser, planning, and related capability actions.
+- `goldband-loop/`: first-party workflow runtime for public review,
+  investigation, QA, browser, planning, and related capability actions;
+  unfinished high-risk work stays in a hidden experimental inventory.
 
 For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -104,7 +105,10 @@ After updating, rerun the install profile you use, such as `pack-quality`,
 - `./install.sh status` reads back install state. If the plugin and
   installer-managed Claude assets both exist, it reports duplicate assets.
 - Hooks, rules, the cross-review gate, and sandbox are guardrails and evidence
-  gates, not a security boundary against a malicious same-permission operator.
+  gates, not a security boundary against a same-permission host user. Managed
+  worktrees are a narrower exception: an OS sandbox blocks Git-metadata writes
+  by the agent process, while the host user remains able to manage and finish
+  the work outside that sandbox.
 - `all-with-workflow` installs and verifies the Goldband Loop browser runtime.
   Offline or CI runs can explicitly set `GOLDBAND_SKIP_PLAYWRIGHT=1` to skip
   browser workflows.
@@ -119,18 +123,49 @@ After installing Goldband Loop:
 The supported capability/action list is generated in
 [docs/generated/capabilities.md](docs/generated/capabilities.md).
 
+Parallel agent worktrees use two user-triggered commands:
+
+```bash
+goldband worktree create task-name
+# Start one agent in the managed shell; Goldband remains the outer hard boundary.
+claude --settings '{"sandbox":{"enabled":false}}'
+codex --sandbox danger-full-access
+# Exit when done.
+goldband worktree finish task-name -m "feat: integrate task"
+```
+
+`create` requires a clean source worktree on a normal branch and creates a
+detached worktree without a task branch. Working files stay writable inside the
+managed shell, while the OS sandbox keeps Git indexes, objects, and refs
+read-only together with broker runtime and Git config/hook inputs. Run `finish`
+only after leaving the managed shell. The broker uses a pinned Git executable,
+isolated config environment, and the source-owned hook contract recorded by
+`create`; a collision between source ignored content and the candidate tree
+stops integration. Goldband removes the worktree only after validation,
+integration, and durable-commit readback all succeed. macOS uses Seatbelt,
+Linux uses bubblewrap, and unavailable boundaries fail closed. Windows does not
+currently claim hard enforcement. Disable the agent's inner OS sandbox as shown
+above to avoid unsupported nesting; normal permission prompts and Goldband hooks
+remain active, while the outer managed boundary continues to deny Git writes.
+
 ## Development
 
 The repo-root default aggregate test entrypoint is:
 
 ```bash
+npm run bootstrap:test # after the first clone, lockfile changes, or installer migrations
 npm test
 # or
 bun run test
 ```
 
-It is equivalent to `npm run test:repo`: it runs an explicit set of
-package-owned suites and prints a final per-suite summary. List the suites with:
+`bootstrap:test` installs the dependencies declared by the root, `mcp/server`,
+and `goldband-loop`, then removes entries from ignored host skill roots only
+when a tracked retired inventory or managed marker proves ownership. Unknown
+same-prefix skills are preserved. `npm test` itself does not access the network or
+silently mutate the checkout. It checks dependencies, the minimum Bun version,
+and legacy artifacts before running an explicit set of package-owned suites and
+printing a final per-suite summary. List the suites with:
 
 ```bash
 npm run test:repo:list

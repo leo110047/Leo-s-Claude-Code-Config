@@ -187,12 +187,41 @@ function buildFixtureEnv(fixture, paths, fixtureDir) {
   return env;
 }
 
-function invokeScript(scriptPath, stdinPayload, env) {
+function prepareGitWorktreeFixture(fixture, paths) {
+  const kind = fixture.setup && fixture.setup.gitWorktree;
+  if (kind !== 'managed' && kind !== 'plain') return undefined;
+  const cwd = path.join(paths.runDir, `git-worktree-${kind}`);
+  if (!fs.existsSync(path.join(cwd, '.git'))) {
+    fs.mkdirSync(cwd, { recursive: true });
+    const initialized = spawnSync('git', ['init', '-q'], {
+      cwd,
+      encoding: 'utf8',
+    });
+    if (initialized.status !== 0) {
+      throw new Error(
+        `could not create ${kind} Git fixture: ${initialized.stderr}`,
+      );
+    }
+  }
+  const marker = path.join(cwd, '.git', 'goldband-managed-worktree.json');
+  if (kind === 'managed') {
+    fs.writeFileSync(
+      marker,
+      '{"schemaVersion":1,"leaseId":"replay","manifestPath":"/fixture"}\n',
+    );
+  } else if (fs.existsSync(marker)) {
+    fs.unlinkSync(marker);
+  }
+  return cwd;
+}
+
+function invokeScript(scriptPath, stdinPayload, env, cwd) {
   return spawnSync(process.execPath, [scriptPath], {
     input: stdinPayload,
     encoding: 'utf8',
     maxBuffer: 2 * 1024 * 1024,
     env,
+    cwd,
   });
 }
 
@@ -209,10 +238,12 @@ function invokeFixture({
   );
   const startNs = process.hrtime.bigint();
   prepareModeStateFixture(fixture, paths.modeStateFile);
+  const cwd = prepareGitWorktreeFixture(fixture, paths);
   const result = invokeScript(
     scriptForFixture(fixture, routerScript),
     stdinPayload,
     buildFixtureEnv(fixture, paths, fixtureDir),
+    cwd,
   );
 
   return buildInvocationResult(fixture, iteration, result, startNs);

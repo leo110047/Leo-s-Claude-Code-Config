@@ -1,8 +1,10 @@
 # Goldband Loop
 
 Goldband Loop is goldband's first-party workflow runtime for AI coding agents.
-It implements the capability actions used for planning, review, investigation,
-QA, browser automation, release work, documentation, and system maintenance.
+It implements the public capability actions used for planning, review,
+investigation, QA, browser automation, documentation, and system maintenance.
+Unfinished high-risk release and knowledge operations remain hidden
+experimental inventory until they have runtime owners.
 
 This directory is maintained as first-party source inside the goldband
 repository.
@@ -28,6 +30,24 @@ not aliases.
 
 The generated [capability catalog](../docs/generated/capabilities.md) is the
 authoritative list of supported capability/action pairs and runtime status.
+
+Managed parallel work uses two host commands:
+
+```bash
+goldband worktree create task-name
+# Inside the managed shell, start one agent without a nested OS sandbox:
+claude --settings '{"sandbox":{"enabled":false}}'
+codex --sandbox danger-full-access
+# Exit the shell, then broker the durable commit from the source repository:
+goldband worktree finish task-name -m "feat: integrate task"
+```
+
+The outer Goldband sandbox, normal agent permissions, and Goldband hooks remain
+active. `finish` fails closed and preserves the detached worktree unless the
+recorded source branch is unchanged, clean, safely fast-forwardable, and has no
+ignored-content collision with the candidate tree. Broker Git runs with a
+pinned executable, isolated config environment, and the source-owned hook
+contract recorded by `create`.
 
 ## Install
 

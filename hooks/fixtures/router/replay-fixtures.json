@@ -1,5 +1,81 @@
 [
   {
+    "id": "pretool-block-managed-worktree-git-write",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "managed-worktree-commit-guard",
+      "expectedDecision": "block",
+      "variant": "positive",
+      "regressionSource": "managed-worktree-commit-enforcement"
+    },
+    "setup": {
+      "gitWorktree": "managed"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "/usr/bin/git commit --no-verify -m blocked"
+      }
+    },
+    "expect": {
+      "exitCode": 2,
+      "decision": "block",
+      "stderrIncludes": [
+        "Git writes are brokered in this managed worktree",
+        "goldband worktree finish"
+      ]
+    }
+  },
+  {
+    "id": "pretool-allow-non-managed-worktree-git-write",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "managed-worktree-commit-guard",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "managed-worktree-scope-isolation"
+    },
+    "setup": {
+      "gitWorktree": "plain"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git commit -m ordinary"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
+    "id": "pretool-allow-managed-worktree-git-read",
+    "coverage": {
+      "category": "pretool-policy",
+      "policy": "managed-worktree-commit-guard",
+      "expectedDecision": "allow",
+      "variant": "negative",
+      "regressionSource": "managed-worktree-read-contract"
+    },
+    "setup": {
+      "gitWorktree": "managed"
+    },
+    "input": {
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git status --short && git worktree list && git branch --show-current"
+      }
+    },
+    "expect": {
+      "exitCode": 0,
+      "decision": "allow"
+    }
+  },
+  {
     "id": "userprompt-cross-review-missing-plan-emits-error",
     "script": "skill-activation-suggestions",
     "coverage": {

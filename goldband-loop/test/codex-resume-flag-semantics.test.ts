@@ -21,6 +21,22 @@ const codexAvailable = codexPath.length > 0;
 describe.skipIf(!codexAvailable)(
   'codex exec resume — flag semantics (live CLI smoke; closes #1270 regex-only gap)',
   () => {
+    test('global approval policy is accepted before the exec subcommand', () => {
+      const result = spawnSync(
+        'codex',
+        ['--ask-for-approval', 'never', 'exec', '--help'],
+        {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 10_000,
+        },
+      );
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).not.toContain(
+        "unexpected argument '--ask-for-approval'",
+      );
+    });
+
     test('codex exec resume --help mentions sandbox_mode as a -c config key', () => {
       const result = spawnSync('codex', ['exec', 'resume', '--help'], {
         encoding: 'utf-8',

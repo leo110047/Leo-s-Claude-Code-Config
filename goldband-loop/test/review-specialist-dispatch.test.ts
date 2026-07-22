@@ -41,6 +41,28 @@ describe('review specialist dispatch', () => {
     expect(findings.every((finding) => finding.category !== 'host-capability')).toBe(true);
   });
 
+  test('applies the caller-owned timeout to every specialist process', async () => {
+    const timeouts: number[] = [];
+    await runParallelSpecialistReview(
+      workflowContext(),
+      {
+        name: 'mock' as const,
+        capabilities: { readOnlyEnforced: true, parallelDispatch: true },
+        async runJson(_prompt, _schema, _cwd, options) {
+          timeouts.push(options.timeoutMs);
+          return { text: '{"findings":[]}', parsed: { findings: [] } };
+        },
+      },
+      '+workflow host-adapter codex prompt',
+      {},
+      'auto',
+      undefined,
+      () => ({ timeoutMs: 123_000 }),
+    );
+
+    expect(timeouts).toEqual([123_000]);
+  });
+
   test('can inspect repository state outside the diff', async () => {
     const fixture = mkdtempSync(join(tmpdir(), 'review-code-unwired-'));
     try {

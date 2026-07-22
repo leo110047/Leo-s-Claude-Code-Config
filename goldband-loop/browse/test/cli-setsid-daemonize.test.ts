@@ -66,7 +66,7 @@ describe("#1612 macOS/Linux daemonize via Node setsid path", () => {
     // Find the non-Windows branch. The `} else {` block following the
     // Windows branch. We then require its first ~400 chars contain a
     // nodeSpawn() call and NOT a Bun.spawn() call (excluding the comment).
-    const nonWindowsStart = codeOnly.indexOf("nodeSpawn('bun'");
+    const nonWindowsStart = codeOnly.indexOf('nodeSpawn(BUN_EXECUTABLE');
     expect(nonWindowsStart).toBeGreaterThan(-1);
     const slice = codeOnly.slice(nonWindowsStart, nonWindowsStart + 400);
     expect(slice).toMatch(/nodeSpawn\(/);

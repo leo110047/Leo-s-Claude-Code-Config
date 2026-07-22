@@ -126,6 +126,19 @@ jobs:
       - name: Check Goldband Loop source quality
         run: cd goldband-loop && bun run check:source
 
+      - name: Install managed worktree Linux boundary
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      - name: Test managed worktree bubblewrap enforcement on Linux
+        run: cd goldband-loop && bun test test/managed-worktree.test.ts
+        env:
+          GOLDBAND_REQUIRE_LIVE_BOUNDARY: "1"
+
       - name: Test Goldband Loop Playwright setup behavior
         run: bash scripts/test-goldband-loop-playwright-setup.sh
 
@@ -167,8 +180,25 @@ jobs:
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
 
+      - name: Test terminal PTY and WebSocket runtime on macOS
+        run: cd goldband-loop && bun test browse/test/terminal-agent-integration.test.ts --max-concurrency=1 --timeout=30000
+
+      - name: Test managed worktree Seatbelt enforcement on macOS
+        run: cd goldband-loop && bun test test/managed-worktree.test.ts
+        env:
+          GOLDBAND_REQUIRE_LIVE_BOUNDARY: "1"
+
       - name: Test Goldband Loop Playwright setup behavior on macOS
         run: bash scripts/test-goldband-loop-playwright-setup.sh
+
+      - name: Install Goldband Loop Playwright browser on macOS
+        run: cd goldband-loop && bunx playwright install chromium
+
+      - name: Test Goldband Loop workflow runtime on macOS
+        run: cd goldband-loop && bun run test:workflows
+
+      - name: Test Goldband Loop free suite on macOS
+        run: cd goldband-loop && bun run test:free
 
       - name: Test workflow installer integration on macOS Bash
         run: bash scripts/test-workflow-integration.sh
