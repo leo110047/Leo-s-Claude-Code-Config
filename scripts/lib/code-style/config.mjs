@@ -13,6 +13,10 @@ export const config = {
   maxParams: parsePositiveInt('GOLDBAND_MAX_PARAMS', 4),
   maxComplexity: parsePositiveInt('GOLDBAND_MAX_COMPLEXITY', 12),
   maxTextBytes: parsePositiveInt('GOLDBAND_MAX_TEXT_FILE_BYTES', 1024 * 1024),
+  maxGeneratedTextBytes: parsePositiveInt(
+    'GOLDBAND_MAX_GENERATED_TEXT_FILE_BYTES',
+    16 * 1024 * 1024,
+  ),
   maxBinaryBytes: parsePositiveInt(
     'GOLDBAND_MAX_BINARY_FILE_BYTES',
     512 * 1024,

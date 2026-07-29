@@ -478,7 +478,13 @@ show_git_style_gate_status() {
         local current_hooks_path
         current_hooks_path="$(git config --global --get core.hooksPath 2>/dev/null || true)"
         if paths_equivalent "$current_hooks_path" "$GIT_HOOKS_DIR"; then
-            echo -e "  ${GREEN}[OK]${NC} global core.hooksPath -> $GIT_HOOKS_DIR"
+            if style_gate_runtime_matches_source; then
+                echo -e "  ${GREEN}[OK]${NC} global core.hooksPath -> $GIT_HOOKS_DIR"
+            else
+                echo -e "  ${YELLOW}[stale]${NC} Git style gate runtime 與目前 repo 不一致；請執行 ./install.sh style-gate"
+            fi
+        elif paths_equivalent "$current_hooks_path" "$LEGACY_GIT_HOOKS_DIR"; then
+            echo -e "  ${YELLOW}[stale]${NC} global core.hooksPath 仍指向 source checkout；請執行 ./install.sh style-gate"
         elif [ -n "$current_hooks_path" ]; then
             echo -e "  ${YELLOW}[外部設定]${NC} global core.hooksPath -> $current_hooks_path"
         else
@@ -487,6 +493,15 @@ show_git_style_gate_status() {
     else
         echo -e "  ${YELLOW}[無法檢查]${NC} git 不可用"
     fi
+}
+
+style_gate_runtime_matches_source() {
+    local relative
+    [ -f "$GIT_HOOKS_DIR/.goldband-source" ] || return 1
+    [ "$(sed -n '1p' "$GIT_HOOKS_DIR/.goldband-source")" = "$REPO_DIR" ] || return 1
+    for relative in pre-commit commit-msg lib/project-hook.sh; do
+        cmp -s "$GIT_HOOKS_SOURCE_DIR/$relative" "$GIT_HOOKS_DIR/$relative" 2>/dev/null || return 1
+    done
 }
 
 show_workflow_status() {

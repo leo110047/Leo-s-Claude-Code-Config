@@ -59,18 +59,27 @@ git config --global --get core.hooksPath
 Expected goldband value:
 
 ```text
-/path/to/goldband/git-hooks
+~/.config/goldband/git-hooks
 ```
 
 Default install packs do not change global git settings; run `style-gate`
 explicitly when you want the machine-wide hook. The pre-commit hook checks only
 staged files. Biome checks run only when the target repo has `biome.json`;
 otherwise the hook keeps the zero-dependency checks and emits an advisory. If
-the repo-linked goldband script or `node` is unavailable, the hook warns and
-allows the commit so one broken goldband checkout does not block every repo on
-the machine. The commit-msg Conventional Commits gate is installed but enforced
-only when the repo has `.goldband-git-workflow.json` or
-`GOLDBAND_GIT_WORKFLOW_GATE=1`.
+the recorded Goldband source script or `node` is unavailable, the hook warns
+and allows the commit so one broken goldband checkout does not block every repo
+on the machine. The hooks themselves are materialized outside the checkout so
+Git LFS or another hook manager cannot write generated hooks into Goldband
+source. Re-running `./install.sh style-gate` refreshes the materialized runtime
+and migrates the legacy source-checkout `core.hooksPath`. The commit-msg
+Conventional Commits gate is installed but enforced only when the repo has
+`.goldband-git-workflow.json` or `GOLDBAND_GIT_WORKFLOW_GATE=1`.
+
+Large generated text files use the exact-path contract documented in
+`rules/coding-style.md`. Ordinary text remains limited to 1 MB; a tracked
+`.goldband-style.json` may name a tracked generator and a per-file cap up to the
+16 MB generated-text hard limit. The exception does not replace the
+project-specific regeneration/drift check.
 
 When the global hook is active, goldband runs first. After the goldband
 pre-commit or commit-msg gate passes or soft-skips, it looks for an executable

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { repoRoot, run, ToolError } from './config.mjs';
+import { config, repoRoot, run, ToolError } from './config.mjs';
 import { CODE_EXTENSIONS } from './constants.mjs';
 
 export function toRepoRelative(filePath) {
@@ -32,6 +32,12 @@ export function fileContent(relativePath, mode) {
   return mode === 'staged'
     ? readStagedFile(relativePath)
     : readWorkingTreeFile(relativePath);
+}
+
+export function fileSize(relativePath, mode) {
+  return mode === 'staged'
+    ? (stagedBlobEntry(relativePath)?.size ?? null)
+    : workingTreeFileSize(relativePath);
 }
 
 export function decodeText(buffer) {
@@ -108,17 +114,104 @@ function splitGitPathList(output) {
 function readWorkingTreeFile(relativePath) {
   try {
     return fs.readFileSync(path.join(repoRoot, relativePath));
-  } catch {
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw new ToolError(
+        `failed to read working-tree file: ${relativePath}`,
+        error.message,
+      );
+    }
     return null;
   }
 }
 
 function readStagedFile(relativePath) {
-  const result = spawnSync('git', ['show', `:${relativePath}`], {
+  const entry = stagedBlobEntry(relativePath);
+  if (!entry) return null;
+  const maxReadableBytes = Math.max(
+    config.maxTextBytes,
+    config.maxGeneratedTextBytes,
+    config.maxBinaryBytes,
+  );
+  if (entry.size > maxReadableBytes) {
+    throw new ToolError(
+      `refusing to load oversized staged file: ${relativePath}`,
+      `${entry.size} bytes exceeds the largest configured file limit ${maxReadableBytes}`,
+    );
+  }
+  const result = spawnSync('git', ['cat-file', 'blob', entry.objectId], {
     cwd: repoRoot,
     encoding: 'buffer',
-    maxBuffer: 10 * 1024 * 1024,
+    maxBuffer: entry.size + 1,
   });
-  if (result.status !== 0) return null;
+  if (result.error || result.status !== 0) {
+    throw new ToolError(
+      `failed to read staged file: ${relativePath}`,
+      result.error?.message || result.stderr?.toString('utf8').trim(),
+    );
+  }
+  if (result.stdout.length !== entry.size) {
+    throw new ToolError(
+      `staged file size changed while reading: ${relativePath}`,
+      `expected ${entry.size} bytes, received ${result.stdout.length}`,
+    );
+  }
   return result.stdout;
+}
+
+function workingTreeFileSize(relativePath) {
+  try {
+    const stats = fs.statSync(path.join(repoRoot, relativePath));
+    return stats.isFile() ? stats.size : null;
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw new ToolError(
+        `failed to inspect working-tree file: ${relativePath}`,
+        error.message,
+      );
+    }
+    return null;
+  }
+}
+
+function stagedBlobEntry(relativePath) {
+  const result = run('git', [
+    'ls-files',
+    '--stage',
+    '-z',
+    '--',
+    `:(top,literal)${relativePath}`,
+  ]);
+  if (result.status !== 0) {
+    throw new ToolError(
+      `failed to inspect staged file: ${relativePath}`,
+      result.stderr.trim(),
+    );
+  }
+  const entries = result.stdout.split('\0').filter(Boolean);
+  if (entries.length === 0) return null;
+  if (entries.length !== 1) {
+    throw new ToolError(
+      `staged file has unresolved index entries: ${relativePath}`,
+    );
+  }
+  const match = entries[0].match(/^(\d{6}) ([0-9a-f]+) 0\t/s);
+  if (!match) {
+    throw new ToolError(`failed to resolve staged blob: ${relativePath}`);
+  }
+  if (match[1] === '160000') return null;
+  if (!['100644', '100755', '120000'].includes(match[1])) {
+    throw new ToolError(
+      `staged file has unsupported index mode ${match[1]}: ${relativePath}`,
+    );
+  }
+  const sizeResult = run('git', ['cat-file', '-s', match[2]]);
+  const size = Number.parseInt(sizeResult.stdout.trim(), 10);
+  if (sizeResult.status !== 0 || !Number.isSafeInteger(size) || size < 0) {
+    throw new ToolError(
+      `failed to inspect staged blob size: ${relativePath}`,
+      sizeResult.stderr.trim(),
+    );
+  }
+  return { objectId: match[2], size };
 }

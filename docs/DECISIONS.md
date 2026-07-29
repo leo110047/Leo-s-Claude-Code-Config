@@ -1391,3 +1391,94 @@ Revisit triggers:
   replace the environment marker.
 - Review inputs gain a measured chunking or context-cache design with defect
   recall parity against the current full-scope prompt.
+
+## 2026-07-29: Style Gate Uses Materialized Hooks and Exact Generated-Text Ownership
+
+Decision: keep the ordinary 1 MB text-file guardrail, add only an exact,
+index-tracked generated-text ownership contract, and install global Git hooks
+as materialized runtime files outside the Goldband source checkout.
+
+Context:
+
+- The size gate treated every text file above 1 MB as accidental data even when
+  a repository intentionally tracked a generated API contract.
+- The global `core.hooksPath` pointed directly at `goldband/git-hooks`. During
+  an unrelated Git LFS-enabled clone, Git LFS hook templates were written into
+  the Goldband worktree as untracked files.
+- File contents cannot reliably prove that an artifact is generated. The
+  repository must declare one authoritative owner, while freshness remains a
+  separate regeneration check.
+
+Implementation contract:
+
+- `.goldband-style.json` schema version 1 may declare
+  `largeGeneratedTextFiles` entries with one exact artifact path, one exact
+  tracked generator path, and one per-file byte cap.
+- The config, artifact, and generator must all exist in the Git index. Globs,
+  path aliases, missing generators, duplicate paths, caps at or below the
+  ordinary limit, and caps above the generated-text hard limit fail clearly.
+- The ordinary text limit remains 1 MB. A declaration cannot exceed the global
+  generated-text hard cap, 16 MB by default. Binary limits do not change.
+- The declaration establishes repository ownership; projects that claim
+  reproducible output must separately regenerate and compare the artifact in
+  their project gate or CI.
+- `./install.sh style-gate` materializes Goldband-owned hooks under
+  `${XDG_CONFIG_HOME:-$HOME/.config}/goldband/git-hooks`, records the source
+  checkout plus an ownership schema and per-file checksums, and points global
+  `core.hooksPath` there.
+- Installer refresh compares source and installed content. Status reports the
+  legacy source-checkout path or content drift as stale. Uninstall uses the
+  ownership record rather than the checkout location, removes only unchanged
+  Goldband-owned materialized files, and preserves unrelated or modified hook
+  files.
+
+Assumptions:
+
+- An explicit tracked config and tracked generator are sufficient ownership
+  evidence for this guardrail; the global hook is not a provenance or
+  reproducibility proof.
+- Repositories needing stronger generated-output guarantees own a deterministic
+  regeneration check appropriate to their language and build system.
+- `${XDG_CONFIG_HOME:-$HOME/.config}` is writable for an explicitly requested
+  per-user style-gate installation.
+
+Consequences:
+
+- Ordinary large text, generated garbage, untracked generators, and broad path
+  exceptions remain blocked.
+- Legitimate large API contracts can be admitted without raising the limit for
+  every text file or hardcoding one repository's filenames.
+- Git LFS may add hooks to the installed global hook directory, but it no
+  longer dirties the Goldband source checkout.
+- Moving or deleting the source checkout can make the checker unavailable; the
+  existing fail-soft warning remains, and reinstalling refreshes the recorded
+  source.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Remove the text-size gate | Loses the original protection against generated garbage and accidental data. |
+| Raise the global text limit | Widens every repository and does not distinguish intentional artifacts. |
+| Infer generated files from extension, directory, header, or Git attributes | These signals are broad declarations without an authoritative generator owner. |
+| Execute arbitrary repo-declared generator commands in the global hook | Turns a machine-wide guardrail into an implicit code-execution surface and is not portable across build systems. |
+| Keep `core.hooksPath` pointed at the checkout and ignore Git LFS files | Leaves a shared runtime directory writable by unrelated Git tooling and guarantees recurring worktree pollution. |
+
+Failure signals:
+
+- A text file above 1 MB passes without an exact tracked declaration and
+  generator.
+- A generated-text declaration accepts globs, an untracked generator, or a cap
+  above the global hard limit.
+- `core.hooksPath` points at the Goldband source checkout after installation.
+- Running Git LFS in another repository creates or modifies files in the
+  Goldband worktree.
+
+Revisit triggers:
+
+- Git gains a native composable global-hook registry that isolates each tool's
+  owned files.
+- Goldband adds a trusted, sandboxed generator protocol that can prove
+  reproducibility without executing arbitrary repository code.
+- Real generated contracts consistently exceed the hard cap and repository
+  evidence supports a new bounded default.

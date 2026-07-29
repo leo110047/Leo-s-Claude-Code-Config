@@ -80,6 +80,7 @@ const checks = [
       file === 'scripts/check-code-style.mjs' ||
       file === 'scripts/check-goldband-project-style-gate.mjs' ||
       file === 'scripts/test-code-style-gate.mjs' ||
+      file === 'scripts/test-style-gate-install.mjs' ||
       file === 'scripts/test-goldband-project-style-gate.mjs' ||
       file.startsWith('scripts/lib/code-style/'),
   },
