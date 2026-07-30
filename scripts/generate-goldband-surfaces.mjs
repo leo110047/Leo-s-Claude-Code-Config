@@ -257,6 +257,24 @@ function validateCapability(capability) {
   if (!/^[a-z][a-z0-9-]*$/.test(capability.id)) {
     throw new Error(`invalid capability: ${capability.id}`);
   }
+  if (!Array.isArray(capability.triggers) || capability.triggers.length === 0) {
+    throw new Error(`${capability.id}: triggers must be a non-empty array`);
+  }
+  const normalizedTriggers = capability.triggers.map((trigger) => {
+    if (
+      typeof trigger !== 'string' ||
+      trigger.length === 0 ||
+      trigger !== trigger.trim()
+    ) {
+      throw new Error(
+        `${capability.id}: triggers must be non-empty trimmed strings`,
+      );
+    }
+    return trigger.toLowerCase();
+  });
+  if (new Set(normalizedTriggers).size !== normalizedTriggers.length) {
+    throw new Error(`${capability.id}: triggers must be unique`);
+  }
   if (
     !capability.actions?.some(
       (action) => action.id === capability.defaultAction,

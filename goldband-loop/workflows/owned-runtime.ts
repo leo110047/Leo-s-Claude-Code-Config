@@ -18,6 +18,13 @@ import { stateRoot } from "./evidence";
 import { workflowAssetPath } from "./paths";
 import { parseIosQaInput, parseSystemUpgradeInput } from "./safety-gates";
 import type { SchemaValidator, WorkflowContext, WorkflowStep } from "./types";
+import {
+	calculateFrontier,
+	workMapDigest,
+	type WorkMapV1,
+} from "./work-map";
+import { runWorkMapCreate } from "./work-map-runtime";
+import { WorkMapStore } from "./work-map-store";
 
 type OwnedStatus = "completed" | "blocked";
 
@@ -77,6 +84,7 @@ const OWNED_HANDLERS: Record<
 	"system/health": runSystemHealth,
 	"system/upgrade": runSystemUpgrade,
 	"ios/qa": runIosQa,
+	"plan/create": runWorkMapCreate,
 };
 
 export function ownedRuntimeSteps(name: string): WorkflowStep[] | undefined {
@@ -400,6 +408,13 @@ function runContextSave(ctx: WorkflowContext): OwnedRuntimeResult {
 		? requiredString(input.summary, "summary")
 		: optionalString(input.summary, "summary") || "Mock saved context";
 	const snapshot = gitSnapshot(ctx.cwd);
+	const activeWorkMap =
+		snapshot.head === "unborn"
+			? null
+			: new WorkMapStore({
+					cwd: ctx.cwd,
+					goldbandHome: ctx.options.goldbandHome,
+				}).readActive();
 	const context = {
 		schemaVersion: 2,
 		savedAt: new Date().toISOString(),
@@ -410,6 +425,14 @@ function runContextSave(ctx: WorkflowContext): OwnedRuntimeResult {
 		decisions: optionalStringArray(input.decisions, "decisions"),
 		nextSteps: optionalStringArray(input.nextSteps, "nextSteps"),
 		files: optionalStringArray(input.files, "files"),
+		...(activeWorkMap
+			? {
+					activeWorkId: activeWorkMap.id,
+					workMapRevision: activeWorkMap.revision,
+					workMapDigest: workMapDigest(activeWorkMap),
+					activeTicketId: null,
+				}
+			: {}),
 	};
 	const latest = contextLatestPath(ctx, snapshot);
 	const artifact = join(
@@ -427,6 +450,7 @@ function runContextSave(ctx: WorkflowContext): OwnedRuntimeResult {
 			`branch=${snapshot.branch}`,
 			`head=${snapshot.head}`,
 			`statusBytes=${snapshot.status.length}`,
+			`activeWorkId=${activeWorkMap?.id ?? "(none)"}`,
 		],
 		[artifact, latest],
 	);
@@ -455,10 +479,9 @@ function runContextRestore(ctx: WorkflowContext): OwnedRuntimeResult {
 		JSON.parse(readFileSync(latest, "utf8")),
 		"saved context",
 	);
-	const stale =
-		saved.head !== current.head ||
-		saved.branch !== current.branch ||
-		saved.status !== current.status;
+	const staleReasons = gitStaleReasons(saved, current);
+	const workMapState = restoreWorkMapState(ctx, saved, staleReasons);
+	const stale = staleReasons.length > 0;
 	ctx.artifacts.push(latest);
 	return completed(
 		"context checkpoint store",
@@ -472,9 +495,125 @@ function runContextRestore(ctx: WorkflowContext): OwnedRuntimeResult {
 			`savedHead=${String(saved.head)}`,
 			`currentHead=${current.head}`,
 			`stale=${stale}`,
+			`staleReasons=${staleReasons.join(",") || "(none)"}`,
 		],
 		[latest],
-		{ saved, current, stale },
+		{
+			saved,
+			current,
+			stale,
+			staleReasons,
+			...workMapState,
+		},
+	);
+}
+
+function gitStaleReasons(
+	saved: JsonRecord,
+	current: { branch: string; head: string; status: string },
+): string[] {
+	const reasons: string[] = [];
+	if (saved.branch !== current.branch) reasons.push("git-branch-changed");
+	if (saved.head !== current.head) reasons.push("git-head-changed");
+	if (saved.status !== current.status) reasons.push("git-worktree-changed");
+	return reasons;
+}
+
+function restoreWorkMapState(
+	ctx: WorkflowContext,
+	saved: JsonRecord,
+	staleReasons: string[],
+): JsonRecord {
+	if (saved.activeWorkId === undefined) {
+		return {
+			workMap: null,
+			frontier: [],
+			nextAction: "Continue from the saved context next steps.",
+		};
+	}
+	const activeWorkId = requiredString(saved.activeWorkId, "activeWorkId");
+	const savedRevision = positiveInteger(
+		saved.workMapRevision,
+		"workMapRevision",
+	);
+	const savedDigest = requiredString(saved.workMapDigest, "workMapDigest");
+	let map: WorkMapV1;
+	let currentActive: WorkMapV1 | null;
+	try {
+		const store = new WorkMapStore({
+			cwd: ctx.cwd,
+			goldbandHome: ctx.options.goldbandHome,
+		});
+		map = store.read(activeWorkId);
+		currentActive = store.readActive();
+	} catch (error) {
+		if (isMissingWorkMapError(error)) {
+			staleReasons.push("work-map-missing");
+			return {
+				workMap: null,
+				frontier: [],
+				nextAction: "Recreate or explicitly select the missing Work Map.",
+			};
+		}
+		throw error;
+	}
+	if (!currentActive || currentActive.id !== activeWorkId) {
+		staleReasons.push("active-work-map-changed");
+	}
+	if (map.revision !== savedRevision) {
+		staleReasons.push("work-map-revision-changed");
+	}
+	const currentDigest = workMapDigest(map);
+	if (currentDigest !== savedDigest) {
+		staleReasons.push("work-map-digest-changed");
+	}
+	const frontier = calculateRestoredFrontier(map);
+	return {
+		workMap: {
+			id: map.id,
+			savedRevision,
+			currentRevision: map.revision,
+			savedDigest,
+			currentDigest,
+			status: map.status,
+		},
+		frontier,
+		nextAction: nextWorkMapAction(map, frontier, staleReasons),
+	};
+}
+
+function calculateRestoredFrontier(map: WorkMapV1): string[] {
+	return calculateFrontier(map.tickets);
+}
+
+function nextWorkMapAction(
+	map: WorkMapV1,
+	frontier: string[],
+	staleReasons: string[],
+): string {
+	if (map.status === "completed") {
+		return "Archive the completed Work Map or create a new one for new work.";
+	}
+	if (map.status === "cancelled") {
+		return "Create or select a non-cancelled Work Map before continuing.";
+	}
+	if (staleReasons.length > 0) {
+		return "Refresh the context checkpoint before executing a frontier ticket.";
+	}
+	if (frontier.length === 0) {
+		return "Resolve the Work Map blockers or shape a ready ticket.";
+	}
+	if (frontier.length === 1) {
+		return `Execute frontier ticket ${frontier[0]}.`;
+	}
+	return "Select one ticket from the complete frontier before execution.";
+}
+
+function isMissingWorkMapError(error: unknown): boolean {
+	return (
+		error instanceof Error &&
+		(error.message.includes("Work Map state is missing") ||
+			error.message.includes("required directory is missing"))
 	);
 }
 
@@ -1315,6 +1454,13 @@ function requiredString(value: unknown, field: string): string {
 		throw new Error(`${field} must be a non-empty string`);
 	}
 	return value.trim();
+}
+
+function positiveInteger(value: unknown, field: string): number {
+	if (!Number.isSafeInteger(value) || Number(value) < 1) {
+		throw new Error(`${field} must be a positive integer`);
+	}
+	return Number(value);
 }
 
 function optionalString(value: unknown, field: string): string {

@@ -196,7 +196,7 @@
       "id": "investigate",
       "description": "Find and verify the root cause of a failure.",
       "defaultAction": "code",
-      "triggers": ["debug", "bug", "error", "failure", "root cause", "regression", "除錯", "錯誤", "根因"],
+      "triggers": ["debug", "root cause", "investigate regression", "regression bug", "failing test", "test failure", "fix bug", "investigate error", "除錯", "根因", "錯誤原因", "測試失敗", "修正 bug"],
       "promptContract": {
         "relevantContext": ["Trace the reported symptom through current code, configuration, tests, and logs."],
         "hardBoundaries": ["Find and verify the root cause before proposing a fix. Do not change code unless the user asked for implementation."],
@@ -210,7 +210,7 @@
       "id": "qa",
       "description": "Verify product behavior with explicit evidence.",
       "defaultAction": "app",
-      "triggers": ["qa", "test site", "staging", "e2e", "user flow", "驗證網站", "測試流程"],
+      "triggers": ["qa", "test site", "staging qa", "run e2e", "e2e qa", "test user flow", "verify user flow", "驗證網站", "測試流程", "驗收流程"],
       "promptContract": {
         "relevantContext": ["Use the requested environment, user flow, expected behavior, and active-host browser state when browser work is needed."],
         "hardBoundaries": ["Do not change the product unless the user explicitly asked to fix verified defects."],
@@ -224,7 +224,7 @@
       "id": "release",
       "description": "Prepare, land, deploy, and verify a release.",
       "defaultAction": "land",
-      "triggers": ["release", "deploy", "pull request", "land", "canary", "發布", "部署", "合併"],
+      "triggers": ["release", "deploy", "merge pull request", "land changes", "canary deployment", "發布", "部署", "合併 pr", "合併 pull request"],
       "promptContract": {
         "relevantContext": ["Inspect the current git state, required checks, release target, deployment path, and rollback signal."],
         "hardBoundaries": ["Require explicit approval before merge, deploy, publish, or any other outward-facing or irreversible action."],
@@ -285,21 +285,51 @@
       "id": "plan",
       "description": "Create, expand, or tune an implementation plan.",
       "defaultAction": "create",
-      "triggers": ["plan", "planning", "roadmap", "scope", "strategy", "規劃", "計畫", "範圍"],
+      "triggers": ["implementation plan", "create a plan", "write a plan", "tracked plan", "work map", "roadmap", "multi-session plan", "實作計畫", "建立計畫", "撰寫計畫", "追蹤式計畫", "工作地圖", "路線圖", "跨 session 計畫", "請規劃", "幫我規劃"],
       "promptContract": {
         "relevantContext": ["Ground the plan in current repository files, constraints, decisions, and available verification commands."],
         "hardBoundaries": ["Plan only. Do not implement product changes unless the user separately authorizes implementation."],
         "verification": ["Make every task executable by naming its artifact, expected result, and proof step; identify unresolved decisions explicitly."]
       },
       "actions": [
-        { "id": "create", "description": "Create an implementation plan.", "runtime": "compatibility", "owner": "prompt-contract-dispatch", "risk": "low", "hostSupport": ["claude"] }
+        {
+          "id": "create",
+          "description": "Create a versioned Work Map for tracked work.",
+          "runtime": "typed",
+          "owner": "work-map-store",
+          "risk": "low",
+          "hostSupport": ["claude", "codex"],
+          "runtimeContract": {
+            "modes": ["create"],
+            "requiredInputs": {
+              "create": ["mode", "destination", "scope", "decisions", "fog", "tickets"]
+            },
+            "outputs": ["work-id", "revision", "digest", "frontier", "map-readback"],
+            "sideEffects": {
+              "local-work-map-write": "runtime-owner"
+            }
+          },
+          "promptContract": {
+            "relevantContext": [
+              "Interview for mode, destination, included and excluded scope, decision references, unresolved in-scope questions, and dependency-ordered tickets before invoking the owner.",
+              "Write exactly the six runtime-owned input fields to a JSON file. From the installed Goldband runtime root containing this contract, execute `bin/goldband plan create --input <file> --host claude` on Claude or `bin/goldband plan create --input <file> --host codex` on Codex; prose without successful runtime output is not completion."
+            ],
+            "hardBoundaries": [
+              "Use Work Maps only for cross-session work, dependent tickets, parallel agents, in-scope unknowns, or an explicitly requested tracked plan, roadmap, or handoff.",
+              "Do not supply repository identity, branch, base commit, frontier, blockers, revision, or timestamps; the runtime owns them."
+            ],
+            "verification": [
+              "Read back the saved work ID, revision, digest, and complete runtime-calculated frontier."
+            ]
+          }
+        }
       ]
     },
     {
       "id": "browser",
       "description": "Operate the persistent browser and browser-backed tools.",
       "defaultAction": "session",
-      "triggers": ["browser", "open browser", "scrape", "cookies", "playwright", "瀏覽器", "爬取", "cookie"],
+      "triggers": ["open browser", "use browser", "browser session", "inspect in browser", "scrape page", "scrape website", "inspect cookies", "browser cookies", "use playwright", "run playwright", "開啟瀏覽器", "使用瀏覽器", "瀏覽器操作", "瀏覽器檢查", "爬取網頁"],
       "promptContract": {
         "relevantContext": [
           "Use Goldband's persistent browser runtime. On Claude, run bin/goldband browser session --host claude <command> [args...].",
@@ -341,7 +371,7 @@
       "id": "design",
       "description": "Define, explore, and prototype product design.",
       "defaultAction": "consult",
-      "triggers": ["design system", "visual direction", "mockup", "prototype", "設計系統", "視覺", "原型"],
+      "triggers": ["design system", "visual direction", "mockup", "ui prototype", "design prototype", "prototype ui", "設計系統", "視覺方向", "ui 原型"],
       "promptContract": {
         "relevantContext": ["Read DESIGN.md when present and inspect the actual product, content, constraints, and target users."],
         "hardBoundaries": ["Do not change production UI unless the user asked for implementation; keep prototypes isolated and reversible."],
@@ -355,7 +385,7 @@
       "id": "safety",
       "description": "Apply or remove workflow safety boundaries.",
       "defaultAction": "guard",
-      "triggers": ["careful", "guard", "freeze", "restrict edits", "read only", "小心", "限制修改", "唯讀"],
+      "triggers": ["careful mode", "freeze edits", "restrict edits", "read only mode", "限制修改", "凍結修改", "唯讀模式"],
       "promptContract": {
         "relevantContext": ["Inspect the current Claude session ID and its existing careful-mode or freeze-mode state."],
         "hardBoundaries": ["Change only the requested session-scoped hook mode. Never report protection as active without owner readback."],
@@ -371,7 +401,7 @@
       "id": "context",
       "description": "Save, restore, and summarize working context.",
       "defaultAction": "restore",
-      "triggers": ["save context", "restore context", "resume", "retro", "checkpoint", "保存進度", "恢復進度", "回顧"],
+      "triggers": ["save context", "restore context", "resume saved work", "resume checkpoint", "context checkpoint", "session retrospective", "保存進度", "恢復進度", "接續上次進度", "工作回顧"],
       "promptContract": {
         "relevantContext": ["Use current git state and the newest relevant saved artifacts for this repository and branch."],
         "hardBoundaries": ["Do not fabricate missing history or treat stale artifacts as current evidence."],
@@ -387,7 +417,7 @@
       "id": "knowledge",
       "description": "Recall, configure, and synchronize Goldband knowledge.",
       "defaultAction": "recall",
-      "triggers": ["learn", "knowledge", "gbrain", "sync knowledge", "學習", "知識", "同步記憶"],
+      "triggers": ["knowledge recall", "recall knowledge", "gbrain", "sync knowledge", "recall memory", "查詢知識", "知識回憶", "同步記憶", "回憶先前內容"],
       "promptContract": {
         "relevantContext": ["Use the active repository's knowledge source, review status, and current files when checking whether recalled material is stale."],
         "hardBoundaries": ["Treat unreviewed candidates as untrusted and never expose secrets or private source content."],
@@ -439,7 +469,7 @@
       "id": "benchmark",
       "description": "Measure workflow or model performance.",
       "defaultAction": "workflow",
-      "triggers": ["benchmark", "performance regression", "model comparison", "效能", "基準", "模型比較"],
+      "triggers": ["benchmark", "workflow benchmark", "performance regression", "model comparison", "基準測試", "工作流程基準", "效能回歸", "模型比較"],
       "promptContract": {
         "relevantContext": ["Define the target, baseline, workload, environment, and metric before measuring."],
         "hardBoundaries": ["Do not compare results collected under materially different conditions without labeling the difference."],
@@ -453,7 +483,7 @@
       "id": "document",
       "description": "Create product documentation and publication artifacts.",
       "defaultAction": "generate",
-      "triggers": ["write docs", "documentation", "pdf", "document", "文件", "說明文件"],
+      "triggers": ["write docs", "write documentation", "create documentation", "create pdf", "generate pdf", "generate document", "撰寫文件", "建立文件", "產生 pdf", "製作說明文件"],
       "promptContract": {
         "relevantContext": ["Use the named source material, audience, output format, and existing document conventions."],
         "hardBoundaries": ["Do not invent product facts, citations, or implementation behavior that the sources do not support."],
@@ -484,7 +514,7 @@
       "id": "system",
       "description": "Inspect or maintain the Goldband installation.",
       "defaultAction": "health",
-      "triggers": ["goldband health", "upgrade goldband", "create skill", "system status", "更新 goldband", "健康檢查"],
+      "triggers": ["goldband health", "goldband status", "upgrade goldband", "reinstall goldband", "更新 goldband", "檢查 goldband", "goldband 健康檢查"],
       "promptContract": {
         "relevantContext": ["Inspect both repository source and the installed Goldband runtime when the distinction affects the result."],
         "hardBoundaries": ["Do not upgrade, reinstall, or mutate shared configuration without explicit authorization."],

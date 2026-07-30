@@ -162,6 +162,26 @@ assert.doesNotMatch(
   'review/code prompt contract must not duplicate runtime-owned execution policy',
 );
 
+const planCreateContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/plan/create.workflow.md',
+);
+assert.ok(planCreateContract, 'plan/create contract must exist');
+assert.match(
+  planCreateContract,
+  /bin\/goldband plan create --input <file> --host claude/,
+  'plan/create must invoke the installed typed owner on Claude',
+);
+assert.match(
+  planCreateContract,
+  /bin\/goldband plan create --input <file> --host codex/,
+  'plan/create must invoke the installed typed owner on Codex',
+);
+assert.match(
+  planCreateContract,
+  /prose without successful runtime output is not completion/,
+  'plan/create must not allow a prose-only success path',
+);
+
 const browserSessionContract = contracts.get(
   'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',
 );
@@ -208,10 +228,10 @@ assert.equal(
   actions.filter((action) => action.lifecycle === 'public').length,
   19,
 );
-assert.equal(actions.filter((action) => action.runtime === 'typed').length, 15);
+assert.equal(actions.filter((action) => action.runtime === 'typed').length, 16);
 assert.equal(
   actions.filter((action) => action.runtime === 'compatibility').length,
-  4,
+  3,
 );
 assert.deepEqual(
   actions

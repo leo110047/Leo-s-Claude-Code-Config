@@ -11,7 +11,7 @@ Public inventory: 19 actions. Experimental actions are excluded from routing and
 | `review` | `security` | Review security and trust boundaries. | `prompt-contract-dispatch` | `compatibility` | `medium` |
 | `investigate` | `code` | Investigate code or runtime behavior. | `prompt-contract-dispatch` | `compatibility` | `medium` |
 | `qa` | `app` | Run product QA and record evidence. | `qa-runtime` | `typed` | `medium` |
-| `plan` | `create` | Create an implementation plan. | `prompt-contract-dispatch` | `compatibility` | `low` |
+| `plan` | `create` | Create a versioned Work Map for tracked work. | `work-map-store` | `typed` | `low` |
 | `browser` | `session` | Use the persistent browser for interactive work. | `browse` | `typed` | `medium` |
 | `design` | `consult` | Define a design direction and system. | `design-decision-store` | `typed` | `low` |
 | `safety` | `guard` | Enable careful-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `low` |

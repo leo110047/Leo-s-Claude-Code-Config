@@ -272,16 +272,41 @@
       "capability": "plan",
       "action": "create",
       "name": "plan/create",
-      "description": "Create an implementation plan.",
+      "description": "Create a versioned Work Map for tracked work.",
       "contractPath": "generated/workflow-contracts/plan/create.workflow.md",
-      "runtime": "compatibility",
+      "runtime": "typed",
       "lifecycle": "public",
-      "runtimeOwner": "prompt-contract-dispatch",
-      "runtimeContract": null,
+      "runtimeOwner": "work-map-store",
+      "runtimeContract": {
+        "modes": [
+          "create"
+        ],
+        "requiredInputs": {
+          "create": [
+            "mode",
+            "destination",
+            "scope",
+            "decisions",
+            "fog",
+            "tickets"
+          ]
+        },
+        "outputs": [
+          "work-id",
+          "revision",
+          "digest",
+          "frontier",
+          "map-readback"
+        ],
+        "sideEffects": {
+          "local-work-map-write": "runtime-owner"
+        }
+      },
       "safetyGates": [],
       "riskLevel": "low",
       "hostSupport": [
-        "claude"
+        "claude",
+        "codex"
       ]
     },
     {

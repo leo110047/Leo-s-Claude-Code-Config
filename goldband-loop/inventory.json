@@ -151,13 +151,39 @@
       "actions": [
         {
           "id": "create",
-          "description": "Create an implementation plan.",
-          "runtime": "compatibility",
-          "owner": "prompt-contract-dispatch",
+          "description": "Create a versioned Work Map for tracked work.",
+          "runtime": "typed",
+          "owner": "work-map-store",
           "risk": "low",
           "hostSupport": [
-            "claude"
-          ]
+            "claude",
+            "codex"
+          ],
+          "runtimeContract": {
+            "modes": [
+              "create"
+            ],
+            "requiredInputs": {
+              "create": [
+                "mode",
+                "destination",
+                "scope",
+                "decisions",
+                "fog",
+                "tickets"
+              ]
+            },
+            "outputs": [
+              "work-id",
+              "revision",
+              "digest",
+              "frontier",
+              "map-readback"
+            ],
+            "sideEffects": {
+              "local-work-map-write": "runtime-owner"
+            }
+          }
         }
       ]
     },

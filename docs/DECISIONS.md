@@ -1482,3 +1482,79 @@ Revisit triggers:
   reproducibility without executing arbitrary repository code.
 - Real generated contracts consistently exceed the hard cap and repository
   evidence supports a new bounded default.
+
+## 2026-07-30: Work Map Runtime Owns Cross-Session Planning State
+
+Decision: use a versioned Work Map under the local Goldband runtime state root
+as the authoritative state for work that spans sessions, has dependent
+tickets, needs parallel agents, contains in-scope unknowns, or explicitly
+requires a tracked plan, roadmap, or handoff.
+
+Implementation contract:
+
+- `goldband-loop/workflows/work-map.ts` owns the schema, validation, dependency
+  graph, frontier calculation, and allowed state transitions.
+- `goldband-loop/workflows/work-map-store.ts` owns canonical repository-scoped
+  persistence, compare-and-swap revisions, atomic writes, deterministic
+  Markdown projection, append-only transition events, and the active pointer.
+- `${GOLDBAND_HOME:-$HOME/.goldband}/projects/<repository-id>/work/` is the
+  Phase 1 authority. Markdown projections, generated contracts, and context
+  checkpoints are not alternate Work Map stores.
+- `plan/create` remains the one public planning entrypoint. It is available to
+  Claude and Codex and delegates validation and persistence to the same typed
+  owner; no additional public planning skills are introduced.
+- Context checkpoints save only the active Work Map ID, revision, digest, and
+  optional active ticket reference. Restore reads the current map and git
+  state before reporting freshness and executable frontier.
+- External issue trackers and managed worktree binding are deferred. Phase 1
+  performs no GitHub, GitLab, or Linear mutation.
+- Single-session, low-risk work without dependencies remains in the ordinary
+  agent loop and does not require a Work Map.
+
+Assumptions:
+
+- A canonical repository/worktree identity plus branch is stable enough to
+  isolate local planning state.
+- Local runtime state is sufficient until a collaboration adapter has explicit
+  identity, authorization, idempotency, and readback contracts.
+- Ticket dependency state is the only Phase 1 input to frontier calculation;
+  models never author the stored frontier.
+
+Consequences:
+
+- Cross-session planning state can be validated, resumed, and compared by
+  revision without copying it into prompts or checkpoints.
+- Local state is not automatically shared across machines or collaborators.
+- Runtime and installer tests expand because the typed owner must work from an
+  installed Goldband surface for both supported parent hosts.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Store the plan only as Markdown | Markdown cannot provide strict schema validation, dependency invariants, or compare-and-swap updates. |
+| Add separate `grill-me`, `to-spec`, `to-tickets`, or `wayfinder` skills | Splits one planning state machine across public routes and makes host parity harder to verify. |
+| Use an issue tracker as the Phase 1 authority | Introduces provider identity, credentials, network mutation, and synchronization conflicts before the local contract is stable. |
+| Copy the complete Work Map into each context checkpoint | Creates duplicated state that can drift from the authoritative map. |
+| Bind Work Maps to managed worktrees immediately | Couples planning state to a separate execution boundary before ticket claim and evidence semantics exist. |
+
+Failure signals:
+
+- A model-supplied frontier or Markdown projection is accepted as authority.
+- A stale revision overwrites a newer map, or a failed write corrupts the last
+  valid state.
+- Repository, worktree, branch, symlink, or traversal boundaries can redirect
+  state writes.
+- Claude and Codex produce or consume different Work Map contracts.
+- Ordinary small changes are blocked until a Work Map is created.
+- A context checkpoint duplicates Work Map content or resumes stale state as
+  current.
+
+Revisit triggers:
+
+- Phase 2 defines ticket claim, implementation, verification, and evidence
+  transitions.
+- Phase 3 defines an external tracker adapter with explicit authorization,
+  idempotency, conflict handling, and round-trip readback.
+- Canonical repository identity proves insufficient for a supported worktree,
+  clone, or cross-machine workflow.

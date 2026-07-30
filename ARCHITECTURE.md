@@ -243,6 +243,43 @@ Integrated runtime runs write step evidence to
 `${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/<workflow>.jsonl`. Core
 workflows can run in mock mode for CI without LLM spend; real host execution is
 gated behind explicit `--mode real`.
+
+### Work Map state
+
+`plan/create` is a typed Claude/Codex entrypoint for work that spans sessions,
+has two or more dependency-linked tickets, needs parallel agents, contains
+in-scope unknowns, or explicitly requires a tracked plan, roadmap, or handoff.
+Single-session, low-risk work without dependencies stays in the ordinary agent
+loop and does not require a Work Map.
+
+The JSON domain contract in `goldband-loop/workflows/work-map.ts` owns schema
+validation, transitions, dependency cycles, blockers, and frontier
+calculation. `goldband-loop/workflows/work-map-store.ts` is the only persistence
+owner. It derives repository identity, canonical worktree, branch, and base
+commit from Git; model input cannot supply those fields, revisions, timestamps,
+frontier, or blockers.
+
+```text
+${GOLDBAND_HOME:-$HOME/.goldband}/projects/<repository-id>/work/
+├── active.json
+└── <work-id>/
+    ├── map.json
+    ├── map.md
+    └── events.jsonl
+```
+
+`map.json` is authoritative. `map.md` is regenerated deterministically, and
+`events.jsonl` is append-only transition evidence. Updates use a per-map lock,
+revision compare-and-swap, temporary files, and atomic rename. State paths are
+canonicalized and symbolic-link or traversal writes fail closed.
+
+Context checkpoints do not copy Work Map content. When a map is active,
+`context/save` stores only its ID, revision, digest, and nullable active ticket
+reference. `context/restore` compares saved/current Git state and saved/current
+Work Map state, recalculates the complete frontier, and returns one explicit
+next action. A stale, missing, completed, or cancelled map is never presented
+as an executable current plan.
+
 For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like
 content are materialized into the prompt, while skipped files are recorded as

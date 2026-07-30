@@ -210,8 +210,8 @@ describe('workflow registry', () => {
       resolve(ROOT, '../codex/hooks/capability-routing.generated.json'),
       'utf8',
     );
-    expect(codexMenu).not.toContain('$goldband plan create');
-    expect(codexHints).not.toContain('$goldband plan create');
+    expect(codexMenu).toContain('$goldband plan create');
+    expect(codexHints).toContain('$goldband plan create');
     expect(claudeMenu).toContain('$goldband plan create');
   });
 

@@ -47,7 +47,12 @@ create_fake_goldband_loop() {
 
 create_fake_loop_metadata() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated/workflow-contracts/review" "$loop_dir/.agents/skills"
+  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated/workflow-contracts/review" "$loop_dir/.agents/skills" "$loop_dir/runtime/workflows" "$loop_dir/runtime/lib" "$loop_dir/runtime/scripts"
+  local runtime_file
+  for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts types.ts; do
+    printf '// installed Work Map runtime fixture\n' > "$loop_dir/runtime/workflows/$runtime_file"
+  done
+  printf '// installed state root fixture\n' > "$loop_dir/runtime/lib/state-root.ts"
   printf '{"schemaVersion":1,"actions":[{"capability":"review","action":"code","contractPath":"generated/workflow-contracts/review/code.workflow.md"}]}\n' > "$loop_dir/generated/capability-actions.json"
   printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
   printf '0.0.0-test\n' > "$loop_dir/VERSION"
@@ -155,6 +160,7 @@ install_claude() {
   rm -rf "$HOME/.claude/skills/goldband"
   if [ "$PROFILE" = "standard" ]; then
     mkdir -p "$HOME/.claude/skills/goldband/bin" "$HOME/.claude/skills/goldband/review" "$HOME/.claude/skills/goldband/workflows"
+    cp -R "$ROOT/runtime" "$HOME/.claude/skills/goldband/runtime"
     ln -s "$ROOT/SKILL.md" "$HOME/.claude/skills/goldband/SKILL.md"
     ln -s "$ROOT/bin/goldband-config" "$HOME/.claude/skills/goldband/bin/goldband-config"
     ln -s "$ROOT/review/shared-rubric.md" "$HOME/.claude/skills/goldband/review/shared-rubric.md"
@@ -191,6 +197,7 @@ install_codex() {
   mkdir -p "$HOME/.codex/skills"
   rm -rf "$HOME/.codex/skills/goldband"
   mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/goldband-upgrade" "$HOME/.codex/skills/goldband/review" "$HOME/.codex/skills/goldband/workflows"
+  cp -R "$ROOT/runtime" "$HOME/.codex/skills/goldband/runtime"
   cp "$ROOT/SKILL.md" "$HOME/.codex/skills/goldband/SKILL.md"
   ln -s "$ROOT/bin/goldband-config" "$HOME/.codex/skills/goldband/bin/goldband-config"
   ln -s "$ROOT/bin/goldband-repo-mode" "$HOME/.codex/skills/goldband/bin/goldband-repo-mode"
@@ -393,6 +400,11 @@ assert_absent "$TMP_HOME/.claude/skills/_goldband-command"
 assert_exists "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_not_symlink "$TMP_HOME/.codex/skills/goldband/SKILL.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-config"
+assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-cli.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-store.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-runtime.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/lib/state-root.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/shared-rubric.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/findings-schema.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/checklist.md"
