@@ -38,6 +38,8 @@ function parseArgs(args: string[]): { capability: string; action: string; option
     else if (arg === '--specialists') options.specialists = takeValue(args, ++index, arg) as WorkflowRunOptions['specialists'];
     else if (arg === '--review-host-timeout-seconds') options.reviewHostTimeoutMs = takeSeconds(args, ++index, arg);
     else if (arg === '--review-pass-timeout-seconds') options.reviewPassTimeoutMs = takeSeconds(args, ++index, arg);
+    else if (arg === '--work-id') options.workId = takeValue(args, ++index, arg);
+    else if (arg === '--ticket-id') options.ticketId = takeValue(args, ++index, arg);
     else if (arg === '--loop') loop = true;
     else if (arg === '--max-iterations') options.maxIterations = takeNumber(args, ++index, arg);
     else usageError(`unknown argument: ${arg}`);
@@ -74,6 +76,9 @@ function validateOptions(
     usageError('review timeout options are only valid for review/code');
   }
   if (`${capability}/${action}` === 'review/code') {
+    if (Boolean(options.workId) !== Boolean(options.ticketId)) {
+      usageError('--work-id and --ticket-id must be supplied together');
+    }
     try {
       assertValidReviewExecutionOptions(options);
       resolveReviewTimeoutPolicy(options);
@@ -120,7 +125,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--work-id <id> --ticket-id <id>] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

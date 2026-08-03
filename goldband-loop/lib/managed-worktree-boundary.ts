@@ -75,6 +75,28 @@ export function runManagedCommand(
 			"--bind",
 			lease.agentScratchPath,
 			lease.agentScratchPath,
+			...(lease.workMap
+				? [
+						"--bind",
+						path.join(lease.stateRoot, "projects"),
+						path.join(lease.stateRoot, "projects"),
+						"--bind",
+						path.join(
+							lease.stateRoot,
+							"worktrees",
+							"verification",
+							path.basename(path.dirname(lease.evidencePath)),
+							lease.id,
+						),
+						path.join(
+							lease.stateRoot,
+							"worktrees",
+							"verification",
+							path.basename(path.dirname(lease.evidencePath)),
+							lease.id,
+						),
+					]
+				: []),
 			"--ro-bind",
 			path.join(lease.worktreePath, ".git"),
 			path.join(lease.worktreePath, ".git"),
@@ -89,6 +111,60 @@ export function runManagedCommand(
 			encoding: "utf8",
 			stdio,
 		},
+	);
+}
+
+export function runManagedVerificationCommand(
+	lease: ManagedWorktreeLease,
+	argv: string[],
+	options: { timeoutMs: number; maxBuffer: number },
+) {
+	if (argv.length === 0) throw new Error("managed verification command is required");
+	const environment = managedVerificationEnvironment(lease);
+	const spawnOptions = {
+		cwd: lease.worktreePath,
+		env: environment,
+		encoding: "buffer" as const,
+		timeout: options.timeoutMs,
+		maxBuffer: options.maxBuffer,
+		shell: false as const,
+	};
+	if (lease.enforcement.boundary === "darwin-seatbelt") {
+		return spawnSync(
+			"/usr/bin/sandbox-exec",
+			["-p", darwinProfile(lease, false), "--", ...argv],
+			spawnOptions,
+		);
+	}
+	return spawnSync(
+		requireExecutable("bwrap"),
+		[
+			"--die-with-parent",
+			"--new-session",
+			"--unshare-net",
+			"--ro-bind",
+			"/",
+			"/",
+			"--dev-bind",
+			"/dev",
+			"/dev",
+			"--proc",
+			"/proc",
+			"--bind",
+			lease.worktreePath,
+			lease.worktreePath,
+			"--bind",
+			lease.agentScratchPath,
+			lease.agentScratchPath,
+			"--ro-bind",
+			path.join(lease.worktreePath, ".git"),
+			path.join(lease.worktreePath, ".git"),
+			"--chdir",
+			lease.worktreePath,
+			"--",
+			...argv,
+		],
+		spawnOptions,
 	);
 }
 
@@ -164,7 +240,10 @@ export function probeManagedBoundary(
 	return { available: true, boundary: lease.enforcement.boundary };
 }
 
-function darwinProfile(lease: ManagedWorktreeLease): string {
+function darwinProfile(
+	lease: ManagedWorktreeLease,
+	allowNetwork = true,
+): string {
 	const deniedDirectories = [
 		lease.repoRoot,
 		lease.commonGitDir,
@@ -192,7 +271,7 @@ function darwinProfile(lease: ManagedWorktreeLease): string {
 	const fileRules = [...new Set(deniedFiles)]
 		.map((deniedPath) => `(literal ${schemeString(deniedPath)})`)
 		.join(" ");
-	return `(version 1) (allow default) (deny file-write* ${directoryRules} ${fileRules})`;
+	return `(version 1) (allow default) ${allowNetwork ? "" : "(deny network*)"} (deny file-write* ${directoryRules} ${fileRules})`;
 }
 
 function managedEnvironment(lease: ManagedWorktreeLease): NodeJS.ProcessEnv {
@@ -202,9 +281,38 @@ function managedEnvironment(lease: ManagedWorktreeLease): NodeJS.ProcessEnv {
 		TMP: lease.agentScratchPath,
 		TEMP: lease.agentScratchPath,
 		GIT_OPTIONAL_LOCKS: "0",
+		...(lease.workMap
+			? {
+					GOLDBAND_WORKTREE_LEASE_ID: lease.id,
+					GOLDBAND_WORK_ID: lease.workMap.workId,
+					GOLDBAND_TICKET_ID: lease.workMap.ticketId,
+				}
+			: {}),
 	};
 	for (const key of GIT_WRITE_ENV) delete environment[key];
 	return environment;
+}
+
+function managedVerificationEnvironment(
+	lease: ManagedWorktreeLease,
+): NodeJS.ProcessEnv {
+	return {
+		PATH: process.env.PATH ?? "/usr/bin:/bin",
+		HOME: lease.agentScratchPath,
+		TMPDIR: lease.agentScratchPath,
+		TMP: lease.agentScratchPath,
+		TEMP: lease.agentScratchPath,
+		CI: "1",
+		NO_COLOR: "1",
+		GIT_OPTIONAL_LOCKS: "0",
+		...(lease.workMap
+			? {
+					GOLDBAND_WORKTREE_LEASE_ID: lease.id,
+					GOLDBAND_WORK_ID: lease.workMap.workId,
+					GOLDBAND_TICKET_ID: lease.workMap.ticketId,
+				}
+			: {}),
+	};
 }
 
 function requireExecutable(command: string): string {

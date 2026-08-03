@@ -44,10 +44,13 @@ create_fake_goldband_loop() {
   write_fake_repo_mode_bin "$loop_dir"
   write_fake_setup_script "$loop_dir"
 }
-
 create_fake_loop_metadata() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/review" "$loop_dir/generated/workflow-contracts/review" "$loop_dir/.agents/skills" "$loop_dir/runtime/workflows" "$loop_dir/runtime/lib" "$loop_dir/runtime/scripts"
+  mkdir -p "$loop_dir/bin" "$loop_dir/lib" "$loop_dir/review" "$loop_dir/generated/workflow-contracts/review" "$loop_dir/.agents/skills" "$loop_dir/runtime/workflows" "$loop_dir/runtime/lib" "$loop_dir/runtime/scripts"
+  printf '// verification receipt fixture\n' > "$loop_dir/lib/verification-receipt.ts"
+  printf '#!/bin/sh\nexit 0\n' > "$loop_dir/bin/goldband-work-verify"
+  printf '#!/usr/bin/env bun\n' > "$loop_dir/bin/goldband-work-verify.ts"
+  chmod +x "$loop_dir/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify.ts"
   local runtime_file
   for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts types.ts; do
     printf '// installed Work Map runtime fixture\n' > "$loop_dir/runtime/workflows/$runtime_file"
@@ -77,7 +80,6 @@ EOF_SCHEMA
 # test greptile triage
 EOF_GREPTILE
 }
-
 write_fake_config_bin() {
   local loop_dir="$1"
   cat > "$loop_dir/bin/goldband-config" <<'EOF_CONFIG'
@@ -159,10 +161,12 @@ install_claude() {
   mkdir -p "$HOME/.claude/skills"
   rm -rf "$HOME/.claude/skills/goldband"
   if [ "$PROFILE" = "standard" ]; then
-    mkdir -p "$HOME/.claude/skills/goldband/bin" "$HOME/.claude/skills/goldband/review" "$HOME/.claude/skills/goldband/workflows"
+    mkdir -p "$HOME/.claude/skills/goldband/bin" "$HOME/.claude/skills/goldband/lib" "$HOME/.claude/skills/goldband/review" "$HOME/.claude/skills/goldband/workflows"
     cp -R "$ROOT/runtime" "$HOME/.claude/skills/goldband/runtime"
     ln -s "$ROOT/SKILL.md" "$HOME/.claude/skills/goldband/SKILL.md"
     ln -s "$ROOT/bin/goldband-config" "$HOME/.claude/skills/goldband/bin/goldband-config"
+    cp "$ROOT/bin/goldband-work-verify"* "$HOME/.claude/skills/goldband/bin/"
+    ln -s "$ROOT/lib/verification-receipt.ts" "$HOME/.claude/skills/goldband/lib/verification-receipt.ts"
     ln -s "$ROOT/review/shared-rubric.md" "$HOME/.claude/skills/goldband/review/shared-rubric.md"
     ln -s "$ROOT/review/findings-schema.md" "$HOME/.claude/skills/goldband/review/findings-schema.md"
     ln -s "$ROOT/review/checklist.md" "$HOME/.claude/skills/goldband/review/checklist.md"
@@ -196,11 +200,13 @@ append_fake_setup_codex() {
 install_codex() {
   mkdir -p "$HOME/.codex/skills"
   rm -rf "$HOME/.codex/skills/goldband"
-  mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/goldband-upgrade" "$HOME/.codex/skills/goldband/review" "$HOME/.codex/skills/goldband/workflows"
+  mkdir -p "$HOME/.codex/skills/goldband/bin" "$HOME/.codex/skills/goldband/goldband-upgrade" "$HOME/.codex/skills/goldband/lib" "$HOME/.codex/skills/goldband/review" "$HOME/.codex/skills/goldband/workflows"
   cp -R "$ROOT/runtime" "$HOME/.codex/skills/goldband/runtime"
   cp "$ROOT/SKILL.md" "$HOME/.codex/skills/goldband/SKILL.md"
   ln -s "$ROOT/bin/goldband-config" "$HOME/.codex/skills/goldband/bin/goldband-config"
   ln -s "$ROOT/bin/goldband-repo-mode" "$HOME/.codex/skills/goldband/bin/goldband-repo-mode"
+  cp "$ROOT/bin/goldband-work-verify"* "$HOME/.codex/skills/goldband/bin/"
+  ln -s "$ROOT/lib/verification-receipt.ts" "$HOME/.codex/skills/goldband/lib/verification-receipt.ts"
   ln -s "$ROOT/review/shared-rubric.md" "$HOME/.codex/skills/goldband/review/shared-rubric.md"
   ln -s "$ROOT/review/findings-schema.md" "$HOME/.codex/skills/goldband/review/findings-schema.md"
   ln -s "$ROOT/review/checklist.md" "$HOME/.codex/skills/goldband/review/checklist.md"
@@ -404,6 +410,9 @@ assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-cli.t
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-store.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-runtime.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-work-verify"
+assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-work-verify.ts"
+assert_exists "$TMP_HOME/.codex/skills/goldband/lib/verification-receipt.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/lib/state-root.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/shared-rubric.md"
 assert_exists "$TMP_HOME/.codex/skills/goldband/review/findings-schema.md"

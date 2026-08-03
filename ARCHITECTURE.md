@@ -152,6 +152,23 @@ pre-integration failure preserves the managed worktree and discards its
 quarantined candidate objects. PreToolUse and `pre-commit` checks are soft,
 early diagnostics only; the OS filesystem sandbox is the enforcement boundary.
 
+A managed worktree may also carry an exact Work Map ticket binding. Bound
+leases record the Work Map ID/revision, ticket ID, and planning-contract
+digest. `goldband-work-verify` executes argument arrays without a shell, stores
+bounded redacted summaries plus full-output digests under the local state root,
+and advances only the bound ticket after mode-specific evidence succeeds.
+`review/code --work-id ... --ticket-id ...` reads that receipt and adds the
+ticket intent as explicitly delimited untrusted data. Its JSON artifact binds
+the map revision, ticket, receipt, reviewed diff, and candidate digest.
+`finish` requires the ticket to be runtime-verified and reads every bound
+artifact back before integration. Standalone managed worktrees retain the
+original finish contract and cannot claim Work Map verification.
+
+These provenance checks are an evidence gate, not a security boundary against
+another process running as the same host user. The filesystem sandbox protects
+Git and broker inputs; Work Map and verification state remain inspectable and
+recoverable local runtime state.
+
 ### Claude Plugin Contract
 
 The Claude plugin is a generated distribution artifact, not a second source of
@@ -279,6 +296,23 @@ reference. `context/restore` compares saved/current Git state and saved/current
 Work Map state, recalculates the complete frontier, and returns one explicit
 next action. A stale, missing, completed, or cancelled map is never presented
 as an executable current plan.
+
+Phase 2 ticket lifecycle transitions are store-owned operations with revision
+compare-and-swap: `ready -> claimed -> implemented -> verified`, plus explicit
+block, requested-changes, cancellation, and integrated-commit readback.
+Block, resume, and cancel are callable through the installed `goldband plan` lifecycle
+surface for both Claude and Codex hosts. Frontier membership is checked at
+claim time, and a code dependency does not satisfy downstream work until its
+verified commit is integrated; verified analysis-only work needs no Git commit.
+Code claims bind exactly one
+managed lease and claim attempt; requested changes open a new attempt so prior
+RED records cannot satisfy a later GREEN. Existing-test tickets bind the exact
+planning command argument array. Work Map review scope is runtime-owned and the
+receipt, review artifact, and finish readback share one canonical candidate-diff
+digest. Canonical untracked materialization reuses the normal review secret,
+file-size, aggregate-size, binary, and stable-read policy. Analysis-only tickets instead bind a named artifact copied into
+broker-owned state and never create a code worktree. Prompt output cannot
+directly transition a ticket.
 
 For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like

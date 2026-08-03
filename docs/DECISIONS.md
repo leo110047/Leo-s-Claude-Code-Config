@@ -1558,3 +1558,56 @@ Revisit triggers:
   idempotency, conflict handling, and round-trip readback.
 - Canonical repository identity proves insufficient for a supported worktree,
   clone, or cross-machine workflow.
+
+## 2026-07-31: Work Map Evidence Is Bound Through Runtime Readback
+
+Decision: bind a Work Map ticket, managed worktree lease, verification receipt,
+review artifact, and integrated commit through stable IDs and SHA-256 digests.
+The Work Map store is the only ticket-transition owner.
+
+Implementation contract:
+
+- A bound managed worktree can claim only an active frontier ticket and records
+  the Work Map ID/revision, ticket ID, lease ID, and ticket-contract digest.
+- `goldband-work-verify` executes command argument arrays without shell
+  interpolation. It stores a bounded redacted summary and full-output digest,
+  enforces verification-mode rules, and advances a successful ticket to
+  `implemented`.
+- TDD evidence requires a failing RED with an expected signal followed by a
+  successful GREEN on the same declared seam. A changed candidate invalidates
+  the current receipt. Requested changes increment a claim attempt, and records
+  from an earlier attempt cannot satisfy the new receipt.
+- Existing-test tickets persist the exact planning command argument array and
+  reject substitute commands, even when the substitute exits successfully.
+- Analysis-only tickets use a normalized named artifact copied into broker-owned
+  state, with an analysis claim and review lifecycle but no code worktree.
+- Work Map-scoped `review/code` treats ticket text as untrusted project data.
+  Its scope is runtime-owned: code review uses the canonical candidate diff and
+  analysis review uses the recorded artifact. The review artifact binds the map
+  revision, ticket and subject digests, reviewed diff digest, and candidate or
+  artifact digest. Runtime readback, not reviewer prose, advances the ticket to
+  `verified` or requested changes.
+- Canonical candidate diffs use the same bounded untracked-file materializer as
+  ordinary review, including secret-like-content skips and stable descriptor reads.
+- Bound `worktree finish` reads the lease, map, ticket, receipt, review
+  artifact, and current candidate. It integrates only a matching verified
+  chain, then records the integrated commit through the Work Map store.
+- Integrated-commit readback retries revision CAS conflicts caused by unrelated
+  map updates and refuses to overwrite a different recorded commit.
+- Standalone managed worktrees remain supported but cannot emit Work Map
+  evidence.
+
+This is an evidence-integrity and workflow gate, not a security boundary
+against a user or process with the same host account and filesystem access.
+
+Failure signals:
+
+- Evidence from another map, ticket, lease, base commit, or candidate is reused.
+- RED proves an unrelated failure or GREEN has no earlier matching RED.
+- A successful command different from the planning command is accepted.
+- Caller-selected review scope differs from the candidate that finish integrates.
+- An analysis-only ticket has no named-artifact completion path.
+- Reviewer output directly edits Work Map state.
+- Finish checks only ticket status and ignores artifact provenance.
+- Full command output or secret-like values are persisted as summaries.
+- Claude and Codex installed runtimes expose different evidence contracts.

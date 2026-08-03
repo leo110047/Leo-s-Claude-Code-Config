@@ -74,6 +74,7 @@ type VerificationReceiptV1 = {
   workRevision: number;
   ticketId: string;
   leaseId: string;
+  claimAttempt: number;
   repositoryIdentity: string;
   worktreePath: string;
   baseCommit: string;
@@ -82,6 +83,7 @@ type VerificationReceiptV1 = {
   candidate: {
     changedPathsDigest: string;
     treeDigest: string;
+    reviewDiffDigest: string;
   };
   createdAt: string;
 };
@@ -111,12 +113,17 @@ type VerificationRecord = {
 - GREEN 必須發生在 RED 之後。
 - RED/GREEN 必須屬於同一 work ID、ticket、lease。
 - Candidate tree 改變後，舊 GREEN 失效，必須重跑。
+- Review requested changes 會遞增 claim attempt；不同 attempt 的 RED/GREEN 不得互用。
 
 ### 5.2 Other modes
 
 - `existing-tests`：至少一筆成功 `check`，命令由 ticket planning contract 指定。
 - `manual`：保存具體步驟、observable result、artifact reference；不能只寫「人工測過」。
 - `analysis-only`：不得產生 code candidate；完成證據是 named report/artifact。
+
+Ticket planning contract 必須讓 `existing-tests` 保存完整 `verificationCommand`
+argument array；recorder 做逐項相等比對。`analysis-only` 必須保存 normalized
+repository-relative `analysisArtifact`，由 recorder 複製到 broker-owned state root。
 
 ## 6. 實作工作
 
@@ -132,6 +139,9 @@ type VerificationRecord = {
 **Action**
 
 - 實作 claim、mark-implemented、request-changes、verify、block、cancel operations。
+- `goldband plan block|resume|cancel` 經 installed Work Map runtime 暴露明確 lifecycle surface，
+  並要求 `--work-id`、`--ticket-id`、`--reason` 與可推導或明示的 host。
+  `resume` 不需要新 reason，會恢復 runtime 保存的 pre-block 狀態。
 - 每個 operation 驗證 expected revision。
 - Claim 只接受 runtime 計算出的 frontier ticket。
 - 保存 claim owner、claimedAt、lease ID、evidence references。
@@ -292,6 +302,9 @@ bun test test/work-map-evidence.test.ts
 goldband review code --work-id <id> --ticket-id <id>
 ```
 
+- Work Map review 不接受 caller-selected scope；runtime 依 receipt 產生唯一
+  canonical candidate diff，analysis ticket 則讀 broker-owned named artifact。
+
 - 兩個 flag 必須一起出現。
 - Runtime 讀取 authoritative Work Map，不接受任意 spec path 取代。
 - Review prompt 加入 bounded intent bundle：
@@ -303,10 +316,7 @@ goldband review code --work-id <id> --ticket-id <id>
   - verification receipt summary/digest
 - Work Map 文字視為 untrusted content，與 system/rules instructions 明確分隔。
 - Findings category 增加：
-  - `code-risk`
-  - `contract-mismatch`
-  - `scope-creep`
-  - `verification-gap`
+  - canonical shared review taxonomy
 - 保持一個 independent core reviewer；不新增 parallel specialists。
 - Review artifact 保存 work ID、ticket ID、map revision、ticket digest、
   receipt digest、reviewed diff digest。
@@ -343,7 +353,7 @@ Required tests：
 **Action**
 
 - Review 完成後由 Work Map owner 讀回 review artifact。
-- 有 blocking `contract-mismatch`、`scope-creep`、`verification-gap` 時：
+- 有任何明確標記為 blocking 的有效 finding 時：
   - ticket 回到 `claimed`；
   - 保存 requested changes reference；
   - 舊 receipt 因 candidate 改變而失效。
@@ -382,11 +392,14 @@ bun test test/work-map-review.test.ts
   - review artifact
   - candidate tree
 - 全部 digest 相符且 ticket 為 `verified` 才能 integration。
+- `reviewedDiffDigest` 必須等於 receipt 保存的 canonical `reviewDiffDigest`。
 - Integration commit 成功後：
   - 寫入 commit/tree/readback evidence；
   - ticket 保存 integrated commit；
   - 重新計算 frontier；
   - map 若所有 tickets 完成且無 fog，進入 `completed`。
+- Code dependency 只有在 `verified` 且已有 integrated commit 時才解鎖 frontier；
+  `analysis-only` dependency 在 `verified` 後即可解鎖。
 - 任何 pre-integration failure 保留 worktree。
 - Standalone worktree 保持現有 finish contract，不偽造 Work Map evidence。
 

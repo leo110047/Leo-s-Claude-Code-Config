@@ -4,6 +4,10 @@ create_minimal_real_setup_fixture() {
   cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
   cp "$ROOT_DIR/goldband-loop/lib/retired-workflow-entry-names.txt" "$loop_dir/lib/retired-workflow-entry-names.txt"
   cp "$ROOT_DIR/goldband-loop/lib/state-root.ts" "$loop_dir/lib/state-root.ts"
+  cp "$ROOT_DIR/goldband-loop/lib/verification-receipt.ts" "$loop_dir/lib/verification-receipt.ts"
+  cp "$ROOT_DIR/goldband-loop/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify"
+  cp "$ROOT_DIR/goldband-loop/bin/goldband-work-verify.ts" "$loop_dir/bin/goldband-work-verify.ts"
+  chmod +x "$loop_dir/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify.ts"
   local runtime_file
   for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts types.ts; do
     cp "$ROOT_DIR/goldband-loop/workflows/$runtime_file" "$loop_dir/workflows/$runtime_file"

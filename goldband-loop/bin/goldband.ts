@@ -89,13 +89,19 @@ const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
+		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
 	);
 	stream.log("  goldband plan create --input <file> [--host <claude|codex>]");
-	stream.log("  goldband worktree create <name>");
+	stream.log(
+		"  goldband plan <block|cancel> --work-id <id> --ticket-id <id> --reason <text> [--host <claude|codex>]",
+	);
+	stream.log("  goldband plan resume --work-id <id> --ticket-id <id> [--host <claude|codex>]");
+	stream.log(
+		"  goldband worktree create <name> [--ticket-id <id>] [--claim-owner <owner>]",
+	);
 	stream.log('  goldband worktree finish <name> -m "<commit message>"');
 }
 
@@ -105,14 +111,28 @@ function usage(): never {
 }
 
 function create(name: string | undefined, extra: string[]): number {
-	if (!name || extra.length > 0) usage();
+	if (!name) usage();
+	let ticketId: string | undefined;
+	let claimOwner: string | undefined;
+	for (let index = 0; index < extra.length; index += 1) {
+		const flag = extra[index];
+		const value = extra[index + 1];
+		if (!value) usage();
+		if (flag === "--ticket-id" && !ticketId) ticketId = value;
+		else if (flag === "--claim-owner" && !claimOwner) claimOwner = value;
+		else usage();
+		index += 1;
+	}
+	if (claimOwner && !ticketId) {
+		throw new Error("--claim-owner requires --ticket-id");
+	}
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
 		throw new Error(
 			"worktree create requires an interactive terminal because the managed agent must inherit the sandboxed shell",
 		);
 	}
 
-	const lease = createManagedWorktree({ name });
+	const lease = createManagedWorktree({ name, ticketId, claimOwner });
 	const probe = probeManagedBoundary(lease);
 	if (!probe.available) {
 		abortCreatedManagedWorktree(lease);
@@ -173,6 +193,8 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	const forwarded: string[] = [];
 	let hasScope = false;
 	const scopeFlags: ReviewScopeFlag[] = [];
+	let workId: string | undefined;
+	let ticketId: string | undefined;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -190,6 +212,20 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			throw new Error(
 				"review code always uses real mode; --mode is not accepted",
 			);
+		}
+		if (arg === "--work-id" || arg === "--ticket-id") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (arg === "--work-id") {
+				if (workId) throw new Error("--work-id may be supplied only once");
+				workId = value;
+			} else {
+				if (ticketId) throw new Error("--ticket-id may be supplied only once");
+				ticketId = value;
+			}
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
 		}
 		if (arg === "--loop") {
 			throw new Error(
@@ -216,8 +252,16 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 
 	if (!host)
 		throw new Error("review code requires --host claude or --host codex");
+	if (Boolean(workId) !== Boolean(ticketId)) {
+		throw new Error("--work-id and --ticket-id must be supplied together");
+	}
+	if (workId && scopeFlags.length > 0) {
+		throw new Error(
+			"Work Map review scope is runtime-owned; remove staged, worktree, base, diff-file, and include-untracked flags",
+		);
+	}
 	assertValidReviewScopeFlags(scopeFlags);
-	if (!hasScope) forwarded.unshift("--worktree");
+	if (!hasScope && !workId) forwarded.unshift("--worktree");
 
 	return ["review", "code", "--mode", "real", "--host", host, ...forwarded];
 }
@@ -561,6 +605,60 @@ export function planCreate(
 	}
 }
 
+export function planLifecycle(
+	action: "block" | "resume" | "cancel",
+	args: string[],
+	options: {
+		entryFile?: string;
+		env?: NodeJS.ProcessEnv;
+		spawn?: typeof spawnSync;
+	} = {},
+): number {
+	let host: ReviewHost | undefined;
+	const forwarded: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		const value = args[index + 1];
+		if (!["--host", "--work-id", "--ticket-id", "--reason"].includes(arg) || !value) {
+			throw new Error(`plan ${action}: invalid or missing option ${arg ?? "option"}`);
+		}
+		if (arg === "--host") {
+			if (host || (value !== "claude" && value !== "codex")) {
+				throw new Error(`plan ${action} --host must be claude or codex`);
+			}
+			host = value;
+		} else {
+			if (forwarded.includes(arg)) throw new Error(`plan ${action} accepts ${arg} only once`);
+			forwarded.push(arg, value);
+		}
+		index += 1;
+	}
+	for (const required of [
+		"--work-id",
+		"--ticket-id",
+		...(action === "resume" ? [] : ["--reason"]),
+	]) {
+		if (!forwarded.includes(required)) throw new Error(`plan ${action} requires ${required}`);
+	}
+	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
+	const resolvedHost = host ?? inferPlanHost(entryFile, options.env ?? process.env);
+	let runtimeRoot: string | null = null;
+	try {
+		const snapshot = snapshotPlanRuntime(resolvePlanRuntimeFile(entryFile));
+		runtimeRoot = snapshot.root;
+		const result = (options.spawn ?? spawnSync)(
+			process.execPath,
+			[snapshot.runtimeFile, action, "--host", resolvedHost, ...forwarded],
+			{ cwd: process.cwd(), env: options.env ?? process.env, stdio: "inherit" },
+		);
+		if (result.error) throw result.error;
+		if (result.status === null) throw new Error(`plan ${action} runtime terminated without an exit status`);
+		return result.status;
+	} finally {
+		if (runtimeRoot) rmSync(runtimeRoot, { recursive: true, force: true });
+	}
+}
+
 function snapshotPlanRuntime(runtimeFile: string): {
 	root: string;
 	runtimeFile: string;
@@ -852,10 +950,14 @@ export function main(args = process.argv.slice(2)): number {
 		);
 	}
 	if (scope === "plan") {
-		if (action !== "create") usage();
-		return planCreate(
-			[name, ...rest].filter((value): value is string => value !== undefined),
+		const planArgs = [name, ...rest].filter(
+			(value): value is string => value !== undefined,
 		);
+		if (action === "create") return planCreate(planArgs);
+		if (action === "block" || action === "resume" || action === "cancel") {
+			return planLifecycle(action, planArgs);
+		}
+		usage();
 	}
 	if (scope !== "worktree") usage();
 	if (action === "create") return create(name, rest);

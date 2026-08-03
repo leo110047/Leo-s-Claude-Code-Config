@@ -48,8 +48,39 @@ export type WorkTicket = {
 	blockedBy: string[];
 	acceptanceCriteria: string[];
 	verificationMode: VerificationMode;
+	verificationCommand?: string[];
+	analysisArtifact?: string;
 	testSeams: string[];
 	status: WorkTicketStatus;
+	claim?: TicketClaim;
+	evidence?: TicketEvidence;
+	blockerReason?: string;
+	blockedFrom?: "claimed" | "implemented";
+	cancellationReason?: string;
+	integratedCommit?: string;
+};
+
+type TicketClaim = {
+	owner: string;
+	claimedAt: string;
+	leaseId: string;
+	kind: "managed-worktree" | "analysis";
+	attempt: number;
+	ticketContractDigest: string;
+};
+
+export type EvidenceReference = {
+	id: string;
+	digest: string;
+	treeDigest?: string;
+	artifactDigest?: string;
+};
+
+type TicketEvidence = {
+	receipt?: EvidenceReference;
+	analysis?: EvidenceReference;
+	review?: EvidenceReference;
+	requestedChanges?: EvidenceReference;
 };
 
 export type WorkBlocker = {
@@ -145,7 +176,7 @@ const TICKET_TRANSITIONS: Record<
 > = {
 	draft: ["ready", "blocked", "cancelled"],
 	ready: ["claimed", "blocked", "cancelled"],
-	claimed: ["implemented", "blocked", "cancelled"],
+	claimed: ["ready", "implemented", "blocked", "cancelled"],
 	implemented: ["claimed", "verified", "blocked", "cancelled"],
 	verified: [],
 	blocked: ["draft", "ready", "claimed", "implemented", "cancelled"],
@@ -237,6 +268,17 @@ export function parseWorkMapCreateInput(value: unknown): WorkMapCreateInput {
 				`plan/create ticket ${ticket.id} cannot start with status ${ticket.status}`,
 			);
 		}
+		if (
+			ticket.claim ||
+			ticket.evidence ||
+			ticket.blockerReason ||
+			ticket.cancellationReason ||
+			ticket.integratedCommit
+		) {
+			throw new Error(
+				`plan/create ticket ${ticket.id} cannot include runtime-owned evidence`,
+			);
+		}
 	}
 	const now = new Date(0).toISOString();
 	validateWorkMap({
@@ -265,8 +307,8 @@ export function calculateFrontier(tickets: readonly WorkTicket[]): string[] {
 		.filter(
 			(ticket) =>
 				ticket.status === "ready" &&
-				ticket.blockedBy.every(
-					(blockerId) => byId.get(blockerId)?.status === "verified",
+				ticket.blockedBy.every((blockerId) =>
+					isTicketDelivered(byId.get(blockerId)),
 				),
 		)
 		.map((ticket) => ticket.id)
@@ -281,7 +323,7 @@ export function calculateBlockers(
 		.filter((ticket) => ticket.status === "blocked")
 		.map((ticket) => {
 			const unresolved = ticket.blockedBy.filter(
-				(id) => byId.get(id)?.status !== "verified",
+				(id) => !isTicketDelivered(byId.get(id)),
 			);
 			return {
 				ticketId: ticket.id,
@@ -292,6 +334,17 @@ export function calculateBlockers(
 			};
 		})
 		.sort((left, right) => left.ticketId.localeCompare(right.ticketId));
+}
+
+function isTicketDelivered(ticket: WorkTicket | undefined): boolean {
+	if (!ticket || ticket.status !== "verified") return false;
+	return ticket.verificationMode === "analysis-only" || Boolean(ticket.integratedCommit);
+}
+
+export function areTicketsDelivered(tickets: readonly WorkTicket[]): boolean {
+	return tickets
+		.filter((ticket) => ticket.status !== "cancelled")
+		.every((ticket) => isTicketDelivered(ticket));
 }
 
 export function assertMapTransition(
@@ -358,6 +411,24 @@ export function workMapDigest(map: WorkMapV1): string {
 	return createHash("sha256").update(stableJson(map)).digest("hex");
 }
 
+export function ticketContractDigest(ticket: WorkTicket): string {
+	return createHash("sha256")
+		.update(
+			stableJson({
+				id: ticket.id,
+				title: ticket.title,
+				delivers: ticket.delivers,
+				blockedBy: ticket.blockedBy,
+				acceptanceCriteria: ticket.acceptanceCriteria,
+				verificationMode: ticket.verificationMode,
+				verificationCommand: ticket.verificationCommand,
+				analysisArtifact: ticket.analysisArtifact,
+				testSeams: ticket.testSeams,
+			}),
+		)
+		.digest("hex");
+}
+
 export function stableJson(value: unknown): string {
 	return `${JSON.stringify(sortJson(value), null, 2)}\n`;
 }
@@ -370,6 +441,53 @@ function validateWorkMap(map: WorkMapV1): void {
 	assertScopeDoesNotOverlap(map.scope);
 	assertDependencies(map.tickets);
 	assertFogReferences(map.fog, map.tickets);
+	for (const ticket of map.tickets) {
+		validateVerificationContract(ticket);
+		const requiresClaim = ["claimed", "implemented", "verified"].includes(
+			ticket.status,
+		);
+		if (requiresClaim && !ticket.claim) {
+			throw new Error(
+				`ticket ${ticket.id} requires a claim binding`,
+			);
+		}
+		if (["implemented", "verified"].includes(ticket.status)) {
+			if (ticket.verificationMode === "analysis-only") {
+				if (!ticket.evidence?.analysis) {
+					throw new Error(
+						`ticket ${ticket.id} requires analysis artifact evidence`,
+					);
+				}
+			} else if (!ticket.evidence?.receipt) {
+				throw new Error(
+					`ticket ${ticket.id} requires verification receipt evidence`,
+				);
+			}
+		}
+		if (ticket.status === "verified" && !ticket.evidence?.review) {
+			throw new Error(
+				`ticket ${ticket.id} requires review evidence`,
+			);
+		}
+		if (ticket.blockerReason && ticket.status !== "blocked") {
+			throw new Error(
+				`ticket ${ticket.id} blocker reason requires blocked status`,
+			);
+		}
+		if (
+			(ticket.blockedFrom !== undefined && ticket.status !== "blocked") ||
+			(ticket.status === "blocked" &&
+				Boolean(ticket.claim) &&
+				!["claimed", "implemented"].includes(ticket.blockedFrom ?? ""))
+		) {
+			throw new Error(`ticket ${ticket.id} blocked state provenance is invalid`);
+		}
+		if (ticket.cancellationReason && ticket.status !== "cancelled") {
+			throw new Error(
+				`ticket ${ticket.id} cancellation reason requires cancelled status`,
+			);
+		}
+	}
 	const expectedFrontier = calculateFrontier(map.tickets);
 	if (!sameStrings(map.frontier, expectedFrontier)) {
 		throw new Error(
@@ -547,8 +665,16 @@ function parseTicket(value: unknown, index: number): WorkTicket {
 		"blockedBy",
 		"acceptanceCriteria",
 		"verificationMode",
+		"verificationCommand",
+		"analysisArtifact",
 		"testSeams",
 		"status",
+		"claim",
+		"evidence",
+		"blockerReason",
+		"blockedFrom",
+		"cancellationReason",
+		"integratedCommit",
 	]);
 	return {
 		id: nonEmptyString(item.id, `tickets[${index}].id`),
@@ -564,9 +690,147 @@ function parseTicket(value: unknown, index: number): WorkTicket {
 			`tickets[${index}].verificationMode`,
 			VERIFICATION_MODES,
 		),
+		...(item.verificationCommand === undefined
+			? {}
+			: {
+					verificationCommand: nonEmptyStringArray(
+						item.verificationCommand,
+						`tickets[${index}].verificationCommand`,
+					),
+				}),
+		...(item.analysisArtifact === undefined
+			? {}
+			: {
+					analysisArtifact: relativeArtifactPath(
+						item.analysisArtifact,
+						`tickets[${index}].analysisArtifact`,
+					),
+				}),
 		testSeams: stringArray(item.testSeams, `tickets[${index}].testSeams`),
 		status: enumValue(item.status, `tickets[${index}].status`, TICKET_STATUSES),
+		...(item.claim === undefined
+			? {}
+			: { claim: parseClaim(item.claim, `tickets[${index}].claim`) }),
+		...(item.evidence === undefined
+			? {}
+			: { evidence: parseEvidence(item.evidence, `tickets[${index}].evidence`) }),
+		...(item.blockerReason === undefined
+			? {}
+			: {
+					blockerReason: nonEmptyString(
+						item.blockerReason,
+						`tickets[${index}].blockerReason`,
+					),
+				}),
+		...(item.blockedFrom === undefined
+			? {}
+			: {
+					blockedFrom: enumValue(
+						item.blockedFrom,
+						`tickets[${index}].blockedFrom`,
+						new Set(["claimed", "implemented"] as const),
+					),
+				}),
+		...(item.cancellationReason === undefined
+			? {}
+			: {
+					cancellationReason: nonEmptyString(
+						item.cancellationReason,
+						`tickets[${index}].cancellationReason`,
+					),
+				}),
+		...(item.integratedCommit === undefined
+			? {}
+			: {
+					integratedCommit: gitObjectString(
+						item.integratedCommit,
+						`tickets[${index}].integratedCommit`,
+					),
+				}),
 	};
+}
+
+function parseClaim(value: unknown, label: string): TicketClaim {
+	const item = strictRecord(value, label, [
+		"owner",
+		"claimedAt",
+		"leaseId",
+		"kind",
+		"attempt",
+		"ticketContractDigest",
+	]);
+	return {
+		owner: nonEmptyString(item.owner, `${label}.owner`),
+		claimedAt: timestamp(item.claimedAt, `${label}.claimedAt`),
+		leaseId: nonEmptyString(item.leaseId, `${label}.leaseId`),
+		kind: enumValue(
+			item.kind,
+			`${label}.kind`,
+			new Set(["managed-worktree", "analysis"]),
+		),
+		attempt: positiveInteger(item.attempt, `${label}.attempt`),
+		ticketContractDigest: digestString(
+			item.ticketContractDigest,
+			`${label}.ticketContractDigest`,
+		),
+	};
+}
+
+function parseEvidence(value: unknown, label: string): TicketEvidence {
+	const item = strictRecord(value, label, [
+		"receipt",
+		"analysis",
+		"review",
+		"requestedChanges",
+	]);
+	return {
+		...(item.receipt === undefined
+			? {}
+			: { receipt: parseEvidenceReference(item.receipt, `${label}.receipt`) }),
+		...(item.analysis === undefined
+			? {}
+			: { analysis: parseEvidenceReference(item.analysis, `${label}.analysis`) }),
+		...(item.review === undefined
+			? {}
+			: { review: parseEvidenceReference(item.review, `${label}.review`) }),
+		...(item.requestedChanges === undefined
+			? {}
+			: {
+					requestedChanges: parseEvidenceReference(
+						item.requestedChanges,
+						`${label}.requestedChanges`,
+					),
+				}),
+	};
+}
+
+function parseEvidenceReference(
+	value: unknown,
+	label: string,
+): EvidenceReference {
+	const item = strictRecord(value, label, [
+		"id",
+		"digest",
+		"treeDigest",
+		"artifactDigest",
+	]);
+	const reference: EvidenceReference = {
+		id: nonEmptyString(item.id, `${label}.id`),
+		digest: digestString(item.digest, `${label}.digest`),
+	};
+	if (item.treeDigest !== undefined) {
+		reference.treeDigest = digestString(item.treeDigest, `${label}.treeDigest`);
+	}
+	if (item.artifactDigest !== undefined) {
+		reference.artifactDigest = digestString(
+			item.artifactDigest,
+			`${label}.artifactDigest`,
+		);
+	}
+	if (Boolean(reference.treeDigest) === Boolean(reference.artifactDigest)) {
+		throw new Error(`${label} requires exactly one subject digest`);
+	}
+	return reference;
 }
 
 function parseBlocker(value: unknown, index: number): WorkBlocker {
@@ -638,11 +902,69 @@ function absolutePath(value: unknown, label: string): string {
 	return result;
 }
 
+function relativeArtifactPath(value: unknown, label: string): string {
+	const result = nonEmptyString(value, label).replaceAll("\\", "/");
+	if (
+		result.startsWith("/") ||
+		win32.isAbsolute(result) ||
+		result.split("/").some((part) => part === ".." || part === "")
+	) {
+		throw new Error(`${label} must be a normalized repository-relative path`);
+	}
+	return result;
+}
+
+function validateVerificationContract(ticket: WorkTicket): void {
+	if (ticket.verificationMode === "existing-tests") {
+		if (!ticket.verificationCommand?.length) {
+			throw new Error(
+				`ticket ${ticket.id} existing-tests requires verificationCommand`,
+			);
+		}
+	} else if (ticket.verificationCommand) {
+		throw new Error(
+			`ticket ${ticket.id} verificationCommand is only valid for existing-tests`,
+		);
+	}
+	if (ticket.verificationMode === "analysis-only") {
+		if (!ticket.analysisArtifact) {
+			throw new Error(
+				`ticket ${ticket.id} analysis-only requires analysisArtifact`,
+			);
+		}
+		if (ticket.testSeams.length > 0) {
+			throw new Error(
+				`ticket ${ticket.id} analysis-only cannot declare testSeams`,
+			);
+		}
+	} else if (ticket.analysisArtifact) {
+		throw new Error(
+			`ticket ${ticket.id} analysisArtifact is only valid for analysis-only`,
+		);
+	}
+}
+
 function positiveInteger(value: unknown, label: string): number {
 	if (!Number.isSafeInteger(value) || Number(value) < 1) {
 		throw new Error(`${label} must be a positive integer`);
 	}
 	return Number(value);
+}
+
+function digestString(value: unknown, label: string): string {
+	const result = nonEmptyString(value, label);
+	if (!/^[a-f0-9]{64}$/.test(result)) {
+		throw new Error(`${label} must be a SHA-256 digest`);
+	}
+	return result;
+}
+
+function gitObjectString(value: unknown, label: string): string {
+	const result = nonEmptyString(value, label);
+	if (!/^[a-f0-9]{40,64}$/.test(result)) {
+		throw new Error(`${label} must be a Git object id`);
+	}
+	return result;
 }
 
 function timestamp(value: unknown, label: string): string {

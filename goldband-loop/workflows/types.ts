@@ -100,6 +100,8 @@ export type WorkflowRunOptions = {
   specialists?: 'off' | 'auto' | 'all';
   reviewHostTimeoutMs?: number;
   reviewPassTimeoutMs?: number;
+  workId?: string;
+  ticketId?: string;
   inputFile?: string;
   goldbandHome?: string;
   cwd?: string;

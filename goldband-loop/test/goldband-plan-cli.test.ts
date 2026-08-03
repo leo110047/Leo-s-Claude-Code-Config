@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	planCreate,
+	planLifecycle,
 	readStablePlanInput,
 	resolvePlanRuntimeFile,
 } from "../bin/goldband.ts";
@@ -27,6 +28,49 @@ afterEach(() => {
 });
 
 describe("goldband plan create CLI", () => {
+	test("routes block and cancel through the installed runtime for both hosts", () => {
+		for (const host of ["claude", "codex"] as const) {
+			const root = fixtureRoot();
+			for (const action of ["block", "resume", "cancel"] as const) {
+				let invocation: string[] = [];
+				const lifecycleArgs = [
+					"--work-id",
+					"work-a",
+					"--ticket-id",
+					"ticket-a",
+					...(action === "resume"
+						? []
+						: ["--reason", "explicit lifecycle reason"]),
+					"--host",
+					host,
+				];
+				const status = planLifecycle(
+					action,
+					lifecycleArgs,
+					{
+						entryFile: join(root, "bin", "goldband.ts"),
+						spawn: ((_command, args) => {
+							invocation = args as string[];
+							return { status: 0, signal: null } as ReturnType<typeof Bun.spawnSync>;
+						}) as never,
+					},
+				);
+				expect(status).toBe(0);
+				expect(invocation.slice(1)).toEqual([
+					action,
+					"--host",
+					host,
+					"--work-id",
+					"work-a",
+					"--ticket-id",
+					"ticket-a",
+					...(action === "resume"
+						? []
+						: ["--reason", "explicit lifecycle reason"]),
+				]);
+			}
+		}
+	});
 	test("dispatches through the materialized installed runtime", () => {
 		const root = fixtureRoot();
 		const input = join(root, "input.json");

@@ -23,6 +23,32 @@ describe("Work Map domain", () => {
 		expect(calculateFrontier(map.tickets)).toEqual(["ticket-a"]);
 	});
 
+	test("code dependencies unlock only after integration while analysis unlocks after verification", () => {
+		const codeBlocker: WorkTicket = {
+			...ticket("ticket-a"),
+			status: "verified",
+		};
+		const dependent: WorkTicket = {
+			...ticket("ticket-b"),
+			blockedBy: ["ticket-a"],
+		};
+		expect(calculateFrontier([codeBlocker, dependent])).toEqual([]);
+		expect(
+			calculateFrontier([
+				{ ...codeBlocker, integratedCommit: "a".repeat(40) },
+				dependent,
+			]),
+		).toEqual(["ticket-b"]);
+
+		const analysisBlocker: WorkTicket = {
+			...codeBlocker,
+			verificationMode: "analysis-only",
+			verificationCommand: undefined,
+			analysisArtifact: "reports/ticket-a.md",
+		};
+		expect(calculateFrontier([analysisBlocker, dependent])).toEqual(["ticket-b"]);
+	});
+
 	test("rejects an empty or generic destination", () => {
 		expect(() => parseWorkMap({ ...fixture(), destination: " " })).toThrow(
 			"destination must be a non-empty string",
@@ -299,6 +325,7 @@ function ticket(id: string): WorkTicket {
 		blockedBy: [],
 		acceptanceCriteria: ["The artifact is present"],
 		verificationMode: "existing-tests",
+		verificationCommand: ["bun", "test"],
 		testSeams: ["unit test"],
 		status: "ready",
 	};

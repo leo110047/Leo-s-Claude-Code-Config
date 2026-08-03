@@ -16,11 +16,14 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
 import {
 	assertWorkMapTransition,
+	areTicketsDelivered,
 	calculateBlockers,
 	calculateFrontier,
 	parseWorkMap,
 	parseWorkMapCreateInput,
 	stableJson,
+	ticketContractDigest,
+	type EvidenceReference,
 	type WorkMapCreateInput,
 	type WorkMapV1,
 	workMapDigest,
@@ -221,6 +224,343 @@ export class WorkMapStore {
 		} finally {
 			release();
 		}
+	}
+
+	claimTicket(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		owner: string;
+		leaseId: string;
+		kind?: "managed-worktree" | "analysis";
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"claim-ticket",
+			input.owner,
+			(map) => {
+				if (!map.frontier.includes(input.ticketId)) {
+					throw new Error(
+						`ticket is not in the current Work Map frontier: ${input.ticketId}`,
+					);
+				}
+				const ticket = requiredTicket(map, input.ticketId);
+				if (ticket.status !== "ready" || ticket.claim) {
+					throw new Error(`ticket is already claimed: ${input.ticketId}`);
+				}
+				ticket.status = "claimed";
+				const kind = input.kind ?? "managed-worktree";
+				if (
+					(ticket.verificationMode === "analysis-only") !==
+					(kind === "analysis")
+				) {
+					throw new Error(
+						"ticket verification mode does not match claim binding kind",
+					);
+				}
+				ticket.claim = {
+					owner: nonEmpty(input.owner, "owner"),
+					claimedAt: this.#clock().toISOString(),
+					leaseId: nonEmpty(input.leaseId, "leaseId"),
+					kind,
+					attempt: 1,
+					ticketContractDigest: ticketContractDigest(ticket),
+				};
+				if (map.status === "mapped") map.status = "executing";
+				return map;
+			},
+		);
+	}
+
+	markImplemented(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		receipt: EvidenceReference;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"mark-implemented",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (
+					!["claimed", "implemented"].includes(ticket.status) ||
+					!ticket.claim ||
+					ticket.claim.kind !== "managed-worktree" ||
+					!input.receipt.treeDigest
+				) {
+					throw new Error(`ticket cannot record implementation: ${input.ticketId}`);
+				}
+				ticket.status = "implemented";
+				ticket.evidence = { receipt: input.receipt };
+				delete ticket.blockerReason;
+				if (map.status === "executing") map.status = "verifying";
+				return map;
+			},
+		);
+	}
+
+	markAnalysisImplemented(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		analysis: EvidenceReference;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"mark-analysis-implemented",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (
+					ticket.status !== "claimed" ||
+					ticket.verificationMode !== "analysis-only" ||
+					ticket.claim?.kind !== "analysis" ||
+					!input.analysis.artifactDigest
+				) {
+					throw new Error(`ticket is not an analysis claim: ${input.ticketId}`);
+				}
+				ticket.status = "implemented";
+				ticket.evidence = { analysis: input.analysis };
+				delete ticket.blockerReason;
+				if (map.status === "executing") map.status = "verifying";
+				return map;
+			},
+		);
+	}
+
+	rollbackClaim(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		leaseId: string;
+		actor: string;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"rollback-claim",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (ticket.claim?.leaseId !== input.leaseId) {
+					throw new Error("only a matching lease claim can roll back");
+				}
+				if (ticket.status === "claimed" && !ticket.evidence) {
+					ticket.status = "ready";
+				} else if (ticket.status === "blocked" || ticket.status === "cancelled") {
+					delete ticket.evidence;
+					delete ticket.blockedFrom;
+				} else {
+					throw new Error("lease claim state cannot roll back safely");
+				}
+				delete ticket.claim;
+				return map;
+			},
+		);
+	}
+
+	requestChanges(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		review: EvidenceReference;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"request-changes",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (ticket.status !== "implemented") {
+					throw new Error(`ticket is not implemented: ${input.ticketId}`);
+				}
+				ticket.status = "claimed";
+				ticket.evidence = { requestedChanges: input.review };
+				if (!ticket.claim) {
+					throw new Error(`ticket claim is missing: ${input.ticketId}`);
+				}
+				ticket.claim.attempt += 1;
+				if (map.status === "verifying") map.status = "executing";
+				return map;
+			},
+		);
+	}
+
+	verifyTicket(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		review: EvidenceReference;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"verify-ticket",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				const subject =
+					ticket.verificationMode === "analysis-only"
+						? ticket.evidence?.analysis?.artifactDigest
+						: ticket.evidence?.receipt?.treeDigest;
+				const reviewedSubject =
+					ticket.verificationMode === "analysis-only"
+						? input.review.artifactDigest
+						: input.review.treeDigest;
+				if (ticket.status !== "implemented" || !subject) {
+					throw new Error(
+						`ticket lacks implemented verification evidence: ${input.ticketId}`,
+					);
+				}
+				if (subject !== reviewedSubject) {
+					throw new Error("review and verification receipt tree digests differ");
+				}
+				ticket.status = "verified";
+				ticket.evidence!.review = input.review;
+				if (
+					ticket.verificationMode === "analysis-only" &&
+					areTicketsDelivered(map.tickets) &&
+					map.fog.every((question) => question.status !== "unresolved")
+				) {
+					map.status = "completed";
+				}
+				return map;
+			},
+		);
+	}
+
+	blockTicket(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		reason: string;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"block-ticket",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (!["ready", "claimed", "implemented"].includes(ticket.status)) {
+					throw new Error(`ticket cannot be blocked: ${input.ticketId}`);
+				}
+				if (ticket.status === "claimed" || ticket.status === "implemented") {
+					ticket.blockedFrom = ticket.status;
+				}
+				ticket.status = "blocked";
+				ticket.blockerReason = nonEmpty(input.reason, "reason");
+				return map;
+			},
+		);
+	}
+
+	resumeTicket(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"resume-ticket",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (ticket.status !== "blocked") {
+					throw new Error(`ticket cannot resume: ${input.ticketId}`);
+				}
+				if (ticket.claim && ticket.blockedFrom) {
+					ticket.status = ticket.blockedFrom;
+				} else if (!ticket.claim && !ticket.blockedFrom) {
+					ticket.status = "ready";
+				} else {
+					throw new Error(`ticket blocked state cannot resume: ${input.ticketId}`);
+				}
+				delete ticket.blockedFrom;
+				delete ticket.blockerReason;
+				return map;
+			},
+		);
+	}
+
+	cancelTicket(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		reason: string;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"cancel-ticket",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (["verified", "cancelled"].includes(ticket.status)) {
+					throw new Error(`ticket cannot be cancelled: ${input.ticketId}`);
+				}
+				ticket.status = "cancelled";
+				ticket.cancellationReason = nonEmpty(input.reason, "reason");
+				delete ticket.blockerReason;
+				delete ticket.blockedFrom;
+				if (
+					map.tickets.every((item) =>
+						["verified", "cancelled"].includes(item.status),
+					)
+				) {
+					map.status = "cancelled";
+				}
+				return map;
+			},
+		);
+	}
+
+	markIntegrated(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		commit: string;
+	}): WorkMapV1 {
+		return this.update(
+			input.workId,
+			input.expectedRevision,
+			"integrate-ticket",
+			input.actor,
+			(map) => {
+				const ticket = requiredTicket(map, input.ticketId);
+				if (ticket.status !== "verified" || !ticket.evidence?.review) {
+					throw new Error(`ticket is not verified: ${input.ticketId}`);
+				}
+				if (!/^[a-f0-9]{40,64}$/.test(input.commit)) {
+					throw new Error("integrated commit must be a Git object id");
+				}
+				ticket.integratedCommit = input.commit;
+				if (
+					areTicketsDelivered(map.tickets) &&
+					map.fog.every((question) => question.status !== "unresolved")
+				) {
+					map.status = "completed";
+				} else if (map.status === "verifying") {
+					map.status = "executing";
+				}
+				return map;
+			},
+		);
 	}
 
 	setActive(workId: string): void {
@@ -566,6 +906,13 @@ export function renderWorkMapMarkdown(map: WorkMapV1): string {
 			`- Delivers: ${ticket.delivers}`,
 			`- Blocked by: ${ticket.blockedBy.length > 0 ? ticket.blockedBy.join(", ") : "none"}`,
 			`- Verification: \`${ticket.verificationMode}\``,
+			`- Verification command: ${ticket.verificationCommand ? `\`${ticket.verificationCommand.map((arg) => JSON.stringify(arg)).join(" ")}\`` : "none"}`,
+			`- Analysis artifact: ${ticket.analysisArtifact ? `\`${ticket.analysisArtifact}\`` : "none"}`,
+			`- Lease: ${ticket.claim?.leaseId ? `\`${ticket.claim.leaseId}\`` : "none"}`,
+			`- Claim attempt: ${ticket.claim?.attempt ?? "none"}`,
+			`- Receipt: ${ticket.evidence?.receipt?.id ? `\`${ticket.evidence.receipt.id}\`` : "none"}`,
+			`- Review: ${ticket.evidence?.review?.id ? `\`${ticket.evidence.review.id}\`` : "none"}`,
+			`- Integrated commit: ${ticket.integratedCommit ? `\`${ticket.integratedCommit}\`` : "none"}`,
 			"",
 			"Acceptance criteria:",
 			"",
@@ -867,6 +1214,13 @@ function nonEmpty(value: string, label: string): string {
 		throw new Error(`${label} must be a non-empty string`);
 	}
 	return value.trim();
+}
+
+function requiredTicket(map: WorkMapV1, ticketId: string) {
+	const id = nonEmpty(ticketId, "ticketId");
+	const ticket = map.tickets.find((item) => item.id === id);
+	if (!ticket) throw new Error(`Work Map ticket is missing: ${id}`);
+	return ticket;
 }
 
 function bullets(items: readonly string[]): string[] {

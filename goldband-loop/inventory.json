@@ -636,7 +636,8 @@
     "goldband-timeline-read",
     "goldband-uninstall",
     "goldband-update-check",
-    "goldband-upgrade-context"
+    "goldband-upgrade-context",
+    "goldband-work-verify"
   ],
   "forbiddenLegacyEntrypoints": [
     "plan"

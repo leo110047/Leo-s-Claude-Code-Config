@@ -19,6 +19,7 @@ import {
 	type WorkMapTransactionStep,
 } from "../workflows/work-map-store";
 import type { WorkMapCreateInput } from "../workflows/work-map";
+import { executeWorkMapLifecycle } from "../workflows/work-map-runtime";
 
 const cleanup: string[] = [];
 
@@ -29,6 +30,278 @@ afterEach(() => {
 });
 
 describe("WorkMapStore", () => {
+	test("owns claim, implementation, review, and integration transitions", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const created = store.create(input(), "codex");
+		const claimed = store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: created.revision,
+			owner: "codex",
+			leaseId: "lease-a",
+		});
+		expect(claimed.tickets[0]?.status).toBe("claimed");
+		const receipt = {
+			id: "receipt-a",
+			digest: "a".repeat(64),
+			treeDigest: "b".repeat(64),
+		};
+		const implemented = store.markImplemented({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: claimed.revision,
+			actor: "recorder",
+			receipt,
+		});
+		const verified = store.verifyTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: implemented.revision,
+			actor: "review-readback",
+			review: {
+				id: "review-a",
+				digest: "c".repeat(64),
+				treeDigest: receipt.treeDigest,
+			},
+		});
+		const integrated = store.markIntegrated({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: verified.revision,
+			actor: "finish",
+			commit: "d".repeat(40),
+		});
+		expect(integrated.status).toBe("completed");
+		expect(integrated.tickets[0]?.integratedCommit).toBe("d".repeat(40));
+		expect(store.events(created.id).map((event) => event.operation)).toEqual([
+			"create",
+			"claim-ticket",
+			"mark-implemented",
+			"verify-ticket",
+			"integrate-ticket",
+		]);
+	});
+
+	test("code dependency enters frontier only after its verified commit is integrated", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const plan = input();
+		plan.tickets.push({
+			...plan.tickets[0]!,
+			id: "ticket-b",
+			title: "Implement dependent candidate",
+			blockedBy: ["ticket-a"],
+		});
+		const created = store.create(plan, "codex");
+		const claimed = store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: created.revision,
+			owner: "codex",
+			leaseId: "lease-a",
+		});
+		const receipt = {
+			id: "receipt-a",
+			digest: "a".repeat(64),
+			treeDigest: "b".repeat(64),
+		};
+		const implemented = store.markImplemented({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: claimed.revision,
+			actor: "recorder",
+			receipt,
+		});
+		const verified = store.verifyTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: implemented.revision,
+			actor: "review-readback",
+			review: {
+				id: "review-a",
+				digest: "c".repeat(64),
+				treeDigest: receipt.treeDigest,
+			},
+		});
+		expect(verified.frontier).toEqual([]);
+		const integrated = store.markIntegrated({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: verified.revision,
+			actor: "finish",
+			commit: "d".repeat(40),
+		});
+		expect(integrated.frontier).toEqual(["ticket-b"]);
+	});
+
+	test("runtime lifecycle owner blocks and cancels with durable readback", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const created = store.create(input(), "codex");
+		store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: created.revision,
+			owner: "codex",
+			leaseId: "lease-a",
+		});
+		const blocked = executeWorkMapLifecycle(
+			"block",
+			{ workId: "work-a", ticketId: "ticket-a", reason: "waiting for evidence" },
+			{ host: "codex", cwd: repo, goldbandHome: home },
+		);
+		expect(blocked.map.tickets[0]?.status).toBe("blocked");
+		expect(store.events("work-a").at(-1)?.operation).toBe("block-ticket");
+		const resumed = executeWorkMapLifecycle(
+			"resume",
+			{ workId: "work-a", ticketId: "ticket-a", reason: "" },
+			{ host: "codex", cwd: repo, goldbandHome: home },
+		);
+		expect(resumed.map.tickets[0]?.status).toBe("claimed");
+		expect(resumed.map.tickets[0]?.blockerReason).toBeUndefined();
+		expect(store.events("work-a").at(-1)?.operation).toBe("resume-ticket");
+
+		const second = createStore(repo, home, "work-b").create(input(), "claude");
+		const cancelled = executeWorkMapLifecycle(
+			"cancel",
+			{ workId: second.id, ticketId: "ticket-a", reason: "scope removed" },
+			{ host: "claude", cwd: repo, goldbandHome: home },
+		);
+		expect(cancelled.map.tickets[0]?.status).toBe("cancelled");
+		expect(createStore(repo, home, "unused").events(second.id).at(-1)?.operation).toBe(
+			"cancel-ticket",
+		);
+	});
+
+	test("runtime lifecycle blocks a ready ticket and resumes it to the frontier", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const created = store.create(input(), "codex");
+		const blocked = executeWorkMapLifecycle(
+			"block",
+			{ workId: created.id, ticketId: "ticket-a", reason: "waiting for access" },
+			{ host: "codex", cwd: repo, goldbandHome: home },
+		);
+		expect(blocked.map.tickets[0]?.status).toBe("blocked");
+		expect(blocked.map.tickets[0]?.claim).toBeUndefined();
+		expect(blocked.map.tickets[0]?.blockedFrom).toBeUndefined();
+		expect(blocked.map.frontier).toEqual([]);
+
+		const resumed = executeWorkMapLifecycle(
+			"resume",
+			{ workId: created.id, ticketId: "ticket-a", reason: "" },
+			{ host: "codex", cwd: repo, goldbandHome: home },
+		);
+		expect(resumed.map.tickets[0]?.status).toBe("ready");
+		expect(resumed.map.frontier).toEqual(["ticket-a"]);
+	});
+
+	test("mixed analysis and code work completes after the code commit integrates", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const plan = input();
+		plan.tickets[0] = {
+			...plan.tickets[0]!,
+			verificationMode: "analysis-only",
+			verificationCommand: undefined,
+			analysisArtifact: "reports/analysis.md",
+			testSeams: [],
+		};
+		plan.tickets.push({
+			...input().tickets[0]!,
+			id: "ticket-b",
+			title: "Integrate the analysis result",
+			blockedBy: ["ticket-a"],
+		});
+		const created = store.create(plan, "codex");
+		const claimedAnalysis = store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: created.revision,
+			owner: "codex",
+			leaseId: "analysis-a",
+			kind: "analysis",
+		});
+		const analysisDigest = "a".repeat(64);
+		const implementedAnalysis = store.markAnalysisImplemented({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: claimedAnalysis.revision,
+			actor: "analysis-recorder",
+			analysis: { id: "analysis-a", digest: "b".repeat(64), artifactDigest: analysisDigest },
+		});
+		const verifiedAnalysis = store.verifyTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: implementedAnalysis.revision,
+			actor: "review-readback",
+			review: { id: "review-a", digest: "c".repeat(64), artifactDigest: analysisDigest },
+		});
+		expect(verifiedAnalysis.frontier).toEqual(["ticket-b"]);
+		const claimedCode = store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-b",
+			expectedRevision: verifiedAnalysis.revision,
+			owner: "codex",
+			leaseId: "lease-b",
+		});
+		const receipt = { id: "receipt-b", digest: "d".repeat(64), treeDigest: "e".repeat(64) };
+		const implementedCode = store.markImplemented({
+			workId: created.id,
+			ticketId: "ticket-b",
+			expectedRevision: claimedCode.revision,
+			actor: "recorder",
+			receipt,
+		});
+		const verifiedCode = store.verifyTicket({
+			workId: created.id,
+			ticketId: "ticket-b",
+			expectedRevision: implementedCode.revision,
+			actor: "review-readback",
+			review: { id: "review-b", digest: "f".repeat(64), treeDigest: receipt.treeDigest },
+		});
+		const completed = store.markIntegrated({
+			workId: created.id,
+			ticketId: "ticket-b",
+			expectedRevision: verifiedCode.revision,
+			actor: "finish",
+			commit: "1".repeat(40),
+		});
+		expect(completed.status).toBe("completed");
+	});
+
+	test("rejects non-frontier and stale claims", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const created = store.create(input(), "codex");
+		expect(() =>
+			store.claimTicket({
+				workId: created.id,
+				ticketId: "missing",
+				expectedRevision: created.revision,
+				owner: "codex",
+				leaseId: "lease-a",
+			}),
+		).toThrow("not in the current Work Map frontier");
+		store.claimTicket({
+			workId: created.id,
+			ticketId: "ticket-a",
+			expectedRevision: created.revision,
+			owner: "codex",
+			leaseId: "lease-a",
+		});
+		expect(() =>
+			store.claimTicket({
+				workId: created.id,
+				ticketId: "ticket-a",
+				expectedRevision: created.revision,
+				owner: "codex",
+				leaseId: "lease-b",
+			}),
+		).toThrow("stale Work Map revision");
+	});
+
 	test("create/read round trip writes event and active pointer", () => {
 		const { repo, home } = fixture();
 		const store = createStore(repo, home, "work-a");
@@ -317,7 +590,10 @@ describe("WorkMapStore", () => {
 		rmdirSync(lock);
 
 		const exitCode = await worker.exited;
-		expect(exitCode).toBe(0);
+		const workerError = await new Response(worker.stderr).text();
+		if (exitCode !== 0) {
+			throw new Error(`active pointer worker exited ${exitCode}: ${workerError}`);
+		}
 		expect(primary.readActive()?.id).toBe("work-primary");
 		expect(linked.readActive()?.id).toBe("work-linked");
 	});
@@ -438,6 +714,7 @@ function input(): WorkMapCreateInput {
 				blockedBy: [],
 				acceptanceCriteria: ["State survives a process restart"],
 				verificationMode: "existing-tests",
+				verificationCommand: ["bun", "test"],
 				testSeams: ["store test"],
 				status: "ready",
 			},

@@ -357,6 +357,50 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
+	test("requires and forwards the complete Work Map scope pair", () => {
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"codex",
+				"--work-id",
+				"work-a",
+			]),
+		).toThrow("--work-id and --ticket-id must be supplied together");
+		expect(
+			buildReviewRuntimeArgs([
+				"--host",
+				"codex",
+				"--work-id",
+				"work-a",
+				"--ticket-id",
+				"ticket-a",
+			]),
+		).toEqual([
+			"review",
+			"code",
+			"--mode",
+			"real",
+			"--host",
+			"codex",
+			"--work-id",
+			"work-a",
+			"--ticket-id",
+			"ticket-a",
+		]);
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"codex",
+				"--work-id",
+				"work-a",
+				"--ticket-id",
+				"ticket-a",
+				"--diff-file",
+				"unrelated.patch",
+			]),
+		).toThrow("Work Map review scope is runtime-owned");
+	});
+
 	test("rejects repeated review loops before launching the runtime", () => {
 		expect(() =>
 			buildReviewRuntimeArgs(["--host", "codex", "--loop"]),

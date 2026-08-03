@@ -25,6 +25,62 @@ export type WorkMapRuntimeResult = {
 	mock: boolean;
 };
 
+export type WorkMapLifecycleResult = {
+	owner: "work-map-store";
+	operation: "block" | "resume" | "cancel";
+	status: "completed";
+	workId: string;
+	ticketId: string;
+	revision: number;
+	map: WorkMapV1;
+};
+
+export function executeWorkMapLifecycle(
+	operation: "block" | "resume" | "cancel",
+	input: { workId: string; ticketId: string; reason: string },
+	options: {
+		host: "claude" | "codex";
+		cwd: string;
+		goldbandHome?: string;
+	},
+): WorkMapLifecycleResult {
+	const workId = requiredLifecycleValue(input.workId, "work id");
+	const ticketId = requiredLifecycleValue(input.ticketId, "ticket id");
+	const reason =
+		operation === "resume" ? input.reason.trim() : requiredLifecycleValue(input.reason, "reason");
+	const store = new WorkMapStore({
+		cwd: options.cwd,
+		goldbandHome: options.goldbandHome,
+	});
+	const current = store.read(workId);
+	const mutation = {
+		workId,
+		ticketId,
+		expectedRevision: current.revision,
+		actor: `${options.host}-plan-${operation}`,
+		reason,
+	};
+	const map = operation === "block"
+		? store.blockTicket(mutation)
+		: operation === "cancel"
+			? store.cancelTicket(mutation)
+			: store.resumeTicket({
+					workId,
+					ticketId,
+					expectedRevision: current.revision,
+					actor: `${options.host}-plan-resume`,
+				});
+	return {
+		owner: "work-map-store",
+		operation,
+		status: "completed",
+		workId,
+		ticketId,
+		revision: map.revision,
+		map: store.read(workId),
+	};
+}
+
 export function runWorkMapCreate(ctx: WorkflowContext): WorkMapRuntimeResult {
 	const result = executeWorkMapCreate(ctx.input, {
 		mode: ctx.options.mode ?? "mock",
@@ -120,11 +176,20 @@ function mockCreateInput(): WorkMapCreateInput {
 				blockedBy: [],
 				acceptanceCriteria: ["The Work Map passes strict validation"],
 				verificationMode: "existing-tests",
+				verificationCommand: ["bun", "test"],
 				testSeams: ["work-map runtime test"],
 				status: "ready",
 			},
 		],
 	};
+}
+
+function requiredLifecycleValue(value: string, label: string): string {
+	const normalized = value.trim();
+	if (!normalized || normalized.length > 1024 || /[\u0000-\u001f\u007f]/.test(normalized)) {
+		throw new Error(`Work Map ${label} is invalid`);
+	}
+	return normalized;
 }
 
 function mockMap(input: WorkMapCreateInput): WorkMapV1 {

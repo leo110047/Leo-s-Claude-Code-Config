@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export const LEASE_SCHEMA_VERSION = 2;
+export const LEASE_SCHEMA_VERSION = 3;
 export const MANAGED_MARKER = "goldband-managed-worktree.json";
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -25,10 +25,10 @@ export interface ManagedBrokerContract {
 }
 
 export interface ManagedWorktreeLease {
-	schemaVersion: 2;
+	schemaVersion: 3;
 	id: string;
 	name: string;
-	status: "active" | "integrated";
+	status: "pending" | "active" | "aborting" | "integrated";
 	repoRoot: string;
 	commonGitDir: string;
 	sourceWorktree: string;
@@ -42,6 +42,12 @@ export interface ManagedWorktreeLease {
 	agentScratchPath: string;
 	evidencePath: string;
 	createdAt: string;
+	workMap?: {
+		workId: string;
+		workRevision: number;
+		ticketId: string;
+		ticketContractDigest: string;
+	};
 	preparedCommit?: string;
 	preparedTree?: string;
 	integratedAt?: string;
@@ -58,6 +64,9 @@ export interface CreateManagedWorktreeOptions {
 	name: string;
 	repoRoot?: string;
 	stateRoot?: string;
+	ticketId?: string;
+	claimOwner?: string;
+	afterPendingLease?: () => void;
 }
 
 export interface FinishManagedWorktreeOptions {
@@ -229,10 +238,25 @@ export function readAndValidateLease(
 		lease.agentScratchPath,
 		lease.evidencePath,
 	];
+	const workMapBindingIsValid =
+		lease.workMap === undefined ||
+		(typeof lease.workMap === "object" &&
+			lease.workMap !== null &&
+			typeof lease.workMap.workId === "string" &&
+			/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(lease.workMap.workId) &&
+			Number.isSafeInteger(lease.workMap.workRevision) &&
+			lease.workMap.workRevision > 0 &&
+			typeof lease.workMap.ticketId === "string" &&
+			lease.workMap.ticketId.length > 0 &&
+			/^[0-9a-f]{64}$/.test(lease.workMap.ticketContractDigest));
 	if (
 		lease.schemaVersion !== LEASE_SCHEMA_VERSION ||
 		!stringsAreValid ||
-		(lease.status !== "active" && lease.status !== "integrated") ||
+		!workMapBindingIsValid ||
+		(lease.status !== "pending" &&
+			lease.status !== "active" &&
+			lease.status !== "aborting" &&
+			lease.status !== "integrated") ||
 		!lease.enforcement ||
 		!lease.broker ||
 		typeof lease.broker.gitExecutable !== "string" ||

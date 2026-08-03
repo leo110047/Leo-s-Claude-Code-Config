@@ -184,7 +184,7 @@ install_runtime_bin_directory() {
     [ -e "$source_file" ] || continue
     name="$(basename "$source_file")"
     case "$name" in
-      goldband|goldband.ts)
+      goldband|goldband.ts|goldband-work-verify|goldband-work-verify.ts)
         _materialize_file_copy "$source_file" "$target_bin/$name"
         ;;
       *)
