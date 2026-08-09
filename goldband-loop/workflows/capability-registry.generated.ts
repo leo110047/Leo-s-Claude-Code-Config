@@ -273,6 +273,101 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     ]
   },
   {
+    "capability": "plan",
+    "action": "sync",
+    "name": "plan/sync",
+    "description": "Preview, inspect, or synchronize a Work Map tracker projection.",
+    "contractPath": "generated/workflow-contracts/plan/sync.workflow.md",
+    "runtime": "typed",
+    "lifecycle": "public",
+    "runtimeOwner": "tracker-runtime",
+    "runtimeContract": {
+      "modes": [
+        "preview",
+        "inspect",
+        "publish-step"
+      ],
+      "requiredInputs": {
+        "preview": [
+          "mode",
+          "workId"
+        ],
+        "inspect": [
+          "mode",
+          "workId"
+        ],
+        "publish-step": [
+          "mode",
+          "workId",
+          "operationDigest",
+          "stepId"
+        ]
+      },
+      "outputs": [
+        "mode",
+        "workId",
+        "readback"
+      ],
+      "sideEffects": {
+        "tracker-issue-write": "publish-step-only"
+      }
+    },
+    "safetyGates": [
+      {
+        "operation": "plan/sync-preview",
+        "mode": "preview",
+        "enforcement": "runtime-owner",
+        "owner": "tracker-runtime",
+        "authorization": "not-required-read-only",
+        "preconditions": [
+          "tracker-config-readback",
+          "local-work-map-readback"
+        ],
+        "sideEffects": [],
+        "readback": [
+          "operation-digest",
+          "projection-steps",
+          "approval-requirements"
+        ]
+      },
+      {
+        "operation": "plan/sync",
+        "mode": "publish-step",
+        "enforcement": "runtime-owner",
+        "owner": "tracker-runtime",
+        "authorization": "native-host-approval",
+        "preconditions": [
+          "matching-preview-digest",
+          "local-revision-unchanged",
+          "remote-digest-unchanged"
+        ],
+        "sideEffects": [
+          "tracker-issue-create",
+          "tracker-issue-update",
+          "tracker-relationship-update"
+        ],
+        "readback": [
+          "remote-markers",
+          "remote-digest",
+          "sync-checkpoint"
+        ]
+      }
+    ],
+    "riskLevel": "high",
+    "hostSupport": [
+      "claude",
+      "codex",
+      "factory",
+      "kiro",
+      "opencode",
+      "slate",
+      "cursor",
+      "openclaw",
+      "hermes",
+      "gbrain"
+    ]
+  },
+  {
     "capability": "browser",
     "action": "session",
     "name": "browser/session",

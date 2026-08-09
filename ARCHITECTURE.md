@@ -314,6 +314,34 @@ file-size, aggregate-size, binary, and stable-read policy. Analysis-only tickets
 broker-owned state and never create a code worktree. Prompt output cannot
 directly transition a ticket.
 
+### Work Map collaboration projections
+
+GitHub Issues and GitLab Issues are optional collaboration surfaces. The local
+`WorkMapStore` remains the only domain and transition owner; tracker issues are
+deterministic projections with versioned work/ticket markers and SHA-256
+digests. Provider wire shapes stay inside
+`goldband-loop/workflows/tracker-adapters/`.
+
+Tracker configuration defaults to `off` and stores only provider, repository,
+labels, and dependency capability under the Goldband state root. Credentials
+remain owned by `gh` or `glab`. Preview and inspect are read-only remote
+operations. Publish accepts only a persisted preview digest, checks the current
+local revision and remote digest, and executes exactly one explicitly named next
+step per native-host-approved invocation. A successful provider write is
+checkpointed before readback so a transient read failure cannot duplicate a
+create. Final readback compares title, body, labels, state, markers, and
+relationships rather than trusting the embedded digest alone.
+
+External issue bodies, comments, labels, assignees, and state are untrusted.
+They become typed change candidates; approved state and single-assignee claim
+changes return through `WorkMapStore` operations, with claims requiring an
+explicit owner and analysis binding ID. Code claims remain exclusive to the
+managed-worktree broker; tracker import cannot fabricate its lease. Closing an
+issue or checking an acceptance box never
+supplies Phase 2 verification evidence. GitHub and GitLab do not provide a
+cross-provider atomic claim lock, so concurrent claim drift stops for explicit
+resolution instead of choosing a winner or applying last-write-wins.
+
 For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like
 content are materialized into the prompt, while skipped files are recorded as

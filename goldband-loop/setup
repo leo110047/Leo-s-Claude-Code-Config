@@ -148,7 +148,18 @@ materialize_work_map_runtime() {
     workflows/work-map.ts \
     workflows/work-map-store.ts \
     workflows/work-map-runtime.ts \
+    workflows/tracker-config.ts \
+    workflows/tracker-runtime.ts \
+    workflows/tracker-adapters/types.ts \
+    workflows/tracker-adapters/projection.ts \
+    workflows/tracker-adapters/sync-state.ts \
+    workflows/tracker-adapters/import.ts \
+    workflows/tracker-adapters/cli-adapter.ts \
+    workflows/tracker-adapters/github.ts \
+    workflows/tracker-adapters/gitlab.ts \
     workflows/types.ts \
+    workflows/evidence.ts \
+    lib/secret-content.ts \
     lib/state-root.ts
   do
     source="$SOURCE_GOLDBAND_DIR/$required"
@@ -157,6 +168,7 @@ materialize_work_map_runtime() {
       echo "goldband setup failed: missing Work Map runtime source: $required" >&2
       exit 1
     }
+    mkdir -p "$(dirname "$temporary/$required")"
     cp "$source" "$temporary/$required"
     if [ ! -f "$temporary/$required" ] || [ -L "$temporary/$required" ]; then
       rm -rf "$temporary"

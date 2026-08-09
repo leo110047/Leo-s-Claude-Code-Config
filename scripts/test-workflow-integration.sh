@@ -52,9 +52,8 @@ create_fake_loop_metadata() {
   printf '#!/usr/bin/env bun\n' > "$loop_dir/bin/goldband-work-verify.ts"
   chmod +x "$loop_dir/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify.ts"
   local runtime_file
-  for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts types.ts; do
-    printf '// installed Work Map runtime fixture\n' > "$loop_dir/runtime/workflows/$runtime_file"
-  done
+  mkdir -p "$loop_dir/runtime/workflows/tracker-adapters"
+	for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts evidence.ts tracker-config.ts tracker-runtime.ts types.ts tracker-adapters/types.ts tracker-adapters/projection.ts tracker-adapters/sync-state.ts tracker-adapters/import.ts tracker-adapters/cli-adapter.ts tracker-adapters/github.ts tracker-adapters/gitlab.ts ../lib/secret-content.ts; do printf '// installed Work Map runtime fixture\n' > "$loop_dir/runtime/workflows/$runtime_file"; done
   printf '// installed state root fixture\n' > "$loop_dir/runtime/lib/state-root.ts"
   printf '{"schemaVersion":1,"actions":[{"capability":"review","action":"code","contractPath":"generated/workflow-contracts/review/code.workflow.md"}]}\n' > "$loop_dir/generated/capability-actions.json"
   printf '%b' '# $goldband review code\n\n## Goal\n\nReview a code diff.\n\n## Relevant context\n\n- Use current repository evidence.\n\n## Hard boundaries\n\n- Review only.\n\n## Verification\n\n- Verify every finding.\n' > "$loop_dir/generated/workflow-contracts/review/code.workflow.md"
@@ -410,6 +409,7 @@ assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-cli.t
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-store.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/work-map-runtime.ts"
+for runtime_file in tracker-config.ts tracker-runtime.ts evidence.ts tracker-adapters/github.ts tracker-adapters/gitlab.ts; do assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/workflows/$runtime_file"; done; assert_exists "$TMP_HOME/.codex/skills/goldband/runtime/lib/secret-content.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-work-verify"
 assert_exists "$TMP_HOME/.codex/skills/goldband/bin/goldband-work-verify.ts"
 assert_exists "$TMP_HOME/.codex/skills/goldband/lib/verification-receipt.ts"

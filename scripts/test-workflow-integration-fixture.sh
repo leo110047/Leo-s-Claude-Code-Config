@@ -9,7 +9,8 @@ create_minimal_real_setup_fixture() {
   cp "$ROOT_DIR/goldband-loop/bin/goldband-work-verify.ts" "$loop_dir/bin/goldband-work-verify.ts"
   chmod +x "$loop_dir/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify.ts"
   local runtime_file
-  for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts types.ts; do
+  mkdir -p "$loop_dir/workflows/tracker-adapters"
+  for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts evidence.ts tracker-config.ts tracker-runtime.ts types.ts tracker-adapters/types.ts tracker-adapters/projection.ts tracker-adapters/sync-state.ts tracker-adapters/import.ts tracker-adapters/cli-adapter.ts tracker-adapters/github.ts tracker-adapters/gitlab.ts ../lib/secret-content.ts; do
     cp "$ROOT_DIR/goldband-loop/workflows/$runtime_file" "$loop_dir/workflows/$runtime_file"
   done
   cp -R "$ROOT_DIR/goldband-loop/generated/host-skills" "$loop_dir/generated/host-skills"

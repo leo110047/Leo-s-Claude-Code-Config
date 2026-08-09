@@ -293,7 +293,9 @@ export class WorkMapStore {
 					ticket.claim.kind !== "managed-worktree" ||
 					!input.receipt.treeDigest
 				) {
-					throw new Error(`ticket cannot record implementation: ${input.ticketId}`);
+					throw new Error(
+						`ticket cannot record implementation: ${input.ticketId}`,
+					);
 				}
 				ticket.status = "implemented";
 				ticket.evidence = { receipt: input.receipt };
@@ -354,7 +356,10 @@ export class WorkMapStore {
 				}
 				if (ticket.status === "claimed" && !ticket.evidence) {
 					ticket.status = "ready";
-				} else if (ticket.status === "blocked" || ticket.status === "cancelled") {
+				} else if (
+					ticket.status === "blocked" ||
+					ticket.status === "cancelled"
+				) {
 					delete ticket.evidence;
 					delete ticket.blockedFrom;
 				} else {
@@ -423,7 +428,9 @@ export class WorkMapStore {
 					);
 				}
 				if (subject !== reviewedSubject) {
-					throw new Error("review and verification receipt tree digests differ");
+					throw new Error(
+						"review and verification receipt tree digests differ",
+					);
 				}
 				ticket.status = "verified";
 				ticket.evidence!.review = input.review;
@@ -487,7 +494,9 @@ export class WorkMapStore {
 				} else if (!ticket.claim && !ticket.blockedFrom) {
 					ticket.status = "ready";
 				} else {
-					throw new Error(`ticket blocked state cannot resume: ${input.ticketId}`);
+					throw new Error(
+						`ticket blocked state cannot resume: ${input.ticketId}`,
+					);
 				}
 				delete ticket.blockedFrom;
 				delete ticket.blockerReason;
@@ -527,6 +536,25 @@ export class WorkMapStore {
 				return map;
 			},
 		);
+	}
+
+	applyApprovedExternalChange(input: {
+		workId: string;
+		ticketId: string;
+		expectedRevision: number;
+		actor: string;
+		change:
+			| { kind: "block-ticket"; reason: string }
+			| { kind: "resume-ticket" }
+			| { kind: "cancel-ticket"; reason: string };
+	}): WorkMapV1 {
+		if (input.change.kind === "block-ticket") {
+			return this.blockTicket({ ...input, reason: input.change.reason });
+		}
+		if (input.change.kind === "resume-ticket") {
+			return this.resumeTicket(input);
+		}
+		return this.cancelTicket({ ...input, reason: input.change.reason });
 	}
 
 	markIntegrated(input: {

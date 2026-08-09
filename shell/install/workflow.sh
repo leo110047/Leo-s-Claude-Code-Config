@@ -235,6 +235,7 @@ verify_installed_work_map_runtime() {
                 exit 1
             fi
         done
+        verify_installed_tracker_runtime "$runtime_root"
         for relative_path in \
             bin/goldband-work-verify \
             bin/goldband-work-verify.ts \
@@ -247,6 +248,21 @@ verify_installed_work_map_runtime() {
         done
         if [ ! -x "$runtime_root/bin/goldband-work-verify" ]; then
             echo -e "${RED}Goldband verification recorder 不可執行: $runtime_root/bin/goldband-work-verify${NC}" >&2
+            exit 1
+        fi
+    done
+}
+
+verify_installed_tracker_runtime() {
+    local runtime_root="$1" relative_path
+    for relative_path in \
+        tracker-config.ts tracker-runtime.ts \
+        tracker-adapters/types.ts tracker-adapters/projection.ts tracker-adapters/sync-state.ts \
+        tracker-adapters/import.ts tracker-adapters/cli-adapter.ts \
+        tracker-adapters/github.ts tracker-adapters/gitlab.ts
+    do
+        if [ ! -f "$runtime_root/runtime/workflows/$relative_path" ] || [ -L "$runtime_root/runtime/workflows/$relative_path" ]; then
+            echo -e "${RED}Goldband tracker runtime 安裝不完整: $runtime_root/runtime/workflows/$relative_path${NC}" >&2
             exit 1
         fi
     done

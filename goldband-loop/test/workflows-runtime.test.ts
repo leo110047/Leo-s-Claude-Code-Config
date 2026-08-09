@@ -83,12 +83,14 @@ describe('workflow runtime', () => {
         ? { diffFile: 'test/fixtures/workflows/review.diff' }
         : workflow.name === 'ios/qa'
           ? { inputFile: writeInput('core-ios-qa.json', iosQaInput()) }
-          : workflow.name === 'system/upgrade'
+            : workflow.name === 'system/upgrade'
             ? {
                 inputFile: writeInput('core-system-upgrade.json', {
                   phase: 'preflight',
                 }),
               }
+			: workflow.name === 'plan/sync'
+			  ? { inputFile: writeInput('core-plan-sync.json', { mode: 'preview', workId: 'work-1' }) }
             : {};
       const result = await runWorkflow(workflow, {
         ...options,
@@ -429,6 +431,24 @@ describe('workflow runtime', () => {
       { ...upgradeOutput, newHead: 'unread-head' },
       { mode: 'real', goldbandHome: tmpHome },
     )).toThrow('completed preflight');
+  });
+
+  test('plan sync gate verifies the exact published step and checkpoint readback', () => {
+    const digest = 'a'.repeat(64);
+    const remoteDigest = 'b'.repeat(64);
+    const request = { mode: 'publish-step', workId: 'work-1', operationDigest: digest, stepId: 'create:map' };
+    const admission = prepareSafetyGate(getWorkflow('plan/sync'), request);
+    if (!admission) throw new Error('missing plan/sync safety admission');
+    const baseOutput = {
+      owner: 'tracker-runtime', operation: 'publish-step', status: 'completed', summary: 'done', evidence: [], artifacts: [], mode: 'publish-step', workId: 'work-1',
+    };
+    const validReadback = {
+      status: 'pending', plan: { operationDigest: digest }, completedSteps: ['create:map'], pendingSteps: ['create:ticket:ticket-1'],
+      remote: { digest: remoteDigest }, checkpoint: { operationDigest: digest, completedSteps: ['create:map'], pendingSteps: ['create:ticket:ticket-1'], lastRemoteDigest: remoteDigest },
+    };
+    expect(verifySafetyGate(admission, request, { ...baseOutput, readback: validReadback }, { mode: 'real' })).toMatchObject({ state: 'verified' });
+    expect(() => verifySafetyGate(admission, request, { ...baseOutput, readback: { ...validReadback, completedSteps: [], blockedReason: 'readback failed' } }, { mode: 'real' })).toThrow(/blocked|complete/);
+    expect(() => verifySafetyGate(admission, request, { ...baseOutput, readback: { ...validReadback, checkpoint: { ...validReadback.checkpoint, lastRemoteDigest: 'c'.repeat(64) } } }, { mode: 'real' })).toThrow('checkpoint readback mismatch');
   });
 
   test('design/consult validates decisions before persisting an artifact', async () => {

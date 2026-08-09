@@ -513,6 +513,7 @@ show_workflow_status() {
     show_workflow_profile_status "Codex" "codex" "$HOME/.codex/skills" "$workflow_codex_dir"
     show_knowledge_system_status "$workflow_claude_dir" "$workflow_codex_dir"
     show_workflow_state_dir_status
+    show_tracker_projection_status
     show_goldband_wrapper_language_status
 }
 

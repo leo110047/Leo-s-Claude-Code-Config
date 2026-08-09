@@ -18,11 +18,7 @@ import { stateRoot } from "./evidence";
 import { workflowAssetPath } from "./paths";
 import { parseIosQaInput, parseSystemUpgradeInput } from "./safety-gates";
 import type { SchemaValidator, WorkflowContext, WorkflowStep } from "./types";
-import {
-	calculateFrontier,
-	workMapDigest,
-	type WorkMapV1,
-} from "./work-map";
+import { calculateFrontier, workMapDigest, type WorkMapV1 } from "./work-map";
 import { runWorkMapCreate } from "./work-map-runtime";
 import { WorkMapStore } from "./work-map-store";
 
@@ -64,8 +60,7 @@ const resultSchema: SchemaValidator<OwnedRuntimeResult> = {
 
 const BROWSER_SESSION_COMMAND_SET = new Set<string>(BROWSER_SESSION_COMMANDS);
 
-const TRUSTED_BROWSER_EXECUTABLE_ENV =
-	"GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
+const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 
 const OWNED_HANDLERS: Record<
 	string,
@@ -85,7 +80,87 @@ const OWNED_HANDLERS: Record<
 	"system/upgrade": runSystemUpgrade,
 	"ios/qa": runIosQa,
 	"plan/create": runWorkMapCreate,
+	"plan/sync": runTrackerSync,
 };
+
+function runTrackerSync(ctx: WorkflowContext): OwnedRuntimeResult {
+	const input = record(ctx.input, "plan/sync input");
+	const mode = requiredString(input.mode, "plan/sync input.mode");
+	if (!["preview", "inspect", "publish-step"].includes(mode))
+		throw new Error(
+			"plan/sync input.mode must be preview, inspect, or publish-step",
+		);
+	const workId = requiredString(input.workId, "plan/sync input.workId");
+	const args = [
+		"sync",
+		mode === "publish-step" ? "publish" : mode,
+		"--work-id",
+		workId,
+		"--host",
+		ctx.options.host === "claude" ? "claude" : "codex",
+	];
+	if (mode === "publish-step") {
+		args.push(
+			"--operation-digest",
+			requiredString(input.operationDigest, "plan/sync input.operationDigest"),
+		);
+		args.push("--step", requiredString(input.stepId, "plan/sync input.stepId"));
+	}
+	if (!isReal(ctx))
+		return blocked(
+			"tracker-runtime",
+			mode,
+			"Tracker synchronization requires real runtime readback.",
+			[`mode=${mode}`, `workId=${workId}`],
+		);
+	const result = commandResult(
+		process.execPath,
+		[workflowAssetPath("workflows/work-map-cli.ts"), ...args],
+		ctx.cwd,
+		120_000,
+	);
+	if (result.status !== 0)
+		return blocked(
+			"tracker-runtime",
+			mode,
+			"Tracker runtime rejected the request.",
+			[compact(result.stderr || result.stdout)],
+		);
+	let readback: unknown;
+	try {
+		readback = JSON.parse(result.stdout);
+	} catch {
+		return blocked(
+			"tracker-runtime",
+			mode,
+			"Tracker runtime returned invalid JSON readback.",
+			[compact(result.stdout)],
+		);
+	}
+	if (
+		mode === "publish-step" &&
+		record(readback, "tracker publish readback").blockedReason
+	) {
+		return blocked(
+			"tracker-runtime",
+			mode,
+			"Tracker publish step is pending readback.",
+			[
+				compact(
+					String(record(readback, "tracker publish readback").blockedReason),
+				),
+			],
+		);
+	}
+	return completed(
+		"tracker-runtime",
+		mode,
+		`Tracker ${mode} completed.`,
+		[`mode=${mode}`, `workId=${workId}`],
+		[],
+		{ mode, workId, readback },
+	);
+}
 
 export function ownedRuntimeSteps(name: string): WorkflowStep[] | undefined {
 	const handler = OWNED_HANDLERS[name];
@@ -112,7 +187,10 @@ function runBrowserSession(ctx: WorkflowContext): OwnedRuntimeResult {
 			[`allowed=${[...BROWSER_SESSION_COMMAND_SET].sort().join(",")}`],
 		);
 	}
-	const unsafeInspectionArgument = unsafeBrowserInspectionArgument(command, args);
+	const unsafeInspectionArgument = unsafeBrowserInspectionArgument(
+		command,
+		args,
+	);
 	if (unsafeInspectionArgument) {
 		return blocked(
 			"browse",

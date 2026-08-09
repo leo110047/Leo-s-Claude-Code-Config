@@ -68,3 +68,45 @@ export function digest(value: unknown): string {
 export function stateRoot(options: WorkflowRunOptions = {}): string {
   return resolveGoldbandStateRoot(options.goldbandHome);
 }
+
+export type TrackerTelemetryEvent = {
+  schemaVersion: 1;
+  provider: 'github' | 'gitlab';
+  operation: 'preview' | 'publish' | 'inspect' | 'import';
+  artifactCount: number;
+  completedCount: number;
+  pendingCount: number;
+  status: 'completed' | 'pending' | 'blocked';
+  durationMs: number;
+  conflictReason?: string;
+  recordedAt: string;
+};
+
+export function writeTrackerTelemetry(
+  input: Omit<TrackerTelemetryEvent, 'schemaVersion' | 'recordedAt'>,
+  options: WorkflowRunOptions = {},
+): string {
+  if (!Number.isSafeInteger(input.artifactCount) || input.artifactCount < 0 ||
+      !Number.isSafeInteger(input.completedCount) || input.completedCount < 0 ||
+      !Number.isSafeInteger(input.pendingCount) || input.pendingCount < 0 ||
+      !Number.isFinite(input.durationMs) || input.durationMs < 0) {
+    throw new Error('invalid tracker telemetry count or duration');
+  }
+  const conflictReason = input.conflictReason?.replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ').slice(0, 160);
+  const event: TrackerTelemetryEvent = {
+    schemaVersion: 1,
+    provider: input.provider,
+    operation: input.operation,
+    artifactCount: input.artifactCount,
+    completedCount: input.completedCount,
+    pendingCount: input.pendingCount,
+    status: input.status,
+    durationMs: Math.round(input.durationMs),
+    ...(conflictReason ? { conflictReason } : {}),
+    recordedAt: new Date().toISOString(),
+  };
+  const file = join(stateRoot(options), 'workflow-runs', 'tracker-sync.jsonl');
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, `${JSON.stringify(event)}\n`);
+  return file;
+}

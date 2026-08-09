@@ -6,8 +6,18 @@ import {
 	executeWorkMapCreate,
 	executeWorkMapLifecycle,
 } from "./work-map-runtime";
+import { TrackerRuntime } from "./tracker-runtime";
+import {
+	inspectTrackerConfiguration,
+	parseTrackerConfiguration,
+	TrackerConfigurationStore,
+} from "./tracker-config";
 
-function main(args: string[]): void {
+async function main(args: string[]): Promise<void> {
+	if (args[0] === "sync") {
+		await trackerSync(args.slice(1));
+		return;
+	}
 	let operation: "create" | "block" | "resume" | "cancel" = "create";
 	if (args[0] === "block" || args[0] === "resume" || args[0] === "cancel") {
 		operation = args.shift() as "block" | "resume" | "cancel";
@@ -83,8 +93,56 @@ function main(args: string[]): void {
 	console.log(JSON.stringify(result, null, 2));
 }
 
+async function trackerSync(args: string[]): Promise<void> {
+	const operation = args.shift();
+	if (operation !== "configure" && operation !== "preview" && operation !== "inspect" && operation !== "publish") throw new Error("sync requires configure, preview, inspect, or publish");
+	let workId = "";
+	let operationDigest = "";
+	let stepId = "";
+	let host = "";
+	let inputFile = "";
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		const value = args[index + 1] ?? "";
+		if (arg === "--work-id" && !workId) workId = value;
+		else if (arg === "--operation-digest" && !operationDigest) operationDigest = value;
+		else if (arg === "--step" && !stepId) stepId = value;
+		else if (arg === "--input" && !inputFile) inputFile = value;
+		else if (arg === "--host" && !host && (value === "claude" || value === "codex")) host = value;
+		else throw new Error(`sync: invalid argument ${arg}`);
+		index += 1;
+	}
+	if (!host) throw new Error("sync requires --host");
+	if (operation === "configure") {
+		if (!inputFile || workId || operationDigest || stepId) throw new Error("sync configure requires only --input and --host");
+		const configuration = parseTrackerConfiguration(JSON.parse(readFileSync(resolve(inputFile), "utf8")));
+		const readback = inspectTrackerConfiguration(configuration);
+		if ("blockedReason" in readback && configuration.mode !== "off") throw new Error(readback.blockedReason);
+		new TrackerConfigurationStore().write(configuration);
+		console.log(JSON.stringify({ configuration, readback }, null, 2));
+		return;
+	}
+	if (!workId || inputFile) throw new Error("sync operation requires --work-id");
+	const runtime = new TrackerRuntime({ cwd: process.cwd() });
+	if (operation === "preview") console.log(JSON.stringify(await runtime.preview(workId), null, 2));
+	else if (operation === "inspect") console.log(JSON.stringify(await runtime.inspect(workId), null, 2));
+	else {
+		if (!operationDigest) throw new Error("sync publish requires --operation-digest");
+		if (!stepId) throw new Error("sync publish requires --step");
+		console.log(JSON.stringify(await runtime.publishStep({
+			workId,
+			operationDigest,
+			stepId,
+			// Native approval is the host/user authorization of this exact one-step command.
+			approval: ({ stepId: approvedStep }) => {
+				if (approvedStep !== stepId) throw new Error("native approval scope does not match the requested projection step");
+			},
+		}), null, 2));
+	}
+}
+
 try {
-	main(process.argv.slice(2));
+	await main(process.argv.slice(2));
 } catch (error) {
 	console.error(error instanceof Error ? error.message : String(error));
 	process.exitCode = 1;

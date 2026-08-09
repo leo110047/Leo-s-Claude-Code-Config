@@ -254,8 +254,8 @@
             {
               "operation": "release/land",
               "mode": "land",
-              "enforcement": "blocked-before-runtime",
-              "owner": null,
+			  "enforcement": "blocked-before-runtime",
+			  "owner": null,
               "authorization": "native-host-approval",
               "preconditions": ["clean-worktree", "required-checks-passed", "deployment-target-resolved", "rollback-plan-recorded"],
               "sideEffects": ["merge", "deploy"],
@@ -335,6 +335,59 @@
               "Read back the saved work ID, revision, digest, and complete runtime-calculated frontier."
             ]
           }
+        },
+        {
+          "id": "sync",
+          "description": "Preview, inspect, or synchronize a Work Map tracker projection.",
+		  "runtime": "typed",
+		  "lifecycle": "public",
+		  "owner": "tracker-runtime",
+          "risk": "high",
+		  "runtimeContract": {
+			"modes": ["preview", "inspect", "publish-step"],
+			"requiredInputs": {
+			  "preview": ["mode", "workId"],
+			  "inspect": ["mode", "workId"],
+			  "publish-step": ["mode", "workId", "operationDigest", "stepId"]
+			},
+			"outputs": ["mode", "workId", "readback"],
+			"sideEffects": { "tracker-issue-write": "publish-step-only" }
+		  },
+          "safetyGates": [
+            {
+              "operation": "plan/sync-preview",
+              "mode": "preview",
+			  "enforcement": "runtime-owner",
+			  "owner": "tracker-runtime",
+              "authorization": "not-required-read-only",
+              "preconditions": ["tracker-config-readback", "local-work-map-readback"],
+              "sideEffects": [],
+              "readback": ["operation-digest", "projection-steps", "approval-requirements"]
+            },
+            {
+              "operation": "plan/sync",
+			  "mode": "publish-step",
+			  "enforcement": "runtime-owner",
+			  "owner": "tracker-runtime",
+              "authorization": "native-host-approval",
+              "preconditions": ["matching-preview-digest", "local-revision-unchanged", "remote-digest-unchanged"],
+              "sideEffects": ["tracker-issue-create", "tracker-issue-update", "tracker-relationship-update"],
+              "readback": ["remote-markers", "remote-digest", "sync-checkpoint"]
+            }
+		  ],
+		  "promptContract": {
+			"relevantContext": [
+			  "Run preview first and preserve its operation digest and ordered pending step IDs.",
+			  "For publish, request native host approval for exactly one next pending step, then invoke plan/sync with mode publish-step, the matching digest, and that step ID. Repeat only after readback."
+			],
+			"hardBoundaries": [
+			  "Never treat tracker state as Work Map authority.",
+			  "Approval covers exactly one projection step; synthetic approval flags are forbidden."
+			],
+			"verification": [
+			  "Verify protected fields, markers, relationships, remote digest, and persisted checkpoint after each outward step."
+			]
+		  }
         }
       ]
     },

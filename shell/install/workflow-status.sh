@@ -162,3 +162,41 @@ workflow_goldband_top_level_count() {
     done
     printf '%s\n' "$count"
 }
+
+show_tracker_projection_status() {
+    local state_root="${GOLDBAND_HOME:-$HOME/.goldband}"
+    local config_file="$state_root/tracker/config.json"
+    local summary mode repository cli
+    if [ ! -f "$config_file" ]; then
+        echo -e "  ${GREEN}[OK]${NC} Work Map tracker mode: off (local-only default)"
+        return 0
+    fi
+    summary="$(node -e '
+const fs = require("node:fs");
+const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (value.schemaVersion !== 1 || !["off", "github", "gitlab"].includes(value.mode)) process.exit(2);
+if (Object.prototype.hasOwnProperty.call(value, "token")) process.exit(3);
+process.stdout.write(`${value.mode}\t${value.repository || ""}`);
+' "$config_file" 2>/dev/null || true)"
+    if [ -z "$summary" ]; then
+        echo -e "  ${RED}[invalid]${NC} Work Map tracker configuration"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+    mode="${summary%%$'\t'*}"
+    repository="${summary#*$'\t'}"
+    if [ "$mode" = "off" ]; then
+        echo -e "  ${GREEN}[OK]${NC} Work Map tracker mode: off (local-only)"
+        return 0
+    fi
+    [ "$mode" = "github" ] && cli="gh" || cli="glab"
+    if ! command -v "$cli" >/dev/null 2>&1; then
+        echo -e "  ${YELLOW}[blocked]${NC} Work Map tracker: $mode ($repository) — $cli CLI unavailable"
+        return 0
+    fi
+    if "$cli" auth status >/dev/null 2>&1; then
+        echo -e "  ${GREEN}[OK]${NC} Work Map tracker: $mode ($repository), auth available"
+    else
+        echo -e "  ${YELLOW}[blocked]${NC} Work Map tracker: $mode ($repository), auth unavailable"
+    fi
+}

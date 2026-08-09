@@ -188,6 +188,41 @@ administrator or managed policy. goldband does not stage
 Goldband telemetry is local-only. It writes JSONL files on this machine and does
 not upload to an external service.
 
+### Work Map tracker configuration and sync
+
+Work Maps are local-only unless tracker mode is explicitly configured. A
+configuration file contains no token; authentication stays in `gh` or `glab`.
+For example, save this request outside the repository and run the matching host
+launcher with `goldband plan sync configure --input <file> --host <host>`:
+
+```json
+{
+  "schemaVersion": 1,
+  "mode": "github",
+  "repository": "owner/repository",
+  "defaultLabels": ["goldband"],
+  "dependencyCapability": "body-links"
+}
+```
+
+Configuration first reads CLI, auth, and repository access. Missing access is
+a blocked result and does not write config. Use `mode: "off"` with
+`repository: null` to return to local-only mode.
+
+`goldband plan sync preview --work-id <id> --host <host>` creates a local
+operation plan and performs no remote writes. `inspect` reads remote state and
+reports digest drift and import candidates. Remote publish is deliberately not
+authorized by an input flag. Approve and run exactly the next pending step with
+`goldband plan sync publish --work-id <id> --operation-digest <digest> --step <step-id> --host <host>`.
+Each invocation is one native host/user approval boundary; the runtime rejects
+an out-of-order step, saves the completed write before readback, and requires a
+new invocation for the next outward action.
+
+Tracker telemetry is local-only at
+`workflow-runs/tracker-sync.jsonl`. It contains provider, operation, counts,
+status, duration, and bounded conflict reason; it never contains issue bodies,
+comments, local paths, credentials, or environment values.
+
 Usage events:
 
 ```bash

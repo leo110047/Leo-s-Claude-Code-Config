@@ -23,7 +23,7 @@
     "dev": "bun run browse/src/cli.ts",
     "server": "bun run browse/src/server.ts",
     "test": "bun run test:free",
-    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/work-map.test.ts test/work-map-store.test.ts test/work-map-evidence.test.ts test/work-map-review.test.ts test/verification-receipt.test.ts test/goldband-plan-cli.test.ts test/review-impact.test.ts test/goldband-review-cli.test.ts test/codex-review-launcher-install.test.ts test/codex-workflow-status.test.ts",
+    "test:workflows": "bun test test/workflows-registry.test.ts test/workflows-runtime.test.ts test/work-map.test.ts test/work-map-store.test.ts test/work-map-evidence.test.ts test/work-map-review.test.ts test/verification-receipt.test.ts test/goldband-plan-cli.test.ts test/goldband-plan-sync-cli.test.ts test/tracker-projection.test.ts test/tracker-config.test.ts test/tracker-github.test.ts test/tracker-gitlab.test.ts test/tracker-runtime.test.ts test/tracker-import.test.ts test/review-impact.test.ts test/goldband-review-cli.test.ts test/codex-review-launcher-install.test.ts test/codex-workflow-status.test.ts",
     "test:free": "bun run scripts/test-free-shards.ts",
     "test:windows": "bun run scripts/test-free-shards.ts --windows-only",
     "test:ml": "bun test browse/test/security-bunnative.test.ts browse/test/security-bench.test.ts",

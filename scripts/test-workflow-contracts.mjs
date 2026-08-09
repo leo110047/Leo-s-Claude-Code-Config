@@ -223,12 +223,12 @@ const actions = manifest.capabilities.flatMap((capability) =>
     owner: action.owner ?? null,
   })),
 );
-assert.equal(actionCount, 23);
+assert.equal(actionCount, 24);
 assert.equal(
   actions.filter((action) => action.lifecycle === 'public').length,
-  19,
+  20,
 );
-assert.equal(actions.filter((action) => action.runtime === 'typed').length, 16);
+assert.equal(actions.filter((action) => action.runtime === 'typed').length, 17);
 assert.equal(
   actions.filter((action) => action.runtime === 'compatibility').length,
   3,
@@ -277,6 +277,8 @@ assert.deepEqual(safetyGates.map((gate) => gate.operation).sort(), [
   'ios/sync',
   'knowledge/setup',
   'knowledge/sync',
+  'plan/sync',
+  'plan/sync-preview',
   'release/canary',
   'release/land',
   'release/setup',
@@ -287,7 +289,7 @@ assert.deepEqual(
     .filter((gate) => gate.enforcement === 'runtime-owner')
     .map((gate) => gate.operation)
     .sort(),
-  ['ios/qa', 'system/upgrade'],
+  ['ios/qa', 'plan/sync', 'plan/sync-preview', 'system/upgrade'],
 );
 assert.equal(
   safetyGates.filter((gate) => gate.enforcement === 'blocked-before-runtime')

@@ -69,7 +69,7 @@ describe('workflow registry', () => {
       const expected = core.has(entry.name) ? 'integrated' : 'registered-only';
       expect(entry.integrationStatus).toBe(expected);
     }
-    expect(publicWorkflows()).toHaveLength(19);
+    expect(publicWorkflows()).toHaveLength(20);
     expect(experimentalWorkflows().map((entry) => entry.name).sort()).toEqual([
       'knowledge/setup',
       'knowledge/sync',
@@ -80,7 +80,7 @@ describe('workflow registry', () => {
     expect(registeredOnlyWorkflows().every((entry) => entry.lifecycle === 'experimental')).toBe(true);
   });
 
-  test('nine high-risk operations have fail-closed safety contracts', () => {
+  test('eleven high-risk operations have fail-closed safety contracts', () => {
     const gates = WORKFLOW_REGISTRY.flatMap((entry) =>
       entry.safetyGates.map((gate) => ({ ...gate, action: entry.name })),
     );
@@ -90,6 +90,8 @@ describe('workflow registry', () => {
       'ios/sync',
       'knowledge/setup',
       'knowledge/sync',
+      'plan/sync',
+      'plan/sync-preview',
       'release/canary',
       'release/land',
       'release/setup',
@@ -100,7 +102,7 @@ describe('workflow registry', () => {
         .filter((gate) => gate.enforcement === 'runtime-owner')
         .map((gate) => gate.operation)
         .sort(),
-    ).toEqual(['ios/qa', 'system/upgrade']);
+	).toEqual(['ios/qa', 'plan/sync', 'plan/sync-preview', 'system/upgrade']);
     expect(
       gates.filter((gate) => gate.enforcement === 'blocked-before-runtime'),
     ).toHaveLength(7);

@@ -1,6 +1,6 @@
 # Work Map Phase 3：Collaboration Adapters
 
-**Status:** Proposed
+**Status:** Implemented locally; live provider verification requires separately authorized disposable repositories
 **Depends on:** Phase 1 Foundation、Phase 2 Evidence Binding 完成
 
 本計畫列出的不存在路徑為新增檔案；已存在路徑為修改檔案。
@@ -66,7 +66,11 @@ interface TrackerProjectionAdapter {
   provider: TrackerProvider;
   inspectConfiguration(): Promise<TrackerConfigurationReadback>;
   previewProjection(map: WorkMapV1): Promise<ProjectionPlan>;
-  publish(plan: ProjectionPlan): Promise<ProjectionResult>;
+  publish(
+    plan: ProjectionPlan,
+    approval: NativeApproval,
+    options?: { completedSteps?: string[]; onlyStepId?: string },
+  ): Promise<ProjectionResult>;
   inspectRemote(workId: string): Promise<RemoteProjectionState>;
   diff(local: WorkMapV1, remote: RemoteProjectionState):
     ExternalChangeCandidate[];
@@ -416,8 +420,8 @@ bun test test/tracker-gitlab.test.ts
   - 列出需要的 approvals。
 - `publish`：
   - 只接受已 preview 的 operation digest；
-  - 每個 outward step 經 native approval；
-  - 寫 checkpoint；
+  - 每次 native-approved invocation 只執行明確指定的下一個 outward step；
+  - provider write 成功後先寫 checkpoint，再做 readback；
   - 完成後 readback。
 - `inspect`：
   - read-only；
@@ -469,8 +473,8 @@ Required tests：
 $goldband plan sync
 ```
 
-- `plan sync` 在 runtime owner、safety gate、authorization、readback 都完成前，
-  保持 registered-only experimental，不得先公開 prompt-only action。
+- `plan sync` 已由 `tracker-runtime` 擁有，read-only 與 `publish-step` safety
+  gates、authorization、readback 完成後成為 typed public action。
 - CLI 分開 read-only preview 與 outward publish。
 
 **Output**

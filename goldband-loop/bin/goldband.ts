@@ -99,6 +99,9 @@ function printUsage(stream: Pick<Console, "log">): void {
 		"  goldband plan <block|cancel> --work-id <id> --ticket-id <id> --reason <text> [--host <claude|codex>]",
 	);
 	stream.log("  goldband plan resume --work-id <id> --ticket-id <id> [--host <claude|codex>]");
+	stream.log("  goldband plan sync configure --input <file> [--host <claude|codex>]");
+	stream.log("  goldband plan sync <preview|inspect> --work-id <id> [--host <claude|codex>]");
+	stream.log("  goldband plan sync publish --work-id <id> --operation-digest <digest> --step <step-id> [--host <claude|codex>]");
 	stream.log(
 		"  goldband worktree create <name> [--ticket-id <id>] [--claim-owner <owner>]",
 	);
@@ -659,6 +662,67 @@ export function planLifecycle(
 	}
 }
 
+export function planSync(
+	args: string[],
+	options: { entryFile?: string; env?: NodeJS.ProcessEnv; spawn?: typeof spawnSync } = {},
+): number {
+	const operation = args[0];
+	if (operation !== "configure" && operation !== "preview" && operation !== "inspect" && operation !== "publish") {
+		throw new Error("plan sync requires configure, preview, inspect, or publish");
+	}
+	let host: ReviewHost | undefined;
+	let inputFile = "";
+	const forwarded = ["sync", operation];
+	for (let index = 1; index < args.length; index += 1) {
+		const arg = args[index];
+		const value = args[index + 1];
+		if (!value || !["--host", "--work-id", "--operation-digest", "--step", "--input"].includes(arg)) {
+			throw new Error(`plan sync ${operation}: invalid or missing option ${arg ?? "option"}`);
+		}
+		if (arg === "--host") {
+			if (host || (value !== "claude" && value !== "codex")) throw new Error("plan sync --host must be claude or codex");
+			host = value;
+		} else if (arg === "--input") {
+			if (inputFile) throw new Error("plan sync accepts --input only once");
+			inputFile = value;
+		} else {
+			if (forwarded.includes(arg)) throw new Error(`plan sync accepts ${arg} only once`);
+			forwarded.push(arg, value);
+		}
+		index += 1;
+	}
+	if (operation === "configure" && !inputFile) throw new Error("plan sync configure requires --input");
+	if (operation !== "configure" && !forwarded.includes("--work-id")) throw new Error("plan sync requires --work-id");
+	if (operation === "configure" && (forwarded.includes("--work-id") || forwarded.includes("--operation-digest") || forwarded.includes("--step"))) throw new Error("plan sync configure accepts only --input and --host");
+	if (operation === "publish" && !forwarded.includes("--operation-digest")) throw new Error("plan sync publish requires --operation-digest");
+	if (operation === "publish" && !forwarded.includes("--step")) throw new Error("plan sync publish requires --step");
+	if (operation !== "publish" && forwarded.includes("--operation-digest")) throw new Error(`plan sync ${operation} does not accept --operation-digest`);
+	if (operation !== "publish" && forwarded.includes("--step")) throw new Error(`plan sync ${operation} does not accept --step`);
+	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
+	const resolvedHost = host ?? inferPlanHost(entryFile, options.env ?? process.env);
+	let runtimeRoot: string | null = null;
+	let inputRoot: string | null = null;
+	try {
+		const snapshot = snapshotPlanRuntime(resolvePlanRuntimeFile(entryFile));
+		runtimeRoot = snapshot.root;
+		if (inputFile) {
+			inputRoot = mkdtempSync(join(tmpdir(), "goldband-tracker-config-"));
+			const stableInput = join(inputRoot, "request.json");
+			writeFileSync(stableInput, readStablePlanInput(inputFile), { mode: 0o600, flag: "wx" });
+			forwarded.push("--input", stableInput);
+		}
+		const result = (options.spawn ?? spawnSync)(process.execPath, [snapshot.runtimeFile, ...forwarded, "--host", resolvedHost], {
+			cwd: process.cwd(), env: options.env ?? process.env, stdio: "inherit",
+		});
+		if (result.error) throw result.error;
+		if (result.status === null) throw new Error("plan sync runtime terminated without an exit status");
+		return result.status;
+	} finally {
+		if (runtimeRoot) rmSync(runtimeRoot, { recursive: true, force: true });
+		if (inputRoot) rmSync(inputRoot, { recursive: true, force: true });
+	}
+}
+
 function snapshotPlanRuntime(runtimeFile: string): {
 	root: string;
 	runtimeFile: string;
@@ -954,6 +1018,7 @@ export function main(args = process.argv.slice(2)): number {
 			(value): value is string => value !== undefined,
 		);
 		if (action === "create") return planCreate(planArgs);
+		if (action === "sync") return planSync(planArgs);
 		if (action === "block" || action === "resume" || action === "cancel") {
 			return planLifecycle(action, planArgs);
 		}

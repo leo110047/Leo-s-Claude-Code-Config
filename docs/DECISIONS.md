@@ -1,5 +1,50 @@
 # Goldband Decisions
 
+## 2026-08-09: Local Work Map Owns Tracker Collaboration State
+
+Decision: keep the local `WorkMapStore` as the sole Work Map domain owner while
+offering GitHub Issues and GitLab Issues as optional projections and
+collaboration surfaces.
+
+Implementation contract:
+
+- Tracker mode defaults to `off`. Configuration stores provider, repository,
+  labels, and dependency capability but no token; provider authentication stays
+  with `gh` or `glab`.
+- Provider-neutral projection code owns deterministic Markdown, versioned
+  markers, digests, sync checkpoints, and typed external-change candidates.
+  GitHub and GitLab wire types remain inside their adapters.
+- Preview has no remote side effect. Publish requires the exact persisted
+  preview digest, unchanged local revision and remote digest, and one explicit
+  next step per native-approved invocation. Successful writes are checkpointed
+  before readback; verification covers title, body, labels, state, markers, and
+  relationships.
+- External issue content is untrusted data. Projection rejects secret-shaped
+  values and private user paths. Assignee, state, checkbox, and resolution
+  changes become candidates. Only approved domain operations may
+  call `WorkMapStore`; issue close and checkbox state never create verified or
+  completed evidence. Approved assignee import can create only an analysis
+  binding; code claims remain owned by the managed-worktree broker.
+- Provider APIs do not provide a reliable distributed claim lock. Concurrent
+  local or remote drift blocks mutation for explicit resolution; there is no
+  last-write-wins fallback.
+
+Failure signals:
+
+- An issue edit directly changes Work Map JSON or advances a ticket to
+  `verified` without Phase 2 evidence.
+- Publish proceeds with a stale preview, local revision, remote digest, or
+  without per-step native approval and readback.
+- A credential, issue body, comment, private path, or environment value enters
+  config, telemetry, logs, or projection evidence.
+- Retry duplicates remote artifacts, partial failure loses its checkpoint, or
+  GitHub and GitLab implement different shared semantics.
+- A publish invocation executes more than its named step, or remote protected
+  fields can change while an unchanged marker suppresses conflict detection.
+
+Live-provider behavior remains unverified until separately authorized
+disposable private repositories complete the recorded verification procedure.
+
 ## 2026-07-16: Repository Runtime Tests Require Bun 1.3.11 and Explicit Bootstrap
 
 Decision: treat Bun 1.3.11 as the minimum supported Goldband Loop runtime and
