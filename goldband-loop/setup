@@ -134,6 +134,78 @@ _materialize_codex_skill_file() {
   _print_codex_materialized_note_once
 }
 
+materialize_work_map_runtime() {
+  local runtime_root="$1"
+  local target="$runtime_root/runtime"
+  local temporary="$runtime_root/.work-map-runtime.tmp.$$"
+  local required source
+
+  rm -rf "$temporary"
+  mkdir -p "$temporary/workflows" "$temporary/lib"
+
+  for required in \
+    workflows/work-map-cli.ts \
+    workflows/work-map.ts \
+    workflows/work-map-store.ts \
+    workflows/work-map-runtime.ts \
+    workflows/tracker-config.ts \
+    workflows/tracker-runtime.ts \
+    workflows/tracker-adapters/types.ts \
+    workflows/tracker-adapters/projection.ts \
+    workflows/tracker-adapters/sync-state.ts \
+    workflows/tracker-adapters/import.ts \
+    workflows/tracker-adapters/cli-adapter.ts \
+    workflows/tracker-adapters/github.ts \
+    workflows/tracker-adapters/gitlab.ts \
+    workflows/types.ts \
+    workflows/evidence.ts \
+    lib/secret-content.ts \
+    lib/state-root.ts
+  do
+    source="$SOURCE_GOLDBAND_DIR/$required"
+    [ -f "$source" ] || {
+      rm -rf "$temporary"
+      echo "goldband setup failed: missing Work Map runtime source: $required" >&2
+      exit 1
+    }
+    mkdir -p "$(dirname "$temporary/$required")"
+    cp "$source" "$temporary/$required"
+    if [ ! -f "$temporary/$required" ] || [ -L "$temporary/$required" ]; then
+      rm -rf "$temporary"
+      echo "goldband setup failed: invalid installed Work Map runtime file: $required" >&2
+      exit 1
+    fi
+  done
+
+  rm -rf "$target"
+  mv "$temporary" "$target"
+}
+
+install_runtime_bin_directory() {
+  local source_bin="$1"
+  local target_bin="$2"
+  local source_file name
+
+  if [ -L "$target_bin" ]; then
+    rm -f "$target_bin"
+  else
+    rm -rf "$target_bin"
+  fi
+  mkdir -p "$target_bin"
+  for source_file in "$source_bin"/*; do
+    [ -e "$source_file" ] || continue
+    name="$(basename "$source_file")"
+    case "$name" in
+      goldband|goldband.ts|goldband-work-verify|goldband-work-verify.ts)
+        _materialize_file_copy "$source_file" "$target_bin/$name"
+        ;;
+      *)
+        _link_or_copy "$source_file" "$target_bin/$name"
+        ;;
+    esac
+  done
+}
+
 require_host_root_skill() {
   local host="$1"
   local root_skill="$2"
@@ -788,6 +860,7 @@ create_internal_workflow_docs() {
   # the typed runtime without guessing or depending on symlink support.
   if ! same_dir_path "$runtime_root" "$SOURCE_GOLDBAND_DIR"; then
     printf '%s\n' "$SOURCE_GOLDBAND_DIR" > "$runtime_root/.installed-source"
+    materialize_work_map_runtime "$runtime_root"
   fi
 }
 
@@ -816,7 +889,7 @@ create_codex_runtime_root() {
   # materialized file; symlinked SKILL.md files can be skipped by the scanner.
   _materialize_codex_skill_file "$root_skill" "$codex_goldband/SKILL.md"
   if [ -d "$goldband_dir/bin" ]; then
-    _link_or_copy "$goldband_dir/bin" "$codex_goldband/bin"
+    install_runtime_bin_directory "$goldband_dir/bin" "$codex_goldband/bin"
   fi
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$codex_goldband/lib"
@@ -908,7 +981,7 @@ create_claude_runtime_root() {
 
   _link_or_copy "$root_skill" "$claude_goldband/SKILL.md"
   if [ -d "$goldband_dir/bin" ]; then
-    _link_or_copy "$goldband_dir/bin" "$claude_goldband/bin"
+    install_runtime_bin_directory "$goldband_dir/bin" "$claude_goldband/bin"
   fi
   if [ -d "$goldband_dir/lib" ]; then
     _link_or_copy "$goldband_dir/lib" "$claude_goldband/lib"

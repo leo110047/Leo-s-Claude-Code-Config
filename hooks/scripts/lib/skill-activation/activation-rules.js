@@ -256,13 +256,27 @@ function countKeywordHits(normalizedPrompt, keywords) {
       .trim();
     if (!token) continue;
 
-    if (normalizedPrompt.includes(token)) {
+    if (keywordMatches(normalizedPrompt, token)) {
       matched.push(token);
       score += token.includes(' ') ? 2 : 1;
     }
   }
 
   return { score, matched };
+}
+
+function keywordMatches(normalizedPrompt, token) {
+  if (!/^[a-z0-9]+(?:[\s-]+[a-z0-9]+)*$/.test(token)) {
+    return normalizedPrompt.includes(token);
+  }
+
+  const escaped = token
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('\\s+');
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`).test(
+    normalizedPrompt,
+  );
 }
 
 function countPatternHits(prompt, patterns) {

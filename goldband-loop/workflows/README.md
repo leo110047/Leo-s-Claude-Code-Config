@@ -155,11 +155,12 @@ produced by the model; runtime owners validate, gate, persist, and read it back.
 
 | Action | Runtime owner | Real-mode input |
 | --- | --- | --- |
+| `plan/create` | `work-map-store` | `mode`, concrete `destination`, included/excluded `scope`, decision references, fog, and dependency-ordered tickets. Runtime derives Git identity, revision, frontier, blockers, and state paths. Use only for cross-session, dependency-linked, parallel, unknown-bearing, or explicitly tracked work; small ordinary tasks bypass Work Maps. |
 | `browser/session` | `browse` | Optional `command` and `args`; only non-outward-effect navigation and inspection commands are delegated. Mutations use the browser tool's native approval path. |
 | `design/consult` | `design-decision-store` | `brief` and `decisions` with typography, color, spacing, layout, and motion. |
 | `safety/guard` | `workflow-safety-state` | Optional `scope`. |
 | `safety/freeze` / `safety/unfreeze` | `freeze-hook-state` | Optional freeze `scope`; unfreeze reads the same state owner. |
-| `context/save` / `context/restore` | `context-checkpoint-store` | Save requires `summary`; restore reads the latest cwd-bound checkpoint and reports freshness. |
+| `context/save` / `context/restore` | `context-checkpoint-store` | Save requires `summary` and stores only the active Work Map ID/revision/digest reference when present. Restore compares Git and Work Map freshness and returns the complete calculated frontier plus one next action. |
 | `knowledge/recall` | `goldband-knowledge` | Optional `query`, `domain`, and `limit`. |
 | `benchmark/workflow` | `benchmark-evidence-aggregator` | `label`, `metric`, `conditions`, `sourceEvidence`, and at least two numeric `samples`. |
 | `system/health` | `goldband-installation` | None; inspection is read-only. |

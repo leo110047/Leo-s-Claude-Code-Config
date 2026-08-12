@@ -18,6 +18,7 @@ For an empty invocation, show this generated capability menu and stop:
 - `$goldband review code` — Independent review with a selected engineering lens.
 - `$goldband investigate code` — Find and verify the root cause of a failure.
 - `$goldband qa app` — Verify product behavior with explicit evidence.
+- `$goldband plan sync` — Create, expand, or tune an implementation plan.
 - `$goldband browser session` — Operate the persistent browser and browser-backed tools.
 - `$goldband design consult` — Define, explore, and prototype product design.
 - `$goldband context restore` — Save, restore, and summarize working context.

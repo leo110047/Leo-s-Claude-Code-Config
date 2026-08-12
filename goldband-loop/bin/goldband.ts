@@ -4,11 +4,18 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
 	chmodSync,
+	closeSync,
+	constants,
+	cpSync,
 	existsSync,
+	fstatSync,
 	lstatSync,
 	mkdirSync,
 	mkdtempSync,
+	openSync,
+	readdirSync,
 	readFileSync,
+	readSync,
 	realpathSync,
 	rmSync,
 	statSync,
@@ -28,22 +35,23 @@ import {
 	runManagedCommand,
 } from "../lib/managed-worktree-boundary";
 import {
-	assertValidReviewScopeFlags,
-	assertReviewNotNested,
-	INDEPENDENT_REVIEWER_ERROR,
-	REVIEW_ACTIVE_ENV,
-	REVIEW_SCOPE_FLAGS,
-	REVIEW_EVIDENCE_DURABILITY_ENV,
-	REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
-	type ReviewScopeFlag,
-} from "../lib/review-runtime-contract";
-import {
 	acquireReviewExecutionLease,
 	releaseReviewExecutionLease,
 } from "../lib/review-execution-lease";
+import {
+	assertReviewNotNested,
+	assertValidReviewScopeFlags,
+	INDEPENDENT_REVIEWER_ERROR,
+	REVIEW_ACTIVE_ENV,
+	REVIEW_EVIDENCE_DURABILITY_ENV,
+	REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
+	REVIEW_SCOPE_FLAGS,
+	type ReviewScopeFlag,
+} from "../lib/review-runtime-contract";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
 
 type ReviewHost = "claude" | "codex";
+const MAX_PLAN_INPUT_BYTES = 1024 * 1024;
 
 type TrustedBrowserRuntime = {
 	browserExecutable: string;
@@ -81,12 +89,22 @@ const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
+		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
 	);
-	stream.log("  goldband worktree create <name>");
+	stream.log("  goldband plan create --input <file> [--host <claude|codex>]");
+	stream.log(
+		"  goldband plan <block|cancel> --work-id <id> --ticket-id <id> --reason <text> [--host <claude|codex>]",
+	);
+	stream.log("  goldband plan resume --work-id <id> --ticket-id <id> [--host <claude|codex>]");
+	stream.log("  goldband plan sync configure --input <file> [--host <claude|codex>]");
+	stream.log("  goldband plan sync <preview|inspect> --work-id <id> [--host <claude|codex>]");
+	stream.log("  goldband plan sync publish --work-id <id> --operation-digest <digest> --step <step-id> [--host <claude|codex>]");
+	stream.log(
+		"  goldband worktree create <name> [--ticket-id <id>] [--claim-owner <owner>]",
+	);
 	stream.log('  goldband worktree finish <name> -m "<commit message>"');
 }
 
@@ -96,14 +114,28 @@ function usage(): never {
 }
 
 function create(name: string | undefined, extra: string[]): number {
-	if (!name || extra.length > 0) usage();
+	if (!name) usage();
+	let ticketId: string | undefined;
+	let claimOwner: string | undefined;
+	for (let index = 0; index < extra.length; index += 1) {
+		const flag = extra[index];
+		const value = extra[index + 1];
+		if (!value) usage();
+		if (flag === "--ticket-id" && !ticketId) ticketId = value;
+		else if (flag === "--claim-owner" && !claimOwner) claimOwner = value;
+		else usage();
+		index += 1;
+	}
+	if (claimOwner && !ticketId) {
+		throw new Error("--claim-owner requires --ticket-id");
+	}
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
 		throw new Error(
 			"worktree create requires an interactive terminal because the managed agent must inherit the sandboxed shell",
 		);
 	}
 
-	const lease = createManagedWorktree({ name });
+	const lease = createManagedWorktree({ name, ticketId, claimOwner });
 	const probe = probeManagedBoundary(lease);
 	if (!probe.available) {
 		abortCreatedManagedWorktree(lease);
@@ -164,6 +196,8 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	const forwarded: string[] = [];
 	let hasScope = false;
 	const scopeFlags: ReviewScopeFlag[] = [];
+	let workId: string | undefined;
+	let ticketId: string | undefined;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -181,6 +215,20 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			throw new Error(
 				"review code always uses real mode; --mode is not accepted",
 			);
+		}
+		if (arg === "--work-id" || arg === "--ticket-id") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (arg === "--work-id") {
+				if (workId) throw new Error("--work-id may be supplied only once");
+				workId = value;
+			} else {
+				if (ticketId) throw new Error("--ticket-id may be supplied only once");
+				ticketId = value;
+			}
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
 		}
 		if (arg === "--loop") {
 			throw new Error(
@@ -207,8 +255,16 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 
 	if (!host)
 		throw new Error("review code requires --host claude or --host codex");
+	if (Boolean(workId) !== Boolean(ticketId)) {
+		throw new Error("--work-id and --ticket-id must be supplied together");
+	}
+	if (workId && scopeFlags.length > 0) {
+		throw new Error(
+			"Work Map review scope is runtime-owned; remove staged, worktree, base, diff-file, and include-untracked flags",
+		);
+	}
 	assertValidReviewScopeFlags(scopeFlags);
-	if (!hasScope) forwarded.unshift("--worktree");
+	if (!hasScope && !workId) forwarded.unshift("--worktree");
 
 	return ["review", "code", "--mode", "real", "--host", host, ...forwarded];
 }
@@ -358,6 +414,371 @@ function browserSession(args: string[]): number {
 	} finally {
 		rmSync(inputRoot, { recursive: true, force: true });
 	}
+}
+
+export function resolvePlanRuntimeFile(
+	entryFile = fileURLToPath(import.meta.url),
+): string {
+	const entryRoot = resolve(dirname(entryFile), "..");
+	const installedRuntime = join(
+		entryRoot,
+		"runtime",
+		"workflows",
+		"work-map-cli.ts",
+	);
+	if (existsSync(installedRuntime)) {
+		const metadata = lstatSync(installedRuntime);
+		if (metadata.isSymbolicLink()) {
+			throw new Error("installed Work Map runtime must not be a symbolic link");
+		}
+		if (metadata.isFile()) return installedRuntime;
+	}
+	const sourceRuntime = join(entryRoot, "workflows", "work-map-cli.ts");
+	if (
+		existsSync(join(entryRoot, "package.json")) &&
+		existsSync(sourceRuntime) &&
+		!existsSync(join(entryRoot, ".installed-source"))
+	) {
+		const metadata = lstatSync(sourceRuntime);
+		if (metadata.isSymbolicLink()) {
+			throw new Error("source Work Map runtime must not be a symbolic link");
+		}
+		if (!metadata.isFile()) {
+			throw new Error("source Work Map runtime must be a regular file");
+		}
+		return sourceRuntime;
+	}
+	throw new Error(
+		"installed Work Map runtime unavailable: rerun the Goldband workflow installer",
+	);
+}
+
+export function readStablePlanInput(
+	file: string,
+	options: {
+		noFollowFlag?: number | null;
+		afterFirstRead?: () => void;
+	} = {},
+): Buffer {
+	const resolvedFile = resolve(file);
+	const pathBefore = lstatSync(resolvedFile);
+	if (pathBefore.isSymbolicLink()) {
+		throw new Error("plan create --input must not be a symbolic link");
+	}
+	if (!pathBefore.isFile()) {
+		throw new Error("plan create --input must be a regular file");
+	}
+	const noFollowFlag =
+		options.noFollowFlag === undefined
+			? (constants.O_NOFOLLOW ?? null)
+			: options.noFollowFlag;
+	const flags = constants.O_RDONLY | (noFollowFlag ?? 0);
+	let descriptor: number;
+	try {
+		descriptor = openSync(resolvedFile, flags);
+	} catch (error) {
+		if (error instanceof Error && "code" in error && error.code === "ELOOP") {
+			throw new Error("plan create --input must not be a symbolic link");
+		}
+		throw error;
+	}
+	try {
+		const before = fstatSync(descriptor);
+		const preciseBefore = fstatSync(descriptor, { bigint: true });
+		if (
+			!before.isFile() ||
+			before.ino !== pathBefore.ino ||
+			before.dev !== pathBefore.dev
+		) {
+			throw new Error("plan create --input must be a regular file");
+		}
+		if (before.size > MAX_PLAN_INPUT_BYTES) {
+			throw new Error(
+				`plan create --input exceeds ${MAX_PLAN_INPUT_BYTES} bytes`,
+			);
+		}
+		const content = readPlanInputBuffer(descriptor, before.size);
+		options.afterFirstRead?.();
+		const confirmation = readPlanInputBuffer(descriptor, before.size);
+		const after = fstatSync(descriptor);
+		const preciseAfter = fstatSync(descriptor, { bigint: true });
+		const pathAfter = lstatSync(resolvedFile);
+		if (
+			!content.equals(confirmation) ||
+			after.size !== before.size ||
+			after.ino !== before.ino ||
+			after.dev !== before.dev ||
+			after.mtimeMs !== before.mtimeMs ||
+			preciseAfter.mtimeNs !== preciseBefore.mtimeNs ||
+			preciseAfter.ctimeNs !== preciseBefore.ctimeNs ||
+			pathAfter.isSymbolicLink() ||
+			pathAfter.ino !== before.ino ||
+			pathAfter.dev !== before.dev
+		) {
+			throw new Error("plan create --input changed while being read");
+		}
+		return content;
+	} finally {
+		closeSync(descriptor);
+	}
+}
+
+function readPlanInputBuffer(descriptor: number, size: number): Buffer {
+	const content = Buffer.alloc(size);
+	let offset = 0;
+	while (offset < content.length) {
+		const bytes = readSync(
+			descriptor,
+			content,
+			offset,
+			content.length - offset,
+			offset,
+		);
+		if (bytes === 0) break;
+		offset += bytes;
+	}
+	if (offset !== size) {
+		throw new Error("plan create --input changed while being read");
+	}
+	return content;
+}
+
+export function planCreate(
+	args: string[],
+	options: {
+		entryFile?: string;
+		env?: NodeJS.ProcessEnv;
+		spawn?: typeof spawnSync;
+	} = {},
+): number {
+	let inputFile = "";
+	let host: ReviewHost | undefined;
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		if (arg === "--input") {
+			if (inputFile) throw new Error("plan create accepts --input only once");
+			inputFile = args[index + 1] || "";
+			index += 1;
+			continue;
+		}
+		if (arg === "--host") {
+			const value = args[index + 1];
+			if (host || (value !== "claude" && value !== "codex")) {
+				throw new Error("plan create --host must be claude or codex");
+			}
+			host = value;
+			index += 1;
+			continue;
+		}
+		throw new Error(`plan create: unknown argument ${arg}`);
+	}
+	if (!inputFile) throw new Error("plan create requires --input <file>");
+	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
+	const resolvedHost =
+		host ?? inferPlanHost(entryFile, options.env ?? process.env);
+	const input = readStablePlanInput(inputFile);
+	const inputRoot = mkdtempSync(join(tmpdir(), "goldband-plan-input-"));
+	const stableInput = join(inputRoot, "request.json");
+	writeFileSync(stableInput, input, { mode: 0o600, flag: "wx" });
+	let runtimeRoot: string | null = null;
+	try {
+		const runtimeFile = resolvePlanRuntimeFile(entryFile);
+		const snapshot = snapshotPlanRuntime(runtimeFile);
+		runtimeRoot = snapshot.root;
+		const run = options.spawn ?? spawnSync;
+		const result = run(
+			process.execPath,
+			[snapshot.runtimeFile, "--host", resolvedHost, "--input", stableInput],
+			{
+				cwd: process.cwd(),
+				env: options.env ?? process.env,
+				stdio: "inherit",
+			},
+		);
+		if (result.error) throw result.error;
+		if (result.status === null) {
+			throw new Error(
+				`plan runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
+			);
+		}
+		return result.status;
+	} finally {
+		if (runtimeRoot) rmSync(runtimeRoot, { recursive: true, force: true });
+		rmSync(inputRoot, { recursive: true, force: true });
+	}
+}
+
+export function planLifecycle(
+	action: "block" | "resume" | "cancel",
+	args: string[],
+	options: {
+		entryFile?: string;
+		env?: NodeJS.ProcessEnv;
+		spawn?: typeof spawnSync;
+	} = {},
+): number {
+	let host: ReviewHost | undefined;
+	const forwarded: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
+		const value = args[index + 1];
+		if (!["--host", "--work-id", "--ticket-id", "--reason"].includes(arg) || !value) {
+			throw new Error(`plan ${action}: invalid or missing option ${arg ?? "option"}`);
+		}
+		if (arg === "--host") {
+			if (host || (value !== "claude" && value !== "codex")) {
+				throw new Error(`plan ${action} --host must be claude or codex`);
+			}
+			host = value;
+		} else {
+			if (forwarded.includes(arg)) throw new Error(`plan ${action} accepts ${arg} only once`);
+			forwarded.push(arg, value);
+		}
+		index += 1;
+	}
+	for (const required of [
+		"--work-id",
+		"--ticket-id",
+		...(action === "resume" ? [] : ["--reason"]),
+	]) {
+		if (!forwarded.includes(required)) throw new Error(`plan ${action} requires ${required}`);
+	}
+	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
+	const resolvedHost = host ?? inferPlanHost(entryFile, options.env ?? process.env);
+	let runtimeRoot: string | null = null;
+	try {
+		const snapshot = snapshotPlanRuntime(resolvePlanRuntimeFile(entryFile));
+		runtimeRoot = snapshot.root;
+		const result = (options.spawn ?? spawnSync)(
+			process.execPath,
+			[snapshot.runtimeFile, action, "--host", resolvedHost, ...forwarded],
+			{ cwd: process.cwd(), env: options.env ?? process.env, stdio: "inherit" },
+		);
+		if (result.error) throw result.error;
+		if (result.status === null) throw new Error(`plan ${action} runtime terminated without an exit status`);
+		return result.status;
+	} finally {
+		if (runtimeRoot) rmSync(runtimeRoot, { recursive: true, force: true });
+	}
+}
+
+export function planSync(
+	args: string[],
+	options: { entryFile?: string; env?: NodeJS.ProcessEnv; spawn?: typeof spawnSync } = {},
+): number {
+	const operation = args[0];
+	if (operation !== "configure" && operation !== "preview" && operation !== "inspect" && operation !== "publish") {
+		throw new Error("plan sync requires configure, preview, inspect, or publish");
+	}
+	let host: ReviewHost | undefined;
+	let inputFile = "";
+	const forwarded = ["sync", operation];
+	for (let index = 1; index < args.length; index += 1) {
+		const arg = args[index];
+		const value = args[index + 1];
+		if (!value || !["--host", "--work-id", "--operation-digest", "--step", "--input"].includes(arg)) {
+			throw new Error(`plan sync ${operation}: invalid or missing option ${arg ?? "option"}`);
+		}
+		if (arg === "--host") {
+			if (host || (value !== "claude" && value !== "codex")) throw new Error("plan sync --host must be claude or codex");
+			host = value;
+		} else if (arg === "--input") {
+			if (inputFile) throw new Error("plan sync accepts --input only once");
+			inputFile = value;
+		} else {
+			if (forwarded.includes(arg)) throw new Error(`plan sync accepts ${arg} only once`);
+			forwarded.push(arg, value);
+		}
+		index += 1;
+	}
+	if (operation === "configure" && !inputFile) throw new Error("plan sync configure requires --input");
+	if (operation !== "configure" && !forwarded.includes("--work-id")) throw new Error("plan sync requires --work-id");
+	if (operation === "configure" && (forwarded.includes("--work-id") || forwarded.includes("--operation-digest") || forwarded.includes("--step"))) throw new Error("plan sync configure accepts only --input and --host");
+	if (operation === "publish" && !forwarded.includes("--operation-digest")) throw new Error("plan sync publish requires --operation-digest");
+	if (operation === "publish" && !forwarded.includes("--step")) throw new Error("plan sync publish requires --step");
+	if (operation !== "publish" && forwarded.includes("--operation-digest")) throw new Error(`plan sync ${operation} does not accept --operation-digest`);
+	if (operation !== "publish" && forwarded.includes("--step")) throw new Error(`plan sync ${operation} does not accept --step`);
+	const entryFile = options.entryFile ?? fileURLToPath(import.meta.url);
+	const resolvedHost = host ?? inferPlanHost(entryFile, options.env ?? process.env);
+	let runtimeRoot: string | null = null;
+	let inputRoot: string | null = null;
+	try {
+		const snapshot = snapshotPlanRuntime(resolvePlanRuntimeFile(entryFile));
+		runtimeRoot = snapshot.root;
+		if (inputFile) {
+			inputRoot = mkdtempSync(join(tmpdir(), "goldband-tracker-config-"));
+			const stableInput = join(inputRoot, "request.json");
+			writeFileSync(stableInput, readStablePlanInput(inputFile), { mode: 0o600, flag: "wx" });
+			forwarded.push("--input", stableInput);
+		}
+		const result = (options.spawn ?? spawnSync)(process.execPath, [snapshot.runtimeFile, ...forwarded, "--host", resolvedHost], {
+			cwd: process.cwd(), env: options.env ?? process.env, stdio: "inherit",
+		});
+		if (result.error) throw result.error;
+		if (result.status === null) throw new Error("plan sync runtime terminated without an exit status");
+		return result.status;
+	} finally {
+		if (runtimeRoot) rmSync(runtimeRoot, { recursive: true, force: true });
+		if (inputRoot) rmSync(inputRoot, { recursive: true, force: true });
+	}
+}
+
+function snapshotPlanRuntime(runtimeFile: string): {
+	root: string;
+	runtimeFile: string;
+} {
+	const runtimeRoot = resolve(dirname(runtimeFile), "..");
+	const snapshotRoot = mkdtempSync(join(tmpdir(), "goldband-plan-runtime-"));
+	try {
+		for (const directory of ["workflows", "lib"]) {
+			const source = join(runtimeRoot, directory);
+			if (!existsSync(source)) continue;
+			cpSync(source, join(snapshotRoot, directory), {
+				recursive: true,
+				dereference: false,
+				errorOnExist: true,
+			});
+		}
+		assertMaterializedTree(snapshotRoot);
+		const snapshotRuntime = join(snapshotRoot, "workflows", "work-map-cli.ts");
+		if (!lstatSync(snapshotRuntime).isFile()) {
+			throw new Error("snapshotted Work Map runtime must be a regular file");
+		}
+		return { root: snapshotRoot, runtimeFile: snapshotRuntime };
+	} catch (error) {
+		rmSync(snapshotRoot, { recursive: true, force: true });
+		throw error;
+	}
+}
+
+function assertMaterializedTree(root: string): void {
+	for (const entry of readdirSync(root, { withFileTypes: true })) {
+		const path = join(root, entry.name);
+		const metadata = lstatSync(path);
+		if (metadata.isSymbolicLink()) {
+			throw new Error(
+				`Work Map runtime snapshot contains a symbolic link: ${path}`,
+			);
+		}
+		if (metadata.isDirectory()) {
+			assertMaterializedTree(path);
+			continue;
+		}
+		if (!metadata.isFile()) {
+			throw new Error(`Work Map runtime snapshot contains a non-file: ${path}`);
+		}
+	}
+}
+
+function inferPlanHost(entryFile: string, env: NodeJS.ProcessEnv): ReviewHost {
+	const normalized = entryFile.split("\\").join("/");
+	if (normalized.includes("/.codex/")) return "codex";
+	if (normalized.includes("/.claude/")) return "claude";
+	if (env.CODEX_THREAD_ID || env.CODEX_HOME) return "codex";
+	if (env.CLAUDECODE || env.CLAUDE_PLUGIN_ROOT) return "claude";
+	throw new Error(
+		"plan create could not infer the parent host; pass --host claude or --host codex",
+	);
 }
 
 export function prepareReviewProcessEnvironment(
@@ -591,6 +1012,17 @@ export function main(args = process.argv.slice(2)): number {
 		return browserSession(
 			[name, ...rest].filter((value): value is string => value !== undefined),
 		);
+	}
+	if (scope === "plan") {
+		const planArgs = [name, ...rest].filter(
+			(value): value is string => value !== undefined,
+		);
+		if (action === "create") return planCreate(planArgs);
+		if (action === "sync") return planSync(planArgs);
+		if (action === "block" || action === "resume" || action === "cancel") {
+			return planLifecycle(action, planArgs);
+		}
+		usage();
 	}
 	if (scope !== "worktree") usage();
 	if (action === "create") return create(name, rest);

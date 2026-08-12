@@ -81,6 +81,26 @@ type RuntimeGateVerifier = {
 };
 
 const RUNTIME_GATE_VERIFIERS: Record<string, RuntimeGateVerifier> = {
+	"plan/sync": trackerSyncVerifier(
+		"native-host-approval",
+		[
+			"matching-preview-digest",
+			"local-revision-unchanged",
+			"remote-digest-unchanged",
+		],
+		[
+			"tracker-issue-create",
+			"tracker-issue-update",
+			"tracker-relationship-update",
+		],
+		["remote-markers", "remote-digest", "sync-checkpoint"],
+	),
+	"plan/sync-preview": trackerSyncVerifier(
+		"not-required-read-only",
+		["tracker-config-readback", "local-work-map-readback"],
+		[],
+		["operation-digest", "projection-steps", "approval-requirements"],
+	),
 	"system/upgrade": {
 		owner: "goldband-setup-gate",
 		authorization: "native-host-approval",
@@ -271,6 +291,8 @@ function resolveSafetyGate(
 
 function operationFor(workflowName: string, input: unknown): string {
 	const record = optionalInputRecord(input);
+	if (workflowName === "plan/sync" && record.mode !== "publish-step")
+		return "plan/sync-preview";
 	if (workflowName === "release/land" && record.mode === "canary") {
 		return "release/canary";
 	}
@@ -281,6 +303,159 @@ function operationFor(workflowName: string, input: unknown): string {
 		return "ios/sync";
 	}
 	return workflowName;
+}
+
+function trackerSyncVerifier(
+	authorization: SafetyGateContract["authorization"],
+	preconditions: string[],
+	sideEffects: string[],
+	readback: string[],
+): RuntimeGateVerifier {
+	return {
+		owner: "tracker-runtime",
+		authorization,
+		preconditions,
+		sideEffects,
+		readback,
+		validateInput(input) {
+			const value = inputRecord(input, "plan/sync input");
+			const mode = requiredString(value.mode, "plan/sync input.mode");
+			if (!["preview", "inspect", "publish-step"].includes(mode))
+				throw new Error(
+					"plan/sync input.mode must be preview, inspect, or publish-step",
+				);
+			requiredString(value.workId, "plan/sync input.workId");
+			if (mode === "publish-step") {
+				if (
+					!/^[a-f0-9]{64}$/.test(
+						requiredString(
+							value.operationDigest,
+							"plan/sync input.operationDigest",
+						),
+					)
+				)
+					throw new Error("plan/sync operationDigest must be a SHA-256 digest");
+				requiredString(value.stepId, "plan/sync input.stepId");
+			}
+		},
+		verify(admission, input, output, options) {
+			const request = inputRecord(input, "plan/sync input");
+			const result = inputRecord(output, `${admission.operation} owner output`);
+			if (
+				result.owner !== "tracker-runtime" ||
+				result.operation !== request.mode
+			) {
+				throw new Error(
+					"plan/sync output scope does not match the admitted input",
+				);
+			}
+			if (result.status === "blocked")
+				return pendingVerification(admission, String(result.summary));
+			if (options.mode !== "real")
+				throw new Error(
+					"plan/sync: mock output cannot satisfy runtime safety readback",
+				);
+			if (
+				result.mode !== request.mode ||
+				result.workId !== request.workId ||
+				typeof result.readback !== "object" ||
+				result.readback === null
+			)
+				throw new Error(
+					"plan/sync owner readback does not match the admitted input",
+				);
+			verifyTrackerSyncReadback(
+				request,
+				inputRecord(result.readback, "plan/sync readback"),
+			);
+			return verified(admission);
+		},
+	};
+}
+
+function verifyTrackerSyncReadback(
+	request: Record<string, unknown>,
+	readback: Record<string, unknown>,
+): void {
+	if (request.mode === "preview") {
+		if (
+			!/^[a-f0-9]{64}$/.test(
+				requiredString(
+					readback.operationDigest,
+					"plan/sync preview operationDigest",
+				),
+			) ||
+			!Array.isArray(readback.steps)
+		) {
+			throw new Error("plan/sync preview readback is incomplete");
+		}
+		if (
+			readback.steps.some(
+				(raw) =>
+					inputRecord(raw, "plan/sync preview step").requiresApproval !== true,
+			)
+		) {
+			throw new Error(
+				"plan/sync preview step omitted its approval requirement",
+			);
+		}
+		return;
+	}
+	if (request.mode === "inspect") {
+		if (
+			!/^[a-f0-9]{64}$/.test(
+				requiredString(readback.remoteDigest, "plan/sync inspect remoteDigest"),
+			) ||
+			!Array.isArray(readback.candidates) ||
+			typeof readback.remote !== "object" ||
+			readback.remote === null
+		) {
+			throw new Error("plan/sync inspect readback is incomplete");
+		}
+		return;
+	}
+	const stepId = requiredString(request.stepId, "plan/sync input.stepId");
+	if (readback.blockedReason !== undefined)
+		throw new Error("plan/sync publish step remains blocked");
+	const completed = stringList(
+		readback.completedSteps,
+		"plan/sync publish completedSteps",
+	);
+	const pending = stringList(
+		readback.pendingSteps,
+		"plan/sync publish pendingSteps",
+	);
+	if (!completed.includes(stepId) || pending.includes(stepId))
+		throw new Error("plan/sync publish did not complete the admitted step");
+	const plan = inputRecord(readback.plan, "plan/sync publish plan");
+	const operationDigest = requiredString(
+		request.operationDigest,
+		"plan/sync input.operationDigest",
+	);
+	if (plan.operationDigest !== operationDigest)
+		throw new Error("plan/sync publish plan digest mismatch");
+	const remote = inputRecord(readback.remote, "plan/sync publish remote");
+	const remoteDigest = requiredString(
+		remote.digest,
+		"plan/sync publish remote.digest",
+	);
+	if (!/^[a-f0-9]{64}$/.test(remoteDigest))
+		throw new Error("plan/sync publish remote digest is invalid");
+	const checkpoint = inputRecord(
+		readback.checkpoint,
+		"plan/sync publish checkpoint",
+	);
+	const checkpointCompleted = stringList(
+		checkpoint.completedSteps,
+		"plan/sync checkpoint completedSteps",
+	);
+	if (
+		checkpoint.operationDigest !== operationDigest ||
+		checkpoint.lastRemoteDigest !== remoteDigest ||
+		!checkpointCompleted.includes(stepId)
+	) {
+		throw new Error("plan/sync publish checkpoint readback mismatch");
+	}
 }
 
 function isCookieOperation(input: Record<string, unknown>): boolean {
@@ -527,9 +702,7 @@ function assertSystemPreflight(preflight: Record<string, unknown>): void {
 			(command) =>
 				!Array.isArray(command) ||
 				command.length === 0 ||
-				command.some(
-					(part) => typeof part !== "string" || part.length === 0,
-				),
+				command.some((part) => typeof part !== "string" || part.length === 0),
 		)
 	) {
 		throw new Error("system/upgrade: preflight nextCommands are invalid");

@@ -197,6 +197,7 @@ install_workflow_host() {
     if [ "$setup_status" -ne 0 ]; then
         exit "$setup_status"
     fi
+    verify_installed_work_map_runtime "$host"
     if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
         install_workflow_claude_command_selector
     fi
@@ -206,6 +207,65 @@ install_workflow_host() {
     if ! is_windows_host; then
         install_shell_launchers
     fi
+}
+
+verify_installed_work_map_runtime() {
+    local host="$1"
+    local runtime_root relative_path
+    local roots=()
+
+    if [ "$host" = "claude" ] || [ "$host" = "auto" ]; then
+        roots+=("$HOME/.claude/skills/goldband")
+    fi
+    if [ "$host" = "codex" ] || [ "$host" = "auto" ]; then
+        roots+=("$HOME/.codex/skills/goldband")
+    fi
+
+    for runtime_root in "${roots[@]}"; do
+        for relative_path in \
+            runtime/workflows/work-map-cli.ts \
+            runtime/workflows/work-map.ts \
+            runtime/workflows/work-map-store.ts \
+            runtime/workflows/work-map-runtime.ts \
+            runtime/workflows/types.ts \
+            runtime/lib/state-root.ts
+        do
+            if [ ! -f "$runtime_root/$relative_path" ] || [ -L "$runtime_root/$relative_path" ]; then
+                echo -e "${RED}Goldband Work Map runtime 安裝不完整: $runtime_root/$relative_path${NC}" >&2
+                exit 1
+            fi
+        done
+        verify_installed_tracker_runtime "$runtime_root"
+        for relative_path in \
+            bin/goldband-work-verify \
+            bin/goldband-work-verify.ts \
+            lib/verification-receipt.ts
+        do
+            if [ ! -f "$runtime_root/$relative_path" ]; then
+                echo -e "${RED}Goldband evidence runtime 安裝不完整: $runtime_root/$relative_path${NC}" >&2
+                exit 1
+            fi
+        done
+        if [ ! -x "$runtime_root/bin/goldband-work-verify" ]; then
+            echo -e "${RED}Goldband verification recorder 不可執行: $runtime_root/bin/goldband-work-verify${NC}" >&2
+            exit 1
+        fi
+    done
+}
+
+verify_installed_tracker_runtime() {
+    local runtime_root="$1" relative_path
+    for relative_path in \
+        tracker-config.ts tracker-runtime.ts \
+        tracker-adapters/types.ts tracker-adapters/projection.ts tracker-adapters/sync-state.ts \
+        tracker-adapters/import.ts tracker-adapters/cli-adapter.ts \
+        tracker-adapters/github.ts tracker-adapters/gitlab.ts
+    do
+        if [ ! -f "$runtime_root/runtime/workflows/$relative_path" ] || [ -L "$runtime_root/runtime/workflows/$relative_path" ]; then
+            echo -e "${RED}Goldband tracker runtime 安裝不完整: $runtime_root/runtime/workflows/$relative_path${NC}" >&2
+            exit 1
+        fi
+    done
 }
 
 run_workflow_setup() {

@@ -107,6 +107,7 @@ function promptDigest(value: string): string {
 
 function targetFor(name: string): string {
   if (name === 'review/code') return 'Find concrete pre-landing code risks from a diff.';
+  if (name === 'plan/create') return 'Create a validated, versioned Work Map for cross-session work.';
   if (name.includes('investigate')) return 'Find root cause with explicit evidence.';
   if (name.includes('qa')) return 'Verify user-visible behavior with pass/fail evidence.';
   if (name.includes('plan')) return 'Improve or validate implementation plans before code changes.';
@@ -118,6 +119,8 @@ function targetFor(name: string): string {
 function evaluationFor(name: string): string {
   if (name === 'review/code')
     return 'Validated findings and rendered report from the selected diff.';
+  if (name === 'plan/create')
+    return 'Persisted Work Map readback matches its calculated frontier, revision, and digest.';
   if (name.includes('qa'))
     return 'Recorded pass/fail checks, screenshots, or reproduction evidence.';
   if (name.includes('investigate'))
@@ -151,6 +154,8 @@ function migrationFor(name: string, runtime: string): string {
 
 function nextStepFor(name: string): string {
   if (name === 'review/code') return 'Keep schema and evidence fixtures stable.';
+  if (name === 'plan/create')
+    return 'Execute or shape one ticket from the runtime-calculated frontier.';
   if (name === 'qa/app')
     return 'Promote real browser checks and screenshot artifacts after mock loop settles.';
   if (name.includes('investigate')) return 'Promote hypothesis and evidence loop to typed steps.';

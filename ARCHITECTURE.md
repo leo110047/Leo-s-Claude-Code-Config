@@ -152,6 +152,23 @@ pre-integration failure preserves the managed worktree and discards its
 quarantined candidate objects. PreToolUse and `pre-commit` checks are soft,
 early diagnostics only; the OS filesystem sandbox is the enforcement boundary.
 
+A managed worktree may also carry an exact Work Map ticket binding. Bound
+leases record the Work Map ID/revision, ticket ID, and planning-contract
+digest. `goldband-work-verify` executes argument arrays without a shell, stores
+bounded redacted summaries plus full-output digests under the local state root,
+and advances only the bound ticket after mode-specific evidence succeeds.
+`review/code --work-id ... --ticket-id ...` reads that receipt and adds the
+ticket intent as explicitly delimited untrusted data. Its JSON artifact binds
+the map revision, ticket, receipt, reviewed diff, and candidate digest.
+`finish` requires the ticket to be runtime-verified and reads every bound
+artifact back before integration. Standalone managed worktrees retain the
+original finish contract and cannot claim Work Map verification.
+
+These provenance checks are an evidence gate, not a security boundary against
+another process running as the same host user. The filesystem sandbox protects
+Git and broker inputs; Work Map and verification state remain inspectable and
+recoverable local runtime state.
+
 ### Claude Plugin Contract
 
 The Claude plugin is a generated distribution artifact, not a second source of
@@ -243,6 +260,88 @@ Integrated runtime runs write step evidence to
 `${GOLDBAND_HOME:-$HOME/.goldband}/workflow-runs/<workflow>.jsonl`. Core
 workflows can run in mock mode for CI without LLM spend; real host execution is
 gated behind explicit `--mode real`.
+
+### Work Map state
+
+`plan/create` is a typed Claude/Codex entrypoint for work that spans sessions,
+has two or more dependency-linked tickets, needs parallel agents, contains
+in-scope unknowns, or explicitly requires a tracked plan, roadmap, or handoff.
+Single-session, low-risk work without dependencies stays in the ordinary agent
+loop and does not require a Work Map.
+
+The JSON domain contract in `goldband-loop/workflows/work-map.ts` owns schema
+validation, transitions, dependency cycles, blockers, and frontier
+calculation. `goldband-loop/workflows/work-map-store.ts` is the only persistence
+owner. It derives repository identity, canonical worktree, branch, and base
+commit from Git; model input cannot supply those fields, revisions, timestamps,
+frontier, or blockers.
+
+```text
+${GOLDBAND_HOME:-$HOME/.goldband}/projects/<repository-id>/work/
+├── active.json
+└── <work-id>/
+    ├── map.json
+    ├── map.md
+    └── events.jsonl
+```
+
+`map.json` is authoritative. `map.md` is regenerated deterministically, and
+`events.jsonl` is append-only transition evidence. Updates use a per-map lock,
+revision compare-and-swap, temporary files, and atomic rename. State paths are
+canonicalized and symbolic-link or traversal writes fail closed.
+
+Context checkpoints do not copy Work Map content. When a map is active,
+`context/save` stores only its ID, revision, digest, and nullable active ticket
+reference. `context/restore` compares saved/current Git state and saved/current
+Work Map state, recalculates the complete frontier, and returns one explicit
+next action. A stale, missing, completed, or cancelled map is never presented
+as an executable current plan.
+
+Phase 2 ticket lifecycle transitions are store-owned operations with revision
+compare-and-swap: `ready -> claimed -> implemented -> verified`, plus explicit
+block, requested-changes, cancellation, and integrated-commit readback.
+Block, resume, and cancel are callable through the installed `goldband plan` lifecycle
+surface for both Claude and Codex hosts. Frontier membership is checked at
+claim time, and a code dependency does not satisfy downstream work until its
+verified commit is integrated; verified analysis-only work needs no Git commit.
+Code claims bind exactly one
+managed lease and claim attempt; requested changes open a new attempt so prior
+RED records cannot satisfy a later GREEN. Existing-test tickets bind the exact
+planning command argument array. Work Map review scope is runtime-owned and the
+receipt, review artifact, and finish readback share one canonical candidate-diff
+digest. Canonical untracked materialization reuses the normal review secret,
+file-size, aggregate-size, binary, and stable-read policy. Analysis-only tickets instead bind a named artifact copied into
+broker-owned state and never create a code worktree. Prompt output cannot
+directly transition a ticket.
+
+### Work Map collaboration projections
+
+GitHub Issues and GitLab Issues are optional collaboration surfaces. The local
+`WorkMapStore` remains the only domain and transition owner; tracker issues are
+deterministic projections with versioned work/ticket markers and SHA-256
+digests. Provider wire shapes stay inside
+`goldband-loop/workflows/tracker-adapters/`.
+
+Tracker configuration defaults to `off` and stores only provider, repository,
+labels, and dependency capability under the Goldband state root. Credentials
+remain owned by `gh` or `glab`. Preview and inspect are read-only remote
+operations. Publish accepts only a persisted preview digest, checks the current
+local revision and remote digest, and executes exactly one explicitly named next
+step per native-host-approved invocation. A successful provider write is
+checkpointed before readback so a transient read failure cannot duplicate a
+create. Final readback compares title, body, labels, state, markers, and
+relationships rather than trusting the embedded digest alone.
+
+External issue bodies, comments, labels, assignees, and state are untrusted.
+They become typed change candidates; approved state and single-assignee claim
+changes return through `WorkMapStore` operations, with claims requiring an
+explicit owner and analysis binding ID. Code claims remain exclusive to the
+managed-worktree broker; tracker import cannot fabricate its lease. Closing an
+issue or checking an acceptance box never
+supplies Phase 2 verification evidence. GitHub and GitLab do not provide a
+cross-provider atomic claim lock, so concurrent claim drift stops for explicit
+resolution instead of choosing a winner or applying last-write-wins.
+
 For review workflows, untracked worktree files cross an additional trust
 boundary before real host execution: only bounded text files without secret-like
 content are materialized into the prompt, while skipped files are recorded as

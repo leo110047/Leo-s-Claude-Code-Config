@@ -34,6 +34,8 @@ Validity rules:
   `suggestedVerification` when those fields are present in the validated
   finding.
 - Suppress speculative findings instead of returning a confidence score.
+- Work Map-scoped review uses the same canonical taxonomy. Set `blocking: true`
+  when the concrete finding must prevent that ticket from advancing.
 - Do not output patches or apply fixes.
 - Do not output cross-review verdict markers from normal `/review`.
 - When a finding enforces a Goldband Rule, preserve its `ruleId` and

@@ -11,6 +11,40 @@ const commitMsgHook = path.join(repoRoot, 'git-hooks', 'commit-msg');
 const tests = [
   ['markdown setext heading is not a merge conflict', testMarkdownSetext],
   ['real merge conflict block is blocked', testMergeConflictBlock],
+  ['ordinary text over 1 MB is blocked', testLargeOrdinaryTextBlocked],
+  [
+    'tracked generated text with an exact generator contract is allowed',
+    testTrackedGeneratedTextAllowed,
+  ],
+  [
+    'generated text contract rejects an untracked generator',
+    testGeneratedTextUntrackedGeneratorBlocked,
+  ],
+  [
+    'generated text contract rejects a generator directory',
+    testGeneratedTextGeneratorDirectoryBlocked,
+  ],
+  [
+    'generated text contract cannot exceed the global generated cap',
+    testGeneratedTextCapBlocked,
+  ],
+  [
+    'generated text contract does not allow path globs',
+    testGeneratedTextGlobBlocked,
+  ],
+  [
+    'generated text remains blocked above its declared file cap',
+    testGeneratedTextDeclaredCapBlocked,
+  ],
+  [
+    'staged generated text above 10 MiB is still checked',
+    testLargeStagedGeneratedTextDeclaredCapBlocked,
+  ],
+  [
+    'staged generated text above the 16 MiB hard cap is blocked',
+    testLargeStagedGeneratedTextHardCapBlocked,
+  ],
+  ['staged gitlinks are not read as blobs', testStagedGitlinkSkipped],
   ['commit-msg accepts scope and breaking marker', testCommitMsgScope],
   ['commit-msg remains opt-in', testCommitMsgOptIn],
   [
@@ -67,6 +101,113 @@ function testMergeConflictBlock() {
   const result = checkStyle(dir);
   assertEqual(result.status, 1, result.stdout + result.stderr);
   assertIncludes(result.stdout, '"rule": "merge-conflict"');
+}
+
+function testLargeOrdinaryTextBlocked() {
+  const dir = createRepo();
+  fs.writeFileSync(path.join(dir, 'large-contract.json'), largeText());
+  run('git', ['add', 'large-contract.json'], { cwd: dir });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertIncludes(result.stdout, '"rule": "text-size"');
+}
+
+function testTrackedGeneratedTextAllowed() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir);
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 0, result.stdout + result.stderr);
+}
+
+function testGeneratedTextUntrackedGeneratorBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, { stageGenerator: false });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 2, result.stdout + result.stderr);
+  assertIncludes(result.stderr, 'generator must be one exact regular file');
+}
+
+function testGeneratedTextGeneratorDirectoryBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, { generatorPath: 'scripts' });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 2, result.stdout + result.stderr);
+  assertIncludes(result.stderr, 'generator must be one exact regular file');
+}
+
+function testGeneratedTextCapBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, { maxBytes: 32 * 1024 * 1024 });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 2, result.stdout + result.stderr);
+  assertIncludes(result.stderr, 'exceeds the generated text hard cap');
+}
+
+function testGeneratedTextGlobBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, { artifactPath: 'api/*.json' });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 2, result.stdout + result.stderr);
+  assertIncludes(result.stderr, 'globs are not allowed');
+}
+
+function testGeneratedTextDeclaredCapBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, {
+    artifactBytes: 2 * 1024 * 1024,
+    maxBytes: 1024 * 1024 + 1,
+  });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertIncludes(result.stdout, '"rule": "text-size"');
+}
+
+function testLargeStagedGeneratedTextDeclaredCapBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, {
+    artifactBytes: 11 * 1024 * 1024,
+    maxBytes: 10 * 1024 * 1024 + 1,
+  });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertIncludes(result.stdout, '"rule": "text-size"');
+}
+
+function testLargeStagedGeneratedTextHardCapBlocked() {
+  const dir = createRepo();
+  writeGeneratedTextFixture(dir, {
+    artifactBytes: 17 * 1024 * 1024,
+    maxBytes: 16 * 1024 * 1024,
+  });
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 1, result.stdout + result.stderr);
+  assertIncludes(result.stdout, '"rule": "file-size"');
+}
+
+function testStagedGitlinkSkipped() {
+  const dir = createRepo();
+  run(
+    'git',
+    [
+      'update-index',
+      '--add',
+      '--cacheinfo',
+      `160000,${'a'.repeat(40)},modules/example`,
+    ],
+    { cwd: dir },
+  );
+
+  const result = checkStyle(dir);
+  assertEqual(result.status, 0, result.stdout + result.stderr);
 }
 
 function testCommitMsgScope() {
@@ -296,6 +437,52 @@ function checkStyle(cwd) {
   return run(process.execPath, [checker, '--staged', '--format', 'json'], {
     cwd,
   });
+}
+
+function writeGeneratedTextFixture(
+  dir,
+  {
+    artifactBytes = 1024 * 1024,
+    artifactPath = 'api/openapi.json',
+    generatorPath = 'scripts/generate-openapi.mjs',
+    maxBytes = 2 * 1024 * 1024,
+    stageGenerator = true,
+  } = {},
+) {
+  fs.mkdirSync(path.join(dir, 'api'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'scripts', 'generate-openapi.mjs'),
+    "process.stdout.write('generated by fixture\\n');\n",
+  );
+  fs.writeFileSync(
+    path.join(dir, 'api', 'openapi.json'),
+    largeText(artifactBytes),
+  );
+  fs.writeFileSync(
+    path.join(dir, '.goldband-style.json'),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        largeGeneratedTextFiles: [
+          {
+            path: artifactPath,
+            generator: generatorPath,
+            maxBytes,
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const files = ['.goldband-style.json', 'api/openapi.json'];
+  if (stageGenerator) files.push('scripts/generate-openapi.mjs');
+  run('git', ['add', ...files], { cwd: dir });
+}
+
+function largeText(bytes = 1024 * 1024) {
+  return `${'x'.repeat(bytes)}\n`;
 }
 
 function createRepo() {

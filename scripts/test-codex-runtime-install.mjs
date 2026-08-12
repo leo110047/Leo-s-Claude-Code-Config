@@ -94,13 +94,13 @@ assert.doesNotMatch(
 );
 assert.match(
   installedConfig,
-  /status_line = \["model-with-reasoning", "current-dir", "project-root", "git-branch"\]/,
-  'codex-config install must use the context-neutral TUI status line',
+  /status_line = \["model-with-reasoning", "project-root", "git-branch", "context-remaining", "five-hour-limit", "weekly-limit"\]/,
+  'codex-config install must use the shared operational TUI status line',
 );
 assert.doesNotMatch(
   installedConfig,
-  /context-remaining|context-used|five-hour-limit/,
-  'codex-config install must not expose context or rate-limit countdowns in the TUI status line',
+  /"current-dir"|"context-used"/,
+  'codex-config install must not retain duplicate path or redundant context status items',
 );
 
 const unsupportedProjectionSource = path.join(

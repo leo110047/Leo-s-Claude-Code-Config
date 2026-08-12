@@ -1,8 +1,18 @@
 create_minimal_real_setup_fixture() {
   local loop_dir="$1"
-  mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review"
+  mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review" "$loop_dir/workflows" "$loop_dir/scripts"
   cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
   cp "$ROOT_DIR/goldband-loop/lib/retired-workflow-entry-names.txt" "$loop_dir/lib/retired-workflow-entry-names.txt"
+  cp "$ROOT_DIR/goldband-loop/lib/state-root.ts" "$loop_dir/lib/state-root.ts"
+  cp "$ROOT_DIR/goldband-loop/lib/verification-receipt.ts" "$loop_dir/lib/verification-receipt.ts"
+  cp "$ROOT_DIR/goldband-loop/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify"
+  cp "$ROOT_DIR/goldband-loop/bin/goldband-work-verify.ts" "$loop_dir/bin/goldband-work-verify.ts"
+  chmod +x "$loop_dir/bin/goldband-work-verify" "$loop_dir/bin/goldband-work-verify.ts"
+  local runtime_file
+  mkdir -p "$loop_dir/workflows/tracker-adapters"
+  for runtime_file in work-map-cli.ts work-map.ts work-map-store.ts work-map-runtime.ts evidence.ts tracker-config.ts tracker-runtime.ts types.ts tracker-adapters/types.ts tracker-adapters/projection.ts tracker-adapters/sync-state.ts tracker-adapters/import.ts tracker-adapters/cli-adapter.ts tracker-adapters/github.ts tracker-adapters/gitlab.ts ../lib/secret-content.ts; do
+    cp "$ROOT_DIR/goldband-loop/workflows/$runtime_file" "$loop_dir/workflows/$runtime_file"
+  done
   cp -R "$ROOT_DIR/goldband-loop/generated/host-skills" "$loop_dir/generated/host-skills"
   local host
   for host in claude codex factory opencode kiro; do

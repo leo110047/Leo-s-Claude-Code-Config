@@ -83,6 +83,8 @@ function buildResult(mode, files, issues) {
       maxFunctionLines: config.maxFunctionLines,
       maxParams: config.maxParams,
       maxComplexity: config.maxComplexity,
+      maxTextBytes: config.maxTextBytes,
+      maxGeneratedTextBytes: config.maxGeneratedTextBytes,
     },
     files,
     violations: issues.filter((issue) => issue.kind === 'violation'),

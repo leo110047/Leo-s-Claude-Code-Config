@@ -11,10 +11,15 @@ import {
 import {
   decodeText,
   fileContent,
+  fileSize,
   isBinary,
   isCodeFile,
   lineCount,
 } from './files.mjs';
+import {
+  allowsLargeGeneratedText,
+  loadLargeGeneratedTextPolicy,
+} from './generated-text.mjs';
 import { advisory, violation } from './issues.mjs';
 
 const require = createRequire(import.meta.url);
@@ -47,18 +52,38 @@ function escapeRegExp(value) {
 
 export function checkFiles(files, mode) {
   const issues = [];
+  const generatedTextPolicy = loadLargeGeneratedTextPolicy(mode);
   for (const file of files) {
-    checkFile(file, mode, issues);
+    checkFile(file, mode, issues, generatedTextPolicy);
   }
   runBiome(files, issues, mode);
   return issues;
 }
 
-function checkFile(file, mode, issues) {
+function checkFile(file, mode, issues, generatedTextPolicy) {
   checkSensitivePath(file, issues);
+  const size = fileSize(file, mode);
+  if (size === null) return;
+  const largestConfiguredLimit = Math.max(
+    config.maxTextBytes,
+    config.maxGeneratedTextBytes,
+    config.maxBinaryBytes,
+  );
+  if (size > largestConfiguredLimit) {
+    issues.push(
+      violation(
+        'file-size',
+        file,
+        `file has ${size} bytes, largest configured limit is ${largestConfiguredLimit}`,
+      ),
+    );
+    return;
+  }
   const buffer = fileContent(file, mode);
-  if (!buffer) return;
-  checkFileSize(file, buffer, issues);
+  if (!buffer) {
+    throw new ToolError(`file disappeared while checking: ${file}`);
+  }
+  checkFileSize(file, buffer, issues, generatedTextPolicy);
 
   const text = decodeText(buffer);
   if (text === null) return;
@@ -105,7 +130,7 @@ function isGeneratedPath(file, name) {
   );
 }
 
-function checkFileSize(file, buffer, issues) {
+function checkFileSize(file, buffer, issues, generatedTextPolicy) {
   if (!buffer) return;
   if (isBinary(buffer) && buffer.length > config.maxBinaryBytes) {
     issues.push(
@@ -117,7 +142,11 @@ function checkFileSize(file, buffer, issues) {
     );
     return;
   }
-  if (!isBinary(buffer) && buffer.length > config.maxTextBytes) {
+  if (
+    !isBinary(buffer) &&
+    buffer.length > config.maxTextBytes &&
+    !allowsLargeGeneratedText(generatedTextPolicy, file, buffer.length)
+  ) {
     issues.push(
       violation(
         'text-size',

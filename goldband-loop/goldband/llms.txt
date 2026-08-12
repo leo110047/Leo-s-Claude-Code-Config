@@ -20,7 +20,8 @@ Conventions:
 - `$goldband investigate code`: Investigate code or runtime behavior.
 - `$goldband ios qa`: Run iOS QA.
 - `$goldband knowledge recall`: Inspect Goldband learnings and knowledge.
-- `$goldband plan create`: Create an implementation plan.
+- `$goldband plan create`: Create a versioned Work Map for tracked work.
+- `$goldband plan sync`: Preview, inspect, or synchronize a Work Map tracker projection.
 - `$goldband qa app`: Run product QA and record evidence.
 - `$goldband review code`: Review a code diff.
 - `$goldband review security`: Review security and trust boundaries.

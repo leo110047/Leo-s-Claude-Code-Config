@@ -162,6 +162,26 @@ assert.doesNotMatch(
   'review/code prompt contract must not duplicate runtime-owned execution policy',
 );
 
+const planCreateContract = contracts.get(
+  'goldband-loop/generated/workflow-contracts/plan/create.workflow.md',
+);
+assert.ok(planCreateContract, 'plan/create contract must exist');
+assert.match(
+  planCreateContract,
+  /bin\/goldband plan create --input <file> --host claude/,
+  'plan/create must invoke the installed typed owner on Claude',
+);
+assert.match(
+  planCreateContract,
+  /bin\/goldband plan create --input <file> --host codex/,
+  'plan/create must invoke the installed typed owner on Codex',
+);
+assert.match(
+  planCreateContract,
+  /prose without successful runtime output is not completion/,
+  'plan/create must not allow a prose-only success path',
+);
+
 const browserSessionContract = contracts.get(
   'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',
 );
@@ -203,15 +223,15 @@ const actions = manifest.capabilities.flatMap((capability) =>
     owner: action.owner ?? null,
   })),
 );
-assert.equal(actionCount, 23);
+assert.equal(actionCount, 24);
 assert.equal(
   actions.filter((action) => action.lifecycle === 'public').length,
-  19,
+  20,
 );
-assert.equal(actions.filter((action) => action.runtime === 'typed').length, 15);
+assert.equal(actions.filter((action) => action.runtime === 'typed').length, 17);
 assert.equal(
   actions.filter((action) => action.runtime === 'compatibility').length,
-  4,
+  3,
 );
 assert.deepEqual(
   actions
@@ -257,6 +277,8 @@ assert.deepEqual(safetyGates.map((gate) => gate.operation).sort(), [
   'ios/sync',
   'knowledge/setup',
   'knowledge/sync',
+  'plan/sync',
+  'plan/sync-preview',
   'release/canary',
   'release/land',
   'release/setup',
@@ -267,7 +289,7 @@ assert.deepEqual(
     .filter((gate) => gate.enforcement === 'runtime-owner')
     .map((gate) => gate.operation)
     .sort(),
-  ['ios/qa', 'system/upgrade'],
+  ['ios/qa', 'plan/sync', 'plan/sync-preview', 'system/upgrade'],
 );
 assert.equal(
   safetyGates.filter((gate) => gate.enforcement === 'blocked-before-runtime')

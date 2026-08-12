@@ -59,18 +59,27 @@ git config --global --get core.hooksPath
 Expected goldband value:
 
 ```text
-/path/to/goldband/git-hooks
+~/.config/goldband/git-hooks
 ```
 
 Default install packs do not change global git settings; run `style-gate`
 explicitly when you want the machine-wide hook. The pre-commit hook checks only
 staged files. Biome checks run only when the target repo has `biome.json`;
 otherwise the hook keeps the zero-dependency checks and emits an advisory. If
-the repo-linked goldband script or `node` is unavailable, the hook warns and
-allows the commit so one broken goldband checkout does not block every repo on
-the machine. The commit-msg Conventional Commits gate is installed but enforced
-only when the repo has `.goldband-git-workflow.json` or
-`GOLDBAND_GIT_WORKFLOW_GATE=1`.
+the recorded Goldband source script or `node` is unavailable, the hook warns
+and allows the commit so one broken goldband checkout does not block every repo
+on the machine. The hooks themselves are materialized outside the checkout so
+Git LFS or another hook manager cannot write generated hooks into Goldband
+source. Re-running `./install.sh style-gate` refreshes the materialized runtime
+and migrates the legacy source-checkout `core.hooksPath`. The commit-msg
+Conventional Commits gate is installed but enforced only when the repo has
+`.goldband-git-workflow.json` or `GOLDBAND_GIT_WORKFLOW_GATE=1`.
+
+Large generated text files use the exact-path contract documented in
+`rules/coding-style.md`. Ordinary text remains limited to 1 MB; a tracked
+`.goldband-style.json` may name a tracked generator and a per-file cap up to the
+16 MB generated-text hard limit. The exception does not replace the
+project-specific regeneration/drift check.
 
 When the global hook is active, goldband runs first. After the goldband
 pre-commit or commit-msg gate passes or soft-skips, it looks for an executable
@@ -178,6 +187,41 @@ administrator or managed policy. goldband does not stage
 
 Goldband telemetry is local-only. It writes JSONL files on this machine and does
 not upload to an external service.
+
+### Work Map tracker configuration and sync
+
+Work Maps are local-only unless tracker mode is explicitly configured. A
+configuration file contains no token; authentication stays in `gh` or `glab`.
+For example, save this request outside the repository and run the matching host
+launcher with `goldband plan sync configure --input <file> --host <host>`:
+
+```json
+{
+  "schemaVersion": 1,
+  "mode": "github",
+  "repository": "owner/repository",
+  "defaultLabels": ["goldband"],
+  "dependencyCapability": "body-links"
+}
+```
+
+Configuration first reads CLI, auth, and repository access. Missing access is
+a blocked result and does not write config. Use `mode: "off"` with
+`repository: null` to return to local-only mode.
+
+`goldband plan sync preview --work-id <id> --host <host>` creates a local
+operation plan and performs no remote writes. `inspect` reads remote state and
+reports digest drift and import candidates. Remote publish is deliberately not
+authorized by an input flag. Approve and run exactly the next pending step with
+`goldband plan sync publish --work-id <id> --operation-digest <digest> --step <step-id> --host <host>`.
+Each invocation is one native host/user approval boundary; the runtime rejects
+an out-of-order step, saves the completed write before readback, and requires a
+new invocation for the next outward action.
+
+Tracker telemetry is local-only at
+`workflow-runs/tracker-sync.jsonl`. It contains provider, operation, counts,
+status, duration, and bounded conflict reason; it never contains issue bodies,
+comments, local paths, credentials, or environment values.
 
 Usage events:
 

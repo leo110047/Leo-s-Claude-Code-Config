@@ -29,7 +29,7 @@ function normalizeReviewFinding(finding: ReviewFinding): ReviewFinding {
       ? `[unverified ${severity}] ${finding.summary}`
       : finding.summary,
     evidence: finding.evidence,
-    blocking: Boolean(finding.blocking && (nextSeverity === 'critical' || nextSeverity === 'high')),
+    blocking: Boolean(finding.blocking && !needsEvidenceDowngrade),
     contributingSpecialists: normalizeSpecialistList([
       ...(finding.contributingSpecialists ?? []),
       ...(finding.specialist ? [finding.specialist] : []),

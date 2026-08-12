@@ -22,7 +22,7 @@ must not raise a threshold or add a bypass only to make one change pass.
 | Merge conflict blocks | n/a | `check-code-style.mjs` |
 | High-confidence secrets | n/a | shared hook-router `secret-patterns` |
 | Sensitive files | n/a | path gate for `.env`, keys, OS noise, generated deps |
-| Large text/binary files | text 1 MB, binary 512 KB | `check-code-style.mjs` |
+| Large text/binary files | text 1 MB, binary 512 KB; declared generated text up to 16 MB | `check-code-style.mjs` |
 | Escape hatches | n/a | staged added-line scan |
 | Focused tests | n/a | staged added-line scan |
 | Skipped tests | n/a | staged added-line scan |
@@ -36,6 +36,37 @@ Currently blocked escape hatches:
 - `biome-ignore`
 - whole-file `eslint-disable`
 
+### Large generated text contract
+
+The 1 MB text limit remains the default. A repository may declare a larger
+generated text artifact in a tracked `.goldband-style.json` file:
+
+```json
+{
+  "schemaVersion": 1,
+  "largeGeneratedTextFiles": [
+    {
+      "path": "api/openapi-snapshot.json",
+      "generator": "scripts/generate-openapi.mjs",
+      "maxBytes": 8388608
+    }
+  ]
+}
+```
+
+This is a narrow ownership exception, not a general size bypass:
+
+- `path` and `generator` are exact normalized repo-relative paths; globs are
+  rejected.
+- The config, artifact, and generator must all be tracked in the Git index.
+- `maxBytes` must exceed the ordinary text limit and cannot exceed
+  `GOLDBAND_MAX_GENERATED_TEXT_FILE_BYTES` (16 MB by default).
+- Files above their declared cap remain blocked.
+- The declaration proves that the repository has named an authoritative
+  generator owner. Generator freshness and reproducibility remain project/CI
+  checks and must compare regenerated output when the project requires that
+  guarantee.
+
 Advisory-only checks for now:
 
 - shell and Python function length heuristics
@@ -46,6 +77,9 @@ Advisory-only checks for now:
 ## Enforcement Surfaces
 
 - The git style gate is opt-in and checks staged files before commit.
+- The installed global hooks are materialized under
+  `${XDG_CONFIG_HOME:-$HOME/.config}/goldband/git-hooks`; `core.hooksPath`
+  never points at the Goldband source checkout.
 - Manual and CI checks scan first-party tracked code.
 - Claude and Codex PostToolUse checks are advisory; they do not block edits.
 - `.goldband-no-style-gate` is a visible repository opt-out.

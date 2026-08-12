@@ -3,6 +3,12 @@ set -euo pipefail
 
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 goldband_root="$(cd "$hook_dir/.." && pwd)"
+if [ -f "$hook_dir/.goldband-source" ]; then
+  IFS= read -r installed_source < "$hook_dir/.goldband-source" || true
+  if [ -n "${installed_source:-}" ]; then
+    goldband_root="$installed_source"
+  fi
+fi
 project_hook_lib="$hook_dir/lib/project-hook.sh"
 repo_root="$(pwd)"
 git_common_dir_value=""

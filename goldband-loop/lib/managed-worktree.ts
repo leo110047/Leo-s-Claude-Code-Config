@@ -47,6 +47,12 @@ import {
 	prepareManagedCommit,
 } from "./managed-worktree-integration";
 import { resolveGoldbandStateRoot } from "./state-root";
+import {
+	computeCandidateState,
+	readAndValidateVerificationReceipt,
+} from "./verification-receipt";
+import { ticketContractDigest } from "../workflows/work-map";
+import { WorkMapStore } from "../workflows/work-map-store";
 
 export type {
 	CreateManagedWorktreeOptions,
@@ -112,13 +118,42 @@ export function createManagedWorktree(
 	const baseCommit = gitOutput(["rev-parse", sourceBranch], repoRoot, context);
 	const repoId = repositoryId(repoRoot, commonGitDir);
 	const paths = leasePaths(stateRoot, repoId, name, leaseId);
-
 	ensureControlDirectories(paths);
+	if (options.ticketId) {
+		reconcilePendingWorkMapLeases({
+			repoRoot,
+			stateRoot,
+			repoId,
+			ticketId: options.ticketId,
+		});
+	}
+	const workMapBinding = options.ticketId
+		? resolveWorkMapBinding({
+				repoRoot,
+				stateRoot,
+				ticketId: options.ticketId,
+			})
+		: undefined;
+
+	if (workMapBinding) {
+		fs.mkdirSync(
+			path.join(
+				stateRoot,
+				"worktrees",
+				"verification",
+				repoId,
+				leaseId,
+			),
+			{ recursive: true, mode: 0o700 },
+		);
+	}
 	if (fs.existsSync(paths.manifestPath) || fs.existsSync(paths.worktreePath)) {
 		throw new Error(`managed worktree already exists: ${name}`);
 	}
 
 	let worktreeCreated = false;
+	let claimCreated = false;
+	let publishedLease: ManagedWorktreeLease | undefined;
 	try {
 		gitOk(
 			["worktree", "add", "--detach", paths.worktreePath, baseCommit],
@@ -134,7 +169,7 @@ export function createManagedWorktree(
 			schemaVersion: LEASE_SCHEMA_VERSION,
 			id: leaseId,
 			name,
-			status: "active",
+			status: workMapBinding ? "pending" : "active",
 			repoRoot,
 			commonGitDir,
 			sourceWorktree: repoRoot,
@@ -148,6 +183,14 @@ export function createManagedWorktree(
 			agentScratchPath: paths.agentScratchPath,
 			evidencePath: paths.evidencePath,
 			createdAt: new Date().toISOString(),
+			...(workMapBinding
+				? {
+						workMap: {
+							...workMapBinding.binding,
+							workRevision: workMapBinding.map.revision + 1,
+						},
+					}
+				: {}),
 			broker,
 			enforcement: {
 				boundary,
@@ -156,12 +199,30 @@ export function createManagedWorktree(
 				softGuards: ["PreToolUse", "pre-commit"],
 			},
 		};
+		publishedLease = lease;
 		writePrivateJson(path.join(worktreeGitDir, MANAGED_MARKER), {
 			schemaVersion: LEASE_SCHEMA_VERSION,
 			leaseId,
 			manifestPath: paths.manifestPath,
 		});
 		writeLease(lease);
+		if (workMapBinding) {
+			options.afterPendingLease?.();
+			const claimed = workMapBinding.store.claimTicket({
+				workId: workMapBinding.map.id,
+				ticketId: workMapBinding.ticket.id,
+				expectedRevision: workMapBinding.map.revision,
+				owner: options.claimOwner ?? "managed-worktree",
+				leaseId,
+			});
+			claimCreated = true;
+			if (claimed.revision !== lease.workMap?.workRevision) {
+				throw new Error("managed worktree claim revision binding failed");
+			}
+			const activeLease: ManagedWorktreeLease = { ...lease, status: "active" };
+			writeLease(activeLease);
+			return activeLease;
+		}
 		return lease;
 	} catch (error) {
 		if (worktreeCreated) {
@@ -172,27 +233,168 @@ export function createManagedWorktree(
 			);
 			gitRun(["worktree", "prune"], repoRoot, context);
 		}
+		if (claimCreated && workMapBinding && publishedLease) {
+			rollbackClaimWithRetry({
+				store: workMapBinding.store,
+				workId: workMapBinding.map.id,
+				ticketId: workMapBinding.ticket.id,
+				leaseId: publishedLease.id,
+			});
+		}
 		removePathIfExists(paths.manifestPath);
 		removePathIfExists(paths.scratchPath);
 		removePathIfExists(paths.agentScratchPath);
+		removePathIfExists(
+			path.join(
+				stateRoot,
+				"worktrees",
+				"verification",
+				repoId,
+				leaseId,
+			),
+		);
 		throw error;
 	}
 }
 
-export function abortCreatedManagedWorktree(lease: ManagedWorktreeLease): void {
+function reconcilePendingWorkMapLeases(input: {
+	repoRoot: string;
+	stateRoot: string;
+	repoId: string;
+	ticketId: string;
+}): void {
+	const leaseDirectory = path.join(
+		input.stateRoot,
+		"worktrees",
+		"leases",
+		input.repoId,
+	);
+	if (!fs.existsSync(leaseDirectory)) return;
+	for (const entry of fs.readdirSync(leaseDirectory)) {
+		if (!entry.endsWith(".json")) continue;
+		const manifestPath = path.join(leaseDirectory, entry);
+		const raw = readJson(manifestPath) as Partial<ManagedWorktreeLease>;
+		if (
+			raw.status !== "pending" ||
+			raw.workMap?.ticketId !== input.ticketId
+		) {
+			continue;
+		}
+		const pending = readAndValidateLease(manifestPath, input.repoRoot);
+		const store = new WorkMapStore({
+			cwd: input.repoRoot,
+			goldbandHome: input.stateRoot,
+		});
+		const map = store.read(pending.workMap!.workId);
+		const ticket = map.tickets.find((item) => item.id === input.ticketId);
+		if (ticket?.status === "claimed" && ticket.claim?.leaseId === pending.id) {
+			writeLease({ ...pending, status: "active" });
+			throw new Error(
+				`recovered pending managed worktree ${pending.name}; use the existing lease instead of creating a second candidate`,
+			);
+		}
+		if (ticket?.status !== "ready" || ticket.claim) {
+			throw new Error("pending managed worktree cannot be reconciled safely");
+		}
+		const pendingContext = brokerGitContext(pending.broker, pending.scratchPath);
+		gitOk(
+			["worktree", "remove", "--force", pending.worktreePath],
+			pending.repoRoot,
+			pendingContext,
+		);
+		removePathIfExists(pending.manifestPath);
+		removePathIfExists(pending.scratchPath);
+		removePathIfExists(pending.agentScratchPath);
+	}
+}
+
+export function abortCreatedManagedWorktree(
+	lease: ManagedWorktreeLease,
+	options: { beforeRollbackAttempt?: (attempt: number) => void } = {},
+): void {
 	const current = readAndValidateLease(lease.manifestPath, lease.repoRoot);
 	const context = brokerGitContext(current.broker, current.scratchPath);
-	if (current.status !== "active") {
+	if (current.status !== "active" && current.status !== "aborting") {
 		throw new Error("cannot abort a managed worktree after source integration");
 	}
-	gitOk(
-		["worktree", "remove", "--force", current.worktreePath],
-		current.repoRoot,
-		context,
-	);
+	if (current.status === "active") {
+		writeLease({ ...current, status: "aborting" });
+	}
+	if (fs.existsSync(current.worktreePath)) {
+		gitOk(
+			["worktree", "remove", "--force", current.worktreePath],
+			current.repoRoot,
+			context,
+		);
+	}
+	if (current.workMap) {
+		const store = new WorkMapStore({
+			cwd: current.repoRoot,
+			goldbandHome: current.stateRoot,
+		});
+		rollbackClaimWithRetry({
+			store,
+			workId: current.workMap.workId,
+			ticketId: current.workMap.ticketId,
+			leaseId: current.id,
+			beforeAttempt: options.beforeRollbackAttempt,
+		});
+	}
 	removePathIfExists(current.manifestPath);
 	removePathIfExists(current.scratchPath);
 	removePathIfExists(current.agentScratchPath);
+	if (current.workMap) {
+		removePathIfExists(
+			path.join(
+				current.stateRoot,
+				"worktrees",
+				"verification",
+				repositoryId(current.repoRoot, current.commonGitDir),
+				current.id,
+			),
+		);
+	}
+}
+
+function rollbackClaimWithRetry(input: {
+	store: WorkMapStore;
+	workId: string;
+	ticketId: string;
+	leaseId: string;
+	beforeAttempt?: (attempt: number) => void;
+}): void {
+	for (let attempt = 1; attempt <= 5; attempt += 1) {
+		const map = input.store.read(input.workId);
+		const ticket = map.tickets.find((item) => item.id === input.ticketId);
+		if (!ticket) throw new Error("rollback Work Map ticket is missing");
+		if (!ticket.claim) {
+			if (["ready", "blocked", "cancelled"].includes(ticket.status)) return;
+			throw new Error("rollback Work Map claim is missing");
+		}
+		if (ticket.claim?.leaseId !== input.leaseId) {
+			throw new Error("rollback Work Map claim no longer matches the managed lease");
+		}
+		input.beforeAttempt?.(attempt);
+		try {
+			input.store.rollbackClaim({
+				workId: map.id,
+				ticketId: ticket.id,
+				expectedRevision: map.revision,
+				leaseId: input.leaseId,
+				actor: "managed-worktree-abort",
+			});
+			return;
+		} catch (error) {
+			if (
+				attempt < 5 &&
+				error instanceof Error &&
+				error.message.startsWith("stale Work Map revision:")
+			) {
+				continue;
+			}
+			throw error;
+		}
+	}
 }
 
 export function finishManagedWorktree(
@@ -261,6 +463,9 @@ export function finishManagedWorktree(
 			if (lease.status === "integrated") {
 				return finishIntegratedCleanup(lease, context);
 			}
+			if (lease.status !== "active") {
+				throw new Error(`cannot finish managed worktree in ${lease.status} state`);
+			}
 			if (
 				lease.preparedCommit &&
 				lease.preparedTree &&
@@ -295,6 +500,7 @@ export function finishManagedWorktree(
 			validateActiveWorktree(lease, context);
 			validateSourceForIntegration(lease, context);
 			validateManagedContent(lease, context);
+			validateBoundEvidence(lease);
 			const prepared = prepareManagedCommit(lease, message, context);
 			try {
 				validateSourceIgnoredCollisions(lease, prepared, context);
@@ -534,6 +740,7 @@ function finishIntegratedCleanup(
 		);
 	}
 	verifyIntegratedSource(lease, commit, tree, context);
+	markBoundTicketIntegrated(lease, commit);
 	if (fs.existsSync(lease.worktreePath)) {
 		const removal = gitRun(
 			["worktree", "remove", "--force", lease.worktreePath],
@@ -563,6 +770,149 @@ function finishIntegratedCleanup(
 		branch: lease.sourceBranch,
 		evidencePath: lease.evidencePath,
 	};
+}
+
+function resolveWorkMapBinding(input: {
+	repoRoot: string;
+	stateRoot: string;
+	ticketId: string;
+}) {
+	const store = new WorkMapStore({
+		cwd: input.repoRoot,
+		goldbandHome: input.stateRoot,
+	});
+	const map = store.readActive();
+	if (!map) throw new Error("managed Work Map worktree requires an active map");
+	if (!map.frontier.includes(input.ticketId)) {
+		throw new Error(`ticket is not in the current Work Map frontier: ${input.ticketId}`);
+	}
+	const ticket = map.tickets.find((item) => item.id === input.ticketId);
+	if (!ticket) throw new Error(`Work Map ticket is missing: ${input.ticketId}`);
+	if (ticket.status !== "ready" || ticket.claim) {
+		throw new Error(`ticket is already claimed: ${input.ticketId}`);
+	}
+	if (ticket.verificationMode === "analysis-only") {
+		throw new Error("analysis-only ticket cannot create a code worktree");
+	}
+	return {
+		store,
+		map,
+		ticket,
+		binding: {
+			workId: map.id,
+			ticketId: ticket.id,
+			ticketContractDigest: ticketContractDigest(ticket),
+		},
+	};
+}
+
+function validateBoundEvidence(lease: ManagedWorktreeLease): void {
+	if (!lease.workMap) return;
+	const store = new WorkMapStore({
+		cwd: lease.repoRoot,
+		goldbandHome: lease.stateRoot,
+	});
+	const map = store.read(lease.workMap.workId);
+	const ticket = map.tickets.find(
+		(item) => item.id === lease.workMap?.ticketId,
+	);
+	if (
+		!ticket ||
+		ticket.status !== "verified" ||
+		ticket.claim?.leaseId !== lease.id ||
+		ticketContractDigest(ticket) !== lease.workMap.ticketContractDigest
+	) {
+		throw new Error("managed worktree ticket is not verified for this lease");
+	}
+	const receipt = readAndValidateVerificationReceipt({
+		lease,
+		map,
+		ticket,
+	});
+	if (
+		!ticket.evidence?.receipt ||
+		!ticket.evidence.review ||
+		ticket.evidence.receipt.digest !== receipt.reference.digest ||
+		ticket.evidence.receipt.treeDigest !== receipt.reference.treeDigest ||
+		ticket.evidence.review.treeDigest !== receipt.reference.treeDigest ||
+		computeCandidateState(lease).treeDigest !== receipt.reference.treeDigest
+	) {
+		throw new Error("managed worktree evidence chain is stale or mismatched");
+	}
+	const reviewPath = path.join(
+		path.dirname(receipt.path),
+		`${ticket.evidence.review.id}-work-map-review.json`,
+	);
+	const review = readJson(reviewPath) as Record<string, unknown>;
+	const reviewDigest = createHash("sha256")
+		.update(JSON.stringify(review))
+		.digest("hex");
+	if (
+		reviewDigest !== ticket.evidence.review.digest ||
+		review.workId !== map.id ||
+		review.ticketId !== ticket.id ||
+		review.ticketDigest !== ticketContractDigest(ticket) ||
+		review.receiptDigest !== receipt.reference.digest ||
+		review.treeDigest !== receipt.reference.treeDigest ||
+		review.reviewedDiffDigest !== receipt.receipt.candidate.reviewDiffDigest
+	) {
+		throw new Error("managed worktree review artifact provenance is invalid");
+	}
+}
+
+function markBoundTicketIntegrated(
+	lease: ManagedWorktreeLease,
+	commit: string,
+): void {
+	if (!lease.workMap) return;
+	const store = new WorkMapStore({
+		cwd: lease.repoRoot,
+		goldbandHome: lease.stateRoot,
+	});
+	markIntegratedWithRetry({
+		store,
+		workId: lease.workMap.workId,
+		ticketId: lease.workMap.ticketId,
+		commit,
+	});
+}
+
+export function markIntegratedWithRetry(input: {
+	store: WorkMapStore;
+	workId: string;
+	ticketId: string;
+	commit: string;
+	beforeAttempt?: (attempt: number) => void;
+}): void {
+	for (let attempt = 1; attempt <= 5; attempt += 1) {
+		const map = input.store.read(input.workId);
+		const ticket = map.tickets.find((item) => item.id === input.ticketId);
+		if (!ticket) throw new Error("integrated Work Map ticket is missing");
+		if (ticket.integratedCommit === input.commit) return;
+		if (ticket.integratedCommit && ticket.integratedCommit !== input.commit) {
+			throw new Error("Work Map ticket records a different integrated commit");
+		}
+		input.beforeAttempt?.(attempt);
+		try {
+			input.store.markIntegrated({
+				workId: map.id,
+				ticketId: ticket.id,
+				expectedRevision: map.revision,
+				actor: "managed-worktree-finish",
+				commit: input.commit,
+			});
+			return;
+		} catch (error) {
+			if (
+				attempt < 5 &&
+				error instanceof Error &&
+				error.message.startsWith("stale Work Map revision:")
+			) {
+				continue;
+			}
+			throw error;
+		}
+	}
 }
 
 function validateLeaseOwnership(

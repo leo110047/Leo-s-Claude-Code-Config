@@ -3,7 +3,7 @@
 
 Formal interface: `$goldband <capability> <action>`. Old workflow names are not aliases.
 
-Public inventory: 19 actions. Experimental actions are excluded from routing and activation hints.
+Public inventory: 20 actions. Experimental actions are excluded from routing and activation hints.
 
 | Capability | Action | Outcome | Runtime owner | Runtime | Risk |
 | --- | --- | --- | --- | --- | --- |
@@ -11,7 +11,8 @@ Public inventory: 19 actions. Experimental actions are excluded from routing and
 | `review` | `security` | Review security and trust boundaries. | `prompt-contract-dispatch` | `compatibility` | `medium` |
 | `investigate` | `code` | Investigate code or runtime behavior. | `prompt-contract-dispatch` | `compatibility` | `medium` |
 | `qa` | `app` | Run product QA and record evidence. | `qa-runtime` | `typed` | `medium` |
-| `plan` | `create` | Create an implementation plan. | `prompt-contract-dispatch` | `compatibility` | `low` |
+| `plan` | `create` | Create a versioned Work Map for tracked work. | `work-map-store` | `typed` | `low` |
+| `plan` | `sync` | Preview, inspect, or synchronize a Work Map tracker projection. | `tracker-runtime` | `typed` | `high` |
 | `browser` | `session` | Use the persistent browser for interactive work. | `browse` | `typed` | `medium` |
 | `design` | `consult` | Define a design direction and system. | `design-decision-store` | `typed` | `low` |
 | `safety` | `guard` | Enable careful-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `low` |
@@ -47,6 +48,8 @@ These operation IDs are internal safety inventory, not public action aliases. `b
 | `release/land` | `release/land` | `land` | `blocked-before-runtime` | `native-host-approval` | — |
 | `release/canary` | `release/land` | `canary` | `blocked-before-runtime` | `not-required-read-only` | — |
 | `release/setup` | `release/setup` | `setup` | `blocked-before-runtime` | `native-host-approval` | — |
+| `plan/sync-preview` | `plan/sync` | `preview` | `runtime-owner` | `not-required-read-only` | `tracker-runtime` |
+| `plan/sync` | `plan/sync` | `publish-step` | `runtime-owner` | `native-host-approval` | `tracker-runtime` |
 | `browser/cookies` | `browser/session` | `cookies` | `blocked-before-runtime` | `native-host-approval` | — |
 | `knowledge/setup` | `knowledge/setup` | `setup` | `blocked-before-runtime` | `native-host-approval` | — |
 | `knowledge/sync` | `knowledge/sync` | `sync` | `blocked-before-runtime` | `native-host-approval` | — |

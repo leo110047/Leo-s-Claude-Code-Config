@@ -57,7 +57,9 @@ CODEX_REVIEW_RUNTIME_FILE="$CODEX_DIR/review-runtime/rules-resolver.js"
 CODEX_RULES_DIR="$CODEX_DIR/rules"
 CODEX_SKILLS_DIR="$HOME/.agents/skills"
 CODEX_SKILL_PROFILE_FILE="$CODEX_SKILLS_DIR/.goldband-profile"
-GIT_HOOKS_DIR="$REPO_DIR/git-hooks"
+GIT_HOOKS_SOURCE_DIR="$REPO_DIR/git-hooks"
+GIT_HOOKS_DIR="${GOLDBAND_GIT_HOOKS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/goldband/git-hooks}"
+LEGACY_GIT_HOOKS_DIR="$REPO_DIR/git-hooks"
 SKILL_CATALOG_FILE="$REPO_DIR/shell/install/skill-catalog.txt"
 LEGACY_DEV_FLAG_USED=false
 

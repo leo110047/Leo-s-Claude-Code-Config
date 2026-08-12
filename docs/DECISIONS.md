@@ -1,5 +1,50 @@
 # Goldband Decisions
 
+## 2026-08-09: Local Work Map Owns Tracker Collaboration State
+
+Decision: keep the local `WorkMapStore` as the sole Work Map domain owner while
+offering GitHub Issues and GitLab Issues as optional projections and
+collaboration surfaces.
+
+Implementation contract:
+
+- Tracker mode defaults to `off`. Configuration stores provider, repository,
+  labels, and dependency capability but no token; provider authentication stays
+  with `gh` or `glab`.
+- Provider-neutral projection code owns deterministic Markdown, versioned
+  markers, digests, sync checkpoints, and typed external-change candidates.
+  GitHub and GitLab wire types remain inside their adapters.
+- Preview has no remote side effect. Publish requires the exact persisted
+  preview digest, unchanged local revision and remote digest, and one explicit
+  next step per native-approved invocation. Successful writes are checkpointed
+  before readback; verification covers title, body, labels, state, markers, and
+  relationships.
+- External issue content is untrusted data. Projection rejects secret-shaped
+  values and private user paths. Assignee, state, checkbox, and resolution
+  changes become candidates. Only approved domain operations may
+  call `WorkMapStore`; issue close and checkbox state never create verified or
+  completed evidence. Approved assignee import can create only an analysis
+  binding; code claims remain owned by the managed-worktree broker.
+- Provider APIs do not provide a reliable distributed claim lock. Concurrent
+  local or remote drift blocks mutation for explicit resolution; there is no
+  last-write-wins fallback.
+
+Failure signals:
+
+- An issue edit directly changes Work Map JSON or advances a ticket to
+  `verified` without Phase 2 evidence.
+- Publish proceeds with a stale preview, local revision, remote digest, or
+  without per-step native approval and readback.
+- A credential, issue body, comment, private path, or environment value enters
+  config, telemetry, logs, or projection evidence.
+- Retry duplicates remote artifacts, partial failure loses its checkpoint, or
+  GitHub and GitLab implement different shared semantics.
+- A publish invocation executes more than its named step, or remote protected
+  fields can change while an unchanged marker suppresses conflict detection.
+
+Live-provider behavior remains unverified until separately authorized
+disposable private repositories complete the recorded verification procedure.
+
 ## 2026-07-16: Repository Runtime Tests Require Bun 1.3.11 and Explicit Bootstrap
 
 Decision: treat Bun 1.3.11 as the minimum supported Goldband Loop runtime and
@@ -1391,3 +1436,223 @@ Revisit triggers:
   replace the environment marker.
 - Review inputs gain a measured chunking or context-cache design with defect
   recall parity against the current full-scope prompt.
+
+## 2026-07-29: Style Gate Uses Materialized Hooks and Exact Generated-Text Ownership
+
+Decision: keep the ordinary 1 MB text-file guardrail, add only an exact,
+index-tracked generated-text ownership contract, and install global Git hooks
+as materialized runtime files outside the Goldband source checkout.
+
+Context:
+
+- The size gate treated every text file above 1 MB as accidental data even when
+  a repository intentionally tracked a generated API contract.
+- The global `core.hooksPath` pointed directly at `goldband/git-hooks`. During
+  an unrelated Git LFS-enabled clone, Git LFS hook templates were written into
+  the Goldband worktree as untracked files.
+- File contents cannot reliably prove that an artifact is generated. The
+  repository must declare one authoritative owner, while freshness remains a
+  separate regeneration check.
+
+Implementation contract:
+
+- `.goldband-style.json` schema version 1 may declare
+  `largeGeneratedTextFiles` entries with one exact artifact path, one exact
+  tracked generator path, and one per-file byte cap.
+- The config, artifact, and generator must all exist in the Git index. Globs,
+  path aliases, missing generators, duplicate paths, caps at or below the
+  ordinary limit, and caps above the generated-text hard limit fail clearly.
+- The ordinary text limit remains 1 MB. A declaration cannot exceed the global
+  generated-text hard cap, 16 MB by default. Binary limits do not change.
+- The declaration establishes repository ownership; projects that claim
+  reproducible output must separately regenerate and compare the artifact in
+  their project gate or CI.
+- `./install.sh style-gate` materializes Goldband-owned hooks under
+  `${XDG_CONFIG_HOME:-$HOME/.config}/goldband/git-hooks`, records the source
+  checkout plus an ownership schema and per-file checksums, and points global
+  `core.hooksPath` there.
+- Installer refresh compares source and installed content. Status reports the
+  legacy source-checkout path or content drift as stale. Uninstall uses the
+  ownership record rather than the checkout location, removes only unchanged
+  Goldband-owned materialized files, and preserves unrelated or modified hook
+  files.
+
+Assumptions:
+
+- An explicit tracked config and tracked generator are sufficient ownership
+  evidence for this guardrail; the global hook is not a provenance or
+  reproducibility proof.
+- Repositories needing stronger generated-output guarantees own a deterministic
+  regeneration check appropriate to their language and build system.
+- `${XDG_CONFIG_HOME:-$HOME/.config}` is writable for an explicitly requested
+  per-user style-gate installation.
+
+Consequences:
+
+- Ordinary large text, generated garbage, untracked generators, and broad path
+  exceptions remain blocked.
+- Legitimate large API contracts can be admitted without raising the limit for
+  every text file or hardcoding one repository's filenames.
+- Git LFS may add hooks to the installed global hook directory, but it no
+  longer dirties the Goldband source checkout.
+- Moving or deleting the source checkout can make the checker unavailable; the
+  existing fail-soft warning remains, and reinstalling refreshes the recorded
+  source.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Remove the text-size gate | Loses the original protection against generated garbage and accidental data. |
+| Raise the global text limit | Widens every repository and does not distinguish intentional artifacts. |
+| Infer generated files from extension, directory, header, or Git attributes | These signals are broad declarations without an authoritative generator owner. |
+| Execute arbitrary repo-declared generator commands in the global hook | Turns a machine-wide guardrail into an implicit code-execution surface and is not portable across build systems. |
+| Keep `core.hooksPath` pointed at the checkout and ignore Git LFS files | Leaves a shared runtime directory writable by unrelated Git tooling and guarantees recurring worktree pollution. |
+
+Failure signals:
+
+- A text file above 1 MB passes without an exact tracked declaration and
+  generator.
+- A generated-text declaration accepts globs, an untracked generator, or a cap
+  above the global hard limit.
+- `core.hooksPath` points at the Goldband source checkout after installation.
+- Running Git LFS in another repository creates or modifies files in the
+  Goldband worktree.
+
+Revisit triggers:
+
+- Git gains a native composable global-hook registry that isolates each tool's
+  owned files.
+- Goldband adds a trusted, sandboxed generator protocol that can prove
+  reproducibility without executing arbitrary repository code.
+- Real generated contracts consistently exceed the hard cap and repository
+  evidence supports a new bounded default.
+
+## 2026-07-30: Work Map Runtime Owns Cross-Session Planning State
+
+Decision: use a versioned Work Map under the local Goldband runtime state root
+as the authoritative state for work that spans sessions, has dependent
+tickets, needs parallel agents, contains in-scope unknowns, or explicitly
+requires a tracked plan, roadmap, or handoff.
+
+Implementation contract:
+
+- `goldband-loop/workflows/work-map.ts` owns the schema, validation, dependency
+  graph, frontier calculation, and allowed state transitions.
+- `goldband-loop/workflows/work-map-store.ts` owns canonical repository-scoped
+  persistence, compare-and-swap revisions, atomic writes, deterministic
+  Markdown projection, append-only transition events, and the active pointer.
+- `${GOLDBAND_HOME:-$HOME/.goldband}/projects/<repository-id>/work/` is the
+  Phase 1 authority. Markdown projections, generated contracts, and context
+  checkpoints are not alternate Work Map stores.
+- `plan/create` remains the one public planning entrypoint. It is available to
+  Claude and Codex and delegates validation and persistence to the same typed
+  owner; no additional public planning skills are introduced.
+- Context checkpoints save only the active Work Map ID, revision, digest, and
+  optional active ticket reference. Restore reads the current map and git
+  state before reporting freshness and executable frontier.
+- External issue trackers and managed worktree binding are deferred. Phase 1
+  performs no GitHub, GitLab, or Linear mutation.
+- Single-session, low-risk work without dependencies remains in the ordinary
+  agent loop and does not require a Work Map.
+
+Assumptions:
+
+- A canonical repository/worktree identity plus branch is stable enough to
+  isolate local planning state.
+- Local runtime state is sufficient until a collaboration adapter has explicit
+  identity, authorization, idempotency, and readback contracts.
+- Ticket dependency state is the only Phase 1 input to frontier calculation;
+  models never author the stored frontier.
+
+Consequences:
+
+- Cross-session planning state can be validated, resumed, and compared by
+  revision without copying it into prompts or checkpoints.
+- Local state is not automatically shared across machines or collaborators.
+- Runtime and installer tests expand because the typed owner must work from an
+  installed Goldband surface for both supported parent hosts.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Store the plan only as Markdown | Markdown cannot provide strict schema validation, dependency invariants, or compare-and-swap updates. |
+| Add separate `grill-me`, `to-spec`, `to-tickets`, or `wayfinder` skills | Splits one planning state machine across public routes and makes host parity harder to verify. |
+| Use an issue tracker as the Phase 1 authority | Introduces provider identity, credentials, network mutation, and synchronization conflicts before the local contract is stable. |
+| Copy the complete Work Map into each context checkpoint | Creates duplicated state that can drift from the authoritative map. |
+| Bind Work Maps to managed worktrees immediately | Couples planning state to a separate execution boundary before ticket claim and evidence semantics exist. |
+
+Failure signals:
+
+- A model-supplied frontier or Markdown projection is accepted as authority.
+- A stale revision overwrites a newer map, or a failed write corrupts the last
+  valid state.
+- Repository, worktree, branch, symlink, or traversal boundaries can redirect
+  state writes.
+- Claude and Codex produce or consume different Work Map contracts.
+- Ordinary small changes are blocked until a Work Map is created.
+- A context checkpoint duplicates Work Map content or resumes stale state as
+  current.
+
+Revisit triggers:
+
+- Phase 2 defines ticket claim, implementation, verification, and evidence
+  transitions.
+- Phase 3 defines an external tracker adapter with explicit authorization,
+  idempotency, conflict handling, and round-trip readback.
+- Canonical repository identity proves insufficient for a supported worktree,
+  clone, or cross-machine workflow.
+
+## 2026-07-31: Work Map Evidence Is Bound Through Runtime Readback
+
+Decision: bind a Work Map ticket, managed worktree lease, verification receipt,
+review artifact, and integrated commit through stable IDs and SHA-256 digests.
+The Work Map store is the only ticket-transition owner.
+
+Implementation contract:
+
+- A bound managed worktree can claim only an active frontier ticket and records
+  the Work Map ID/revision, ticket ID, lease ID, and ticket-contract digest.
+- `goldband-work-verify` executes command argument arrays without shell
+  interpolation. It stores a bounded redacted summary and full-output digest,
+  enforces verification-mode rules, and advances a successful ticket to
+  `implemented`.
+- TDD evidence requires a failing RED with an expected signal followed by a
+  successful GREEN on the same declared seam. A changed candidate invalidates
+  the current receipt. Requested changes increment a claim attempt, and records
+  from an earlier attempt cannot satisfy the new receipt.
+- Existing-test tickets persist the exact planning command argument array and
+  reject substitute commands, even when the substitute exits successfully.
+- Analysis-only tickets use a normalized named artifact copied into broker-owned
+  state, with an analysis claim and review lifecycle but no code worktree.
+- Work Map-scoped `review/code` treats ticket text as untrusted project data.
+  Its scope is runtime-owned: code review uses the canonical candidate diff and
+  analysis review uses the recorded artifact. The review artifact binds the map
+  revision, ticket and subject digests, reviewed diff digest, and candidate or
+  artifact digest. Runtime readback, not reviewer prose, advances the ticket to
+  `verified` or requested changes.
+- Canonical candidate diffs use the same bounded untracked-file materializer as
+  ordinary review, including secret-like-content skips and stable descriptor reads.
+- Bound `worktree finish` reads the lease, map, ticket, receipt, review
+  artifact, and current candidate. It integrates only a matching verified
+  chain, then records the integrated commit through the Work Map store.
+- Integrated-commit readback retries revision CAS conflicts caused by unrelated
+  map updates and refuses to overwrite a different recorded commit.
+- Standalone managed worktrees remain supported but cannot emit Work Map
+  evidence.
+
+This is an evidence-integrity and workflow gate, not a security boundary
+against a user or process with the same host account and filesystem access.
+
+Failure signals:
+
+- Evidence from another map, ticket, lease, base commit, or candidate is reused.
+- RED proves an unrelated failure or GREEN has no earlier matching RED.
+- A successful command different from the planning command is accepted.
+- Caller-selected review scope differs from the candidate that finish integrates.
+- An analysis-only ticket has no named-artifact completion path.
+- Reviewer output directly edits Work Map state.
+- Finish checks only ticket status and ignores artifact provenance.
+- Full command output or secret-like values are persisted as summaries.
+- Claude and Codex installed runtimes expose different evidence contracts.

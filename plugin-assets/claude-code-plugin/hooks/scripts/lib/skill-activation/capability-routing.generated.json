@@ -18,14 +18,18 @@
     "hint": "Use $goldband investigate code when this capability matches the task.",
     "keywords": [
       "debug",
-      "bug",
-      "error",
-      "failure",
       "root cause",
-      "regression",
+      "investigate regression",
+      "regression bug",
+      "failing test",
+      "test failure",
+      "fix bug",
+      "investigate error",
       "除錯",
-      "錯誤",
-      "根因"
+      "根因",
+      "錯誤原因",
+      "測試失敗",
+      "修正 bug"
     ]
   },
   {
@@ -35,11 +39,14 @@
     "keywords": [
       "qa",
       "test site",
-      "staging",
-      "e2e",
-      "user flow",
+      "staging qa",
+      "run e2e",
+      "e2e qa",
+      "test user flow",
+      "verify user flow",
       "驗證網站",
-      "測試流程"
+      "測試流程",
+      "驗收流程"
     ]
   },
   {
@@ -47,14 +54,22 @@
     "priority": "medium",
     "hint": "Use $goldband plan create when this capability matches the task.",
     "keywords": [
-      "plan",
-      "planning",
+      "implementation plan",
+      "create a plan",
+      "write a plan",
+      "tracked plan",
+      "work map",
       "roadmap",
-      "scope",
-      "strategy",
-      "規劃",
-      "計畫",
-      "範圍"
+      "multi-session plan",
+      "實作計畫",
+      "建立計畫",
+      "撰寫計畫",
+      "追蹤式計畫",
+      "工作地圖",
+      "路線圖",
+      "跨 session 計畫",
+      "請規劃",
+      "幫我規劃"
     ]
   },
   {
@@ -62,14 +77,21 @@
     "priority": "medium",
     "hint": "Use $goldband browser session when this capability matches the task.",
     "keywords": [
-      "browser",
       "open browser",
-      "scrape",
-      "cookies",
-      "playwright",
-      "瀏覽器",
-      "爬取",
-      "cookie"
+      "use browser",
+      "browser session",
+      "inspect in browser",
+      "scrape page",
+      "scrape website",
+      "inspect cookies",
+      "browser cookies",
+      "use playwright",
+      "run playwright",
+      "開啟瀏覽器",
+      "使用瀏覽器",
+      "瀏覽器操作",
+      "瀏覽器檢查",
+      "爬取網頁"
     ]
   },
   {
@@ -80,10 +102,12 @@
       "design system",
       "visual direction",
       "mockup",
-      "prototype",
+      "ui prototype",
+      "design prototype",
+      "prototype ui",
       "設計系統",
-      "視覺",
-      "原型"
+      "視覺方向",
+      "ui 原型"
     ]
   },
   {
@@ -91,14 +115,13 @@
     "priority": "medium",
     "hint": "Use $goldband safety guard when this capability matches the task.",
     "keywords": [
-      "careful",
-      "guard",
-      "freeze",
+      "careful mode",
+      "freeze edits",
       "restrict edits",
-      "read only",
-      "小心",
+      "read only mode",
       "限制修改",
-      "唯讀"
+      "凍結修改",
+      "唯讀模式"
     ]
   },
   {
@@ -108,12 +131,14 @@
     "keywords": [
       "save context",
       "restore context",
-      "resume",
-      "retro",
-      "checkpoint",
+      "resume saved work",
+      "resume checkpoint",
+      "context checkpoint",
+      "session retrospective",
       "保存進度",
       "恢復進度",
-      "回顧"
+      "接續上次進度",
+      "工作回顧"
     ]
   },
   {
@@ -121,13 +146,15 @@
     "priority": "medium",
     "hint": "Use $goldband knowledge recall when this capability matches the task.",
     "keywords": [
-      "learn",
-      "knowledge",
+      "knowledge recall",
+      "recall knowledge",
       "gbrain",
       "sync knowledge",
-      "學習",
-      "知識",
-      "同步記憶"
+      "recall memory",
+      "查詢知識",
+      "知識回憶",
+      "同步記憶",
+      "回憶先前內容"
     ]
   },
   {
@@ -136,10 +163,12 @@
     "hint": "Use $goldband benchmark workflow when this capability matches the task.",
     "keywords": [
       "benchmark",
+      "workflow benchmark",
       "performance regression",
       "model comparison",
-      "效能",
-      "基準",
+      "基準測試",
+      "工作流程基準",
+      "效能回歸",
       "模型比較"
     ]
   },
@@ -149,11 +178,15 @@
     "hint": "Use $goldband document generate when this capability matches the task.",
     "keywords": [
       "write docs",
-      "documentation",
-      "pdf",
-      "document",
-      "文件",
-      "說明文件"
+      "write documentation",
+      "create documentation",
+      "create pdf",
+      "generate pdf",
+      "generate document",
+      "撰寫文件",
+      "建立文件",
+      "產生 pdf",
+      "製作說明文件"
     ]
   },
   {
@@ -162,11 +195,12 @@
     "hint": "Use $goldband system health when this capability matches the task.",
     "keywords": [
       "goldband health",
+      "goldband status",
       "upgrade goldband",
-      "create skill",
-      "system status",
+      "reinstall goldband",
       "更新 goldband",
-      "健康檢查"
+      "檢查 goldband",
+      "goldband 健康檢查"
     ]
   },
   {
