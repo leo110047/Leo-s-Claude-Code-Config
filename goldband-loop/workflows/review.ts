@@ -20,7 +20,12 @@ import {
   REVIEW_EVIDENCE_DURABILITY_EPHEMERAL,
 } from '../lib/review-runtime-contract';
 import { evidencePath, stateRoot } from './evidence';
-import { adapterFor, type HostUsage } from './host-adapter';
+import {
+  adapterFor,
+  HostRunError,
+  type HostExecutionPolicy,
+  type HostUsage,
+} from './host-adapter';
 import { workflowAssetPath } from './paths';
 import {
   aggregateReviewFindings,
@@ -231,13 +236,34 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     timeBudget.policy,
     input.impact,
   );
-  const result = await adapter.runJson(
-    prompt,
-    findingsEnvelopeJsonSchema,
-    ctx.cwd,
-    { timeoutMs: timeBudget.nextHostTimeoutMs() },
+  let result;
+  try {
+    result = await adapter.runJson(
+      prompt,
+      findingsEnvelopeJsonSchema,
+      ctx.cwd,
+      {
+        timeoutMs: timeBudget.nextHostTimeoutMs(),
+        claudeMaxBudgetUsd: ctx.options.reviewClaudeMaxBudgetUsd,
+      },
+    );
+  } catch (error) {
+    if (error instanceof HostRunError) {
+      recordReviewHostUsage(
+        ctx,
+        adapter.name,
+        error.usage,
+        error.executionPolicy,
+      );
+    }
+    throw error;
+  }
+  recordReviewHostUsage(
+    ctx,
+    adapter.name,
+    result.usage,
+    result.executionPolicy,
   );
-  recordReviewHostUsage(ctx, adapter.name, result.usage);
   const coreFindings = findingsSchema.validate(unwrapFindings(result.parsed));
   return aggregateReviewFindings(coreFindings);
 }
@@ -867,13 +893,19 @@ function recordReviewHostUsage(
   ctx: WorkflowContext,
   host: string,
   usage?: HostUsage,
+  executionPolicy?: HostExecutionPolicy,
 ): void {
   const dir = join(stateRoot(ctx.options), 'workflow-runs', 'telemetry');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${ctx.runId}-review-host-usage.json`);
   writeFileSync(
     file,
-    `${JSON.stringify({ host, available: Boolean(usage), ...usage }, null, 2)}\n`,
+    `${JSON.stringify({
+      host,
+      available: Boolean(usage),
+      ...(executionPolicy ? { executionPolicy } : {}),
+      ...usage,
+    }, null, 2)}\n`,
   );
 }
 

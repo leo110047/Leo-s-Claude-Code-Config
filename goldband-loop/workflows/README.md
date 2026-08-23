@@ -25,6 +25,7 @@ bun run workflows/run.ts <capability> <action> \
   [--mode mock|real] [--host mock|claude|codex] \
   [--review-host-timeout-seconds <60-1800>] \
   [--review-pass-timeout-seconds <60-1800>] \
+  [--review-claude-max-budget-usd <0.01-100.00>] \
   [--input <file>] [--base <ref>] \
   [--staged|--worktree|--include-untracked|--diff-file <file>]
 ```
@@ -135,6 +136,22 @@ Claude review subprocesses run with `--safe-mode` and only `Read`, `Glob`, and
 customizations. Because safe mode also disables automatic project instructions,
 the review prompt requires the child to inspect applicable `AGENTS.md` and
 `CLAUDE.md` files explicitly with those read-only tools.
+
+Before a Claude review starts, the adapter applies Claude's documented
+environment credential precedence, reads `claude auth status --json`, and
+resolves one billing policy from the CLI's active credential. Claude.ai
+login and setup-token OAuth are subscription modes and never receive
+`--max-budget-usd`, because the reported dollar value is not the subscription
+quota authority. API keys, API-key helpers, and third-party providers are
+metered modes; higher-precedence cloud-provider, bearer-token, and API-key
+environment credentials remain metered even when a lower-precedence OAuth token
+is also present. Metered runs receive a `$3.00` default safety cap that can be overridden
+for one run with `--review-claude-max-budget-usd`. Unknown, unavailable, or
+inconsistent auth state fails before model dispatch instead of guessing whether
+an unbounded paid call is safe. Host telemetry records the resolved policy but
+does not retain auth-status identity fields. Subscription telemetry retains
+token/cache/output usage but drops the API-equivalent `costUsd` estimate;
+metered telemetry retains it for paid-run attribution.
 
 Both host adapters receive the complete review prompt over stdin rather than a
 command argument, so the 2 MiB review-input contract does not exceed the host

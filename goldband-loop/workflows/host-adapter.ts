@@ -8,12 +8,25 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
+import {
+  formatClaudeReviewBudgetUsd,
+  resolveClaudeReviewBudgetPolicy,
+  type ClaudeAuthStatus,
+  type ClaudeBillingMode,
+  type ClaudeReviewBudgetPolicy,
+} from './review-budgets';
 import type { ReviewFinding } from './types';
 
 type HostResult = {
   text: string;
   parsed?: unknown;
   usage?: HostUsage;
+  executionPolicy?: HostExecutionPolicy;
+};
+
+export type HostExecutionPolicy = {
+  billingMode?: ClaudeBillingMode;
+  maxBudgetUsd?: number;
 };
 
 export type HostUsage = {
@@ -27,8 +40,27 @@ export type HostUsage = {
   model?: string;
 };
 
+export class HostRunError extends Error {
+  readonly executionPolicy?: HostExecutionPolicy;
+  readonly usage?: HostUsage;
+
+  constructor(
+    message: string,
+    details: {
+      executionPolicy?: HostExecutionPolicy;
+      usage?: HostUsage;
+    } = {},
+  ) {
+    super(message);
+    this.name = 'HostRunError';
+    this.executionPolicy = details.executionPolicy;
+    this.usage = details.usage;
+  }
+}
+
 type HostRunOptions = {
   timeoutMs: number;
+  claudeMaxBudgetUsd?: number;
 };
 
 export type RunProcessOptions = {
@@ -50,6 +82,8 @@ export type RunProcessResult = {
 
 export const MAX_HOST_DIAGNOSTIC_BYTES = 256 * 1024;
 export const MAX_HOST_STRUCTURED_OUTPUT_BYTES = 2 * 1024 * 1024;
+const CLAUDE_AUTH_STATUS_TIMEOUT_MS = 10 * 1000;
+const MAX_CLAUDE_AUTH_STATUS_BYTES = 64 * 1024;
 
 export type HostAdapter = {
   name: 'mock' | 'claude' | 'codex';
@@ -149,25 +183,74 @@ class ClaudeHostAdapter implements HostAdapter {
     cwd: string,
     options: HostRunOptions,
   ): Promise<HostResult> {
-    const result = await runProcess(
-      'claude',
-      claudeRunJsonArgs(schema),
-      {
-        timeoutMs: options.timeoutMs,
-        killGraceMs: 2000,
-        cwd,
-        input: prompt,
-        stdoutMaxBytes: MAX_HOST_STRUCTURED_OUTPUT_BYTES,
-        stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
-      },
+    const startedAt = performance.now();
+    const auth = await readClaudeAuthStatus(cwd, options.timeoutMs);
+    const executionPolicy = resolveClaudeReviewBudgetPolicy(
+      auth,
+      options.claudeMaxBudgetUsd,
+      process.env,
     );
-    if (result.status !== 0) throw new Error(processFailureMessage(result));
-    if (result.stdoutTruncated) {
-      throw new Error(
-        `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
+    const remainingTimeoutMs = Math.floor(
+      options.timeoutMs - (performance.now() - startedAt),
+    );
+    if (remainingTimeoutMs <= 0) {
+      throw new HostRunError(
+        `Claude authentication status check exhausted the ${options.timeoutMs}ms host timeout`,
+        { executionPolicy },
       );
     }
-    return parseClaudeJson(result.stdout);
+    let result: RunProcessResult;
+    try {
+      result = await runProcess(
+        'claude',
+        claudeRunJsonArgs(schema, executionPolicy),
+        {
+          timeoutMs: remainingTimeoutMs,
+          killGraceMs: 2000,
+          cwd,
+          input: prompt,
+          stdoutMaxBytes: MAX_HOST_STRUCTURED_OUTPUT_BYTES,
+          stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+        },
+      );
+    } catch {
+      throw new HostRunError(
+        'Claude review host process failed before returning structured output',
+        { executionPolicy },
+      );
+    }
+    if (result.status !== 0) {
+      throw new HostRunError(
+        claudeProcessFailureMessage(result, executionPolicy),
+        {
+          executionPolicy,
+          usage: claudeFailureUsage(result.stdout, executionPolicy),
+        },
+      );
+    }
+    if (result.stdoutTruncated) {
+      throw new HostRunError(
+        `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
+        { executionPolicy },
+      );
+    }
+    let parsed: HostResult;
+    try {
+      parsed = parseClaudeJson(result.stdout);
+    } catch {
+      throw new HostRunError(
+        'Claude review returned invalid structured JSON',
+        {
+          executionPolicy,
+          usage: claudeFailureUsage(result.stdout, executionPolicy),
+        },
+      );
+    }
+    return {
+      ...parsed,
+      usage: claudeUsageForPolicy(parsed.usage, executionPolicy),
+      executionPolicy,
+    };
   }
 }
 
@@ -199,8 +282,11 @@ export function codexRunJsonArgs(schemaFile: string, outputFile: string): string
   ];
 }
 
-export function claudeRunJsonArgs(schema: unknown): string[] {
-  return [
+export function claudeRunJsonArgs(
+  schema: unknown,
+  policy: ClaudeReviewBudgetPolicy,
+): string[] {
+  const args = [
     '-p',
     '--safe-mode',
     '--output-format',
@@ -210,11 +296,60 @@ export function claudeRunJsonArgs(schema: unknown): string[] {
     'Read,Glob,Grep',
     '--disallowedTools',
     'Bash,Edit,Write',
-    '--max-budget-usd',
-    '0.50',
-    '--json-schema',
-    JSON.stringify(schema),
   ];
+  if (policy.maxBudgetUsd !== undefined) {
+    args.push(
+      '--max-budget-usd',
+      formatClaudeReviewBudgetUsd(policy.maxBudgetUsd),
+    );
+  }
+  args.push('--json-schema', JSON.stringify(schema));
+  return args;
+}
+
+async function readClaudeAuthStatus(
+  cwd: string,
+  hostTimeoutMs: number,
+): Promise<ClaudeAuthStatus> {
+  const result = await runProcess('claude', ['auth', 'status', '--json'], {
+    timeoutMs: Math.min(CLAUDE_AUTH_STATUS_TIMEOUT_MS, hostTimeoutMs),
+    killGraceMs: 2000,
+    cwd,
+    stdoutMaxBytes: MAX_CLAUDE_AUTH_STATUS_BYTES,
+    stderrMaxBytes: MAX_HOST_DIAGNOSTIC_BYTES,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Claude authentication status check failed (exit status ${result.status ?? 'unknown'})`,
+    );
+  }
+  if (result.stdoutTruncated) {
+    throw new Error(
+      `Claude authentication status exceeds ${MAX_CLAUDE_AUTH_STATUS_BYTES} byte limit`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(
+      `Claude authentication status check returned invalid JSON (exit status ${result.status ?? 'unknown'})`,
+    );
+  }
+  const record = recordValue(parsed);
+  if (
+    !record ||
+    typeof record.loggedIn !== 'boolean' ||
+    typeof record.authMethod !== 'string'
+  ) {
+    throw new Error('Claude authentication status returned an invalid contract');
+  }
+  return {
+    loggedIn: record.loggedIn,
+    authMethod: record.authMethod,
+    apiProvider:
+      typeof record.apiProvider === 'string' ? record.apiProvider : undefined,
+  };
 }
 
 export function runProcess(
@@ -296,15 +431,74 @@ function processFailureMessage(result: RunProcessResult): string {
     : message;
 }
 
+function claudeProcessFailureMessage(
+  result: RunProcessResult,
+  policy: ClaudeReviewBudgetPolicy,
+): string {
+  const parsed = parseJsonRecord(result.stdout);
+  if (parsed?.subtype === 'error_max_budget_usd') {
+    if (policy.billingMode === 'subscription') {
+      return 'Claude unexpectedly reported a maximum-budget failure while Goldband had subscription estimated-dollar limits disabled; no structured findings were returned';
+    }
+    const cost = typeof parsed.total_cost_usd === 'number'
+      ? ` after an estimated $${parsed.total_cost_usd.toFixed(2)}`
+      : '';
+    const cap = `at the metered $${formatClaudeReviewBudgetUsd(policy.maxBudgetUsd)} cap`;
+    return `Claude review did not complete${cost}: maximum budget reported ${cap}; no structured findings were returned`;
+  }
+  return `Claude review failed (billing mode: ${policy.billingMode}, estimated-dollar cap: ${
+    policy.maxBudgetUsd === undefined
+      ? 'disabled'
+      : `$${formatClaudeReviewBudgetUsd(policy.maxBudgetUsd)}`
+  }): ${processFailureMessage(result)}`;
+}
+
+function claudeUsageForPolicy(
+  usage: HostUsage | undefined,
+  policy: ClaudeReviewBudgetPolicy,
+): HostUsage | undefined {
+  if (!usage || policy.billingMode === 'metered') return usage;
+  const { costUsd: _estimatedCost, ...tokenUsage } = usage;
+  return tokenUsage;
+}
+
+function claudeFailureUsage(
+  stdout: string,
+  policy: ClaudeReviewBudgetPolicy,
+): HostUsage | undefined {
+  const parsed = parseJsonRecord(stdout);
+  return parsed
+    ? claudeUsageForPolicy(claudeUsageFromRecord(parsed), policy)
+    : undefined;
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | undefined {
+  try {
+    return recordValue(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseClaudeJson(stdout: string): HostResult {
   const parsed = JSON.parse(stdout);
   const parsedRecord = recordValue(parsed) ?? {};
+  const usage = claudeUsageFromRecord(parsedRecord);
+  if (typeof parsed.result === 'string') {
+    return { text: parsed.result, parsed: JSON.parse(parsed.result), usage };
+  }
+  return { text: stdout, parsed, usage };
+}
+
+function claudeUsageFromRecord(
+  parsedRecord: Record<string, unknown>,
+): HostUsage | undefined {
   const baseUsage = usageFromCandidate(
     parsedRecord.usage,
     'claude-json',
     parsedRecord.model,
   );
-  const usage = baseUsage
+  return baseUsage
     ? {
         ...baseUsage,
         costUsd: baseUsage.costUsd ?? numericValue(
@@ -315,10 +509,6 @@ export function parseClaudeJson(stdout: string): HostResult {
         ),
       }
     : undefined;
-  if (typeof parsed.result === 'string') {
-    return { text: parsed.result, parsed: JSON.parse(parsed.result), usage };
-  }
-  return { text: stdout, parsed, usage };
 }
 
 export function parseCodexUsage(stdout: string): HostUsage | undefined {

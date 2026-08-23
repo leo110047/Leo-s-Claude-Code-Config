@@ -494,6 +494,45 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
+	test("forwards metered Claude budget overrides only to the Claude host", () => {
+		expect(
+			buildReviewRuntimeArgs([
+				"--host",
+				"claude",
+				"--review-claude-max-budget-usd",
+				"4.25",
+			]),
+		).toEqual([
+			"review",
+			"code",
+			"--mode",
+			"real",
+			"--host",
+			"claude",
+			"--worktree",
+			"--review-claude-max-budget-usd",
+			"4.25",
+		]);
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"codex",
+				"--review-claude-max-budget-usd",
+				"3.00",
+			]),
+		).toThrow("--review-claude-max-budget-usd requires --host claude");
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"claude",
+				"--review-claude-max-budget-usd",
+				"3.00",
+				"--review-claude-max-budget-usd",
+				"4.00",
+			]),
+		).toThrow("--review-claude-max-budget-usd may be supplied only once");
+	});
+
 	test("rejects missing hosts and attempts to downgrade into mock mode", () => {
 		expect(() => buildReviewRuntimeArgs([])).toThrow(
 			"review code requires --host claude or --host codex",

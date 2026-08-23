@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -63,6 +64,10 @@ import {
   createReviewTimeBudget,
   resolveReviewTimeoutPolicy,
 } from '../workflows/review-timeouts';
+import {
+  DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
+  resolveClaudeReviewBudgetPolicy,
+} from '../workflows/review-budgets';
 
 const ROOT = resolve(import.meta.dir, '..');
 const PROJECT_ROOT = resolve(ROOT, '..');
@@ -1401,7 +1406,49 @@ describe('workflow runtime', () => {
     ]);
     expect(wrongWorkflow.status).toBe(2);
     expect(wrongWorkflow.stderr).toContain(
-      'review timeout options are only valid for review/code',
+      'review timeout and budget options are only valid for review/code',
+    );
+
+    const invalidBudget = runCli([
+      'review/code',
+      '--mode',
+      'real',
+      '--host',
+      'claude',
+      '--review-claude-max-budget-usd',
+      'free',
+    ]);
+    expect(invalidBudget.status).toBe(2);
+    expect(invalidBudget.stderr).toContain(
+      '--review-claude-max-budget-usd requires a decimal dollar amount',
+    );
+
+    const excessiveBudget = runCli([
+      'review/code',
+      '--mode',
+      'real',
+      '--host',
+      'claude',
+      '--review-claude-max-budget-usd',
+      '100.01',
+    ]);
+    expect(excessiveBudget.status).toBe(2);
+    expect(excessiveBudget.stderr).toContain(
+      '--review-claude-max-budget-usd must be between 0.01 and 100.00',
+    );
+
+    const codexBudget = runCli([
+      'review/code',
+      '--mode',
+      'real',
+      '--host',
+      'codex',
+      '--review-claude-max-budget-usd',
+      '3.00',
+    ]);
+    expect(codexBudget.status).toBe(2);
+    expect(codexBudget.stderr).toContain(
+      '--review-claude-max-budget-usd requires --host claude',
     );
 
     for (const scopes of [
@@ -2154,22 +2201,114 @@ describe('workflow runtime', () => {
     expect(args).not.toContain('prompt text');
   });
 
-  test('Claude JSON adapter disables customizations, denies mutating tools, and caps budget', () => {
-    const args = claudeRunJsonArgs({ type: 'object' });
+  test('Claude JSON adapter disables estimated-dollar caps for subscription auth', () => {
+    const args = claudeRunJsonArgs(
+      { type: 'object' },
+      { billingMode: 'subscription' },
+    );
     expect(args).toContain('--safe-mode');
     expect(args.slice(args.indexOf('--disallowedTools'), args.indexOf('--disallowedTools') + 2)).toEqual([
       '--disallowedTools',
       'Bash,Edit,Write',
     ]);
-    expect(args.slice(args.indexOf('--max-budget-usd'), args.indexOf('--max-budget-usd') + 2)).toEqual([
-      '--max-budget-usd',
-      '0.50',
-    ]);
+    expect(args).not.toContain('--max-budget-usd');
     expect(args.slice(args.indexOf('--tools'), args.indexOf('--tools') + 2)).toEqual([
       '--tools',
       'Read,Glob,Grep',
     ]);
     expect(args).not.toContain('prompt text');
+  });
+
+  test('Claude JSON adapter retains an explicit cap for metered auth', () => {
+    const args = claudeRunJsonArgs(
+      { type: 'object' },
+      {
+        billingMode: 'metered',
+        maxBudgetUsd: DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
+      },
+    );
+    expect(args.slice(args.indexOf('--max-budget-usd'), args.indexOf('--max-budget-usd') + 2)).toEqual([
+      '--max-budget-usd',
+      '3.00',
+    ]);
+  });
+
+  test('Claude review budget policy follows auth precedence without using subscription cost estimates', () => {
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'claude.ai',
+      apiProvider: 'firstParty',
+    })).toEqual({ billingMode: 'subscription' });
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'oauth_token',
+      apiProvider: 'firstParty',
+    })).toEqual({ billingMode: 'subscription' });
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'api_key',
+      apiProvider: 'firstParty',
+    })).toEqual({
+      billingMode: 'metered',
+      maxBudgetUsd: DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
+    });
+    const awsPolicy = resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'claude.ai',
+      apiProvider: 'firstParty',
+    }, undefined, {
+      CLAUDE_CODE_USE_ANTHROPIC_AWS: '1',
+    });
+    expect(awsPolicy).toEqual({
+      billingMode: 'metered',
+      maxBudgetUsd: DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
+    });
+    const awsArgs = claudeRunJsonArgs({ type: 'object' }, awsPolicy);
+    expect(awsArgs.slice(
+      awsArgs.indexOf('--max-budget-usd'),
+      awsArgs.indexOf('--max-budget-usd') + 2,
+    )).toEqual(['--max-budget-usd', '3.00']);
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'api_key_helper',
+      apiProvider: 'firstParty',
+    }, 4.25)).toEqual({
+      billingMode: 'metered',
+      maxBudgetUsd: 4.25,
+    });
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'oauth_token',
+      apiProvider: 'firstParty',
+    }, undefined, {
+      ANTHROPIC_AUTH_TOKEN: 'present-but-never-retained',
+      CLAUDE_CODE_OAUTH_TOKEN: 'lower-precedence-token',
+    })).toEqual({
+      billingMode: 'metered',
+      maxBudgetUsd: DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
+    });
+    expect(resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'oauth_token',
+      apiProvider: 'firstParty',
+    }, undefined, {
+      CLAUDE_CODE_OAUTH_TOKEN: 'present-but-never-retained',
+    })).toEqual({ billingMode: 'subscription' });
+    expect(() => resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'claude.ai',
+      apiProvider: 'firstParty',
+    }, 3)).toThrow('subscription reviews do not use estimated-dollar limits');
+    expect(() => resolveClaudeReviewBudgetPolicy({
+      loggedIn: false,
+      authMethod: 'none',
+      apiProvider: 'firstParty',
+    })).toThrow('Claude authentication is unavailable');
+    expect(() => resolveClaudeReviewBudgetPolicy({
+      loggedIn: true,
+      authMethod: 'future_auth_method',
+      apiProvider: 'firstParty',
+    })).toThrow('unsupported Claude authentication method');
   });
 
   test('host adapters extract numeric usage without retaining event payloads', () => {
@@ -2236,9 +2375,14 @@ describe('workflow runtime', () => {
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env bash',
         'set -euo pipefail',
+        'if [ "${1:-}" = "auth" ]; then',
+        '  printf \'%s\\n\' \'{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"max"}\'',
+        '  exit 0',
+        'fi',
+        'if printf \'%s\\n\' "$@" | grep -q -- \'--max-budget-usd\'; then exit 91; fi',
         'bytes=$(wc -c | tr -d " ")',
         'test "$bytes" -gt 1048576',
-        'printf \'%s\\n\' \'{"result":"{\\"findings\\":[]}"}\'',
+        'printf \'%s\\n\' \'{"result":"{\\"findings\\":[]}","total_cost_usd":0.72,"usage":{"input_tokens":100,"output_tokens":20}}\'',
         '',
       ].join('\n'));
       chmodSync(fakeCodex, 0o755);
@@ -2262,6 +2406,193 @@ describe('workflow runtime', () => {
 
       expect(codex.parsed).toEqual({ findings: [] });
       expect(claude.parsed).toEqual({ findings: [] });
+      expect(claude.usage?.inputTokens).toBe(100);
+      expect(claude.usage?.costUsd).toBeUndefined();
+      expect(claude.executionPolicy).toEqual({ billingMode: 'subscription' });
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('Claude adapter applies the configured cap only for metered auth', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      const argsFile = join(fakeBin, 'claude-args.json');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "api_key", apiProvider: "firstParty" }));',
+        '  process.exit(0);',
+        '}',
+        `fs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(args));`,
+        'process.stdin.resume();',
+        'process.stdin.on("end", () => process.stdout.write(JSON.stringify({ result: "{\\"findings\\":[]}" })));',
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      const result = await adapterFor('claude').runJson(
+        'review prompt',
+        { type: 'object' },
+        ROOT,
+        { timeoutMs: 5_000, claudeMaxBudgetUsd: 4.25 },
+      );
+
+      const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[];
+      expect(args.slice(args.indexOf('--max-budget-usd'), args.indexOf('--max-budget-usd') + 2)).toEqual([
+        '--max-budget-usd',
+        '4.25',
+      ]);
+      expect(result.executionPolicy).toEqual({
+        billingMode: 'metered',
+        maxBudgetUsd: 4.25,
+      });
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('Claude adapter stops when auth status returns valid JSON with a nonzero exit', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      const invocationsFile = join(fakeBin, 'claude-invocations.txt');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        'const fs = require("node:fs");',
+        'const args = process.argv.slice(2);',
+        `fs.appendFileSync(${JSON.stringify(invocationsFile)}, args[0] === "auth" ? "auth\\n" : "model\\n");`,
+        'if (args[0] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty" }));',
+        '  process.exit(1);',
+        '}',
+        'process.stdout.write(JSON.stringify({ result: "{\\"findings\\":[]}" }));',
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      await expect(adapterFor('claude').runJson(
+        'review prompt',
+        { type: 'object' },
+        ROOT,
+        { timeoutMs: 5_000 },
+      )).rejects.toThrow('Claude authentication status check failed (exit status 1)');
+      expect(readFileSync(invocationsFile, 'utf8')).toBe('auth\n');
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('metered budget failures retain safe policy and usage telemetry', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "api_key", apiProvider: "firstParty" }));',
+        '  process.exit(0);',
+        '}',
+        'process.stdin.resume();',
+        'process.stdin.on("end", () => {',
+        '  process.stdout.write(JSON.stringify({',
+        '    type: "result",',
+        '    subtype: "error_max_budget_usd",',
+        '    total_cost_usd: 3.12,',
+        '    usage: { input_tokens: 100, cache_read_input_tokens: 80, output_tokens: 20 }',
+        '  }));',
+        '  process.exitCode = 1;',
+        '});',
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      await expect(runWorkflow(getWorkflow('review/code'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        diffFile: 'test/fixtures/workflows/review.diff',
+      })).rejects.toThrow('maximum budget reported at the metered $3.00 cap');
+
+      const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
+      const usageFiles = readdirSync(telemetryDir)
+        .filter((file) => file.endsWith('-review-host-usage.json'));
+      expect(usageFiles).toHaveLength(1);
+      const telemetry = JSON.parse(readFileSync(
+        join(telemetryDir, usageFiles[0]),
+        'utf8',
+      ));
+      expect(telemetry.executionPolicy).toEqual({
+        billingMode: 'metered',
+        maxBudgetUsd: 3,
+      });
+      expect(telemetry.available).toBe(true);
+      expect(telemetry.inputTokens).toBe(100);
+      expect(telemetry.cachedInputTokens).toBe(80);
+      expect(telemetry.outputTokens).toBe(20);
+      expect(telemetry.costUsd).toBe(3.12);
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('subscription review telemetry retains tokens without estimated dollars', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        'const args = process.argv.slice(2);',
+        'if (args[0] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" }));',
+        '  process.exit(0);',
+        '}',
+        'if (args.includes("--max-budget-usd")) process.exit(91);',
+        'process.stdin.resume();',
+        'process.stdin.on("end", () => process.stdout.write(JSON.stringify({',
+        '  result: "{\\"findings\\":[]}",',
+        '  total_cost_usd: 0.72,',
+        '  usage: { input_tokens: 100, cache_read_input_tokens: 80, output_tokens: 20 }',
+        '})));',
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      const result = await runWorkflow(getWorkflow('review/code'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        diffFile: 'test/fixtures/workflows/review.diff',
+      });
+      const telemetry = JSON.parse(readFileSync(join(
+        tmpHome,
+        'workflow-runs',
+        'telemetry',
+        `${result.runId}-review-host-usage.json`,
+      ), 'utf8'));
+      expect(telemetry.executionPolicy).toEqual({ billingMode: 'subscription' });
+      expect(telemetry.inputTokens).toBe(100);
+      expect(telemetry.cachedInputTokens).toBe(80);
+      expect(telemetry.outputTokens).toBe(20);
+      expect(telemetry).not.toHaveProperty('costUsd');
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });
@@ -2396,27 +2727,93 @@ describe('workflow runtime', () => {
     }
   });
 
-  test('Claude adapter fails clearly when structured stdout exceeds its bound', async () => {
+  test('Claude workflow retains metered policy when structured stdout exceeds its bound', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
     const previousPath = process.env.PATH;
     try {
       const fakeClaude = join(fakeBin, 'claude');
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env node',
+        'if (process.argv[2] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "api_key", apiProvider: "firstParty" }));',
+        '  process.exit(0);',
+        '}',
         `process.stdout.write('x'.repeat(${MAX_HOST_STRUCTURED_OUTPUT_BYTES + 1}));`,
         '',
       ].join('\n'));
       chmodSync(fakeClaude, 0o755);
       process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
 
-      await expect(adapterFor('claude').runJson(
-        'review prompt',
-        { type: 'object' },
-        ROOT,
-        { timeoutMs: 5_000 },
-      )).rejects.toThrow(
+      await expect(runWorkflow(getWorkflow('review/code'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        diffFile: 'test/fixtures/workflows/review.diff',
+      })).rejects.toThrow(
         `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
       );
+      const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
+      const usageFile = readdirSync(telemetryDir)
+        .find((file) => file.endsWith('-review-host-usage.json'));
+      expect(usageFile).toBeDefined();
+      const telemetry = JSON.parse(readFileSync(
+        join(telemetryDir, usageFile as string),
+        'utf8',
+      ));
+      expect(telemetry.executionPolicy).toEqual({
+        billingMode: 'metered',
+        maxBudgetUsd: 3,
+      });
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  test('Claude workflow retains metered policy and safe usage for malformed result JSON', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const previousPath = process.env.PATH;
+    try {
+      const fakeClaude = join(fakeBin, 'claude');
+      writeFileSync(fakeClaude, [
+        '#!/usr/bin/env node',
+        'if (process.argv[2] === "auth") {',
+        '  process.stdout.write(JSON.stringify({ loggedIn: true, authMethod: "api_key", apiProvider: "firstParty" }));',
+        '  process.exit(0);',
+        '}',
+        'process.stdout.write(JSON.stringify({',
+        '  result: "not-json",',
+        '  total_cost_usd: 1.25,',
+        '  usage: { input_tokens: 120, output_tokens: 25 }',
+        '}));',
+        '',
+      ].join('\n'));
+      chmodSync(fakeClaude, 0o755);
+      process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
+
+      await expect(runWorkflow(getWorkflow('review/code'), {
+        mode: 'real',
+        host: 'claude',
+        cwd: ROOT,
+        goldbandHome: tmpHome,
+        diffFile: 'test/fixtures/workflows/review.diff',
+      })).rejects.toThrow('Claude review returned invalid structured JSON');
+      const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
+      const usageFile = readdirSync(telemetryDir)
+        .find((file) => file.endsWith('-review-host-usage.json'));
+      expect(usageFile).toBeDefined();
+      const telemetry = JSON.parse(readFileSync(
+        join(telemetryDir, usageFile as string),
+        'utf8',
+      ));
+      expect(telemetry.executionPolicy).toEqual({
+        billingMode: 'metered',
+        maxBudgetUsd: 3,
+      });
+      expect(telemetry.inputTokens).toBe(120);
+      expect(telemetry.outputTokens).toBe(25);
+      expect(telemetry.costUsd).toBe(1.25);
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });

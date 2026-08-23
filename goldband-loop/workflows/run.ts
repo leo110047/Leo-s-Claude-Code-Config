@@ -38,6 +38,7 @@ function parseArgs(args: string[]): { capability: string; action: string; option
     else if (arg === '--specialists') options.specialists = takeValue(args, ++index, arg) as WorkflowRunOptions['specialists'];
     else if (arg === '--review-host-timeout-seconds') options.reviewHostTimeoutMs = takeSeconds(args, ++index, arg);
     else if (arg === '--review-pass-timeout-seconds') options.reviewPassTimeoutMs = takeSeconds(args, ++index, arg);
+    else if (arg === '--review-claude-max-budget-usd') options.reviewClaudeMaxBudgetUsd = takeUsd(args, ++index, arg);
     else if (arg === '--work-id') options.workId = takeValue(args, ++index, arg);
     else if (arg === '--ticket-id') options.ticketId = takeValue(args, ++index, arg);
     else if (arg === '--loop') loop = true;
@@ -69,13 +70,20 @@ function validateOptions(
   if (options.specialists && !['off', 'auto', 'all'].includes(options.specialists)) {
     usageError(`invalid --specialists: ${options.specialists}`);
   }
-  const hasReviewTimeoutOverride =
+  const hasReviewOnlyOverride =
     options.reviewHostTimeoutMs !== undefined ||
-    options.reviewPassTimeoutMs !== undefined;
-  if (hasReviewTimeoutOverride && `${capability}/${action}` !== 'review/code') {
-    usageError('review timeout options are only valid for review/code');
+    options.reviewPassTimeoutMs !== undefined ||
+    options.reviewClaudeMaxBudgetUsd !== undefined;
+  if (hasReviewOnlyOverride && `${capability}/${action}` !== 'review/code') {
+    usageError('review timeout and budget options are only valid for review/code');
   }
   if (`${capability}/${action}` === 'review/code') {
+    if (
+      options.reviewClaudeMaxBudgetUsd !== undefined &&
+      options.host !== 'claude'
+    ) {
+      usageError('--review-claude-max-budget-usd requires --host claude');
+    }
     if (Boolean(options.workId) !== Boolean(options.ticketId)) {
       usageError('--work-id and --ticket-id must be supplied together');
     }
@@ -118,6 +126,18 @@ function takeSeconds(args: string[], index: number, flag: string): number {
   return seconds * 1000;
 }
 
+function takeUsd(args: string[], index: number, flag: string): number {
+  const raw = takeValue(args, index, flag);
+  if (!/^\d+(?:\.\d+)?$/.test(raw)) {
+    usageError(`${flag} requires a decimal dollar amount`);
+  }
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) {
+    usageError(`${flag} requires a finite dollar amount`);
+  }
+  return amount;
+}
+
 function usageError(message: string): never {
   console.error(message);
   usage();
@@ -125,7 +145,7 @@ function usageError(message: string): never {
 }
 
 function usage(): void {
-  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--work-id <id> --ticket-id <id>] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
+  console.error('Usage: bun run workflows/run.ts <capability> <action> [--loop] [--max-iterations <n>] [--input <file>] [--base <ref>] [--mode mock|real] [--host mock|claude|codex] [--work-id <id> --ticket-id <id>] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>] [--staged|--worktree|--include-untracked|--diff-file <file>]');
 }
 
 main().catch((error) => {

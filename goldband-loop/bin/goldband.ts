@@ -89,7 +89,7 @@ const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
+		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
@@ -198,6 +198,7 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	const scopeFlags: ReviewScopeFlag[] = [];
 	let workId: string | undefined;
 	let ticketId: string | undefined;
+	let hasClaudeBudgetOverride = false;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -244,6 +245,17 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			index += 1;
 			continue;
 		}
+		if (arg === "--review-claude-max-budget-usd") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (hasClaudeBudgetOverride) {
+				throw new Error(`${arg} may be supplied only once`);
+			}
+			hasClaudeBudgetOverride = true;
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
+		}
 		if (REVIEW_SCOPE_FLAGS.includes(arg as ReviewScopeFlag)) {
 			scopeFlags.push(arg as ReviewScopeFlag);
 		}
@@ -255,6 +267,9 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 
 	if (!host)
 		throw new Error("review code requires --host claude or --host codex");
+	if (hasClaudeBudgetOverride && host !== "claude") {
+		throw new Error("--review-claude-max-budget-usd requires --host claude");
+	}
 	if (Boolean(workId) !== Boolean(ticketId)) {
 		throw new Error("--work-id and --ticket-id must be supplied together");
 	}

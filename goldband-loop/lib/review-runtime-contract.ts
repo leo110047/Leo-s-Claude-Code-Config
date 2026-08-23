@@ -1,3 +1,5 @@
+import { assertValidClaudeReviewMaxBudgetUsd } from '../workflows/review-budgets';
+
 export const REVIEW_ACTIVE_ENV = "GOLDBAND_REVIEW_ACTIVE";
 const NESTED_REVIEW_ERROR =
 	"review/code cannot start inside an active review; reuse the current runtime report instead of launching another reviewer";
@@ -24,6 +26,7 @@ type ReviewScopeOptions = {
 
 type ReviewExecutionOptions = ReviewScopeOptions & {
 	specialists?: "off" | "auto" | "all";
+	reviewClaudeMaxBudgetUsd?: number;
 };
 
 export const INDEPENDENT_REVIEWER_ERROR =
@@ -70,4 +73,5 @@ export function assertValidReviewExecutionOptions(
 	if (options.specialists && options.specialists !== "off") {
 		throw new Error(`${INDEPENDENT_REVIEWER_ERROR}; remove --specialists`);
 	}
+	assertValidClaudeReviewMaxBudgetUsd(options.reviewClaudeMaxBudgetUsd);
 }

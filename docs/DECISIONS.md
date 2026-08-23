@@ -1656,3 +1656,48 @@ Failure signals:
 - Finish checks only ticket status and ignores artifact provenance.
 - Full command output or secret-like values are persisted as summaries.
 - Claude and Codex installed runtimes expose different evidence contracts.
+
+## 2026-08-23: Claude Review Cost Caps Follow the Active Billing Authority
+
+Decision: do not apply estimated-dollar limits to subscription-authenticated
+Claude reviews. Preserve an explicit bounded cap for metered credentials.
+
+Implementation contract:
+
+- Claude's documented environment credential precedence is applied before the
+  `claude auth status --json` projection. Higher-priority cloud-provider,
+  including Claude Platform on AWS, bearer-token, and API-key credentials stay
+  metered even when a lower-priority OAuth token is present. The adapter retains
+  only `loggedIn`, `authMethod`, and `apiProvider`; identity fields and
+  credential values are neither logged nor persisted.
+- `claude.ai` and `oauth_token` are subscription modes. Goldband omits
+  `--max-budget-usd` because locally estimated API-equivalent dollars are not
+  the subscription quota owner.
+- `api_key`, `api_key_helper`, and `third_party` are metered modes. Goldband
+  applies a `$3.00` default safety cap and accepts a validated per-run
+  `--review-claude-max-budget-usd` override.
+- Unknown, unauthenticated, inconsistent, or malformed auth state fails before
+  model dispatch. Goldband never guesses that a potentially paid call is safe.
+- The resolved billing mode and cap are written to host telemetry. Subscription
+  telemetry drops API-equivalent `costUsd`; metered telemetry retains it for
+  paid-run attribution. Raw auth status and account identity are not retained.
+- A budget-exhausted result remains an incomplete review. It cannot be rendered
+  as `No findings`, and the non-streaming JSON contract cannot claim that
+  partial findings were recovered.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep one hard-coded cap for every Claude login | Subscription quota is not denominated by the local API-equivalent estimate, and the old `$0.50` cap repeatedly terminated valid reviews. |
+| Remove the cap for every Claude login | Silently widens paid API, gateway, and cloud-provider side effects. |
+| Infer subscription mode only from absent environment variables | `apiKeyHelper` and provider configuration can be active without a visible API-key variable. |
+| Use `subscriptionType` as the authority | Claude CLI can report a valid Claude.ai auth method while the subscription field is absent or stale. |
+
+Failure signals:
+
+- A subscription review receives `--max-budget-usd`.
+- A metered review launches without a validated cap.
+- Auth status cannot be classified but model dispatch continues.
+- Account email, organization, token, or raw auth JSON appears in telemetry.
+- Budget exhaustion is reported as a completed review or `No findings`.

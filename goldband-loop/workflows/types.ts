@@ -100,6 +100,7 @@ export type WorkflowRunOptions = {
   specialists?: 'off' | 'auto' | 'all';
   reviewHostTimeoutMs?: number;
   reviewPassTimeoutMs?: number;
+  reviewClaudeMaxBudgetUsd?: number;
   workId?: string;
   ticketId?: string;
   inputFile?: string;
