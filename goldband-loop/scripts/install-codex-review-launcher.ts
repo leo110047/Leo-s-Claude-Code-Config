@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
 	copyFileSync,
 	cpSync,
 	chmodSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
+	readFileSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
@@ -18,6 +21,7 @@ const REVIEW_ASSETS = [
 	"shared-rubric.md",
 	"findings-schema.md",
 	"checklist.md",
+	"evidence-omission.md",
 	"design-checklist.md",
 	"greptile-triage.md",
 	"TODOS-format.md",
@@ -181,6 +185,7 @@ export function installCodexReviewLauncher(
 	const bunPath = requireAbsolute("bunPath", options.bunPath);
 	const codexPath = requireAbsolute("codexPath", options.codexPath);
 	const browserPath = requireAbsolute("browserPath", options.browserPath);
+	const reviewReceiptKeyFile = join(dirname(runtimeRoot), "review-receipt.key");
 
 	if (pathIsWithin(sourceRoot, runtimeRoot)) {
 		throw new Error(
@@ -223,6 +228,7 @@ export function installCodexReviewLauncher(
 	const stageRoot = `${runtimeRoot}.tmp-${process.pid}`;
 	const backupRoot = `${runtimeRoot}.backup`;
 	mkdirSync(dirname(runtimeRoot), { recursive: true });
+	ensureReviewReceiptAuthorityKey(reviewReceiptKeyFile);
 	recoverInterruptedRuntimeSwap(runtimeRoot, backupRoot);
 	rmSync(stageRoot, { recursive: true, force: true });
 	try {
@@ -257,6 +263,7 @@ export function installCodexReviewLauncher(
 			`${JSON.stringify(
 				{
 					schemaVersion: 2,
+					runtimeHost: "codex",
 					codexExecutable: codexPath,
 					browserExecutable: join(runtimeRoot, "browse", "browse"),
 					browserServerScript: join(
@@ -272,6 +279,9 @@ export function installCodexReviewLauncher(
 						"rules-resolver.js",
 					),
 					rulesDirectory: join(runtimeRoot, "review", "rules"),
+					reviewReceiptKeyFile,
+					reviewReceiptAuthorityRoot: dirname(runtimeRoot),
+					reviewReceiptStore: join(dirname(runtimeRoot), "review-receipts"),
 				},
 				null,
 				2,
@@ -308,6 +318,27 @@ export function installCodexReviewLauncher(
 	}
 
 	return marker;
+}
+
+function ensureReviewReceiptAuthorityKey(file: string): void {
+	if (!existsSync(file)) {
+		writeFileSync(file, `${randomBytes(32).toString("hex")}\n`, {
+			mode: 0o600,
+			flag: "wx",
+		});
+		return;
+	}
+	const stat = lstatSync(file);
+	if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
+		throw new Error(`review receipt authority key has unsafe permissions: ${file}`);
+	}
+	if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+		throw new Error(`review receipt authority key has the wrong owner: ${file}`);
+	}
+	const value = readFileSync(file, "utf8").trim();
+	if (!/^[a-f0-9]{64}$/.test(value)) {
+		throw new Error(`review receipt authority key is invalid: ${file}`);
+	}
 }
 
 function parseArgs(args: string[]): CodexReviewLauncherInstallOptions {

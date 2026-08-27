@@ -15,7 +15,7 @@
       "actions": [
         {
           "id": "code",
-          "description": "Review a code diff.",
+          "description": "Evidence-first code review with scoped closure.",
           "runtime": "typed",
           "owner": "review-runtime",
           "risk": "medium"

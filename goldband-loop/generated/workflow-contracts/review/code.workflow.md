@@ -3,13 +3,13 @@
 
 ## Goal
 
-Review a code diff.
+Evidence-first code review with scoped closure.
 
 ## Relevant context
 
 - Inspect the user-selected artifact, current repository instructions, and direct evidence.
-- On Claude, execute bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex. Forward a user-named scope; otherwise omit the scope flag.
-- Work Map: forward IDs only; runtime owns scope and evidence.
+- Claude executes bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex.
+- Forward scope, evidence/closure files, or Work Map IDs; runtime owns defaults.
 
 ## Hard boundaries
 
@@ -20,4 +20,4 @@ Review a code diff.
 ## Verification
 
 - Return the selected review owner's result.
-- Return runtime report/artifact; Work Map artifacts bind map, ticket, receipt, diff, and candidate digests.
+- Return the runtime report and typed artifact; Work Map includes provenance.

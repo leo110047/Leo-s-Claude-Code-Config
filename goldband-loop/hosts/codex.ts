@@ -17,6 +17,7 @@ const codex: HostConfig = {
         'shared-rubric.md',
         'findings-schema.md',
         'checklist.md',
+        'evidence-omission.md',
         'design-checklist.md',
         'greptile-triage.md',
         'TODOS-format.md',

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "behaviorMatrix": [
+    {
+      "id": "typescript-contracts",
+      "behavior": "Workflow runtime source preserves its declared TypeScript contracts.",
+      "kind": "boundary",
+      "input": "the scoped candidate source",
+      "preconditions": "dependencies are installed in the isolated snapshot",
+      "expected": "the project typecheck exits successfully",
+      "risk": "high",
+      "disposition": "static",
+      "providerIds": ["workflow-typecheck"]
+    }
+  ],
+  "providers": [
+    {
+      "id": "workflow-typecheck",
+      "owner": "goldband-loop/package.json#typecheck",
+      "kind": "project-gate",
+      "cellIds": ["typescript-contracts"],
+      "changedPathPrefixes": [],
+      "operations": [
+        {
+          "id": "candidate-typecheck",
+          "target": "candidate",
+          "argv": ["bun", "run", "typecheck"],
+          "expectedExit": "zero",
+          "timeoutMs": 120000,
+          "maxOutputBytes": 65536,
+          "network": "deny",
+          "evidenceLevel": "local"
+        }
+      ]
+    }
+  ],
+  "authorizations": []
+}

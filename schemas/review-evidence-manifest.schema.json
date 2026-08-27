@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.dev/schemas/review-evidence-manifest.schema.json",
+  "title": "Goldband Review Evidence Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "behaviorMatrix", "providers", "authorizations"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "behaviorMatrix": { "$ref": "review-behavior-matrix.schema.json" },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "owner", "kind", "cellIds", "changedPathPrefixes", "operations"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+          "owner": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["regression", "static", "project-gate", "property-fuzz", "runtime-integration"] },
+          "cellIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+          "changedPathPrefixes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "target", "argv", "expectedExit", "timeoutMs", "maxOutputBytes", "network", "evidenceLevel"],
+              "allOf": [
+                {
+                  "if": { "properties": { "network": { "const": "authorized" } }, "required": ["network"] },
+                  "then": { "required": ["authorizationId"] },
+                  "else": { "not": { "required": ["authorizationId"] } }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "evidenceLevel": { "enum": ["live-provider", "device-platform", "production-readback"] }
+                    },
+                    "required": ["evidenceLevel"]
+                  },
+                  "then": {
+                    "properties": { "network": { "const": "authorized" } },
+                    "required": ["network", "authorizationId"]
+                  }
+                },
+                {
+                  "if": { "properties": { "expectedExit": { "const": "nonzero" } }, "required": ["expectedExit"] },
+                  "then": { "required": ["expectedExitCode"] },
+                  "else": { "not": { "required": ["expectedExitCode"] } }
+                }
+              ],
+              "properties": {
+                "id": { "type": "string" },
+                "target": { "enum": ["base", "candidate"] },
+                "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+                "expectedExit": { "enum": ["zero", "nonzero"] },
+                "expectedExitCode": { "type": "integer", "minimum": 1, "maximum": 255 },
+                "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 900000 },
+                "maxOutputBytes": { "type": "integer", "minimum": 1, "maximum": 65536 },
+                "network": { "enum": ["deny", "authorized"] },
+                "authorizationId": { "type": "string" },
+                "evidenceLevel": { "enum": ["fixture", "local", "sandboxed-service", "live-provider", "device-platform", "production-readback"] },
+                "requiredSystemTools": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$" }
+                },
+                "seed": { "type": "string", "minLength": 1 },
+                "iterations": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "authorizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "operation", "scope", "approvedBy", "approvedAt", "expiresAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "operation": { "type": "string" },
+          "scope": { "type": "string" },
+          "approvedBy": { "type": "string" },
+          "approvedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

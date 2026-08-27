@@ -31,6 +31,28 @@ not aliases.
 The generated [capability catalog](../docs/generated/capabilities.md) is the
 authoritative list of supported capability/action pairs and runtime status.
 
+Real `review/code` runs require a project-owned
+`goldband.review-evidence.json`. It declares behavior cells and typed provider
+commands; the runtime executes each operation in its own read-only,
+default-deny read/write/network snapshot, verifies the pre/post tree digest, and requires reciprocal provider/cell
+ownership plus an exact RED exit code before one semantic host call. After a finding is repaired, pass the initial JSON
+artifact through `--closure-artifact` with the same review scope to run one
+repair-delta-only closure call. Closure also accepts a repaired manifest and
+reruns newly added or modified affected cells; `closed` requires fresh passing
+evidence. Installed-runtime receipt plus Work Map requested-changes readback rejects
+caller-edited, cross-scope, or prior-attempt initial artifacts. The same OS user remains
+inside the trusted host boundary. Receipt claims are atomic and at-most-once; crash or later
+failure requires a new initial review. Prompt-redacted untracked files remain digest-bound and executable
+through a separate snapshot-only channel. Missing manifests, unsupported isolation,
+candidate drift, and provenance mismatch fail closed before semantic review.
+On macOS, the default-deny profile imports Apple's common system process baseline
+for process startup, then exactly re-denies its syslog, Mach service, and shared-memory
+channels as well as broad network and system-socket access. Dynamically linked
+non-system Mach-O runtimes execute from a rewritten, ad-hoc-signed, content-attested
+private projection; the command cannot read the source package tree or write the
+projection. Only the candidate, isolated runner state, sealed runtime projection,
+and projected dependency roots are readable.
+
 Managed parallel work uses two host commands:
 
 ```bash

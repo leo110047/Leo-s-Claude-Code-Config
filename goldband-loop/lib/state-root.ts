@@ -13,7 +13,7 @@ type StateRootEnv = NodeJS.ProcessEnv & {
 export function resolveGoldbandStateRoot(
   explicitRoot?: string,
   env: StateRootEnv = process.env,
-  home: string = homedir(),
+  home?: string,
 ): string {
   if (explicitRoot) return explicitRoot;
   if (env.GOLDBAND_HOME) return env.GOLDBAND_HOME;
@@ -25,5 +25,5 @@ export function resolveGoldbandStateRoot(
   ) {
     return env.CLAUDE_PLUGIN_DATA;
   }
-  return join(home, '.goldband');
+  return join(home ?? env.HOME ?? homedir(), '.goldband');
 }

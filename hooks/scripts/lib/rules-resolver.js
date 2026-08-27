@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -21,13 +20,13 @@ function canonicalRepoRoot(cwd = process.cwd()) {
 }
 
 function candidateRulesDirs(options = {}) {
-  const home = os.homedir();
+  const home = process.env.HOME;
   return [
     options.rulesDir,
     process.env.GOLDBAND_RULES_DIR,
     path.join(options.repoRoot || '', 'rules'),
-    path.join(home, '.claude', 'rules'),
-    path.join(home, '.codex', 'rules'),
+    home && path.join(home, '.claude', 'rules'),
+    home && path.join(home, '.codex', 'rules'),
     // Works for source, packaged plugin, and ~/.claude/hooks installs.
     path.resolve(__dirname, '..', '..', '..', 'rules'),
   ].filter(Boolean);

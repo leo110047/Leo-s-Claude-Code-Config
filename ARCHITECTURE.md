@@ -102,6 +102,72 @@ directory symlink.
 Semantic findings are produced by independent review, not by PreToolUse, Stop,
 workspace leases, shell classification, or writer self-attestation.
 
+`review/code` is evidence-first. A project-owned
+`goldband.review-evidence.json` declares stable behavior cells and typed
+providers. The runtime validates every disposition and reciprocal provider/cell
+ownership, materializes a fresh read-only candidate snapshot per operation,
+executes declared argument arrays under a default-deny read/write/network OS
+sandbox with the platform's common process-runtime baseline plus only the snapshot,
+isolated runner state, sealed runtime projection, and projected dependencies
+readable outside that baseline, verifies the
+snapshot digest again after execution, isolates and removes each operation's
+HOME/TMP state, bounds output and time, and binds every record to repository, base,
+candidate, scope, behavior contract, owner, environment, command, and time
+digests before starting the semantic host. Regression providers preserve a
+base/exact-nonzero RED and candidate/zero GREEN pair; property/fuzz providers also
+preserve seed, iteration budget, and replay command. Unsupported high-risk
+cells, missing runners, malformed evidence, candidate drift, and provenance
+mismatch fail closed before model dispatch.
+For Mach-O executables with non-system dependencies, the runtime copies all attested
+images into a private projection, rewrites their load commands to projected paths,
+ad-hoc signs and re-attests the transformed bytes, and keeps the original host package
+tree unreadable. The macOS adapter also exactly re-denies inherited syslog, Mach service,
+and shared-memory channels.
+Secret-like bounded regular untracked files use a separate non-prompt channel:
+their paths and content digests remain in the candidate binding and their exact
+bytes are copied into each isolated executable snapshot, while the semantic diff
+contains only the redaction marker. Unsafe or oversized redacted files fail
+closed before provider execution.
+
+The one initial semantic host receives the immutable candidate diff once plus
+bounded matrix and evidence projections. Raw logs and deterministic control
+rules remain outside the prompt. Only deterministic evidence code can mint a
+`verified-failure`; semantic output requesting that classification becomes a
+non-blocking `semantic-concern`, and unrelated evidence IDs are discarded.
+Fixture, local, sandboxed-service, live-provider,
+device-platform, and production-readback evidence remain distinct in records
+and reports. The local runner can attest only local levels; live, device, and
+production levels require an authorized external runner.
+
+Repair closure is a separate conditional invocation. It consumes the initial
+artifact only after a canonical HMAC receipt is read back from the installed
+runtime authority store. The receipt binds the complete serialized artifact,
+findings, evidence, timestamps, candidate, behavior contract, and standalone or
+Work Map scope including map revision, subject, and claim attempt. Work Map closure also
+reads back the exact requested-changes artifact and requires the immediately following
+repair attempt; caller-authored, cross-scope, or prior-attempt JSON cannot authorize closure.
+The trust boundary excludes reviewed candidate code, model output, and artifact inputs, but
+intentionally trusts the same-permission host user and installed Goldband runtime. Protecting
+against a malicious same-user host process requires a privileged helper or OS-backed signing key. Closure then proves
+repository/scope provenance and records the original and repaired
+behavior-contract digests, derives a bounded multi-hunk repair delta without
+unchanged middle regions. After repaired binding and Work Map causality validate,
+runtime atomically claims the initial receipt with at-most-once semantics. A crash or later
+failure leaves it spent and requires a new initial review; this favors fail-closed behavior
+over replayable closure authority. Closure reruns original plus new or changed affected cells,
+and permits exactly one host call returning
+only `closed`, `still-open`, `direct-regression`, or `evidence-incomplete` for
+original finding IDs. A zero-finding initial review cannot start closure, and
+closure never receives the unchanged full original diff or opens a new findings
+inventory. Closure evidence must intersect the original finding's authorized
+behavior cells. Persisted evidence records and completeness are revalidated and
+recomputed before reuse. Work Map review artifacts add the behavior contract, evidence
+records plus their recomputable digest, completeness state, candidate digest,
+phase, and host-call count to the existing receipt and tree chain.
+An operation identity also binds seed/iterations, resolved executable content,
+runner policy, platform, dependency contracts, package metadata, and projected
+command shims; closure cannot weaken that identity behind a stable operation ID.
+
 Cross-review hook adapters are host-specific projections over
 `goldband-loop/cross-review/core.cjs`. Minimal workflow runtime roots include
 the complete `cross-review/` directory next to `bin/`; explicit module discovery

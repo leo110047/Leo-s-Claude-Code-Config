@@ -71,13 +71,36 @@ import {
 
 const ROOT = resolve(import.meta.dir, '..');
 const PROJECT_ROOT = resolve(ROOT, '..');
+const REVIEW_RECEIPT_CONFIG_ENV = 'GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG';
 let tmpHome: string;
+let previousReviewReceiptConfig: string | undefined;
 
 beforeEach(() => {
   tmpHome = mkdtempSync(join(tmpdir(), 'goldband-workflows-'));
+  previousReviewReceiptConfig = process.env[REVIEW_RECEIPT_CONFIG_ENV];
+  const runtimeRoot = join(tmpHome, 'trusted-runtime');
+  const authorityRoot = join(tmpHome, 'review-receipt-authority');
+  const receiptRoot = join(authorityRoot, 'review-receipts');
+  const keyFile = join(authorityRoot, 'review-receipt.key');
+  mkdirSync(runtimeRoot, { recursive: true, mode: 0o700 });
+  mkdirSync(receiptRoot, { recursive: true, mode: 0o700 });
+  writeFileSync(keyFile, `${'a'.repeat(64)}\n`, { mode: 0o600 });
+  const configFile = join(runtimeRoot, 'trusted-runtime.json');
+  writeFileSync(configFile, `${JSON.stringify({
+    schemaVersion: 2,
+    reviewReceiptAuthorityRoot: authorityRoot,
+    reviewReceiptKeyFile: keyFile,
+    reviewReceiptStore: receiptRoot,
+  })}\n`, { mode: 0o600 });
+  process.env[REVIEW_RECEIPT_CONFIG_ENV] = configFile;
 });
 
 afterEach(() => {
+  if (previousReviewReceiptConfig === undefined) {
+    delete process.env[REVIEW_RECEIPT_CONFIG_ENV];
+  } else {
+    process.env[REVIEW_RECEIPT_CONFIG_ENV] = previousReviewReceiptConfig;
+  }
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
@@ -581,6 +604,7 @@ describe('workflow runtime', () => {
         '@@ -1 +1 @@',
         '-old',
         '+new',
+        '',
       ].join('\n'));
 
       const result = await runWorkflow(getWorkflow('document/generate'), {
@@ -1503,9 +1527,9 @@ describe('workflow runtime', () => {
           'new file mode 100644',
           '--- /dev/null',
           '+++ b/new-file.txt',
-          '@@ -0,0 +1,2 @@',
+          '@@ -0,0 +1,1 @@',
           '+hello',
-          '+',
+          '',
         ].join('\n'),
         changedFiles: ['new-file.txt'],
       }));
@@ -1555,8 +1579,16 @@ describe('workflow runtime', () => {
       const diff = String((output as { diff: string }).diff);
       expect(diff).toContain('newline filename marker');
       expect(diff).toContain('tab filename marker');
-      expect(diff).toContain('line\nbreak.ts');
-      expect(diff).toContain('tab\tname.ts');
+      expect(diff).toContain('line\\nbreak.ts');
+      expect(diff).toContain('tab\\tname.ts');
+
+      const result = await runWorkflow(getWorkflow('review/code'), {
+        mode: 'mock',
+        cwd: repo,
+        goldbandHome: tmpHome,
+        worktree: true,
+      });
+      expect(String(result.output)).toContain('review/code runtime report');
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
@@ -1910,14 +1942,20 @@ describe('workflow runtime', () => {
   test('review prompt template is resolved from the workflow runtime root', async () => {
     const repo = mkdtempSync(join(tmpdir(), 'goldband-workflow-target-'));
     try {
-      writeFileSync(join(repo, 'review.diff'), [
+      spawnSync('git', ['init'], { cwd: repo });
+      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+      spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+      writeFileSync(join(repo, 'app.ts'), 'old\n');
+      spawnSync('git', ['add', 'app.ts'], { cwd: repo });
+      spawnSync('git', ['commit', '-m', 'base'], { cwd: repo });
+      writeFileSync(join(repo, 'review.diff'), `${[
         'diff --git a/app.ts b/app.ts',
         '--- a/app.ts',
         '+++ b/app.ts',
         '@@ -1 +1 @@',
         '-old',
         '+new',
-      ].join('\n'));
+      ].join('\n')}\n`);
 
       const result = await runWorkflow(getWorkflow('review/code'), {
         mode: 'mock',
@@ -1932,10 +1970,10 @@ describe('workflow runtime', () => {
     }
   });
 
-  test('findings without an exact reachable failure path are suppressed', async () => {
+  test('review finding verification cannot bypass the evidence pipeline state', async () => {
     const step = reviewSteps.find((item) => item.name === 'verify-findings');
     expect(step).toBeDefined();
-    const result = await step!.run({
+    expect(() => step!.run({
       runId: 'test-run',
       workflow: getWorkflow('review/code'),
       cwd: ROOT,
@@ -1946,8 +1984,7 @@ describe('workflow runtime', () => {
         severity: 'high',
         summary: 'Possibly serious issue.',
       }],
-    });
-    expect(result).toEqual([]);
+    })).toThrow('review evidence state is missing');
   });
 
   test('core review prompt contains judgment inputs without runtime-owned control prose', () => {
@@ -2526,6 +2563,7 @@ describe('workflow runtime', () => {
         cwd: ROOT,
         goldbandHome: tmpHome,
         diffFile: 'test/fixtures/workflows/review.diff',
+        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
       })).rejects.toThrow('maximum budget reported at the metered $3.00 cap');
 
       const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
@@ -2581,6 +2619,7 @@ describe('workflow runtime', () => {
         cwd: ROOT,
         goldbandHome: tmpHome,
         diffFile: 'test/fixtures/workflows/review.diff',
+        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
       });
       const telemetry = JSON.parse(readFileSync(join(
         tmpHome,
@@ -2750,6 +2789,7 @@ describe('workflow runtime', () => {
         cwd: ROOT,
         goldbandHome: tmpHome,
         diffFile: 'test/fixtures/workflows/review.diff',
+        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
       })).rejects.toThrow(
         `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
       );
@@ -2798,6 +2838,7 @@ describe('workflow runtime', () => {
         cwd: ROOT,
         goldbandHome: tmpHome,
         diffFile: 'test/fixtures/workflows/review.diff',
+        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
       })).rejects.toThrow('Claude review returned invalid structured JSON');
       const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
       const usageFile = readdirSync(telemetryDir)

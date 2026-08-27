@@ -24,6 +24,32 @@ This repo has two layers:
 For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+`review/code` first loads the project-owned `goldband.review-evidence.json`,
+runs every typed check in an independent read-only, default-deny read/write/network snapshot,
+validates pre/post tree digests, reciprocal provider/cell ownership, and exact RED exits, and validates
+evidence completeness and candidate provenance before one semantic review. If
+an operation uses a script launcher, its manifest must invoke the interpreter explicitly. A Mach-O runtime
+with non-system dependencies executes from a private sealed projection: Goldband rewrites only attested
+load commands, ad-hoc signs and re-attests the transformed bytes, and leaves the original host package tree
+unreadable. The macOS profile exactly re-denies inherited syslog, Mach service, and shared-memory channels
+in addition to broad network and system-socket access.
+If
+that review finds an issue and the candidate is repaired,
+`--closure-artifact <initial-artifact>` performs one closure pass over only the
+repair delta, original finding IDs, and rerun evidence. New or changed affected
+cells in the repaired manifest are rerun, and `closed` requires fresh passing
+evidence. Closure also requires a receipt issued by the installed runtime authority for the complete
+initial payload, review scope, and Work Map claim attempt; prior-attempt replay is rejected. This
+boundary distrusts reviewed code, model output, and artifact input, while trusting the Goldband
+installer/runtime under the same OS account. Isolating a malicious same-user host process requires
+an OS-backed key or privileged helper.
+Closure receipts use at-most-once semantics: after repair binding and Work Map causality
+validation, an atomic claim consumes the receipt. A crash or later failure requires a new
+initial review instead of replaying that receipt. Prompt-redacted untracked files remain
+digest-bound and executable through a non-prompt snapshot channel. A zero-finding initial review cannot trigger closure. Fixture, local, live, device, and production
+evidence levels remain distinct, and a green gate is never reported as overall
+deployment readiness.
+
 ## Install Paths
 
 | Need | Recommended path |

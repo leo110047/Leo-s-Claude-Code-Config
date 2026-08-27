@@ -114,6 +114,38 @@ class MockHostAdapter implements HostAdapter {
     _cwd?: string,
     _options?: HostRunOptions,
   ): Promise<HostResult> {
+    if (prompt.includes('# Scoped Closure Review')) {
+      const payloadText = prompt
+        .split('CLOSURE_INPUT_START\n')[1]
+        ?.split('\nCLOSURE_INPUT_END')[0];
+      const payload = payloadText
+        ? JSON.parse(payloadText) as {
+          originalFindings?: Array<{ id?: string; behaviorCellIds?: string[] }>;
+          rerunEvidence?: Array<{ id?: string; cellIds?: string[] }>;
+        }
+        : {};
+      const ids = (payload.originalFindings ?? [])
+        .map((finding) => finding.id)
+        .filter((id): id is string => Boolean(id));
+      const parsed = {
+        results: [...new Set(ids)].map((findingId) => {
+          const cells = new Set(
+            payload.originalFindings?.find((finding) => finding.id === findingId)?.behaviorCellIds ?? [],
+          );
+          const evidenceIds = (payload.rerunEvidence ?? [])
+            .filter((record) => record.cellIds?.some((cellId) => cells.has(cellId)))
+            .map((record) => record.id)
+            .filter((id): id is string => Boolean(id));
+          return {
+            findingId,
+            status: evidenceIds.length > 0 ? 'closed' : 'evidence-incomplete',
+            summary: 'Mock closure confirms the repair for the original finding.',
+            evidenceIds,
+          };
+        }),
+      };
+      return { text: JSON.stringify(parsed), parsed };
+    }
     const findings = mockFindingsForPrompt(prompt);
     const parsed = { findings };
     return { text: JSON.stringify(parsed), parsed };
@@ -121,20 +153,31 @@ class MockHostAdapter implements HostAdapter {
 }
 
 function mockFindingsForPrompt(prompt: string): ReviewFinding[] {
-  void prompt;
-  return [mockFinding(1)];
+  const behaviorCellId = /BEHAVIOR_MATRIX_START\n\[\{\"id\":\"([^\"]+)/.exec(prompt)?.[1];
+  return [mockFinding(
+    1,
+    behaviorCellId,
+    prompt.includes('GOLDBAND_HIGH_SEMANTIC_FIXTURE') ? 'high' : 'medium',
+  )];
 }
 
-function mockFinding(index: number): ReviewFinding {
+function mockFinding(
+  index: number,
+  behaviorCellId?: string,
+  severity: ReviewFinding['severity'] = 'medium',
+): ReviewFinding {
   return {
     file: 'src/example.ts',
     line: index + 1,
-    severity: 'medium',
+    severity,
     summary: `Mock review finding ${index} with concrete diff evidence.`,
     evidence: '+ riskyChange();',
     failureScenario: 'A valid request reaches riskyChange() and returns the wrong result.',
     recommendation: 'Add a guard and a focused regression test.',
     suggestedVerification: 'Run the focused mock review regression test.',
+    classification: 'semantic-concern',
+    reproductionStep: 'Run the focused mock review regression test.',
+    behaviorCellIds: behaviorCellId ? [behaviorCellId] : undefined,
   };
 }
 

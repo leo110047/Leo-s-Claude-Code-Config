@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
 	chmodSync,
 	closeSync,
@@ -38,6 +37,11 @@ import {
 	acquireReviewExecutionLease,
 	releaseReviewExecutionLease,
 } from "../lib/review-execution-lease";
+import {
+	evidenceChildProcessEnvironment,
+	EVIDENCE_SANDBOX_ACTIVE_ENV,
+	EVIDENCE_TEMP_ROOT_ENV,
+} from "../lib/evidence-runtime-contract";
 import {
 	assertReviewNotNested,
 	assertValidReviewScopeFlags,
@@ -85,11 +89,13 @@ type ReviewProcessEnvironmentOptions = {
 
 const TRUSTED_CODEX_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_CODEX_EXECUTABLE";
 const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
+const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV =
+	"GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG";
 
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
+		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--evidence-manifest <file>] [--closure-artifact <initial-review-artifact>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
@@ -199,6 +205,8 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	let workId: string | undefined;
 	let ticketId: string | undefined;
 	let hasClaudeBudgetOverride = false;
+	let hasEvidenceManifest = false;
+	let hasClosureArtifact = false;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -216,6 +224,12 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			throw new Error(
 				"review code always uses real mode; --mode is not accepted",
 			);
+		}
+		if (arg === "--goldband-home") {
+			throw new Error("review state root is runtime-owned");
+		}
+		if (arg === "--review-receipt-trusted-config") {
+			throw new Error("review receipt authority is runtime-owned");
 		}
 		if (arg === "--work-id" || arg === "--ticket-id") {
 			const value = args[index + 1];
@@ -252,6 +266,20 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 				throw new Error(`${arg} may be supplied only once`);
 			}
 			hasClaudeBudgetOverride = true;
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
+		}
+		if (arg === "--evidence-manifest" || arg === "--closure-artifact") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (arg === "--evidence-manifest") {
+				if (hasEvidenceManifest) throw new Error(`${arg} may be supplied only once`);
+				hasEvidenceManifest = true;
+			} else {
+				if (hasClosureArtifact) throw new Error(`${arg} may be supplied only once`);
+				hasClosureArtifact = true;
+			}
 			forwarded.push(arg, value);
 			index += 1;
 			continue;
@@ -325,6 +353,16 @@ function reviewCode(args: string[]): number {
 	const runtimeFile = resolveWorkflowRuntimeFile();
 	const runtimeArgs = buildReviewRuntimeArgs(args);
 	const reviewEnvironment = prepareReviewProcessEnvironment(process.env);
+	runtimeArgs.push("--goldband-home", reviewEnvironment.evidenceRoot);
+	const trustedRuntime = readTrustedRuntimeConfig(fileURLToPath(import.meta.url));
+	if (trustedRuntime) {
+		reviewEnvironment.env[REVIEW_RECEIPT_TRUSTED_CONFIG_ENV] =
+			trustedRuntime.configFile;
+		runtimeArgs.push(
+			"--review-receipt-trusted-config",
+			trustedRuntime.configFile,
+		);
+	}
 	const trustedCodexExecutable = resolveTrustedCodexExecutable();
 	if (trustedCodexExecutable) resolveTrustedRulesRuntime();
 	if (trustedCodexExecutable) {
@@ -800,7 +838,10 @@ export function prepareReviewProcessEnvironment(
 	env: NodeJS.ProcessEnv,
 	options: ReviewProcessEnvironmentOptions = {},
 ): ReviewProcessEnvironment {
-	const cleanEnv = { ...env };
+	const cleanEnv = {
+		...env,
+		...evidenceChildProcessEnvironment(env),
+	};
 	delete cleanEnv[REVIEW_EVIDENCE_DURABILITY_ENV];
 	delete cleanEnv[TRUSTED_CODEX_EXECUTABLE_ENV];
 	delete cleanEnv[TRUSTED_BROWSER_EXECUTABLE_ENV];
@@ -819,7 +860,7 @@ export function prepareReviewProcessEnvironment(
 			env: cleanEnv,
 			evidenceRoot,
 			coordinationRoot: prepareTemporaryReviewCoordinationRoot(
-				options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+				options.coordinationRoot ?? defaultReviewCoordinationRoot(evidenceRoot, "durable"),
 			),
 			durability: "durable",
 		};
@@ -829,10 +870,10 @@ export function prepareReviewProcessEnvironment(
 
 	const temporaryRoot = options.createTemporaryRoot
 		? options.createTemporaryRoot()
-		: mkdtempSync(join(tmpdir(), "goldband-review-state-"));
+		: mkdtempSync(join(reviewTemporaryDirectory(env), "goldband-review-state-"));
 	probe(temporaryRoot);
 	const coordinationRoot = prepareTemporaryReviewCoordinationRoot(
-		options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+		options.coordinationRoot ?? defaultReviewCoordinationRoot(temporaryRoot, "ephemeral"),
 	);
 	return {
 		env: {
@@ -846,15 +887,44 @@ export function prepareReviewProcessEnvironment(
 	};
 }
 
-function defaultReviewCoordinationRoot(home = homedir()): string {
-	const identity =
-		typeof process.getuid === "function"
-			? String(process.getuid())
-			: createHash("sha256").update(home).digest("hex").slice(0, 12);
-	return join(
-		realpathSync(tmpdir()),
-		`goldband-review-coordination-${identity}`,
-	);
+function defaultReviewCoordinationRoot(
+	stateRoot: string,
+	durability: "durable" | "ephemeral",
+): string {
+	if (durability === "durable") return join(stateRoot, "review-coordination");
+	const identity = typeof process.getuid === "function"
+		? String(process.getuid())
+		: "current-user";
+	return join(dirname(stateRoot), `goldband-review-coordination-${identity}`);
+}
+
+function reviewTemporaryDirectory(env: NodeJS.ProcessEnv): string {
+	const runtimeOwnedEvidenceRoot = env[EVIDENCE_TEMP_ROOT_ENV];
+	if (
+		env[EVIDENCE_SANDBOX_ACTIVE_ENV] === "1" &&
+		runtimeOwnedEvidenceRoot &&
+		isAbsolute(runtimeOwnedEvidenceRoot) &&
+		resolve(runtimeOwnedEvidenceRoot) === runtimeOwnedEvidenceRoot
+	) {
+		// The outer evidence runtime creates, canonicalizes, and grants this root
+		// before entering Seatbelt. Re-probing it here can itself be denied and
+		// must not make the installed launcher fall back to an unauthorized /tmp.
+		return runtimeOwnedEvidenceRoot;
+	}
+	for (const key of [EVIDENCE_TEMP_ROOT_ENV, "TMPDIR", "TMP", "TEMP"] as const) {
+		const candidate = env[key];
+		if (!candidate || !isAbsolute(candidate) || !existsSync(candidate)) continue;
+		let metadata;
+		try {
+			metadata = lstatSync(candidate);
+		} catch {
+			continue;
+		}
+		if (!metadata.isDirectory() || metadata.isSymbolicLink()) continue;
+		if (typeof process.getuid === "function" && metadata.uid !== process.getuid()) continue;
+		return realpathSync(candidate);
+	}
+	return realpathSync(tmpdir());
 }
 
 function prepareTemporaryReviewCoordinationRoot(root: string): string {
@@ -883,6 +953,7 @@ export function resolveTrustedCodexExecutable(
 ): string | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return requireTrustedExecutable(
 		resolved.configFile,
 		"codexExecutable",
@@ -895,6 +966,7 @@ export function resolveTrustedBrowserRuntime(
 ): TrustedBrowserRuntime | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return {
 		browserExecutable: requireTrustedExecutable(
 			resolved.configFile,
@@ -919,6 +991,7 @@ export function resolveTrustedRulesRuntime(
 ): TrustedRulesRuntime | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return {
 		rulesResolverScript: requireTrustedFile(
 			resolved.configFile,

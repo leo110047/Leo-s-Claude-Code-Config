@@ -1,6 +1,18 @@
-import type { QaCheck, QaCheckResult, ReviewFinding, SchemaValidator } from './types';
+import type {
+  QaCheck,
+  QaCheckResult,
+  ReviewFinding,
+  ReviewFindingClassification,
+  SchemaValidator,
+} from './types';
 
 const severities = new Set(['critical', 'high', 'medium', 'low', 'info']);
+const findingClassifications = new Set<ReviewFindingClassification>([
+  'verified-failure',
+  'coverage-gap',
+  'semantic-concern',
+  'runtime-incomplete',
+]);
 
 export const objectSchema: SchemaValidator<Record<string, unknown>> = {
   name: 'object',
@@ -71,6 +83,7 @@ function validateFinding(value: unknown): ReviewFinding {
   if (!severities.has(severity)) throw new Error(`invalid severity: ${severity}`);
   const summary = requiredString(item.summary, 'summary');
   return {
+    id: optionalString(item.id),
     file,
     line: optionalLine(item.line),
     severity: severity as ReviewFinding['severity'],
@@ -85,7 +98,20 @@ function validateFinding(value: unknown): ReviewFinding {
     blocking: optionalBoolean(item.blocking),
     specialist: optionalString(item.specialist),
     contributingSpecialists: optionalStringArray(item.contributingSpecialists),
+    classification: optionalFindingClassification(item.classification),
+    evidenceIds: optionalStringArray(item.evidenceIds),
+    behaviorCellIds: optionalStringArray(item.behaviorCellIds),
+    reproductionStep: optionalString(item.reproductionStep),
   };
+}
+
+function optionalFindingClassification(value: unknown): ReviewFindingClassification | undefined {
+  const classification = optionalString(value);
+  if (!classification) return undefined;
+  if (!findingClassifications.has(classification as ReviewFindingClassification)) {
+    throw new Error(`invalid finding classification: ${classification}`);
+  }
+  return classification as ReviewFindingClassification;
 }
 
 function validateQaCheck(value: unknown): QaCheck {

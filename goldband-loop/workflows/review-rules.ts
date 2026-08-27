@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,13 +95,18 @@ function loadTrustedRulesRuntime(): TrustedRulesRuntime | undefined {
 const trustedRulesRuntime = loadTrustedRulesRuntime();
 
 function loadRulesResolver(): RulesResolver {
-  const candidates = [
+  const candidates: string[] = [
     trustedRulesRuntime?.resolverScript,
     '../../hooks/scripts/lib/rules-resolver',
-    join(homedir(), '.codex', 'review-runtime', 'rules-resolver.js'),
-    join(homedir(), '.codex', 'hooks', 'shared', 'rules-resolver.js'),
-    join(homedir(), '.claude', 'hooks', 'scripts', 'lib', 'rules-resolver.js'),
   ].filter((candidate): candidate is string => Boolean(candidate));
+  const fallbackHome = process.env.HOME;
+  if (fallbackHome) {
+    candidates.push(
+      join(fallbackHome, '.codex', 'review-runtime', 'rules-resolver.js'),
+      join(fallbackHome, '.codex', 'hooks', 'shared', 'rules-resolver.js'),
+      join(fallbackHome, '.claude', 'hooks', 'scripts', 'lib', 'rules-resolver.js'),
+    );
+  }
   const failures: string[] = [];
   for (const candidate of candidates) {
     try {

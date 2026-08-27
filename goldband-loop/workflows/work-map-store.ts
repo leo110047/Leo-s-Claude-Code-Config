@@ -287,6 +287,7 @@ export class WorkMapStore {
 			input.actor,
 			(map) => {
 				const ticket = requiredTicket(map, input.ticketId);
+				const requestedChanges = ticket.evidence?.requestedChanges;
 				if (
 					!["claimed", "implemented"].includes(ticket.status) ||
 					!ticket.claim ||
@@ -298,7 +299,10 @@ export class WorkMapStore {
 					);
 				}
 				ticket.status = "implemented";
-				ticket.evidence = { receipt: input.receipt };
+				ticket.evidence = {
+					receipt: input.receipt,
+					...(requestedChanges ? { requestedChanges } : {}),
+				};
 				delete ticket.blockerReason;
 				if (map.status === "executing") map.status = "verifying";
 				return map;
@@ -320,6 +324,7 @@ export class WorkMapStore {
 			input.actor,
 			(map) => {
 				const ticket = requiredTicket(map, input.ticketId);
+				const requestedChanges = ticket.evidence?.requestedChanges;
 				if (
 					ticket.status !== "claimed" ||
 					ticket.verificationMode !== "analysis-only" ||
@@ -329,7 +334,10 @@ export class WorkMapStore {
 					throw new Error(`ticket is not an analysis claim: ${input.ticketId}`);
 				}
 				ticket.status = "implemented";
-				ticket.evidence = { analysis: input.analysis };
+				ticket.evidence = {
+					analysis: input.analysis,
+					...(requestedChanges ? { requestedChanges } : {}),
+				};
 				delete ticket.blockerReason;
 				if (map.status === "executing") map.status = "verifying";
 				return map;

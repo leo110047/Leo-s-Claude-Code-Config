@@ -119,6 +119,27 @@ git pull --ff-only
 目前支援的 capability/action 清單以
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
 
+`review/code` 會先讀取 project-owned `goldband.review-evidence.json`，在隔離、
+預設以每個 operation 各自獨立、唯讀且 read/write/network default-deny 的 snapshot 執行 typed checks，
+並驗證執行前後 tree digest、provider/cell 雙向 ownership 與 exact RED exit，確認 evidence completeness 與
+candidate provenance 後，才啟動一次 semantic review。script launcher 必須在 manifest 明確寫出 interpreter；
+macOS sandbox 會載入 Apple 的 common system process baseline，並精確重新封鎖 baseline 的 syslog、Mach service、
+shared-memory、network 與 system socket 通道。含非系統 dylib 的 Mach-O runtime 會先複製到私有 sealed projection，
+將已驗證的 load commands 改寫到 projection、ad-hoc sign 並重新雜湊最終 bytes；operation 不能讀原始 host package tree，
+也不能修改 projection。除此之外只允許 candidate 與必要 dependency roots，
+不會因此允許任意 HOME、其他 workspace 或 `/tmp` 內容。初審有 findings 且
+候選內容修正後，可用 `--closure-artifact <initial-artifact>` 做一次只看 repair
+delta、原 finding IDs 與 rerun evidence 的 closure；修正版 manifest 新增或修改的
+affected cells 也會重跑，且沒有 fresh passing evidence 就不能標成 `closed`。初審無
+findings 時不會啟動 closure；closure 也必須讀回 installed runtime authority 簽發的 receipt，caller
+只靠修改 JSON、跨 Work Map scope 或重播舊 claim attempt 都會 fail closed。這個邊界把 reviewed
+candidate、model output 與 artifact input 視為不可信，但信任同一 OS account 下的 Goldband installer/runtime；
+若同一 host user 已惡意控制 authority store，需另加 privileged helper 或 OS-backed key 才能隔離。
+Closure receipt 採 at-most-once：repair binding 與 Work Map 因果鏈驗證完成後會以 atomic claim 消耗；
+claim 後若 process crash 或後續失敗，必須重新做 initial review，不能重播同一 receipt。
+被 secret redaction 隱藏的 untracked 檔仍會以 digest 綁定並經非 prompt 通道放入 executable snapshot。Fixture/local/live/device/production evidence 會分開標示，green gate 不會
+被解讀成整體 deploy readiness。
+
 平行 agent worktree 使用兩個 user-triggered 指令：
 
 ```bash

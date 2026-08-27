@@ -2,6 +2,41 @@
 
 This document explains **why** goldband is built the way it is. For setup and commands, see CLAUDE.md. For contributing, see CONTRIBUTING.md.
 
+## Evidence-first review runtime
+
+`workflows/review.ts` owns review orchestration and
+`workflows/review-evidence.ts` owns deterministic behavior/evidence contracts.
+A project supplies `goldband.review-evidence.json`; code validates the behavior
+matrix and provider registry, materializes isolated base/candidate snapshots,
+executes bounded argument arrays under a default-deny read/write/network OS
+sandbox with the platform common process baseline plus explicit candidate,
+runner-state, sealed runtime-projection, and dependency roots, and binds
+records to the current candidate before the semantic host can start.
+Non-system Mach-O dependencies are copied into a private per-review projection,
+rewritten to projected loader paths, ad-hoc signed, and content-attested after
+transformation. Evidence commands cannot read the source package tree or write
+the projection. The macOS adapter exactly re-denies inherited syslog, Mach service,
+and shared-memory channels rather than relying only on broad operation denies.
+Prompt-redacted untracked files remain content-digest-bound and are copied only
+through the executable snapshot channel.
+
+The initial host sees one immutable full diff plus bounded matrix, evidence,
+Rules, and impact projections. It looks for omissions; it does not rerun gates
+or decide whether a command passed. Runtime classification only permits
+candidate-bound replayable failures to become verified blockers.
+
+Closure is a distinct conditional invocation over an initial artifact whose
+complete payload and standalone or Work Map scope match an installed-runtime receipt, and a
+repaired candidate. Runtime derives the repair delta, selects affected behavior
+cells, reruns their evidence, and permits one host response over original
+finding IDs. It does not resend the unchanged original diff or reopen the full
+findings inventory. Work Map closure additionally requires the exact requested-changes
+artifact and immediately following claim attempt. The same-permission host user is
+trusted; reviewed code, model output, and artifact input are not. After those checks,
+runtime atomically claims the receipt with at-most-once semantics; crash or later failure
+requires a new initial review. Reports, telemetry, and Work Map artifacts retain the
+candidate/evidence/host-call chain.
+
 ## The core idea
 
 goldband gives Claude Code a persistent browser and a set of opinionated workflow skills. The browser is the hard part — everything else is Markdown.
