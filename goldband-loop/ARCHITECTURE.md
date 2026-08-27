@@ -37,6 +37,16 @@ runtime atomically claims the receipt with at-most-once semantics; crash or late
 requires a new initial review. Reports, telemetry, and Work Map artifacts retain the
 candidate/evidence/host-call chain.
 
+`workflows/review-lineage.ts` owns cross-run authority. Before any evidence
+provider or semantic host dispatch, it locks and verifies a signed lineage
+record under the installed receipt authority. The record inherits required
+cells/providers, Work Map or standalone acceptance, selected Rules, minimum
+evidence levels, and unresolved finding IDs. Existing contracts are monotonic;
+additive coverage remains valid. Open blockers require the exact authoritative
+artifact and scoped closure. Typed waivers are loaded only from
+`goldband.review-policy.json` in the base commit and are persisted in the signed
+audit record; candidate files and model prose cannot authorize them.
+
 ## The core idea
 
 goldband gives Claude Code a persistent browser and a set of opinionated workflow skills. The browser is the hard part — everything else is Markdown.

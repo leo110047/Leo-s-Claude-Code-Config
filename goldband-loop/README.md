@@ -53,6 +53,14 @@ private projection; the command cannot read the source package tree or write the
 projection. Only the candidate, isolated runner state, sealed runtime projection,
 and projected dependency roots are readable.
 
+The installed runtime also persists a signed acceptance lineage. It compares
+every successor manifest before evidence or host dispatch, preserves unresolved
+finding IDs across restarts, and forces repaired candidates through the exact
+initial artifact's scoped closure. Optional base-committed
+`goldband.review-policy.json` sets per-cell minimum evidence levels and typed,
+auditable waivers. Reports keep `no-new-findings`, deterministic completeness,
+runtime completeness, closure completeness, and completion authority separate.
+
 Managed parallel work uses two host commands:
 
 ```bash

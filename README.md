@@ -140,6 +140,14 @@ claim 後若 process crash 或後續失敗，必須重新做 initial review，�
 被 secret redaction 隱藏的 untracked 檔仍會以 digest 綁定並經非 prompt 通道放入 executable snapshot。Fixture/local/live/device/production evidence 會分開標示，green gate 不會
 被解讀成整體 deploy readiness。
 
+跨次 review 由 installed runtime 的 signed acceptance lineage 管理。新
+manifest 只能增加 coverage，不能刪除、反轉或降低既有 required cells；有未關閉
+finding 時只能走 scoped closure。專案可在 base commit 提交 typed
+`goldband.review-policy.json`，設定 minimum evidence level 或有歸責、期限的
+waiver；model prose 與 candidate 臨時檔沒有 waiver 權限。`No new findings`
+也不等於完成，report 會分開列出 contract completeness、prior blockers、closure
+與 completion authority。
+
 平行 agent worktree 使用兩個 user-triggered 指令：
 
 ```bash

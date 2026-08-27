@@ -42,6 +42,7 @@ import {
   executeEvidencePlan,
   loadReviewEvidenceManifest,
   readClosureArtifact,
+  reviewLineageAuthority,
   removeInitialReviewRuntimeReceipt,
   validateClosureResults,
   writeInitialReviewArtifact,
@@ -50,6 +51,15 @@ import {
   type ReviewEvidenceBundle,
   type ReviewEvidenceManifest,
 } from './review-evidence';
+import {
+  finalizeClosureReviewLineage,
+  finalizeInitialReviewLineage,
+  prepareReviewLineage,
+  releaseReviewLineage,
+  reviewLineageScopeDigest,
+  type ReviewLineageHandle,
+  type ReviewVerdict,
+} from './review-lineage';
 import {
   collectReviewImpactContext,
   formatReviewImpactContext,
@@ -126,6 +136,10 @@ type ReviewEvidenceRunState = {
   closure?: ClosureReviewInput;
   closureResults?: ReviewClosureResult[];
   hostCallCount: number;
+  lineage: ReviewLineageHandle;
+  lineageKey: Buffer;
+  verdict?: ReviewVerdict;
+  rules: ReturnType<typeof coreReviewRules>;
 };
 
 const reviewEvidenceRuns = new Map<string, ReviewEvidenceRunState>();
@@ -256,11 +270,59 @@ function planEvidence(ctx: WorkflowContext) {
       ? { manifest: closureArtifact.evidence.manifest, source: closureArtifact.evidence.manifestSource }
       : loadReviewEvidenceManifest(ctx);
   const binding = createCandidateBinding(ctx.cwd, input, loaded.manifest, ctx.options.base);
-  const closure = closureArtifact
-    ? buildClosureInput(closureArtifact, binding, input.diff, loaded.manifest)
-    : undefined;
-  if (closureArtifact && closure) {
-    claimInitialReviewClosure(ctx, closureArtifact, binding.candidateDigest);
+  const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
+  const rules = coreReviewRules(
+    ctx.cwd,
+    input.diff,
+    rulesSnapshot,
+    input.impact.changedFiles,
+  );
+  const policyIdentityDigest = sha256(JSON.stringify({
+    rules: rulesSnapshot.manifest.rules.map((rule) => ({
+      id: rule.id,
+      contentHash: rulesSnapshot.rulesById[rule.id]?.contentHash,
+    })),
+  }));
+  const acceptanceDigest = workMapBinding?.ticketDigest ?? sha256(JSON.stringify({
+    kind: 'standalone',
+    repository: binding.repository,
+    baseDigest: binding.baseDigest,
+    scopeDigest: binding.scopeDigest,
+  }));
+  const lineageScopeDigest = reviewLineageScopeDigest(
+    binding.scopeDigest,
+    workMapBinding
+      ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
+      : undefined,
+  );
+  const authority = reviewLineageAuthority(ctx);
+  const lineage = prepareReviewLineage({
+    cwd: ctx.cwd,
+    storeRoot: authority.receiptRoot,
+    key: authority.key,
+    repository: binding.repository,
+    baseRef: binding.baseRef,
+    baseDigest: binding.baseDigest,
+    scopeDigest: lineageScopeDigest,
+    acceptanceDigest,
+    policyIdentityDigest,
+    candidateDigest: binding.candidateDigest,
+    behaviorContractDigest: binding.behaviorContractDigest,
+    manifest: loaded.manifest,
+    closureArtifact,
+    runId: ctx.runId,
+  });
+  let closure: ClosureReviewInput | undefined;
+  try {
+    closure = closureArtifact
+      ? buildClosureInput(closureArtifact, binding, input.diff, loaded.manifest)
+      : undefined;
+    if (closureArtifact && closure) {
+      claimInitialReviewClosure(ctx, closureArtifact, binding.candidateDigest);
+    }
+  } catch (error) {
+    releaseReviewLineage(lineage);
+    throw error;
   }
   reviewEvidenceRuns.set(ctx.runId, {
     input,
@@ -281,6 +343,9 @@ function planEvidence(ctx: WorkflowContext) {
     },
     closure,
     hostCallCount: 0,
+    lineage,
+    lineageKey: authority.key,
+    rules,
   });
   return input;
 }
@@ -298,6 +363,7 @@ async function runEvidence(ctx: WorkflowContext) {
       onlyCells,
     );
   } catch (error) {
+    releaseReviewLineage(state.lineage);
     reviewEvidenceRuns.delete(ctx.runId);
     throw error;
   }
@@ -310,6 +376,7 @@ function verifyEvidence(ctx: WorkflowContext) {
   try {
     assertCandidateFresh(ctx, input, state);
   } catch (error) {
+    releaseReviewLineage(state.lineage);
     reviewEvidenceRuns.delete(ctx.runId);
     throw error;
   }
@@ -355,13 +422,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     return [];
   }
   const adapter = adapterFor(reviewHost(ctx));
-  const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
-  const coreRules = coreReviewRules(
-    ctx.cwd,
-    input.diff,
-    rulesSnapshot,
-    input.impact.changedFiles,
-  );
+  const coreRules = evidenceState.rules;
   const prompt = evidenceState.closure
     ? buildClosureReviewPrompt(ctx, evidenceState.closure, evidenceState.evidence, coreRules)
     : buildReviewPrompt(
@@ -405,6 +466,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
       );
     }
     reviewEvidenceRuns.delete(ctx.runId);
+    releaseReviewLineage(evidenceState.lineage);
     workMapReviewBindings.delete(ctx.runId);
     throw error;
   }
@@ -437,6 +499,7 @@ function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
   try {
     return aggregateReviewFindings(normalizeFindings(findingsSchema.validate(ctx.input)));
   } catch (error) {
+    releaseReviewLineage(requiredEvidenceRunState(ctx.runId).lineage);
     reviewEvidenceRuns.delete(ctx.runId);
     throw error;
   }
@@ -481,6 +544,24 @@ function renderReport(ctx: WorkflowContext): string {
       '',
     );
   }
+  const closureComplete = Boolean(
+    evidenceState.closure &&
+    evidenceState.closureResults?.length === evidenceState.closure.affectedFindingIds.length &&
+    evidenceState.closureResults.every((result) => result.status === 'closed'),
+  );
+  const inheritedBlockers = evidenceState.lineage.predecessor?.unresolvedFindings
+    .filter((finding) => finding.blocking).length ?? 0;
+  lines.push(
+    '## Verdict authority',
+    '',
+    `- no-new-findings: ${!evidenceState.closure && findings.length === 0}`,
+    `- prior-blockers-open: ${evidenceState.closure ? !closureComplete : inheritedBlockers > 0 || findings.some((finding) => finding.blocking)}`,
+    `- deterministic-contract-complete: ${evidenceState.evidence.completeness.complete}`,
+    `- runtime-evidence-incomplete: ${evidenceState.evidence.completeness.runtimeIncompleteCellIds.length > 0}`,
+    `- closure-complete: ${closureComplete}`,
+    `- completion-authorized: ${evidenceState.evidence.completeness.complete && (evidenceState.closure ? closureComplete : !findings.some((finding) => finding.blocking))}`,
+    '',
+  );
   lines.push('## Typed evidence', '');
   for (const record of evidenceState.evidence.records) {
     lines.push(
@@ -496,7 +577,7 @@ function renderReport(ctx: WorkflowContext): string {
       if (result.evidenceIds?.length) lines.push(`  Evidence: ${result.evidenceIds.join(', ')}`);
     }
   } else if (findings.length === 0 && evidenceState.evidence.completeness.complete) {
-    lines.push('No findings. Deterministic evidence is complete for the declared behavior contract.');
+    lines.push('No new findings. Deterministic evidence is complete for the authoritative behavior contract.');
   } else if (findings.length === 0) {
     lines.push('Review incomplete: no semantic findings were returned, but deterministic evidence is not complete.');
   } else {
@@ -520,13 +601,24 @@ function renderReport(ctx: WorkflowContext): string {
   const file = join(dir, reportArtifactName(ctx));
   writeFileSync(file, report);
   const binding = workMapReviewBindings.get(ctx.runId);
-  const phaseArtifact = persistReviewPhaseArtifact(ctx, dir, evidenceState, findings, binding);
+  let phaseArtifact: ReturnType<typeof persistReviewPhaseArtifact>;
+  try {
+    phaseArtifact = persistReviewPhaseArtifact(ctx, dir, evidenceState, findings, binding);
+  } catch (error) {
+    releaseReviewLineage(evidenceState.lineage);
+    reviewEvidenceRuns.delete(ctx.runId);
+    workMapReviewBindings.delete(ctx.runId);
+    throw error;
+  }
+  evidenceState.verdict = phaseArtifact.verdict;
   if (binding) {
     const artifactFile = join(
       binding.artifactRoot,
       `${ctx.runId}-work-map-review.json`,
     );
-    let preservePhaseArtifact = false;
+    // The signed lineage now names this artifact. Preserve it even if Work Map
+    // readback fails; a later initial review must not erase the blocker.
+    let preservePhaseArtifact = true;
     try {
       for (let attempt = 1; attempt <= 5; attempt += 1) {
         const current = binding.store.read(binding.workId);
@@ -575,6 +667,7 @@ function renderReport(ctx: WorkflowContext): string {
             recordsDigest: sha256(JSON.stringify(evidenceState.evidence.records)),
             hostCallCount: evidenceState.hostCallCount,
             phase: evidenceState.closure ? 'closure' : 'initial',
+            verdict: phaseArtifact.verdict,
           },
           createdAt: new Date().toISOString(),
         };
@@ -589,19 +682,9 @@ function renderReport(ctx: WorkflowContext): string {
             : { artifactDigest: binding.subject.artifactDigest }),
         };
         try {
-          const closureComplete = Boolean(
-            evidenceState.closure &&
-            evidenceState.hostCallCount === 1 &&
-            evidenceState.closureResults?.length === evidenceState.closure.affectedFindingIds.length &&
-            evidenceState.closureResults.every((result) => result.status === 'closed'),
-          );
-          const transition = evidenceState.closure
-            ? (closureComplete
-              ? binding.store.verifyTicket.bind(binding.store)
-              : binding.store.requestChanges.bind(binding.store))
-            : findings.some((finding) => finding.blocking)
-            ? binding.store.requestChanges.bind(binding.store)
-            : binding.store.verifyTicket.bind(binding.store);
+          const transition = phaseArtifact.verdict.completionAuthorized
+            ? binding.store.verifyTicket.bind(binding.store)
+            : binding.store.requestChanges.bind(binding.store);
           transition({
             workId: binding.workId,
             ticketId: binding.ticketId,
@@ -629,13 +712,14 @@ function renderReport(ctx: WorkflowContext): string {
             ctx.artifacts.push(artifactFile);
             break;
           }
-          preservePhaseArtifact = reconciliation === 'unknown';
+          preservePhaseArtifact = true;
           if (!preservePhaseArtifact) rmSync(artifactFile, { force: true });
           throw error;
         }
       }
     } catch (error) {
       reviewEvidenceRuns.delete(ctx.runId);
+      releaseReviewLineage(evidenceState.lineage);
       if (!preservePhaseArtifact) discardUncommittedReviewPhaseArtifact(ctx, phaseArtifact);
       throw error;
     } finally {
@@ -643,8 +727,10 @@ function renderReport(ctx: WorkflowContext): string {
     }
   }
   ctx.artifacts.push(phaseArtifact.file);
+  ctx.artifacts.push(evidenceState.lineage.file);
   ctx.artifacts.push(file, evidencePath(ctx.workflow.name, ctx.options));
   reviewEvidenceRuns.delete(ctx.runId);
+  releaseReviewLineage(evidenceState.lineage);
   return report;
 }
 
@@ -684,7 +770,7 @@ function persistReviewPhaseArtifact(
   evidenceState: ReviewEvidenceRunState,
   findings: ReviewFinding[],
   workMapBinding?: WorkMapReviewBinding,
-): { file: string; receiptId?: string } {
+): { file: string; receiptId?: string; verdict: ReviewVerdict } {
   if (!evidenceState.closure) {
     const artifactFile = createReviewArtifactPath(dir, ctx.runId);
     const issued = writeInitialReviewArtifact(artifactFile, {
@@ -707,7 +793,30 @@ function persistReviewPhaseArtifact(
         subjectDigest: workMapBinding.subject.digest,
       }
       : { kind: 'standalone' });
-    return { file: artifactFile, receiptId: issued.runtimeReceipt.id };
+    try {
+      const verdict = finalizeInitialReviewLineage({
+        handle: evidenceState.lineage,
+        key: evidenceState.lineageKey,
+        repository: evidenceState.evidence.binding.repository,
+        baseDigest: evidenceState.evidence.binding.baseDigest,
+        scopeDigest: reviewLineageScopeDigest(
+          evidenceState.evidence.binding.scopeDigest,
+          workMapBinding
+            ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
+            : undefined,
+        ),
+        artifact: issued,
+        artifactFile,
+        findings,
+        deterministicComplete: evidenceState.evidence.completeness.complete,
+        runtimeIncomplete: evidenceState.evidence.completeness.runtimeIncompleteCellIds.length > 0,
+      });
+      return { file: artifactFile, receiptId: issued.runtimeReceipt.id, verdict };
+    } catch (error) {
+      removeInitialReviewRuntimeReceipt(ctx, issued.runtimeReceipt.id);
+      rmSync(artifactFile, { force: true });
+      throw error;
+    }
   }
   const closureArtifactFile = join(dir, `${ctx.runId}-review-closure.json`);
   writeFileSync(closureArtifactFile, `${JSON.stringify({
@@ -727,7 +836,19 @@ function persistReviewPhaseArtifact(
     hostCallCount: evidenceState.hostCallCount,
     createdAt: new Date().toISOString(),
   }, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-  return { file: closureArtifactFile };
+  try {
+    const verdict = finalizeClosureReviewLineage({
+      handle: evidenceState.lineage,
+      key: evidenceState.lineageKey,
+      results: evidenceState.closureResults ?? [],
+      deterministicComplete: evidenceState.evidence.completeness.complete,
+      runtimeIncomplete: evidenceState.evidence.completeness.runtimeIncompleteCellIds.length > 0,
+    });
+    return { file: closureArtifactFile, verdict };
+  } catch (error) {
+    rmSync(closureArtifactFile, { force: true });
+    throw error;
+  }
 }
 
 function discardUncommittedReviewPhaseArtifact(

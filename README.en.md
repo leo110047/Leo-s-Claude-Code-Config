@@ -46,7 +46,16 @@ an OS-backed key or privileged helper.
 Closure receipts use at-most-once semantics: after repair binding and Work Map causality
 validation, an atomic claim consumes the receipt. A crash or later failure requires a new
 initial review instead of replaying that receipt. Prompt-redacted untracked files remain
-digest-bound and executable through a non-prompt snapshot channel. A zero-finding initial review cannot trigger closure. Fixture, local, live, device, and production
+digest-bound and executable through a separate snapshot-only channel.
+
+Cross-run review authority is owned by a signed installed-runtime acceptance
+lineage. A new manifest may add coverage but cannot remove, reverse, or weaken
+inherited required cells, and an open finding forces scoped closure. Projects
+may commit typed minimum evidence requirements or attributable waivers in
+`goldband.review-policy.json` on the base commit; model prose and candidate-only
+files have no waiver authority. `No new findings` is reported separately from
+contract completeness, prior blockers, closure, and completion authority. A
+zero-finding initial review cannot trigger closure. Fixture, local, live, device, and production
 evidence levels remain distinct, and a green gate is never reported as overall
 deployment readiness.
 

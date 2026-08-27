@@ -140,7 +140,7 @@ type EvidenceProviderKind =
   | 'project-gate'
   | 'property-fuzz'
   | 'runtime-integration';
-type EvidenceLevel =
+export type EvidenceLevel =
   | 'fixture'
   | 'local'
   | 'sandboxed-service'
@@ -383,7 +383,16 @@ export function createCandidateBinding(
     baseRef,
     baseDigest,
     candidateDigest,
-    scopeDigest: sha256(stableJson({ source: input.source.replace(/ \+ untracked$/, '') })),
+    scopeDigest: sha256(stableJson({
+      kind: input.source.startsWith('diff-file:')
+        ? 'diff-file'
+        : input.source === 'work-map-runtime-owned-candidate'
+          ? 'work-map'
+          : 'git',
+      source: input.source.startsWith('diff-file:')
+        ? undefined
+        : input.source.replace(/ \+ untracked$/, ''),
+    })),
     behaviorContractDigest: sha256(stableJson(manifest)),
     changedFiles: [...input.changedFiles],
     redactedUntrackedFiles: hiddenUntracked,
@@ -533,6 +542,15 @@ export function classifyReviewFindings(
       .filter((record): record is ReviewEvidenceRecord => Boolean(record))
       .filter((record) => requestedCellIds.size > 0 && record.cellIds.some((id) => requestedCellIds.has(id)));
     const validCellIds = new Set(evidence.manifest.behaviorMatrix.map((cell) => cell.id));
+    const normalizedCellIds = uniqueSorted([
+      ...(finding.behaviorCellIds ?? []).filter((id) => validCellIds.has(id)),
+      ...bound.flatMap((record) => record.cellIds),
+    ]);
+    const closureCellIds =
+      (finding.severity === 'critical' || finding.severity === 'high') &&
+      normalizedCellIds.length === 0
+        ? uniqueSorted([...validCellIds])
+        : normalizedCellIds;
     // Only deterministicEvidenceFindings may mint verified-failure. Semantic
     // output can reference relevant records, but cannot promote itself by
     // selecting an unrelated failed command.
@@ -547,10 +565,7 @@ export function classifyReviewFindings(
       classification,
       category: finding.category === 'deterministic-evidence' ? 'semantic-review' : finding.category,
       evidenceIds: bound.map((record) => record.id),
-      behaviorCellIds: uniqueSorted([
-        ...(finding.behaviorCellIds ?? []).filter((id) => validCellIds.has(id)),
-        ...bound.flatMap((record) => record.cellIds),
-      ]),
+      behaviorCellIds: closureCellIds,
       // Blocking authority stays deterministic: the host supplies the
       // observation, while runtime severity policy decides ticket state.
       blocking: finding.severity === 'critical' || finding.severity === 'high',
@@ -2949,6 +2964,13 @@ function reviewReceiptAuthority(ctx: WorkflowContext): { key: Buffer; receiptRoo
     }
   }
   return { key: Buffer.from(encoded, 'hex'), receiptRoot };
+}
+
+/** The lineage store shares the installed review receipt authority. */
+export function reviewLineageAuthority(
+  ctx: WorkflowContext,
+): { key: Buffer; receiptRoot: string } {
+  return reviewReceiptAuthority(ctx);
 }
 
 export function removeInitialReviewRuntimeReceipt(ctx: WorkflowContext, id: string): void {

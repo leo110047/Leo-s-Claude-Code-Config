@@ -1867,3 +1867,40 @@ Revisit triggers:
   concrete provider/device/production readback without widening local review.
 - Stable project behavior contracts can be generated from another authoritative
   artifact without losing owner review or explicit dispositions.
+
+## ADR: Runtime-owned review acceptance lineage
+
+Status: Accepted
+
+Decision:
+
+- Persist one HMAC-signed lineage per canonical repository/base/scope under the
+  installed review receipt authority.
+- Compare inherited behavior cells and providers before evidence execution.
+  Existing requirements are monotonic; new cells/providers may be added.
+- Preserve blocking finding IDs and behavior-cell bindings. A successor initial
+  review cannot supersede them; only the authoritative initial artifact may
+  enter scoped closure.
+- Bind lineage to Work Map acceptance when present, selected Rules, base,
+  candidate, scope, and manifest identities.
+- Load minimum evidence requirements and waivers only from typed
+  `goldband.review-policy.json` in the base commit. Persist applied waiver IDs in
+  the signed lineage record.
+- Keep verdict dimensions separate. `no-new-findings` alone never grants Work
+  Map verification or completion authority.
+
+Why:
+
+Fresh candidate-bound evidence can still prove a caller-weakened contract. A
+runtime-owned predecessor is required to detect removal, semantic reversal,
+risk/disposition/evidence downgrade, provider replacement, or finding
+detachment before semantic review can wash away an earlier blocker.
+
+Consequences:
+
+- Concurrent equivalent reviews have one lock owner, dead owners are
+  recoverable, and signed records detect state tampering.
+- Legitimate weakening requires a reviewable base-committed waiver; additive
+  coverage remains valid without a waiver.
+- A failed Work Map readback keeps the signed lineage and named artifact, so a
+  later review cannot erase a blocker because a projection transition failed.

@@ -411,7 +411,7 @@ describe("Work Map review readback", () => {
 		expect(store.read("work-a").tickets[0]?.status).toBe("implemented");
 	});
 
-	test("host-ineligible closure requests changes instead of verifying the Work Map ticket", async () => {
+	test("closure rejects a caller-downgraded evidence disposition before execution", async () => {
 		const { store, repo, state } = fixture();
 		store.create(analysisInput(), "codex");
 		const manifest = writeNoopEvidenceManifest(state);
@@ -425,19 +425,16 @@ describe("Work Map review readback", () => {
 		fs.writeFileSync(path.join(repo, "reports", "ticket-a.md"), "after-repair\n");
 		recordAnalysisArtifact({ cwd: repo, env: { ...process.env, GOLDBAND_HOME: state }, workId: "work-a", ticketId: "ticket-a", artifactPath: "reports/ticket-a.md" });
 		writeNoopEvidenceManifest(state, "unsupported");
-		const closure = await runWorkflow(getWorkflow("review/code"), {
+		await expect(runWorkflow(getWorkflow("review/code"), {
 			mode: "mock", host: "mock", workId: "work-a", ticketId: "ticket-a",
 			cwd: repo, goldbandHome: state, evidenceManifestFile: manifest,
 			closureArtifactFile: initialArtifact,
-		});
-		expect(String(closure.output)).toContain("Semantic host calls: 0.");
-		expect(String(closure.output)).toContain("evidence-incomplete");
+		})).rejects.toThrow("contract laundering blocked");
 		const current = store.read("work-a");
-		expect(current.tickets[0]?.status).toBe("claimed");
-		expect(current.tickets[0]?.evidence?.requestedChanges?.id).toBe(closure.runId);
+		expect(current.tickets[0]?.status).toBe("implemented");
 	});
 
-	test("transition failure removes the uncommitted phase artifact and runtime receipt", async () => {
+	test("transition failure preserves the lineage-bound artifact and receipt", async () => {
 		const { store, repo, state } = fixture();
 		store.create(analysisInput(), "codex");
 		const manifest = writeNoopEvidenceManifest(state);
@@ -459,9 +456,12 @@ describe("Work Map review readback", () => {
 		const artifactRoot = path.join(state, "workflow-runs", "artifacts");
 		expect(fs.existsSync(artifactRoot)
 			? fs.readdirSync(artifactRoot).some((file) => file.endsWith("-review-evidence.json"))
-			: false).toBe(false);
+			: false).toBe(true);
 		const receiptRoot = path.join(state, "workflow-runs", "mock-review-receipts");
-		expect(fs.existsSync(receiptRoot) ? fs.readdirSync(receiptRoot) : []).toHaveLength(0);
+		expect(fs.existsSync(receiptRoot)
+			? fs.readdirSync(receiptRoot).some((file) => file.endsWith(".json"))
+			: false).toBe(true);
+		expect(fs.existsSync(path.join(receiptRoot, "review-lineages"))).toBe(true);
 		expect(store.read("work-a").tickets[0]?.status).toBe("implemented");
 	});
 

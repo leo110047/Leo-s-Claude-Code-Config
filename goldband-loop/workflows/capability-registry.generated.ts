@@ -21,7 +21,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
     "capability": "review",
     "action": "code",
     "name": "review/code",
-    "description": "Evidence-first code review with scoped closure.",
+    "description": "Evidence-first code review with authoritative lineage and scoped closure.",
     "contractPath": "generated/workflow-contracts/review/code.workflow.md",
     "runtime": "typed",
     "lifecycle": "public",

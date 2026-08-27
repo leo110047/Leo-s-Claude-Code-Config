@@ -168,6 +168,18 @@ An operation identity also binds seed/iterations, resolved executable content,
 runner policy, platform, dependency contracts, package metadata, and projected
 command shims; closure cannot weaken that identity behind a stable operation ID.
 
+Cross-run acceptance is owned by a signed runtime lineage, not by the newest
+caller manifest. Before evidence or semantic dispatch, the runtime compares the
+current contract with inherited cells/providers, the Work Map acceptance or
+standalone scope, selected Rules, minimum evidence policy, and unresolved
+finding IDs. Existing requirements cannot be removed, reversed, downgraded, or
+detached from blockers. Additive coverage remains valid. Open blockers force
+the exact authoritative initial artifact through scoped closure. Optional
+waivers and per-cell minimum evidence levels are accepted only from typed
+`goldband.review-policy.json` in the base commit and are copied into the signed
+audit record. Reports and Work Map artifacts keep no-new-findings, deterministic
+completeness, runtime completeness, closure, and completion authority distinct.
+
 Cross-review hook adapters are host-specific projections over
 `goldband-loop/cross-review/core.cjs`. Minimal workflow runtime roots include
 the complete `cross-review/` directory next to `bin/`; explicit module discovery

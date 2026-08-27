@@ -15,7 +15,7 @@
       "actions": [
         {
           "id": "code",
-          "description": "Evidence-first code review with scoped closure.",
+          "description": "Evidence-first code review with authoritative lineage and scoped closure.",
           "runtime": "typed",
           "owner": "review-runtime",
           "risk": "medium"

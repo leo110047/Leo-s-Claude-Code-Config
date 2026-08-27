@@ -743,7 +743,7 @@ describe('review evidence contracts', () => {
     expect(unrelated[0]).toMatchObject({
       classification: 'semantic-concern',
       evidenceIds: [],
-      behaviorCellIds: [],
+      behaviorCellIds: ['behavior-a'],
       blocking: true,
     });
 

@@ -173,14 +173,14 @@
       "actions": [
         {
           "id": "code",
-          "description": "Evidence-first code review with scoped closure.",
+          "description": "Evidence-first code review with authoritative lineage and scoped closure.",
           "runtime": "typed",
           "owner": "review-runtime",
           "risk": "medium",
           "promptContract": {
             "relevantContext": [
               "Claude executes bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex.",
-              "Forward scope, evidence/closure files, or Work Map IDs; runtime owns defaults."
+              "Forward scope, evidence/closure files, or Work Map IDs; runtime owns acceptance lineage and defaults."
             ],
             "hardBoundaries": [
               "Use only the installed launcher. Missing marker, runtime, or rule is an install failure; report the error.",
@@ -196,7 +196,7 @@
                 "work-map": ["work-id", "ticket-id", "managed-lease", "verification-receipt", "behavior-matrix", "evidence-provider-registry"],
                 "closure": ["initial-review-artifact", "repaired-candidate", "rerun-evidence"]
               },
-              "outputs": ["typed-evidence", "classified-findings", "closure-results", "review-artifact", "provenance-readback"],
+              "outputs": ["typed-evidence", "classified-findings", "acceptance-lineage", "typed-verdict", "closure-results", "review-artifact", "provenance-readback"],
               "sideEffects": {
                 "work-map-ticket-transition": "runtime-owner"
               }
