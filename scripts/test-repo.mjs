@@ -42,6 +42,13 @@ export const TEST_SUITES = [
     args: ['run', 'test:workflow-contracts'],
   }),
   suite({
+    id: 'root:decision-guidance',
+    label: 'Root decision guidance and installer readback',
+    cwd: ROOT,
+    command: npmCmd,
+    args: ['run', 'test:decision-guidance'],
+  }),
+  suite({
     id: 'root:app-support',
     label: 'Root app support tests',
     cwd: ROOT,

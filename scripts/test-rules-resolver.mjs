@@ -78,7 +78,24 @@ function testReviewSnapshotIsStableAndRefreshable() {
   assert.notEqual(refreshed.contentHash, first.contentHash);
 }
 
+function testChangeScopeAppliesBeforeReview() {
+  const rulesDir = copyRulesFixture();
+  for (const phase of ['plan', 'implementation', 'review']) {
+    const bundle = resolver.resolveRules({
+      repoRoot: process.cwd(),
+      rulesDir,
+      phase,
+    });
+    assert.equal(
+      bundle.ruleIds.includes('change-scope'),
+      true,
+      `change-scope must apply during ${phase}`,
+    );
+  }
+}
+
 testManifestGroupsOwnRuleMembership();
 testReviewSnapshotIsStableAndRefreshable();
+testChangeScopeAppliesBeforeReview();
 
 console.log('[OK] Rules resolver tests passed');

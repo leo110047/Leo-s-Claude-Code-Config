@@ -181,6 +181,21 @@ assert.match(
   /prose without successful runtime output is not completion/,
   'plan/create must not allow a prose-only success path',
 );
+assert.match(
+  planCreateContract,
+  /smallest sufficient solution/,
+  'plan/create must apply the canonical proportionality principle before selecting a direction',
+);
+assert.match(
+  planCreateContract,
+  /ongoing operational or maintenance cost/,
+  'plan/create must surface the permanent cost of a heavier mechanism',
+);
+assert.match(
+  planCreateContract,
+  /applicability, not deterministic enforcement/,
+  'plan/create must not misrepresent phase metadata as a hard gate',
+);
 
 const browserSessionContract = contracts.get(
   'goldband-loop/generated/workflow-contracts/browser/session.workflow.md',

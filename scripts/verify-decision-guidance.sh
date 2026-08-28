@@ -42,10 +42,16 @@ check_contains "commands/discuss.md" "Unknowns to Verify:" "discuss command requ
 check_contains "commands/plan.md" "## Decision Check" "plan command includes decision check"
 check_contains "commands/plan.md" "## Pre-Mortem" "plan command includes pre-mortem"
 check_contains "commands/plan.md" "Fallback Path:" "plan command includes fallback path"
-check_contains "commands/plan.md" "healthiest option now" "plan command keeps healthiest-path decision default"
+check_contains "commands/plan.md" "Smallest Sufficient Option:" "plan command names the smallest sufficient option"
+check_contains "commands/plan.md" "Evidence for Heavier Mechanism:" "plan command requires evidence for heavier mechanisms"
+check_contains "commands/plan.md" "Permanent Cost:" "plan command surfaces permanent cost"
 
 check_contains "skills/global/planning-workflow/SKILL.md" "## Decision-Quality Block" "planning-workflow decision-quality block"
 check_contains "skills/global/planning-workflow/SKILL.md" "/plan" "planning-workflow defers full workflow planning"
+check_contains "skills/global/planning-workflow/SKILL.md" "Smallest sufficient option and its permanent cost." "planning-workflow applies proportionality"
+check_contains "skills/global/implementation-contracts/SKILL.md" "## Pre-Implementation Proportionality" "implementation-contracts applies proportionality before edits"
+check_contains "rules/change-scope.md" "## Pre-Implementation Proportionality" "canonical change-scope policy owns the full proportionality contract"
+check_contains "rules/change-scope.md" "Phase metadata expresses applicability, not deterministic enforcement." "canonical policy preserves the guidance boundary"
 check_contains "skills/global/OPERATIONS.md" "recommendation 應附：assumptions、failure modes、warning signals、best alternative、unknowns" "operations docs keep decision recommendation guidance"
 check_contains "skills/global/VALIDATION.md" "recommendation 沒有 assumptions / failure modes / alternatives" "validation docs flag missing decision-quality evidence"
 check_contains "skills/global/security-checklist/SKILL.md" "Goldband cso workflow" "security-checklist defers deep security workflow"
@@ -59,6 +65,8 @@ check_contains "README.en.md" "goldband-loop/" "README.en references Goldband Lo
 check_contains "README.en.md" "workflow runtime" "README.en documents Goldband Loop as workflow runtime"
 check_contains "README.en.md" "ARCHITECTURE.md" "README.en points boundary details to architecture"
 check_contains "commands/verify-config.md" "scripts/verify-decision-guidance.sh" "verify-config documents decision guidance check"
+
+node "$ROOT_DIR/scripts/test-change-scope-guidance.mjs" || EXIT_CODE=1
 
 if [ "$EXIT_CODE" -eq 0 ]; then
   echo "[OK] decision guidance checks passed"

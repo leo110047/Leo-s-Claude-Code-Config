@@ -8,12 +8,14 @@ Preview, inspect, or synchronize a Work Map tracker projection.
 ## Relevant context
 
 - Ground the plan in current repository files, constraints, decisions, and available verification commands.
+- Choose the smallest sufficient solution for current needs, causes, and safety boundaries. A heavier mechanism needs current evidence naming an uncovered requirement, reachable failure, or invariant and its ongoing operational or maintenance cost.
 - Run preview first and preserve its operation digest and ordered pending step IDs.
 - For publish, request native host approval for exactly one next pending step, then invoke plan/sync with mode publish-step, the matching digest, and that step ID. Repeat only after readback.
 
 ## Hard boundaries
 
 - Plan only. Do not implement product changes unless the user separately authorizes implementation.
+- change-scope phases mean applicability, not deterministic enforcement; do not create a gate from them.
 - Never treat tracker state as Work Map authority.
 - Approval covers exactly one projection step; synthetic approval flags are forbidden.
 

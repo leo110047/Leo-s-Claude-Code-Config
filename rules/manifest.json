@@ -59,6 +59,8 @@
       "id": "change-scope",
       "file": "change-scope.md",
       "phases": [
+        "plan",
+        "implementation",
         "review"
       ],
       "groups": [
@@ -68,7 +70,7 @@
         "Fix the failure class at its owning layer rather than suppressing one symptom.",
         "Prefer reuse, then deletion, then addition; new abstraction needs a real ownership boundary or stable domain concept.",
         "Reject unrelated refactors, speculative flags, duplicated truth, and gate bypasses.",
-        "When the minimal and healthy fixes materially diverge, make that tradeoff explicit."
+        "Choose the smallest sufficient solution; a heavier permanent mechanism needs current evidence naming what the smaller option cannot cover and its ongoing cost."
       ]
     },
     {

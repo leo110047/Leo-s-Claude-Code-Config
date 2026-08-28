@@ -60,8 +60,12 @@ Codex does not auto-load:
 - Treat localhost, child-process, SDK, HTTP, WebSocket, and tool boundaries as
   untrusted. Validate before side effects or persistence, and require live
   evidence for provider, approval, process, or platform behavior claims.
-- When the minimal fix and the structurally healthy fix diverge, present both
-  and let the user choose; recommend the healthy path.
+- Before adding or expanding a permanent approval, permission, state, gate,
+  artifact, lineage, coordination workflow, external side effect, or generic
+  mechanism, choose the smallest sufficient solution that fully covers the
+  current requirement, root-cause class, and required safety boundary; use a
+  heavier mechanism only when current evidence names what the smaller option
+  cannot cover.
 - Persist durable decisions to `docs/DECISIONS.md`-style records and leave a
   written handoff (tried, verified vs suspected, next step) when stopping
   partway.

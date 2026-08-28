@@ -31,6 +31,15 @@ Keep durable workflow policy in skills, commands, hooks, rules, or project-level
 - Use workflow entrypoints and portable skills only when the task actually calls
   for them.
 
+## Judgment Default
+
+- Before adding or expanding a permanent approval, permission, state, gate,
+  artifact, lineage, coordination workflow, external side effect, or generic
+  mechanism, choose the smallest sufficient solution that fully covers the
+  current requirement, root-cause class, and required safety boundary; use a
+  heavier mechanism only when current evidence names what the smaller option
+  cannot cover.
+
 ## UI and Skills
 
 - For UI, frontend, and visual work, read `DESIGN.md` first when the repo has
