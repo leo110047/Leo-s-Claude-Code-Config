@@ -260,6 +260,11 @@ function planEvidence(ctx: WorkflowContext) {
     : undefined;
   if (workMapBinding) workMapReviewBindings.set(ctx.runId, workMapBinding);
   const closureArtifact = readClosureArtifact(ctx);
+  if (!closureArtifact && input.impact.changedFiles.length === 0) {
+    throw new Error(
+      'review/code initial candidate is empty; no authoritative lineage was created',
+    );
+  }
   if (closureArtifact && workMapBinding) {
     assertWorkMapClosureCausality(closureArtifact, workMapBinding);
   }
@@ -283,18 +288,18 @@ function planEvidence(ctx: WorkflowContext) {
       contentHash: rulesSnapshot.rulesById[rule.id]?.contentHash,
     })),
   }));
-  const acceptanceDigest = workMapBinding?.ticketDigest ?? sha256(JSON.stringify({
-    kind: 'standalone',
-    repository: binding.repository,
-    baseDigest: binding.baseDigest,
-    scopeDigest: binding.scopeDigest,
-  }));
   const lineageScopeDigest = reviewLineageScopeDigest(
     binding.scopeDigest,
     workMapBinding
       ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
-      : undefined,
+      : { changedFiles: closureArtifact?.binding.changedFiles ?? binding.changedFiles },
   );
+  const acceptanceDigest = workMapBinding?.ticketDigest ?? sha256(JSON.stringify({
+    kind: 'standalone',
+    repository: binding.repository,
+    baseDigest: binding.baseDigest,
+    scopeDigest: lineageScopeDigest,
+  }));
   const authority = reviewLineageAuthority(ctx);
   const lineage = prepareReviewLineage({
     cwd: ctx.cwd,
@@ -304,6 +309,8 @@ function planEvidence(ctx: WorkflowContext) {
     baseRef: binding.baseRef,
     baseDigest: binding.baseDigest,
     scopeDigest: lineageScopeDigest,
+    ...(!workMapBinding ? { legacyScopeDigest: binding.scopeDigest } : {}),
+    scopeSummary: closureArtifact?.binding.changedFiles ?? binding.changedFiles,
     acceptanceDigest,
     policyIdentityDigest,
     candidateDigest: binding.candidateDigest,
@@ -803,7 +810,9 @@ function persistReviewPhaseArtifact(
           evidenceState.evidence.binding.scopeDigest,
           workMapBinding
             ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
-            : undefined,
+            : {
+              changedFiles: evidenceState.evidence.binding.changedFiles,
+            },
         ),
         artifact: issued,
         artifactFile,

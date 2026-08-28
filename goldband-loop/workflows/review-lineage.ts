@@ -6,6 +6,7 @@ import {
   openSync,
   closeSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   type Stats,
@@ -73,6 +74,8 @@ type ReviewLineagePayload = {
   repository: string;
   baseDigest: string;
   scopeDigest: string;
+  scopeSummary?: string[];
+  collectionScopeDigest?: string;
   acceptanceDigest: string;
   policyDigest: string;
   policy: ReviewPolicy;
@@ -83,6 +86,7 @@ type ReviewLineagePayload = {
     digest: string;
     runId: string;
     receiptId: string;
+    createdAt?: string;
   };
   verdict: ReviewVerdict;
   appliedWaiverIds: string[];
@@ -107,11 +111,14 @@ export type ReviewLineageHandle = {
   file: string;
   lockFile: string;
   ownerToken: string;
+  scopeLocks: Array<{ lockFile: string; ownerToken: string }>;
   predecessor?: ReviewLineagePayload;
   manifest: ReviewEvidenceManifest;
   policy: ReviewPolicy;
   policyDigest: string;
   acceptanceDigest: string;
+  scopeSummary: string[];
+  collectionScopeDigest?: string;
   candidateDigest: string;
   behaviorContractDigest: string;
   appliedWaiverIds: string[];
@@ -119,11 +126,14 @@ export type ReviewLineageHandle = {
 
 export function reviewLineageScopeDigest(
   candidateScopeDigest: string,
-  workMap?: { workId: string; ticketId: string },
+  authority: { workId: string; ticketId: string } | { changedFiles: string[] },
 ): string {
-  return workMap
-    ? sha256(stableJson({ candidateScopeDigest, workMap }))
-    : candidateScopeDigest;
+  return 'workId' in authority
+    ? sha256(stableJson({ candidateScopeDigest, workMap: authority }))
+    : sha256(stableJson({
+      candidateScopeDigest,
+      changedFiles: [...new Set(authority.changedFiles)].sort(),
+    }));
 }
 
 export function prepareReviewLineage(options: {
@@ -134,6 +144,8 @@ export function prepareReviewLineage(options: {
   baseRef: string;
   baseDigest: string;
   scopeDigest: string;
+  legacyScopeDigest?: string;
+  scopeSummary: string[];
   acceptanceDigest: string;
   policyIdentityDigest: string;
   candidateDigest: string;
@@ -144,29 +156,89 @@ export function prepareReviewLineage(options: {
 }): ReviewLineageHandle {
   const policy = readBaseReviewPolicy(options.cwd, options.baseRef);
   const policyDigest = sha256(stableJson({ policy, safetyPolicy: options.policyIdentityDigest }));
-  const id = sha256(stableJson({
-    repository: options.repository,
-    baseDigest: options.baseDigest,
-    scopeDigest: options.scopeDigest,
-  }));
+  const id = lineageId(options.repository, options.baseDigest, options.scopeDigest);
   const root = join(options.storeRoot, 'review-lineages');
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const file = join(root, `${id}.json`);
   const lockFile = join(root, `${id}.lock`);
-  acquireLineageLock(lockFile, options.runId);
+  const scopeLocks = acquireScopeLocks({
+    root,
+    repository: options.repository,
+    baseDigest: options.baseDigest,
+    collectionScopeDigest: options.legacyScopeDigest,
+    scopeSummary: options.scopeSummary,
+    runId: options.runId,
+  });
   try {
-    const predecessor = readSignedLineage(file, options.key);
+    acquireLineageLock(lockFile, options.runId);
+  } catch (error) {
+    releaseScopeLocks(scopeLocks);
+    throw error;
+  }
+  try {
+    let predecessor = readSignedLineage(file, options.key);
+    let migratedLegacy = false;
+    if (!predecessor && options.legacyScopeDigest && options.legacyScopeDigest !== options.scopeDigest) {
+      const legacyId = lineageId(options.repository, options.baseDigest, options.legacyScopeDigest);
+      const legacyFile = join(root, `${legacyId}.json`);
+      const legacyLock = join(root, `${legacyId}.lock`);
+      acquireLineageLock(legacyLock, `${options.runId}-legacy-read`);
+      try {
+        const legacy = readSignedLineage(legacyFile, options.key);
+        if (legacy?.unresolvedFindings.length) {
+          const verifiedArtifact = legacy.scopeSummary && legacy.authoritativeArtifact?.createdAt
+            ? undefined
+            : closureArtifactScope(legacy, options.closureArtifact) ?? verifiedArtifactScope(legacy);
+          const legacySummary = legacy.scopeSummary ?? verifiedArtifact?.changedFiles;
+          const exactCandidate = legacy.lastCandidateDigest === options.candidateDigest;
+          if ((legacySummary && scopesOverlap(legacySummary, options.scopeSummary)) ||
+              (!legacySummary && exactCandidate)) {
+            predecessor = {
+              ...legacy,
+              id,
+              scopeDigest: options.scopeDigest,
+              scopeSummary: legacySummary ?? [...options.scopeSummary],
+              collectionScopeDigest: options.legacyScopeDigest,
+              acceptanceDigest: options.acceptanceDigest,
+              ...(legacy.authoritativeArtifact ? {
+                authoritativeArtifact: {
+                  ...legacy.authoritativeArtifact,
+                  ...(legacy.authoritativeArtifact.createdAt || !verifiedArtifact?.createdAt
+                    ? {}
+                    : { createdAt: verifiedArtifact.createdAt }),
+                },
+              } : {}),
+            };
+            migratedLegacy = true;
+          }
+        }
+      } finally {
+        releaseReviewLineage({ lockFile: legacyLock, ownerToken: `${options.runId}-legacy-read` });
+      }
+    }
+    let inheritedOverlap = false;
+    if (!predecessor && options.legacyScopeDigest) {
+      predecessor = findOverlappingScopedLineage({
+        root,
+        currentFile: file,
+        key: options.key,
+        repository: options.repository,
+        baseDigest: options.baseDigest,
+        collectionScopeDigest: options.legacyScopeDigest,
+        scopeSummary: options.scopeSummary,
+      });
+      inheritedOverlap = Boolean(predecessor);
+    }
     if (predecessor) {
-      if (predecessor.acceptanceDigest !== options.acceptanceDigest) {
+      if (!migratedLegacy && !inheritedOverlap &&
+          predecessor.acceptanceDigest !== options.acceptanceDigest) {
         throw new Error('review acceptance lineage changed without a new authoritative scope');
       }
       if (predecessor.policyDigest !== policyDigest) {
         throw new Error('review safety policy identity changed inside an existing lineage');
       }
       if (predecessor.unresolvedFindings.length > 0 && !options.closureArtifact) {
-        throw new Error(
-          `review lineage has prior findings/blockers open (${predecessor.unresolvedFindings.map((item) => item.findingId).join(', ')}); use scoped closure`,
-        );
+        throw new Error(openFindingsMessage(predecessor));
       }
       if (!options.closureArtifact &&
           predecessor.lastCandidateDigest === options.candidateDigest &&
@@ -184,8 +256,11 @@ export function prepareReviewLineage(options: {
       );
       enforceMinimumEvidenceLevels(options.manifest, policy);
       return {
-        id, file, lockFile, ownerToken: options.runId, predecessor, manifest: options.manifest, policy,
+        id, file, lockFile, ownerToken: options.runId, scopeLocks,
+        predecessor, manifest: options.manifest, policy,
         policyDigest, acceptanceDigest: options.acceptanceDigest,
+        scopeSummary: [...options.scopeSummary],
+        collectionScopeDigest: options.legacyScopeDigest,
         candidateDigest: options.candidateDigest,
         behaviorContractDigest: options.behaviorContractDigest,
         appliedWaiverIds,
@@ -196,6 +271,7 @@ export function prepareReviewLineage(options: {
         id,
         artifact: options.closureArtifact,
         scopeDigest: options.scopeDigest,
+        collectionScopeDigest: options.legacyScopeDigest,
         acceptanceDigest: options.acceptanceDigest,
         policy,
         policyDigest,
@@ -209,8 +285,11 @@ export function prepareReviewLineage(options: {
       );
       enforceMinimumEvidenceLevels(options.manifest, policy);
       return {
-        id, file, lockFile, ownerToken: options.runId, predecessor, manifest: options.manifest, policy,
+        id, file, lockFile, ownerToken: options.runId, scopeLocks,
+        predecessor, manifest: options.manifest, policy,
         policyDigest, acceptanceDigest: options.acceptanceDigest,
+        scopeSummary: [...options.scopeSummary],
+        collectionScopeDigest: options.legacyScopeDigest,
         candidateDigest: options.candidateDigest,
         behaviorContractDigest: options.behaviorContractDigest,
         appliedWaiverIds,
@@ -218,14 +297,17 @@ export function prepareReviewLineage(options: {
     }
     enforceMinimumEvidenceLevels(options.manifest, policy);
     return {
-      id, file, lockFile, ownerToken: options.runId, manifest: options.manifest, policy,
+      id, file, lockFile, ownerToken: options.runId, scopeLocks,
+      manifest: options.manifest, policy,
       policyDigest, acceptanceDigest: options.acceptanceDigest,
+      scopeSummary: [...options.scopeSummary],
+      collectionScopeDigest: options.legacyScopeDigest,
       candidateDigest: options.candidateDigest,
       behaviorContractDigest: options.behaviorContractDigest,
       appliedWaiverIds: [],
     };
   } catch (error) {
-    releaseReviewLineage({ lockFile, ownerToken: options.runId });
+    releaseReviewLineage({ lockFile, ownerToken: options.runId, scopeLocks });
     throw error;
   }
 }
@@ -234,6 +316,7 @@ function bootstrapLineageFromArtifact(options: {
   id: string;
   artifact: InitialReviewArtifact;
   scopeDigest: string;
+  collectionScopeDigest?: string;
   acceptanceDigest: string;
   policy: ReviewPolicy;
   policyDigest: string;
@@ -252,6 +335,8 @@ function bootstrapLineageFromArtifact(options: {
     repository: options.artifact.binding.repository,
     baseDigest: options.artifact.binding.baseDigest,
     scopeDigest: options.scopeDigest,
+    scopeSummary: [...options.artifact.binding.changedFiles].sort(),
+    collectionScopeDigest: options.collectionScopeDigest,
     acceptanceDigest: options.acceptanceDigest,
     policyDigest: options.policyDigest,
     policy: options.policy,
@@ -262,6 +347,7 @@ function bootstrapLineageFromArtifact(options: {
       digest: sha256(stableJson(options.artifact)),
       runId: options.artifact.runId,
       receiptId: options.artifact.runtimeReceipt.id,
+      createdAt: options.artifact.createdAt,
     },
     verdict: verdictFor({
       noNewFindings: options.artifact.findings.length === 0,
@@ -314,6 +400,8 @@ export function finalizeInitialReviewLineage(options: {
     repository: options.repository,
     baseDigest: options.baseDigest,
     scopeDigest: options.scopeDigest,
+    scopeSummary: [...options.handle.scopeSummary],
+    collectionScopeDigest: options.handle.collectionScopeDigest,
     acceptanceDigest: options.handle.acceptanceDigest,
     policyDigest: options.handle.policyDigest,
     policy: options.handle.policy,
@@ -328,6 +416,7 @@ export function finalizeInitialReviewLineage(options: {
         digest: sha256(stableJson(options.artifact)),
         runId: options.artifact.runId,
         receiptId: options.artifact.runtimeReceipt.id,
+        createdAt: options.artifact.createdAt,
       },
     } : {}),
     verdict,
@@ -385,12 +474,19 @@ export function finalizeClosureReviewLineage(options: {
 }
 
 export function releaseReviewLineage(
-  handle?: Pick<ReviewLineageHandle, 'lockFile' | 'ownerToken'>,
+  handle?: Pick<ReviewLineageHandle, 'lockFile' | 'ownerToken'> & {
+    scopeLocks?: Array<{ lockFile: string; ownerToken: string }>;
+  },
 ): void {
-  if (!handle?.lockFile) return;
+  if (!handle) return;
+  releaseOwnedLock(handle.lockFile, handle.ownerToken);
+  releaseScopeLocks(handle.scopeLocks ?? []);
+}
+
+function releaseOwnedLock(lockFile: string, ownerToken: string): void {
   let owner: { runId?: string } = {};
-  try { owner = JSON.parse(readFileSync(handle.lockFile, 'utf8')); } catch { return; }
-  if (owner.runId === handle.ownerToken) rmSync(handle.lockFile, { force: true });
+  try { owner = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { return; }
+  if (owner.runId === ownerToken) rmSync(lockFile, { force: true });
 }
 
 export function readReviewLineageForTest(
@@ -590,6 +686,97 @@ function assertAuthoritativeClosureArtifact(
   }
 }
 
+function verifiedArtifactScope(
+  lineage: ReviewLineagePayload,
+): { changedFiles: string[]; createdAt: string } | undefined {
+  const artifactFile = lineage.authoritativeArtifact?.file;
+  if (!artifactFile) return undefined;
+  const stat = lstatSync(artifactFile, { throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.isSymbolicLink()) return undefined;
+  try {
+    const artifact = JSON.parse(readFileSync(artifactFile, 'utf8')) as InitialReviewArtifact;
+    if (sha256(stableJson(artifact)) !== lineage.authoritativeArtifact?.digest ||
+        !Array.isArray(artifact.binding?.changedFiles) ||
+        artifact.binding.changedFiles.some((item) => typeof item !== 'string')) {
+      return undefined;
+    }
+    if (typeof artifact.createdAt !== 'string' || !Number.isFinite(Date.parse(artifact.createdAt))) {
+      return undefined;
+    }
+    return {
+      changedFiles: [...new Set(artifact.binding.changedFiles)].sort(),
+      createdAt: artifact.createdAt,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function findOverlappingScopedLineage(options: {
+  root: string;
+  currentFile: string;
+  key: Buffer;
+  repository: string;
+  baseDigest: string;
+  collectionScopeDigest: string;
+  scopeSummary: string[];
+}): ReviewLineagePayload | undefined {
+  const candidates = readdirSync(options.root)
+    .filter((name) => name.endsWith('.json'))
+    .sort();
+  for (const name of candidates) {
+    const file = join(options.root, name);
+    if (file === options.currentFile) continue;
+    const lineage = readSignedLineage(file, options.key);
+    if (!lineage || lineage.repository !== options.repository ||
+        lineage.baseDigest !== options.baseDigest ||
+        lineage.collectionScopeDigest !== options.collectionScopeDigest ||
+        lineage.unresolvedFindings.length === 0 ||
+        !lineage.scopeSummary || !scopesOverlap(lineage.scopeSummary, options.scopeSummary)) {
+      continue;
+    }
+    return lineage;
+  }
+  return undefined;
+}
+
+function closureArtifactScope(
+  lineage: ReviewLineagePayload,
+  artifact?: InitialReviewArtifact,
+): { changedFiles: string[]; createdAt: string } | undefined {
+  if (!artifact || sha256(stableJson(artifact)) !== lineage.authoritativeArtifact?.digest) {
+    return undefined;
+  }
+  return {
+    changedFiles: [...new Set(artifact.binding.changedFiles)].sort(),
+    createdAt: artifact.createdAt,
+  };
+}
+
+function openFindingsMessage(lineage: ReviewLineagePayload): string {
+  const artifact = lineage.authoritativeArtifact;
+  const verifiedArtifact = verifiedArtifactScope(lineage);
+  const findings = lineage.unresolvedFindings.map((item) => item.findingId).join(', ');
+  const scope = lineage.scopeSummary?.length
+    ? lineage.scopeSummary.join(', ')
+    : '<legacy scope unavailable>';
+  const runId = artifact?.runId ?? lineage.unresolvedFindings[0]?.artifactRunId ?? '<unknown>';
+  const createdAt = artifact?.createdAt ?? verifiedArtifact?.createdAt ?? '<unavailable>';
+  const closureInstruction = artifact && verifiedArtifact
+    ? `close with: --closure-artifact ${artifact.file}`
+    : artifact
+      ? `closure recovery: restore an authoritative artifact matching digest ${artifact.digest}, then use --closure-artifact <restored-path>`
+      : 'closure recovery: authoritative artifact reference is unavailable';
+  return [
+    `review lineage has prior findings/blockers open (${findings})`,
+    `authoritative run: ${runId}`,
+    `created: ${createdAt}`,
+    `lineage updated: ${lineage.updatedAt}`,
+    `scope: ${scope}`,
+    closureInstruction,
+  ].join('; ');
+}
+
 function verdictFor(input: {
   noNewFindings: boolean;
   unresolvedCount: number;
@@ -618,6 +805,45 @@ function normalizeOperation<T extends { requiredSystemTools?: string[] }>(operat
     ...(JSON.parse(JSON.stringify(operation)) as T),
     requiredSystemTools: operation.requiredSystemTools ?? [],
   };
+}
+
+function acquireScopeLocks(options: {
+  root: string;
+  repository: string;
+  baseDigest: string;
+  collectionScopeDigest?: string;
+  scopeSummary: string[];
+  runId: string;
+}): Array<{ lockFile: string; ownerToken: string }> {
+  if (!options.collectionScopeDigest || options.scopeSummary.length === 0) return [];
+  const lockRoot = join(options.root, 'scope-path-locks');
+  mkdirSync(lockRoot, { recursive: true, mode: 0o700 });
+  const acquired: Array<{ lockFile: string; ownerToken: string }> = [];
+  try {
+    for (const path of [...new Set(options.scopeSummary)].sort()) {
+      const lockId = sha256(stableJson({
+        repository: options.repository,
+        baseDigest: options.baseDigest,
+        collectionScopeDigest: options.collectionScopeDigest,
+        path,
+      }));
+      const lock = { lockFile: join(lockRoot, `${lockId}.lock`), ownerToken: options.runId };
+      acquireLineageLock(lock.lockFile, lock.ownerToken);
+      acquired.push(lock);
+    }
+    return acquired;
+  } catch (error) {
+    releaseScopeLocks(acquired);
+    throw error;
+  }
+}
+
+function releaseScopeLocks(
+  locks: Array<{ lockFile: string; ownerToken: string }>,
+): void {
+  for (const lock of [...locks].reverse()) {
+    releaseOwnedLock(lock.lockFile, lock.ownerToken);
+  }
 }
 
 function acquireLineageLock(lockFile: string, runId: string): void {
@@ -776,6 +1002,15 @@ function stableJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function lineageId(repository: string, baseDigest: string, scopeDigest: string): string {
+  return sha256(stableJson({ repository, baseDigest, scopeDigest }));
+}
+
+function scopesOverlap(left: string[], right: string[]): boolean {
+  const rightPaths = new Set(right);
+  return left.some((path) => rightPaths.has(path));
 }
 
 function requiredObject(value: unknown, label: string): Record<string, unknown> {

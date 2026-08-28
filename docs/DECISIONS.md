@@ -1883,6 +1883,24 @@ Decision:
   enter scoped closure.
 - Bind lineage to Work Map acceptance when present, selected Rules, base,
   candidate, scope, and manifest identities.
+- Reject an empty initial candidate before acquiring or writing authoritative
+  lineage state. For standalone reviews, bind lineage identity to normalized
+  changed paths as well as the collection scope. A repair keeps the original
+  path scope and must use its authoritative artifact for closure.
+- Preserve upgrade safety with signed legacy read-through: a broad-scope legacy
+  blocker migrates only when its artifact digest verifies the same changed-path
+  scope. An empty or unrelated legacy artifact remains stored but cannot pollute
+  a different candidate. If the artifact is unavailable, an exact signed
+  candidate-digest match still preserves the blocker; other candidates do not
+  inherit the unverifiable broad scope.
+- Treat non-empty changed-path overlap inside one standalone collection scope as
+  the same unresolved authority for admission purposes. A repair that adds or
+  removes paths cannot start a successor initial review while any original path
+  still overlaps; it must use the authoritative closure artifact.
+- Acquire deterministic sorted per-path locks before overlap discovery and hold
+  them through lineage finalization or release. Overlapping candidates therefore
+  serialize across scan and write, while disjoint candidates keep independent
+  concurrency.
 - Load minimum evidence requirements and waivers only from typed
   `goldband.review-policy.json` in the base commit. Persist applied waiver IDs in
   the signed lineage record.
@@ -1904,3 +1922,7 @@ Consequences:
   coverage remains valid without a waiver.
 - A failed Work Map readback keeps the signed lineage and named artifact, so a
   later review cannot erase a blocker because a projection transition failed.
+- Block messages name the authoritative run, creation time, lineage update time,
+  changed-path scope, and unresolved finding IDs. They provide the exact
+  `--closure-artifact` instruction when the artifact still verifies; otherwise
+  they name the expected digest and the required restore-then-close recovery.

@@ -142,7 +142,14 @@ claim 後若 process crash 或後續失敗，必須重新做 initial review，�
 
 跨次 review 由 installed runtime 的 signed acceptance lineage 管理。新
 manifest 只能增加 coverage，不能刪除、反轉或降低既有 required cells；有未關閉
-finding 時只能走 scoped closure。專案可在 base commit 提交 typed
+finding 時只能走 scoped closure。空的 initial candidate 會在建立 lineage 前被拒絕；
+standalone lineage 會綁定正規化 changed-file scope，舊 signed record 也只有在
+authoritative artifact 證明 scope 相同時才會遷移；若 artifact 無法驗證，signed
+candidate digest 完全相同仍會保留 blocker，但不會讓無關候選繼承不可判定的 broad scope。
+同一 collection scope 下，只要新 initial candidate 與未關閉 changed-file scope 有重疊，
+包含新增或移除修復檔，都必須走 closure；排序後的 per-path authority locks 讓 overlap
+scan 到 finalize 保持原子性，而完全 disjoint 的 scope 仍可獨立執行。
+專案可在 base commit 提交 typed
 `goldband.review-policy.json`，設定 minimum evidence level 或有歸責、期限的
 waiver；model prose 與 candidate 臨時檔沒有 waiver 權限。`No new findings`
 也不等於完成，report 會分開列出 contract completeness、prior blockers、closure

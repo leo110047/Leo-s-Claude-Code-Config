@@ -174,7 +174,15 @@ current contract with inherited cells/providers, the Work Map acceptance or
 standalone scope, selected Rules, minimum evidence policy, and unresolved
 finding IDs. Existing requirements cannot be removed, reversed, downgraded, or
 detached from blockers. Additive coverage remains valid. Open blockers force
-the exact authoritative initial artifact through scoped closure. Optional
+the exact authoritative initial artifact through scoped closure. Empty initial
+candidates are rejected before lineage creation. Standalone lineage identity
+includes normalized changed paths, and a legacy broad-scope blocker is inherited
+when its signed artifact digest proves the same scope or its signed candidate
+digest exactly matches. An unrelated candidate does not inherit an unverifiable
+legacy scope. A new initial candidate whose changed paths overlap any unresolved
+scope under the same collection authority must use closure. Sorted per-path
+locks cover overlap discovery through lineage finalization while disjoint scopes
+remain independent. Optional
 waivers and per-cell minimum evidence levels are accepted only from typed
 `goldband.review-policy.json` in the base commit and are copied into the signed
 audit record. Reports and Work Map artifacts keep no-new-findings, deterministic

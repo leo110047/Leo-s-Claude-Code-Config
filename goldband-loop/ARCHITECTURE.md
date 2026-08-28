@@ -43,7 +43,15 @@ record under the installed receipt authority. The record inherits required
 cells/providers, Work Map or standalone acceptance, selected Rules, minimum
 evidence levels, and unresolved finding IDs. Existing contracts are monotonic;
 additive coverage remains valid. Open blockers require the exact authoritative
-artifact and scoped closure. Typed waivers are loaded only from
+artifact and scoped closure. Empty initial candidates are rejected before the
+lineage lock or record is created. Standalone lineage identity includes the
+normalized changed-file scope; legacy broad-scope records migrate only when the
+signed artifact digest proves the same scope. When the artifact cannot be
+verified, an exact signed candidate-digest match still preserves the blocker;
+other candidates do not inherit the unverifiable scope. Any initial candidate
+whose paths overlap an unresolved scope in the same collection authority must
+use closure. Sorted per-path locks cover overlap discovery through lineage
+finalization; disjoint scopes do not share those locks. Typed waivers are loaded only from
 `goldband.review-policy.json` in the base commit and are persisted in the signed
 audit record; candidate files and model prose cannot authorize them.
 

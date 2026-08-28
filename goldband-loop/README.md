@@ -56,7 +56,15 @@ and projected dependency roots are readable.
 The installed runtime also persists a signed acceptance lineage. It compares
 every successor manifest before evidence or host dispatch, preserves unresolved
 finding IDs across restarts, and forces repaired candidates through the exact
-initial artifact's scoped closure. Optional base-committed
+initial artifact's scoped closure. Empty initial candidates fail before lineage
+creation. Standalone lineages include the normalized changed-file scope, while
+signed legacy records are read through only when their authoritative artifact
+proves the same scope. If that artifact is unavailable, an exact signed
+candidate-digest match still preserves the blocker; an unrelated candidate does
+not inherit the unverifiable broad scope. A new initial candidate that overlaps
+an unresolved changed-file scope must use closure, including repairs that add or
+remove files. Sorted per-path authority locks make overlap detection atomic while
+disjoint scopes remain independent. Optional base-committed
 `goldband.review-policy.json` sets per-cell minimum evidence levels and typed,
 auditable waivers. Reports keep `no-new-findings`, deterministic completeness,
 runtime completeness, closure completeness, and completion authority separate.
