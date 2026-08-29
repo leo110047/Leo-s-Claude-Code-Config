@@ -6,6 +6,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readdirSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -37,15 +38,19 @@ function spawnInstalledRuntime(
 describe("Codex trusted workflow launcher install", () => {
 	test("materializes review and browser owners with exact allow rules outside source", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-codex-review-install-"));
-		const nestedEvidenceSandbox = process.env.GOLDBAND_EVIDENCE_SANDBOX_ACTIVE === "1";
+		const trustedOuterEvidenceSandbox =
+			process.env.GOLDBAND_EVIDENCE_SANDBOX_ACTIVE === "1" &&
+			nestedSandboxProbeIsBlocked();
 		try {
 			const trustedBin = join(fixture, "trusted-bin");
 			const poisonBin = join(fixture, "poison-bin");
 			const emptyHome = join(fixture, "empty-home");
+			const hostCallLog = join(fixture, "host-calls.log");
 			mkdirSync(trustedBin, { recursive: true });
 			mkdirSync(poisonBin, { recursive: true });
 			mkdirSync(emptyHome, { recursive: true });
 			const fakeCodex = join(trustedBin, "codex");
+			const fakeClaude = join(trustedBin, "claude");
 			const fakeBrowser = join(trustedBin, "browse");
 			writeFileSync(
 				fakeCodex,
@@ -58,9 +63,12 @@ describe("Codex trusted workflow launcher install", () => {
 					"  shift",
 					"done",
 					'test -n "$output"',
+					'if [ -n "${GOLDBAND_TEST_HOST_CALL_LOG:-}" ]; then printf "%s\\n" codex >> "$GOLDBAND_TEST_HOST_CALL_LOG"; fi',
 					'prompt="$(cat)"',
 					'if printf \'%s\' "$prompt" | grep -q CLOSURE_INPUT_START; then',
 					'  printf \'%s\\n\' \'{"results":[{"findingId":"S-001","status":"closed","summary":"repair verified","evidenceIds":["installed-gate:pass"]}]}\' > "$output"',
+					'elif [ "${GOLDBAND_TEST_CLEAN_REVIEW:-}" = "1" ]; then',
+					'  printf \'%s\\n\' \'{"findings":[]}\' > "$output"',
 					'elif [ "${GOLDBAND_EVIDENCE_SANDBOX_ACTIVE:-}" = "1" ]; then',
 					'  printf \'%s\\n\' \'{"findings":[{"id":"F-001","file":"review-me.txt","line":1,"severity":"medium","summary":"fixture finding","evidence":"fixture semantic observation","failureScenario":"fixture path","suggestedVerification":"inspect installed phases","classification":"semantic-concern","blocking":false,"evidenceIds":["cell:installed-review:unsupported"],"behaviorCellIds":["installed-review"]}]}\' > "$output"',
 					'else',
@@ -69,6 +77,21 @@ describe("Codex trusted workflow launcher install", () => {
 				].join("\n"),
 			);
 			chmodSync(fakeCodex, 0o755);
+			writeFileSync(
+				fakeClaude,
+				[
+					"#!/usr/bin/env bash",
+					"set -euo pipefail",
+					'if [ "${1:-}" = "auth" ]; then',
+					'  printf \'%s\\n\' \'{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}\'',
+					"  exit 0",
+					"fi",
+					'if [ -n "${GOLDBAND_TEST_HOST_CALL_LOG:-}" ]; then printf "%s\\n" claude >> "$GOLDBAND_TEST_HOST_CALL_LOG"; fi',
+					"cat >/dev/null",
+					'printf \'%s\\n\' \'{"result":"{\\"findings\\":[]}","usage":{"input_tokens":10,"output_tokens":2}}\'',
+				].join("\n"),
+			);
+			chmodSync(fakeClaude, 0o755);
 			writeFileSync(
 				fakeBrowser,
 				"#!/usr/bin/env bash\nset -euo pipefail\nprintf 'browser-ok:%s\\n' \"$*\"\n",
@@ -93,6 +116,26 @@ describe("Codex trusted workflow launcher install", () => {
 					writeFileSync(join(outputDirectory, "server.js"), "// fixture\n");
 				},
 			});
+			const runInstalledReview = (
+				cwd: string,
+				args: string[],
+				env: NodeJS.ProcessEnv = {},
+			) => spawnInstalledRuntime(
+				marker.argvPrefix[0],
+				[marker.argvPrefix[1], "review", "code", ...args],
+				{
+					cwd,
+					encoding: "utf8",
+					env: {
+						...process.env,
+						HOME: emptyHome,
+						GOLDBAND_HOME: join(fixture, "state"),
+						GOLDBAND_TEST_HOST_CALL_LOG: hostCallLog,
+						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
+						...env,
+					},
+				},
+			);
 			const receiptKeyFile = join(dirname(runtimeRoot), "review-receipt.key");
 			expect(readFileSync(receiptKeyFile, "utf8").trim()).toMatch(/^[a-f0-9]{64}$/);
 
@@ -162,7 +205,7 @@ describe("Codex trusted workflow launcher install", () => {
 			writeFileSync(join(repo, "review-me.txt"), "change\n");
 			writeFileSync(
 				join(repo, "goldband.review-evidence.json"),
-				`${JSON.stringify(installedReviewEvidenceManifest(nestedEvidenceSandbox))}\n`,
+				`${JSON.stringify(installedReviewEvidenceManifest())}\n`,
 			);
 			const review = spawnInstalledRuntime(
 				marker.argvPrefix[0],
@@ -182,6 +225,7 @@ describe("Codex trusted workflow launcher install", () => {
 						GOLDBAND_HOME: stateRoot,
 						GOLDBAND_ROOT: poisonRoot,
 						GOLDBAND_RULES_DIR: join(poisonRoot, "rules"),
+						GOLDBAND_TEST_HOST_CALL_LOG: hostCallLog,
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
@@ -195,19 +239,23 @@ describe("Codex trusted workflow launcher install", () => {
 			).toBe(0);
 			expect(review.stdout).toContain("review/code runtime report");
 			expect(review.stdout).toContain("Phase: initial.");
-			expect(review.stdout).toContain(nestedEvidenceSandbox
-				? "Deterministic evidence: 0 verified pass, 0 verified failure, 1 coverage gap"
-				: "Deterministic evidence: 1 verified pass");
 			const reviewResult = JSON.parse(review.stdout) as { artifacts: string[] };
 			const initialArtifactPath = reviewResult.artifacts.find((file) =>
 				file.endsWith("-review-evidence.json"));
 			expect(initialArtifactPath).toBeDefined();
 			const initialArtifact = JSON.parse(readFileSync(initialArtifactPath!, "utf8"));
+			const installedRecord = initialArtifact.evidence.records[0];
+			const installedPath = classifyInstalledReviewPath(
+				installedRecord,
+				trustedOuterEvidenceSandbox,
+			);
+			expect(installedPath, JSON.stringify(installedRecord, null, 2)).not.toBe("unverified");
+			console.info(`[installed-review-lineage] Codex path: ${installedPath}`);
 			const runtimeReceiptId = initialArtifact.runtimeReceipt.id;
 			expect(runtimeReceiptId).toMatch(/^[A-Za-z0-9._-]+$/);
 			expect(initialArtifact).toMatchObject({
 				phase: "initial",
-				hostCallCount: nestedEvidenceSandbox ? 0 : 1,
+				hostCallCount: installedPath === "full-verified" ? 1 : 0,
 				runtimeReceipt: {
 					schemaVersion: 1,
 					id: expect.any(String),
@@ -215,10 +263,10 @@ describe("Codex trusted workflow launcher install", () => {
 					signature: expect.stringMatching(/^[a-f0-9]{64}$/),
 					reviewScope: { kind: "standalone" },
 				},
-				evidence: nestedEvidenceSandbox ? {
-					records: [{ id: "cell:installed-review:unsupported", status: "coverage-gap", fresh: true }],
-				} : {
+				evidence: installedPath === "full-verified" ? {
 					records: [{ id: "installed-gate:pass", status: "verified-pass", fresh: true }],
+				} : {
+					records: [{ id: "installed-gate:pass", status: "runtime-incomplete", fresh: false }],
 				},
 			});
 			expect(readFileSync(
@@ -229,17 +277,50 @@ describe("Codex trusted workflow launcher install", () => {
 				),
 				"utf8",
 			)).toContain(initialArtifact.binding.candidateDigest);
-			if (nestedEvidenceSandbox) return;
 
-			const forgedArtifactPath = join(repo, "forged-initial-review.json");
-			writeFileSync(forgedArtifactPath, `${JSON.stringify({
-				...initialArtifact,
-				findings: initialArtifact.findings.map((finding: Record<string, unknown>) => ({
-					...finding,
-					summary: "caller-forged closure authority",
-				})),
-			})}\n`);
-			const forgedClosure = spawnInstalledRuntime(
+			const workflowEvidenceFile = join(stateRoot, "workflow-runs", "review", "code.jsonl");
+			const providerDispatchesBeforeDuplicate = workflowStepEventCount(
+				workflowEvidenceFile,
+				"run-evidence",
+			);
+			const hostCallsBeforeDuplicate = lineCount(hostCallLog);
+			const duplicate = runInstalledReview(
+				repo,
+				[
+					"--include-untracked",
+					"--host",
+					"codex",
+					"--worktree",
+				],
+			);
+			expect(duplicate.status).not.toBe(0);
+			expect(duplicate.stderr).toMatch(/prior findings\/blockers open|duplicate initial review identity/);
+			expect(workflowStepEventCount(workflowEvidenceFile, "run-evidence"))
+				.toBe(providerDispatchesBeforeDuplicate);
+			expect(lineCount(hostCallLog)).toBe(hostCallsBeforeDuplicate);
+
+			writeFileSync(join(repo, "review-me.txt"), "repaired without closure\n");
+			const repairedInitial = runInstalledReview(
+				repo,
+				["--host", "codex"],
+			);
+			expect(repairedInitial.status).not.toBe(0);
+			expect(repairedInitial.stderr).toContain("prior findings/blockers open");
+			expect(workflowStepEventCount(workflowEvidenceFile, "run-evidence"))
+				.toBe(providerDispatchesBeforeDuplicate);
+			expect(lineCount(hostCallLog)).toBe(hostCallsBeforeDuplicate);
+			writeFileSync(join(repo, "review-me.txt"), "change\n");
+
+			if (installedPath === "full-verified") {
+				const forgedArtifactPath = join(repo, "forged-initial-review.json");
+				writeFileSync(forgedArtifactPath, `${JSON.stringify({
+					...initialArtifact,
+					findings: initialArtifact.findings.map((finding: Record<string, unknown>) => ({
+						...finding,
+						summary: "caller-forged closure authority",
+					})),
+				})}\n`);
+				const forgedClosure = spawnInstalledRuntime(
 				marker.argvPrefix[0],
 				[
 					marker.argvPrefix[1],
@@ -260,12 +341,12 @@ describe("Codex trusted workflow launcher install", () => {
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
-			);
-			expect(forgedClosure.status).not.toBe(0);
-			expect(forgedClosure.stderr).toMatch(/receipt|artifact/);
+				);
+				expect(forgedClosure.status).not.toBe(0);
+				expect(forgedClosure.stderr).toMatch(/receipt|artifact/);
 
-			writeFileSync(join(repo, "review-me.txt"), "repaired\n");
-			const closure = spawnInstalledRuntime(
+				writeFileSync(join(repo, "review-me.txt"), "repaired\n");
+				const closure = spawnInstalledRuntime(
 				marker.argvPrefix[0],
 				[
 					marker.argvPrefix[1],
@@ -286,23 +367,206 @@ describe("Codex trusted workflow launcher install", () => {
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
-			);
-			expect(
+				);
+				expect(
 				closure.status,
 				`closure stdout:\n${closure.stdout}\nclosure stderr:\n${closure.stderr}`,
-			).toBe(0);
-			expect(closure.stdout).toContain("Phase: closure.");
-			expect(closure.stdout).toContain("[closed] S-001");
-			const closureResult = JSON.parse(closure.stdout) as { artifacts: string[] };
-			const closureArtifactPath = closureResult.artifacts.find((file) =>
+				).toBe(0);
+				expect(closure.stdout).toContain("Phase: closure.");
+				expect(closure.stdout).toContain("[closed] S-001");
+				const closureResult = JSON.parse(closure.stdout) as { artifacts: string[] };
+				const closureArtifactPath = closureResult.artifacts.find((file) =>
 				file.endsWith("-review-closure.json"));
-			expect(closureArtifactPath).toBeDefined();
-			const closureArtifact = JSON.parse(readFileSync(closureArtifactPath!, "utf8"));
-			expect(closureArtifact).toMatchObject({
+				expect(closureArtifactPath).toBeDefined();
+				const closureArtifact = JSON.parse(readFileSync(closureArtifactPath!, "utf8"));
+				expect(closureArtifact).toMatchObject({
 				phase: "closure",
 				hostCallCount: 1,
 				results: [{ findingId: "S-001", status: "closed" }],
-			});
+				});
+			} else {
+				expect(review.stdout).toContain("Semantic host calls: 0.");
+			}
+
+			const cleanRepo = join(fixture, "clean-repo");
+			mkdirSync(cleanRepo, { recursive: true });
+			expect(spawnSync("git", ["init", "-q"], { cwd: cleanRepo }).status).toBe(0);
+			writeFileSync(join(cleanRepo, "review-me.txt"), "baseline\n");
+			writeFileSync(
+				join(cleanRepo, "candidate.patch"),
+				installedCandidatePatch("clean candidate one"),
+			);
+			writeFileSync(
+				join(cleanRepo, "goldband.review-evidence.json"),
+				`${JSON.stringify(installedNoOperationManifest())}\n`,
+			);
+			expect(spawnSync("git", ["add", "."], { cwd: cleanRepo }).status).toBe(0);
+			const cleanCommit = spawnSync(
+				"git",
+				[
+					"-c",
+					"user.name=Goldband Test",
+					"-c",
+					"user.email=goldband@example.invalid",
+					"commit",
+					"-qm",
+					"clean installed fixture",
+				],
+				{ cwd: cleanRepo, encoding: "utf8" },
+			);
+			expect(cleanCommit.status, cleanCommit.stderr).toBe(0);
+			const lineageRoot = join(dirname(runtimeRoot), "review-receipts", "review-lineages");
+			const lineageFilesBeforeClean = new Set(readdirSync(lineageRoot));
+			const cleanHostCallsBefore = lineCount(hostCallLog);
+			const cleanInitial = runInstalledReview(
+				cleanRepo,
+				[
+					"--diff-file",
+					"candidate.patch",
+					"--host",
+					"codex",
+				],
+				{
+					GOLDBAND_TEST_CLEAN_REVIEW: "1",
+				},
+			);
+			expect(cleanInitial.status, cleanInitial.stderr).toBe(0);
+			expect(cleanInitial.stdout).toContain("no-new-findings: true");
+			expect(lineCount(hostCallLog)).toBe(cleanHostCallsBefore + 1);
+			const cleanLineageFiles = readdirSync(lineageRoot).filter(
+				(file) => !lineageFilesBeforeClean.has(file),
+			);
+			expect(cleanLineageFiles).toHaveLength(1);
+			const cleanLineageFile = join(lineageRoot, cleanLineageFiles[0]!);
+			const firstCleanLineage = JSON.parse(readFileSync(cleanLineageFile, "utf8"));
+			const cleanProviderDispatches = workflowStepEventCount(workflowEvidenceFile, "run-evidence");
+			const cleanDuplicate = runInstalledReview(
+				cleanRepo,
+				[
+					"--host",
+					"codex",
+					"--diff-file",
+					join(cleanRepo, "candidate.patch"),
+				],
+				{
+					GOLDBAND_TEST_CLEAN_REVIEW: "1",
+				},
+			);
+			expect(cleanDuplicate.status).not.toBe(0);
+			expect(cleanDuplicate.stderr).toContain(
+				"duplicate initial review identity already has an authoritative result",
+			);
+			expect(workflowStepEventCount(workflowEvidenceFile, "run-evidence"))
+				.toBe(cleanProviderDispatches);
+			expect(lineCount(hostCallLog)).toBe(cleanHostCallsBefore + 1);
+			const crossHostDuplicate = runInstalledReview(
+				cleanRepo,
+				[
+					"--diff-file",
+					"candidate.patch",
+					"--host",
+					"claude",
+				],
+				{
+					PATH: `${trustedBin}:${poisonBin}:${process.env.PATH ?? ""}`,
+				},
+			);
+			expect(crossHostDuplicate.status).not.toBe(0);
+			expect(crossHostDuplicate.stderr).toContain(
+				"duplicate initial review identity already has an authoritative result",
+			);
+			expect(workflowStepEventCount(workflowEvidenceFile, "run-evidence"))
+				.toBe(cleanProviderDispatches);
+			expect(lineCount(hostCallLog)).toBe(cleanHostCallsBefore + 1);
+
+			writeFileSync(
+				join(cleanRepo, "candidate.patch"),
+				installedCandidatePatch("clean candidate two"),
+			);
+			const cleanSuccessor = runInstalledReview(
+				cleanRepo,
+				[
+					"--host",
+					"codex",
+					"--diff-file",
+					"candidate.patch",
+				],
+				{
+					GOLDBAND_TEST_CLEAN_REVIEW: "1",
+				},
+			);
+			expect(cleanSuccessor.status, cleanSuccessor.stderr).toBe(0);
+			expect(lineCount(hostCallLog)).toBe(cleanHostCallsBefore + 2);
+			const successorLineage = JSON.parse(readFileSync(cleanLineageFile, "utf8"));
+			expect(successorLineage.revision).toBe(firstCleanLineage.revision + 1);
+			expect(successorLineage.acceptanceDigest).toBe(firstCleanLineage.acceptanceDigest);
+			expect(successorLineage.policyDigest).toBe(firstCleanLineage.policyDigest);
+			expect(successorLineage.lastCandidateDigest).not.toBe(
+				firstCleanLineage.lastCandidateDigest,
+			);
+
+			const isolatedRepo = join(fixture, "isolated-repo");
+			const cloneForCodexIsolation = spawnSync(
+				"git",
+				["clone", "-q", cleanRepo, isolatedRepo],
+				{ encoding: "utf8" },
+			);
+			expect(cloneForCodexIsolation.status, cloneForCodexIsolation.stderr).toBe(0);
+			const isolatedCallsBefore = lineCount(hostCallLog);
+			const isolatedCodexInitial = runInstalledReview(
+				isolatedRepo,
+				["--host", "codex", "--diff-file", "candidate.patch"],
+				{ GOLDBAND_TEST_CLEAN_REVIEW: "1" },
+			);
+			expect(isolatedCodexInitial.status, isolatedCodexInitial.stderr).toBe(0);
+			expect(lineCount(hostCallLog)).toBe(isolatedCallsBefore + 1);
+
+			const claudeRepo = join(fixture, "claude-repo");
+			const cloneForClaude = spawnSync(
+				"git",
+				["clone", "-q", cleanRepo, claudeRepo],
+				{ encoding: "utf8" },
+			);
+			expect(cloneForClaude.status, cloneForClaude.stderr).toBe(0);
+			const isolateClaudeAuthority = spawnSync(
+				"git",
+				["remote", "set-url", "origin", "https://example.invalid/claude-parity.git"],
+				{ cwd: claudeRepo, encoding: "utf8" },
+			);
+			expect(isolateClaudeAuthority.status, isolateClaudeAuthority.stderr).toBe(0);
+			const claudeCallsBefore = lineCount(hostCallLog);
+			const claudeInitial = runInstalledReview(
+				claudeRepo,
+				[
+					"--host",
+					"claude",
+					"--diff-file",
+					"candidate.patch",
+				],
+				{
+					PATH: `${trustedBin}:${poisonBin}:${process.env.PATH ?? ""}`,
+				},
+			);
+			expect(claudeInitial.status, claudeInitial.stderr).toBe(0);
+			expect(claudeInitial.stdout).toContain("no-new-findings: true");
+			expect(lineCount(hostCallLog)).toBe(claudeCallsBefore + 1);
+			const claudeDuplicate = runInstalledReview(
+				claudeRepo,
+				[
+					"--diff-file",
+					join(claudeRepo, "candidate.patch"),
+					"--host",
+					"claude",
+				],
+				{
+					PATH: `${trustedBin}:${poisonBin}:${process.env.PATH ?? ""}`,
+				},
+			);
+			expect(claudeDuplicate.status).not.toBe(0);
+			expect(claudeDuplicate.stderr).toContain(
+				"duplicate initial review identity already has an authoritative result",
+			);
+			expect(lineCount(hostCallLog)).toBe(claudeCallsBefore + 1);
 
 			const browser = spawnInstalledRuntime(
 				marker.argvPrefix[0],
@@ -355,6 +619,20 @@ describe("Codex trusted workflow launcher install", () => {
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}
+	});
+
+	test("distinguishes outer sandbox denial from an unverified runner failure", () => {
+		const sandboxDenied = {
+			status: "runtime-incomplete",
+			outputSummary: "runner incomplete: sandbox-exec denied or could not initialize the operation",
+		};
+		expect(classifyInstalledReviewPath(sandboxDenied, true))
+			.toBe("outer-sandbox-partial");
+		expect(classifyInstalledReviewPath(sandboxDenied, false)).toBe("unverified");
+		expect(classifyInstalledReviewPath({
+			status: "runtime-incomplete",
+			outputSummary: "runner incomplete: timeout",
+		}, true)).toBe("unverified");
 	});
 
 	test("restores the previous runtime when replacement fails after backup", () => {
@@ -457,26 +735,7 @@ describe("Codex trusted workflow launcher install", () => {
 	});
 });
 
-function installedReviewEvidenceManifest(nestedEvidenceSandbox = false) {
-	if (nestedEvidenceSandbox) {
-		return {
-			schemaVersion: 1,
-			behaviorMatrix: [{
-				id: "installed-review",
-				behavior: "The installed runtime persists evidence-first phases and a runtime-owned receipt.",
-				kind: "boundary",
-				input: "installed fixture candidate inside an outer evidence sandbox",
-				preconditions: "nested macOS Seatbelt profiles are unavailable",
-				expected: "the installed initial artifact and receipt are persisted without recursive evidence execution",
-				risk: "high",
-				disposition: "unsupported",
-				providerIds: [],
-				reason: "Executable evidence is owned by the already-active outer sandbox; this smoke verifies installed phase and receipt wiring without nesting Seatbelt.",
-			}],
-			providers: [],
-			authorizations: [],
-		};
-	}
+function installedReviewEvidenceManifest() {
 	return {
 		schemaVersion: 1,
 		behaviorMatrix: [{
@@ -509,4 +768,80 @@ function installedReviewEvidenceManifest(nestedEvidenceSandbox = false) {
 		}],
 		authorizations: [],
 	};
+}
+
+function nestedSandboxProbeIsBlocked(): boolean {
+	if (process.platform !== "darwin" || !existsSync("/usr/bin/sandbox-exec")) {
+		return false;
+	}
+	const probe = spawnSync(
+		"/usr/bin/sandbox-exec",
+		["-p", "(version 1)\n(allow default)", "/usr/bin/true"],
+		{ encoding: "utf8" },
+	);
+	return probe.status === 71 && /Operation not permitted/.test(probe.stderr);
+}
+
+function classifyInstalledReviewPath(
+	record: { status: string; outputSummary: string },
+	trustedOuterEvidenceSandbox: boolean,
+): "full-verified" | "outer-sandbox-partial" | "unverified" {
+	if (record.status === "verified-pass") return "full-verified";
+	if (
+		trustedOuterEvidenceSandbox &&
+		record.status === "runtime-incomplete" &&
+		record.outputSummary.includes(
+			"runner incomplete: sandbox-exec denied or could not initialize the operation",
+		)
+	) {
+		return "outer-sandbox-partial";
+	}
+	return "unverified";
+}
+
+function installedNoOperationManifest() {
+	return {
+		schemaVersion: 1,
+		behaviorMatrix: [{
+			id: "installed-clean-review",
+			behavior: "The fixture has no applicable external evidence operation.",
+			kind: "boundary",
+			input: "installed diff-file candidate",
+			preconditions: "the fixture is intentionally self-contained",
+			expected: "the runtime records the explicit non-applicability before semantic review",
+			risk: "low",
+			disposition: "not-applicable",
+			providerIds: [],
+			reason: "This fixture verifies installed lineage dispatch rather than a product gate.",
+		}],
+		providers: [],
+		authorizations: [],
+	};
+}
+
+function installedCandidatePatch(value: string): string {
+	return [
+		"diff --git a/review-me.txt b/review-me.txt",
+		"--- a/review-me.txt",
+		"+++ b/review-me.txt",
+		"@@ -1 +1 @@",
+		"-baseline",
+		`+${value}`,
+		"",
+	].join("\n");
+}
+
+function lineCount(file: string): number {
+	if (!existsSync(file)) return 0;
+	return readFileSync(file, "utf8").split("\n").filter(Boolean).length;
+}
+
+function workflowStepEventCount(file: string, step: string): number {
+	if (!existsSync(file)) return 0;
+	return readFileSync(file, "utf8")
+		.split("\n")
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as { step?: string })
+		.filter((event) => event.step === step)
+		.length;
 }
