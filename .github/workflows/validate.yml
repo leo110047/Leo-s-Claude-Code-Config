@@ -59,10 +59,8 @@ jobs:
         run: node scripts/check-code-style.mjs
       - name: Check plugin distribution artifacts are fresh
         run: node scripts/sync-plugin-assets.mjs --check
-      - name: Check app support artifacts and adapters
-        run: |
-          node scripts/sync-app-support-assets.mjs --check
-          npm run test:app-support
+      - name: Check app support artifacts are fresh
+        run: node scripts/sync-app-support-assets.mjs --check
       - name: Verify hook script references
         run: python3 scripts/verify-hook-script-references.py
       - name: Verify decision guidance parity
@@ -91,6 +89,8 @@ jobs:
         run: |
           npm install -g @anthropic-ai/claude-code
           npm install -g @openai/codex
+      - name: Test app support adapters
+        run: npm run test:app-support
       - name: Test plugin distribution with Claude Code CLI
         run: npm run test:plugin-distribution
       - name: Test coding style gate

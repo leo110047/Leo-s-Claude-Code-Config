@@ -169,10 +169,15 @@ function runCodexPluginCommand(env, args) {
     env,
     encoding: 'utf8',
   });
+  assert.ifError(result.error);
   assert.equal(
     result.status,
     0,
-    [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n'),
+    [result.stdout, result.stderr]
+      .filter((output) => typeof output === 'string')
+      .map((output) => output.trim())
+      .filter(Boolean)
+      .join('\n'),
   );
   return result;
 }

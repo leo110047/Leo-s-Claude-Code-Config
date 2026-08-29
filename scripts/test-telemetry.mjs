@@ -519,16 +519,26 @@ function testReportSummary() {
   );
 }
 
-testPersistentPathAndMetricsDefault();
-testCodexPluginDataRoot();
-testCodexDataRootFallbacks();
-testCodexTempFallback();
-testCodexUsageRetention();
-testCodexStructuredDenyTelemetryName();
-testSchemaValidationAndLegacyCompatibility();
-testCodexRunIdFileFallback();
-testClaudeSessionStartIsSilent();
-testTelemetryCapture();
-testReportSummary();
+withEnv(
+  {
+    CLAUDE_SESSION_ID: undefined,
+    CODEX_SESSION_ID: undefined,
+    GOLDBAND_RUN_ID: undefined,
+    GOLDBAND_RUN_ID_FILE: undefined,
+  },
+  () => {
+    testPersistentPathAndMetricsDefault();
+    testCodexPluginDataRoot();
+    testCodexDataRootFallbacks();
+    testCodexTempFallback();
+    testCodexUsageRetention();
+    testCodexStructuredDenyTelemetryName();
+    testSchemaValidationAndLegacyCompatibility();
+    testCodexRunIdFileFallback();
+    testClaudeSessionStartIsSilent();
+    testTelemetryCapture();
+    testReportSummary();
+  },
+);
 
 console.log('[OK] telemetry behavior verified');
