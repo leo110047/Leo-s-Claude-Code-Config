@@ -41,9 +41,7 @@ function spawnInstalledRuntime(
 describe("Codex trusted workflow launcher install", () => {
 	test("materializes review and browser owners with exact allow rules outside source", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-codex-review-install-"));
-		const trustedOuterEvidenceSandbox =
-			process.env.GOLDBAND_EVIDENCE_SANDBOX_ACTIVE === "1" &&
-			nestedSandboxProbeIsBlocked();
+		const nestedEvidenceBoundaryUnavailable = nestedSandboxProbeIsBlocked();
 		try {
 			const trustedBin = join(fixture, "trusted-bin");
 			const poisonBin = join(fixture, "poison-bin");
@@ -294,10 +292,10 @@ describe("Codex trusted workflow launcher install", () => {
 			const installedRecord = initialArtifact.evidence.records[0];
 			const installedPath = classifyInstalledReviewPath(
 				installedRecord,
-				trustedOuterEvidenceSandbox,
+				nestedEvidenceBoundaryUnavailable,
 			);
 			expect(installedPath, JSON.stringify(installedRecord, null, 2)).not.toBe("unverified");
-			console.info(`[installed-review-lineage] Codex path: ${installedPath}`);
+			console.info(installedReviewCoverageSummary(installedPath));
 			const runtimeReceiptId = initialArtifact.runtimeReceipt.id;
 			expect(runtimeReceiptId).toMatch(/^[A-Za-z0-9._-]+$/);
 			expect(initialArtifact).toMatchObject({
@@ -324,6 +322,13 @@ describe("Codex trusted workflow launcher install", () => {
 				),
 				"utf8",
 			)).toContain(initialArtifact.binding.candidateDigest);
+			if (installedPath === "outer-sandbox-runtime-incomplete") {
+				expect(review.stdout).toContain(
+					"Deterministic evidence: 0 verified pass, 0 verified failure, 0 coverage gap, 1 runtime incomplete.",
+				);
+				expect(review.stdout).toContain("Semantic host calls: 0.");
+				expect(review.stdout).toContain("completion-authorized: false");
+			}
 
 			const workflowEvidenceFile = join(stateRoot, "workflow-runs", "review", "code.jsonl");
 			const providerDispatchesBeforeDuplicate = workflowStepEventCount(
@@ -358,16 +363,17 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(lineCount(hostCallLog)).toBe(hostCallsBeforeDuplicate);
 			writeFileSync(join(repo, "review-me.txt"), "change\n");
 
-			if (installedPath === "full-verified") {
-				const forgedArtifactPath = join(repo, "forged-initial-review.json");
-				writeFileSync(forgedArtifactPath, `${JSON.stringify({
-					...initialArtifact,
-					findings: initialArtifact.findings.map((finding: Record<string, unknown>) => ({
-						...finding,
-						summary: "caller-forged closure authority",
-					})),
-				})}\n`);
-				const forgedClosure = spawnInstalledRuntime(
+			const authorityHostCallsBefore = lineCount(hostCallLog);
+			const forgedArtifactPath = join(repo, "forged-initial-review.json");
+			writeFileSync(forgedArtifactPath, `${JSON.stringify({
+				...initialArtifact,
+				hostCallCount: 1,
+				findings: initialArtifact.findings.map((finding: Record<string, unknown>) => ({
+					...finding,
+					summary: "caller-forged closure authority",
+				})),
+			})}\n`);
+			const forgedClosure = spawnInstalledRuntime(
 				marker.argvPrefix[0],
 				[
 					marker.argvPrefix[1],
@@ -388,12 +394,21 @@ describe("Codex trusted workflow launcher install", () => {
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
-				);
-				expect(forgedClosure.status).not.toBe(0);
-				expect(forgedClosure.stderr).toMatch(/receipt|artifact/);
+			);
+			expect(forgedClosure.status).not.toBe(0);
+			expect(forgedClosure.stderr).toMatch(/receipt|artifact/);
+			expect(lineCount(hostCallLog)).toBe(authorityHostCallsBefore);
 
-				writeFileSync(join(repo, "review-me.txt"), "repaired\n");
-				const closure = spawnInstalledRuntime(
+			const runtimeReceiptFile = join(
+				dirname(runtimeRoot),
+				"review-receipts",
+				`${runtimeReceiptId}.json`,
+			);
+			const trustedRuntimeReceipt = readFileSync(runtimeReceiptFile, "utf8");
+			const forgedRuntimeReceipt = JSON.parse(trustedRuntimeReceipt);
+			forgedRuntimeReceipt.signature = "0".repeat(64);
+			writeFileSync(runtimeReceiptFile, `${JSON.stringify(forgedRuntimeReceipt)}\n`);
+			const forgedReceiptClosure = spawnInstalledRuntime(
 				marker.argvPrefix[0],
 				[
 					marker.argvPrefix[1],
@@ -414,6 +429,39 @@ describe("Codex trusted workflow launcher install", () => {
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 					},
 				},
+			);
+			expect(forgedReceiptClosure.status).not.toBe(0);
+			expect(forgedReceiptClosure.stderr).toMatch(
+				installedPath === "full-verified"
+					? /receipt|signature/
+					: /completed initial semantic host call/,
+			);
+			expect(lineCount(hostCallLog)).toBe(authorityHostCallsBefore);
+			writeFileSync(runtimeReceiptFile, trustedRuntimeReceipt);
+
+			if (installedPath === "full-verified") {
+				writeFileSync(join(repo, "review-me.txt"), "repaired\n");
+				const closure = spawnInstalledRuntime(
+					marker.argvPrefix[0],
+					[
+						marker.argvPrefix[1],
+						"review",
+						"code",
+						"--host",
+						"codex",
+						"--closure-artifact",
+						initialArtifactPath!,
+					],
+					{
+						cwd: repo,
+						encoding: "utf8",
+						env: {
+							...process.env,
+							HOME: join(fixture, "empty-home"),
+							GOLDBAND_HOME: stateRoot,
+							PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
+						},
+					},
 				);
 				expect(
 				closure.status,
@@ -431,8 +479,6 @@ describe("Codex trusted workflow launcher install", () => {
 				hostCallCount: 1,
 				results: [{ findingId: "S-001", status: "closed" }],
 				});
-			} else {
-				expect(review.stdout).toContain("Semantic host calls: 0.");
 			}
 
 			const cleanRepo = join(fixture, "clean-repo");
@@ -668,18 +714,31 @@ describe("Codex trusted workflow launcher install", () => {
 		}
 	});
 
-	test("distinguishes outer sandbox denial from an unverified runner failure", () => {
+	test("distinguishes verified, outer-sandbox runtime-incomplete, and unverified coverage", () => {
 		const sandboxDenied = {
 			status: "runtime-incomplete",
 			outputSummary: "runner incomplete: sandbox-exec denied or could not initialize the operation",
 		};
 		expect(classifyInstalledReviewPath(sandboxDenied, true))
-			.toBe("outer-sandbox-partial");
+			.toBe("outer-sandbox-runtime-incomplete");
 		expect(classifyInstalledReviewPath(sandboxDenied, false)).toBe("unverified");
 		expect(classifyInstalledReviewPath({
 			status: "runtime-incomplete",
 			outputSummary: "runner incomplete: timeout",
 		}, true)).toBe("unverified");
+		expect(classifyInstalledReviewPath({
+			status: "verified-pass",
+			outputSummary: "fixture gate passed",
+		}, false)).toBe("full-verified");
+		expect(installedReviewCoverageSummary("full-verified")).toContain(
+			"verified; full supported-sandbox path: verified",
+		);
+		expect(installedReviewCoverageSummary("outer-sandbox-runtime-incomplete")).toContain(
+			"runtime-incomplete; full supported-sandbox path: unverified",
+		);
+		expect(installedReviewCoverageSummary("unverified")).toContain(
+			"unverified; full supported-sandbox path: unverified",
+		);
 	});
 
 	test("restores the previous runtime when replacement fails after backup", () => {
@@ -838,19 +897,31 @@ function nestedSandboxProbeIsBlocked(): boolean {
 
 function classifyInstalledReviewPath(
 	record: { status: string; outputSummary: string },
-	trustedOuterEvidenceSandbox: boolean,
-): "full-verified" | "outer-sandbox-partial" | "unverified" {
+	nestedEvidenceBoundaryUnavailable: boolean,
+): "full-verified" | "outer-sandbox-runtime-incomplete" | "unverified" {
 	if (record.status === "verified-pass") return "full-verified";
 	if (
-		trustedOuterEvidenceSandbox &&
+		nestedEvidenceBoundaryUnavailable &&
 		record.status === "runtime-incomplete" &&
 		record.outputSummary.includes(
 			"runner incomplete: sandbox-exec denied or could not initialize the operation",
 		)
 	) {
-		return "outer-sandbox-partial";
+		return "outer-sandbox-runtime-incomplete";
 	}
 	return "unverified";
+}
+
+function installedReviewCoverageSummary(
+	path: "full-verified" | "outer-sandbox-runtime-incomplete" | "unverified",
+): string {
+	if (path === "full-verified") {
+		return "[installed-review-lineage] installed evidence: verified; full supported-sandbox path: verified";
+	}
+	if (path === "outer-sandbox-runtime-incomplete") {
+		return "[installed-review-lineage] installed evidence: runtime-incomplete; full supported-sandbox path: unverified (nested evidence boundary unavailable)";
+	}
+	return "[installed-review-lineage] installed evidence: unverified; full supported-sandbox path: unverified";
 }
 
 function installedNoOperationManifest() {
