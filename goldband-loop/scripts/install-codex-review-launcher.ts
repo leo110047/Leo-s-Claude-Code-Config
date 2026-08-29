@@ -273,6 +273,7 @@ export function installCodexReviewLauncher(
 				{
 					schemaVersion: 2,
 					runtimeHost: "codex",
+					reviewHostEvidenceLane: "macos-review-contract-host",
 					codexExecutable: codexPath,
 					browserExecutable: join(runtimeRoot, "browse", "browse"),
 					browserServerScript: join(

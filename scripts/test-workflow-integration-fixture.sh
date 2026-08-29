@@ -1,7 +1,8 @@
 create_minimal_real_setup_fixture() {
   local loop_dir="$1"
   mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review" "$loop_dir/workflows" "$loop_dir/scripts"
-  cp "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
+  install -m 755 "$ROOT_DIR/goldband-loop/setup" "$loop_dir/setup"
+  cp "$ROOT_DIR/goldband-loop/scripts/prepare-internal-workflow-root.sh" "$loop_dir/scripts/prepare-internal-workflow-root.sh"
   cp "$ROOT_DIR/goldband-loop/lib/retired-workflow-entry-names.txt" "$loop_dir/lib/retired-workflow-entry-names.txt"
   cp "$ROOT_DIR/goldband-loop/lib/state-root.ts" "$loop_dir/lib/state-root.ts"
   cp "$ROOT_DIR/goldband-loop/lib/verification-receipt.ts" "$loop_dir/lib/verification-receipt.ts"
@@ -18,7 +19,6 @@ create_minimal_real_setup_fixture() {
   for host in claude codex factory opencode kiro; do
     printf '\n<!-- fixture host selector: %s -->\n' "$host" >> "$loop_dir/generated/host-skills/$host.SKILL.md"
   done
-  chmod +x "$loop_dir/setup"
   write_fake_config_bin "$loop_dir"
   write_noop_runtime_bin "$loop_dir" "goldband-task-emission"
   cat > "$loop_dir/browse/dist/browse" <<'EOF_BROWSE'

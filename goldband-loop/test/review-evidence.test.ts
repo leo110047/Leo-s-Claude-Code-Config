@@ -784,7 +784,7 @@ describe('review evidence contracts', () => {
       .toEqual(evidence.completeness);
   });
 
-  test('unsupported provider-owned sandbox context is typed partial before dispatch', async () => {
+  test('source runtime cannot claim the installed host evidence lane', async () => {
     const repo = gitFixture();
     const value = manifest();
     value.providers[0]!.executionContext = {
@@ -803,10 +803,10 @@ describe('review evidence contracts', () => {
     expect(evidence.records[0]).toMatchObject({
       status: 'runtime-incomplete',
       fresh: false,
-      environment: 'sealed/review-runtime',
+      environment: 'source/review-runtime',
     });
     expect(evidence.records[0]!.exitStatus).toBeUndefined();
-    expect(evidence.records[0]!.outputSummary).toContain('actual=sealed/review-runtime');
+    expect(evidence.records[0]!.outputSummary).toContain('actual=source/review-runtime');
     expect(evidence.records[0]!.outputSummary).toContain('fix=run the named deterministic host lane');
     expect(evidence.completeness).toMatchObject({ complete: false, hostEligible: false });
   });
@@ -1007,7 +1007,7 @@ describe('review evidence contracts', () => {
       ['property-provider:property', 'verified-pass'],
     ]);
     expect(evidence.records[0]!.executionIdentityDigest)
-      .toBe(evidence.records[1]!.executionIdentityDigest);
+      .not.toBe(evidence.records[1]!.executionIdentityDigest);
     expect(evidence.records[2]).toMatchObject({
       seed: 'seed-42',
       iterations: 25,
@@ -1243,21 +1243,49 @@ describe('review evidence contracts', () => {
   });
 
   test('evidence sandbox denies the system log socket inherited from the macOS process baseline', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
+    const probeRoot = mkdtempSync(join(tmpdir(), 'review-syslog-socket-'));
+    roots.push(probeRoot);
+    const probeSource = join(probeRoot, 'syslog-socket.c');
+    const probe = join(probeRoot, 'syslog-socket');
+    writeFileSync(
+      probeSource,
+      [
+        '#include <errno.h>',
+        '#include <stddef.h>',
+        '#include <string.h>',
+        '#include <sys/socket.h>',
+        '#include <sys/un.h>',
+        'int main(void) {',
+        '  int descriptor = socket(AF_UNIX, SOCK_DGRAM, 0);',
+        '  if (descriptor < 0) return 8;',
+        '  struct sockaddr_un address = {0};',
+        '  address.sun_family = AF_UNIX;',
+        '  strcpy(address.sun_path, "/private/var/run/syslog");',
+        '  if (connect(descriptor, (struct sockaddr *)&address, sizeof(address)) == 0) return 9;',
+        '  return errno == EPERM || errno == EACCES ? 0 : 8;',
+        '}',
+      ].join('\n'),
+    );
+    compileMachO([probeSource, '-o', probe]);
     const repo = gitFixture();
     const value = manifest();
-    value.providers[0]!.operations[0]!.argv = [
-      'ruby',
-      '--disable-gems',
-      '-rsocket',
-      '-e',
-      "socket=Socket.new(Socket::AF_UNIX,Socket::SOCK_DGRAM,0);begin;socket.connect(Socket.sockaddr_un('/private/var/run/syslog'));exit 9;rescue SystemCallError=>error;exit([Errno::EPERM,Errno::EACCES].any?{|klass|error.is_a?(klass)} ? 0 : 8);end",
-    ];
+    value.providers[0]!.operations[0]!.argv = [basename(probe)];
     const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
-    const evidence = await executeEvidencePlan(
-      context(repo), input, validated, createCandidateBinding(repo, input, validated),
-    );
-    expect(evidence.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${probeRoot}:${previousPath ?? '/usr/bin:/bin'}`;
+    try {
+      const evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      expect(evidence.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   test('regression RED requires the declared exact exit code', async () => {

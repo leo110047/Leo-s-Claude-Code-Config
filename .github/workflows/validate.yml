@@ -51,6 +51,12 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Install Goldband Loop dependencies
+        run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Build installer-owned Goldband Loop artifacts
+        run: cd goldband-loop && bun run build
+
       - name: Check generated capability surfaces
         run: npm run check:manifest
 
@@ -123,9 +129,6 @@ jobs:
           echo "=== Verifying decision guidance parity ==="
           bash scripts/verify-decision-guidance.sh
 
-      - name: Install Goldband Loop dependencies
-        run: cd goldband-loop && bun install --frozen-lockfile
-
       - name: Check Goldband Loop source quality
         run: cd goldband-loop && bun run check:source
 
@@ -177,11 +180,21 @@ jobs:
         with:
           bun-version: 1.3.11
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Codex CLI for execpolicy contract tests
+        run: npm install -g @openai/codex
+
       - name: Show Bash version
         run: bash --version
 
       - name: Install Goldband Loop dependencies
         run: cd goldband-loop && bun install --frozen-lockfile
+
+      - name: Build installer-owned Goldband Loop artifacts
+        run: cd goldband-loop && bun run build
 
       - name: Test terminal PTY and WebSocket runtime on macOS
         run: cd goldband-loop && bun test browse/test/terminal-agent-integration.test.ts --max-concurrency=1 --timeout=30000

@@ -61,6 +61,7 @@ const config = {
 	...existing,
 	schemaVersion: 2,
 	runtimeHost: "claude",
+	reviewHostEvidenceLane: "macos-review-contract-host",
 	reviewReceiptAuthorityRoot: authorityRoot,
 	reviewReceiptKeyFile: keyFile,
 	reviewReceiptStore: receiptStore,

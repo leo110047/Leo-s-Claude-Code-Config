@@ -1977,3 +1977,75 @@ Consequences:
   changed-path scope, and unresolved finding IDs. They provide the exact
   `--closure-artifact` instruction when the artifact still verifies; otherwise
   they name the expected digest and the required restore-then-close recovery.
+
+## ADR: Same-host execution for provider-owned review evidence
+
+Status: Accepted
+
+Decision:
+
+- Keep host evidence inside the existing installed review pass. A trusted
+  runtime on macOS may execute the exact manifest-declared operation through
+  the existing candidate snapshot and one provider-owned Seatbelt boundary.
+- Require the installed private runtime configuration to authorize the named
+  `macos-review-contract-host` lane. Bind the execution identity to repository,
+  base, candidate, scope, manifest, provider, operation, runner context, runtime
+  images, projected dependencies, platform, and architecture.
+- When an outer evidence sandbox is active, the host or lane is unsupported, or
+  installed authority validation fails, emit typed `runtime-incomplete` before
+  dispatch. Never retry without Seatbelt and never consume caller-supplied
+  result JSON.
+- Reuse the existing review receipt, lineage, evidence records, semantic host,
+  and completion decision. Do not create a portable CI artifact or a second
+  handoff authority for this same-host requirement.
+
+Why:
+
+The execution-context preflight correctly prevented nested Seatbelt, but it
+also made semantic review unreachable for every applicable host-bound provider.
+The installed launcher already owns the exact review, candidate materialization,
+receipt, and lineage needed for a same-machine handoff.
+
+Assumptions:
+
+- The installed private runtime configuration and receipt key remain owned by
+  the current user and are not writable by the reviewed candidate.
+- macOS Seatbelt remains the supported local boundary for this lane.
+- Manifest operations remain deny-network and run only against the runtime-owned
+  read-only candidate snapshot plus isolated HOME/TMP roots.
+
+Consequences:
+
+- Supported installed macOS reviews can obtain fresh host-bound records and
+  continue to the single semantic host call.
+- Source runtimes, Linux, unsupported lanes, and outer sealed sandboxes remain
+  incomplete with zero completion authority.
+- Cross-machine CI transport, signing, freshness, and key management remain out
+  of scope until a demonstrated use case requires them.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Permit nested Seatbelt | The host rejects it and treating that failure as evidence would weaken the boundary. |
+| Run the candidate command unsandboxed | It would let a writable manifest expand host access beyond the review contract. |
+| Add a portable signed CI artifact now | Same-host execution closes the current requirement without transport, freshness, or cross-machine key management. |
+| Add a second handoff receipt | The installed review receipt and lineage already own authority; another receipt would create conflicting owners. |
+
+Failure signals:
+
+- A source runtime, wrong host, unsupported lane, or outer evidence sandbox
+  produces a fresh verified host record.
+- A host operation runs without Seatbelt, with network access, or against the
+  writable source worktree.
+- Changing repository, base, candidate, scope, manifest, provider, operation,
+  or runner context leaves the execution identity unchanged.
+- A host result can be edited or reused while its installed receipt still
+  validates.
+
+Revisit triggers:
+
+- A required review operation cannot execute on the same trusted macOS host.
+- Linux or Windows gains an equivalent tested provider-owned sandbox.
+- A demonstrated cross-machine review needs portable attestation, freshness,
+  transport, and key-rotation contracts.

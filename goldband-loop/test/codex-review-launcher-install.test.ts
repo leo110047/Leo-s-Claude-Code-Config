@@ -155,6 +155,9 @@ describe("Codex trusted workflow launcher install", () => {
 				readFileSync(join(runtimeRoot, "trusted-runtime.json"), "utf8"),
 			);
 			expect(trustedConfig.schemaVersion).toBe(2);
+			expect(trustedConfig.reviewHostEvidenceLane).toBe(
+				"macos-review-contract-host",
+			);
 			expect(trustedConfig.rulesResolverScript).toBe(
 				join(runtimeRoot, "review", "rules-resolver.js"),
 			);
@@ -867,7 +870,11 @@ function installedReviewEvidenceManifest() {
 			lifecycle: "persistent",
 			cellIds: ["installed-review"],
 			applicability: { kind: "global", reason: "Explicit installed-runtime test fixture." },
-			executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
+			executionContext: {
+				sandboxOwner: "provider",
+				runner: "host-seatbelt",
+				lane: "macos-review-contract-host",
+			},
 			operations: [{
 				id: "pass",
 				target: "candidate",

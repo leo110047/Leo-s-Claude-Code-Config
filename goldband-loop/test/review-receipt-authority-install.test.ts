@@ -45,6 +45,7 @@ describe("review receipt authority provisioning", () => {
 		const config = JSON.parse(readFileSync(join(runtimeRoot, "trusted-runtime.json"), "utf8"));
 		expect(config).toMatchObject({
 			schemaVersion: 2,
+			reviewHostEvidenceLane: "macos-review-contract-host",
 			reviewReceiptAuthorityRoot: authorityRoot,
 			reviewReceiptKeyFile: keyFile,
 			reviewReceiptStore: join(authorityRoot, "review-receipts"),

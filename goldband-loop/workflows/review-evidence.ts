@@ -55,6 +55,7 @@ const DEFAULT_REVIEW_EVIDENCE_MANIFEST = 'goldband.review-evidence.json';
 const EVIDENCE_RUNNER_POLICY = 'per-operation-sealed-runtime-readonly-snapshot-default-deny-read-write-network-v54';
 const MAX_REDACTED_UNTRACKED_BYTES = 256 * 1024;
 const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV = 'GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG';
+const SUPPORTED_REVIEW_HOST_EVIDENCE_LANE = 'macos-review-contract-host';
 const executableDigestCache = new Map<string, string>();
 const mockReviewReceiptAuthorityKey = randomBytes(32);
 const SYSTEM_SANDBOX_MACH_SERVICES = [
@@ -462,8 +463,16 @@ export async function executeEvidencePlan(
         }
         validateOperationAuthorization(operation, manifest);
         if (provider.executionContext.runner === 'host-seatbelt') {
-          records.push(executionContextIncompleteRecord(provider, operation, binding));
-          continue;
+          const unavailable = hostEvidenceExecutionUnavailable(ctx, provider);
+          if (unavailable) {
+            records.push(executionContextIncompleteRecord(
+              provider,
+              operation,
+              binding,
+              unavailable,
+            ));
+            continue;
+          }
         }
         const operationKey = `${records.length}-${safePathSegment(provider.id)}-${safePathSegment(operation.id)}`;
         const operationRoot = join(
@@ -1563,6 +1572,14 @@ async function runEvidenceOperation(
     ...preparedChildRuntimes.map((entry) => entry.prepared.access),
   ]);
   const executionIdentityDigest = sha256(stableJson({
+    repository: binding.repository,
+    baseDigest: binding.baseDigest,
+    candidateDigest: binding.candidateDigest,
+    scopeDigest: binding.scopeDigest,
+    manifestDigest: binding.behaviorContractDigest,
+    providerId: provider.id,
+    operationId: operation.id,
+    executionContext: provider.executionContext,
     executableDigest: executableContentDigest(command),
     sourceRuntimeDigest: runtimeAccess.identityDigest,
     executionRuntimeDigest: preparedRuntime.identityDigest,
@@ -1596,6 +1613,7 @@ async function runEvidenceOperation(
   const runnerHome = realpathSync(runnerHomePath);
   const env = {
     PATH: uniqueSorted([
+      ...systemToolAccess.executableDirectories,
       dirname(preparedRuntime.command),
       ...preparedChildRuntimes.map((entry) => dirname(entry.prepared.command)),
     ]).join(':') + ':/usr/bin:/bin',
@@ -1705,7 +1723,9 @@ async function runEvidenceOperation(
     kind: provider.kind,
     status,
     evidenceLevel: operation.evidenceLevel,
-    environment: `isolated-${process.platform}-snapshot`,
+    environment: provider.executionContext.runner === 'host-seatbelt'
+      ? `${provider.executionContext.lane}/host-seatbelt-${process.platform}-snapshot`
+      : `isolated-${process.platform}-snapshot`,
     commandDigest,
     executionIdentityDigest,
     snapshotDigestBefore,
@@ -2463,10 +2483,14 @@ function executionContextIncompleteRecord(
   provider: EvidenceProvider,
   operation: EvidenceOperation,
   binding: CandidateBinding,
+  unavailable: { actual: string; detail: string } = {
+    actual: 'sealed/review-runtime',
+    detail: 'the review is already inside a sealed evidence runtime',
+  },
 ): ReviewEvidenceRecord {
   const now = new Date().toISOString();
   const expected = `${provider.executionContext.runner}/${provider.executionContext.sandboxOwner}`;
-  const actual = 'sealed/review-runtime';
+  const actual = unavailable.actual;
   const lane = provider.executionContext.runner === 'host-seatbelt' ? provider.executionContext.lane : 'none';
   const outputSummary = [
     `contract owner=${provider.owner}`,
@@ -2474,6 +2498,7 @@ function executionContextIncompleteRecord(
     `expected=${expected}`,
     `scope=${binding.scopeDigest}`,
     `executionContext=${stableJson(provider.executionContext)}`,
+    `detail=${unavailable.detail}`,
     `fix=run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`,
   ].join('; ');
   return {
@@ -2496,6 +2521,60 @@ function executionContextIncompleteRecord(
     scopeDigest: binding.scopeDigest,
     fresh: false,
   };
+}
+
+function hostEvidenceExecutionUnavailable(
+  ctx: WorkflowContext,
+  provider: EvidenceProvider,
+): { actual: string; detail: string } | undefined {
+  if (process.env[EVIDENCE_SANDBOX_ACTIVE_ENV] === '1') {
+    return {
+      actual: 'sealed/review-runtime',
+      detail: 'nested provider Seatbelt is forbidden',
+    };
+  }
+  if (provider.executionContext.runner !== 'host-seatbelt' ||
+      provider.executionContext.lane !== SUPPORTED_REVIEW_HOST_EVIDENCE_LANE) {
+    return {
+      actual: 'installed/review-runtime',
+      detail: `unsupported host evidence lane ${provider.executionContext.runner === 'host-seatbelt' ? provider.executionContext.lane : 'none'}`,
+    };
+  }
+  const configuredRuntimeFile = ctx.options.reviewReceiptTrustedConfig ??
+    process.env[REVIEW_RECEIPT_TRUSTED_CONFIG_ENV];
+  if (!configuredRuntimeFile) {
+    return {
+      actual: 'source/review-runtime',
+      detail: 'host evidence requires the trusted installed launcher authority',
+    };
+  }
+  try {
+    reviewReceiptAuthority(ctx);
+    const trustedRuntime = JSON.parse(readFileSync(configuredRuntimeFile, 'utf8')) as {
+      runtimeHost?: unknown;
+      reviewHostEvidenceLane?: unknown;
+    };
+    if (trustedRuntime.runtimeHost !== ctx.options.host ||
+        (trustedRuntime.runtimeHost !== 'codex' && trustedRuntime.runtimeHost !== 'claude') ||
+        trustedRuntime.reviewHostEvidenceLane !== provider.executionContext.lane) {
+      return {
+        actual: 'installed/review-runtime',
+        detail: 'trusted runtime does not authorize the manifest-declared host evidence lane',
+      };
+    }
+  } catch (error) {
+    return {
+      actual: 'untrusted/review-runtime',
+      detail: `installed review authority validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  if (process.platform !== 'darwin' || !existsSync('/usr/bin/sandbox-exec')) {
+    return {
+      actual: `${process.platform}/review-runtime`,
+      detail: 'the named host lane requires macOS Seatbelt',
+    };
+  }
+  return undefined;
 }
 
 function recordAuthorizedForCell(
@@ -2718,13 +2797,14 @@ type EvidenceSystemToolAccess = {
   roots: string[];
   literals: string[];
   mapExecutableLiterals: string[];
+  executableDirectories: string[];
   identityDigest: string;
   verifyUnchanged: () => boolean;
 };
 
 function evidenceSystemToolAccess(tools: string[]): EvidenceSystemToolAccess {
   if (tools.length === 0) {
-    return { roots: [], literals: [], mapExecutableLiterals: [], identityDigest: sha256('no-system-tools'), verifyUnchanged: () => true };
+    return { roots: [], literals: [], mapExecutableLiterals: [], executableDirectories: [], identityDigest: sha256('no-system-tools'), verifyUnchanged: () => true };
   }
   if (process.platform !== 'darwin') {
     throw new Error('declared evidence system tools require a supported host adapter');
@@ -2771,6 +2851,7 @@ function evidenceSystemToolAccess(tools: string[]): EvidenceSystemToolAccess {
     roots: uniqueSorted(entries.map((entry) => entry.root).filter(Boolean)),
     literals,
     mapExecutableLiterals: uniqueSorted(entries.map((entry) => entry.executable)),
+    executableDirectories: uniqueSorted(entries.map((entry) => dirname(entry.executable))),
     identityDigest,
     verifyUnchanged: () => entries.every((entry) =>
       existsSync(entry.executable) && executableContentDigest(entry.executable) === entry.executableDigest) &&
