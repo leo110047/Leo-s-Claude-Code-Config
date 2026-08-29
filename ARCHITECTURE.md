@@ -118,6 +118,21 @@ base/exact-nonzero RED and candidate/zero GREEN pair; property/fuzz providers al
 preserve seed, iteration budget, and replay command. Unsupported high-risk
 cells, missing runners, malformed evidence, candidate drift, and provenance
 mismatch fail closed before model dispatch.
+
+The repository-owned provider store is persistent-only. Exact base-to-candidate
+RED/GREEN transitions carry repository, base, candidate, scope, and operation
+contract digests in the one review artifact and fail validation on a successor
+binding. Applicability is an explicit union: a non-empty path-prefix set or a
+global declaration with a reviewable reason. The selected provider set also
+owns the effective behavior-cell set used by completeness; unrelated scoped
+cells cannot become blocking coverage gaps. Explicit transition manifests and
+persisted initial artifacts both pass the exact-binding validator in the
+production ingestion path. Execution context names both the
+sandbox owner and runner. Provider-owned Seatbelt suites are never nested inside
+the sealed evidence runner; it emits a typed `runtime-incomplete` record with
+owner, actual/expected context, scope, lane, and remediation. The named macOS
+host lane executes those tests directly, while partial evidence never gains
+completion or closure authority.
 For Mach-O executables with non-system dependencies, the runtime copies all attested
 images into a private projection, rewrites their load commands to projected paths,
 ad-hoc signs and re-attests the transformed bytes, and keeps the original host package
@@ -564,6 +579,13 @@ toolchains and file-shape rules.
   dependencies, installs the Playwright browser asset, runs
   `node scripts/check-goldband-loop-inventory.mjs`, and then runs
   `cd goldband-loop && bun run test:free`.
+- `npm run check:review-contracts` is the single freshness entrypoint in the
+  root test graph. It lints the real manifests, scoped provider selection,
+  lifecycle/execution declarations, canonical dispatch groups, and the
+  installer-owned source-input set. Temp-install inventory then verifies the
+  installed artifact digest and bounded probes for every action explicitly
+  declared `trusted-launcher`; compatibility actions remain workflow-document
+  dispatch, and registered-only actions remain non-executable.
 - The sandbox story is additive defense in depth. `sandbox/sandbox.sh` starts a
   Docker/Podman container with goldband baked into a non-writable
   `/opt/goldband`, a clean container HOME, and one target project mounted

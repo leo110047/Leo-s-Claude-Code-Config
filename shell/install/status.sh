@@ -287,8 +287,7 @@ codex_workflow_policy_allows() {
 }
 
 show_codex_workflow_launcher_status() {
-    local marker="$HOME/.codex/skills/goldband/.workflow-launcher.json"
-    local rule="$HOME/.codex/rules/goldband-workflows.rules"
+    local marker="$HOME/.codex/skills/goldband/.workflow-launcher.json" rule="$HOME/.codex/rules/goldband-workflows.rules"
     local marker_values bun_path launcher_path marker_rule runtime_root
     if [ ! -f "$marker" ] || [ ! -f "$rule" ]; then
         echo -e "  ${YELLOW}[未安裝]${NC} trusted Codex workflow launcher — 重跑 ./install.sh workflow-codex"
@@ -299,18 +298,15 @@ show_codex_workflow_launcher_status() {
         return 0
     fi
     marker_values="$(node -e '
-const fs = require("node:fs");
-const marker = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const fs = require("node:fs"), marker = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (marker.schemaVersion !== 1 || !Array.isArray(marker.argvPrefix) || marker.argvPrefix.length !== 2) process.exit(2);
 if (typeof marker.ruleFile !== "string" || typeof marker.runtimeRoot !== "string") process.exit(2);
 process.stdout.write(marker.argvPrefix[0] + "\t" + marker.argvPrefix[1] + "\t" + marker.ruleFile + "\t" + marker.runtimeRoot);
 ' "$marker" 2>/dev/null || true)"
     IFS=$'\t' read -r bun_path launcher_path marker_rule runtime_root <<<"$marker_values"
-    local trusted_config="$runtime_root/trusted-runtime.json"
-    local config_values config_bun codex_path browser_path browser_server rules_resolver rules_directory
+    local trusted_config="$runtime_root/trusted-runtime.json" config_values config_bun codex_path browser_path browser_server rules_resolver rules_directory
     config_values="$(node -e '
-const fs = require("node:fs");
-const config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const fs = require("node:fs"), config = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (config.schemaVersion !== 2) process.exit(2);
 for (const field of ["bunExecutable", "codexExecutable", "browserExecutable", "browserServerScript", "rulesResolverScript", "rulesDirectory"]) {
   if (typeof config[field] !== "string" || !config[field]) process.exit(2);
@@ -321,6 +317,10 @@ process.stdout.write([config.bunExecutable, config.codexExecutable, config.brows
     if [ ! -x "$bun_path" ] || [ "$config_bun" != "$bun_path" ] || [ ! -x "$codex_path" ] || [ ! -f "$launcher_path" ] || [ ! -f "$trusted_config" ] || [ ! -x "$browser_path" ] || [ ! -f "$browser_server" ] || [ ! -f "$rules_resolver" ] || [ ! -d "$rules_directory" ] || [ ! -f "$rules_directory/manifest.json" ] || [ "$marker_rule" != "$rule" ]; then
         echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — marker target missing or inconsistent"
         echo "    建議: 重跑 ./install.sh workflow-codex。"
+        GOLDBAND_STATUS_EXIT_CODE=2
+        return 0
+    fi
+    if ! verify_codex_workflow_distribution "$runtime_root" "$bun_path" "$launcher_path" "$marker" "$rule"; then
         GOLDBAND_STATUS_EXIT_CODE=2
         return 0
     fi

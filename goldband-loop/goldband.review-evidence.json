@@ -18,8 +18,13 @@
       "id": "workflow-typecheck",
       "owner": "goldband-loop/package.json#typecheck",
       "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": ["typescript-contracts"],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": ["bin", "lib", "scripts", "test", "workflows", "package.json", "tsconfig.json"]
+      },
+      "executionContext": { "sandboxOwner": "review-runtime", "runner": "sealed" },
       "operations": [
         {
           "id": "candidate-typecheck",

@@ -532,7 +532,9 @@ function assertMonotonicContract(
       const providerWeakened = !before || !after ||
         before.owner !== after.owner ||
         before.kind !== after.kind ||
-        stableJson(before.changedPathPrefixes) !== stableJson(after.changedPathPrefixes) ||
+        before.lifecycle !== after.lifecycle ||
+        stableJson(before.applicability) !== stableJson(after.applicability) ||
+        stableJson(before.executionContext) !== stableJson(after.executionContext) ||
         before.cellIds.some((cellId) => !after.cellIds.includes(cellId)) ||
         before.operations.some((operation) => {
           const successor = after.operations.find((item) => item.id === operation.id);

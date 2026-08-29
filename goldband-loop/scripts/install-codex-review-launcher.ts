@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { AUTO_ALLOWED_BROWSER_SESSION_COMMANDS } from "../lib/browser-runtime-contract";
+import { writeDistributionManifest } from "../../scripts/lib/workflow-distribution-contract.mjs";
 
 const REVIEW_ASSETS = [
 	"shared-rubric.md",
@@ -186,6 +187,14 @@ export function installCodexReviewLauncher(
 	const codexPath = requireAbsolute("codexPath", options.codexPath);
 	const browserPath = requireAbsolute("browserPath", options.browserPath);
 	const reviewReceiptKeyFile = join(dirname(runtimeRoot), "review-receipt.key");
+	const marker: CodexReviewLauncherMarker = {
+		schemaVersion: 1,
+		argvPrefix: [bunPath, join(runtimeRoot, "bin", "goldband.js")],
+		ruleFile,
+		runtimeRoot,
+	};
+	const ruleContents = renderCodexReviewRule(marker);
+	const markerContents = `${JSON.stringify(marker, null, 2)}\n`;
 
 	if (pathIsWithin(sourceRoot, runtimeRoot)) {
 		throw new Error(
@@ -288,6 +297,10 @@ export function installCodexReviewLauncher(
 			)}\n`,
 			{ mode: 0o600 },
 		);
+		writeDistributionManifest(stageRoot, sourceRoot, [
+			{ role: "codex-execpolicy-rule", path: ruleFile, contents: ruleContents, mode: 0o600 },
+			{ role: "workflow-launcher-marker", path: markerFile, contents: markerContents, mode: 0o600 },
+		]);
 
 		if (existsSync(runtimeRoot)) renameSync(runtimeRoot, backupRoot);
 		options.afterRuntimeBackup?.();
@@ -301,15 +314,9 @@ export function installCodexReviewLauncher(
 		throw error;
 	}
 
-	const marker: CodexReviewLauncherMarker = {
-		schemaVersion: 1,
-		argvPrefix: [bunPath, join(runtimeRoot, "bin", "goldband.js")],
-		ruleFile,
-		runtimeRoot,
-	};
 	for (const [destination, contents] of [
-		[ruleFile, renderCodexReviewRule(marker)],
-		[markerFile, `${JSON.stringify(marker, null, 2)}\n`],
+		[ruleFile, ruleContents],
+		[markerFile, markerContents],
 	] as const) {
 		mkdirSync(dirname(destination), { recursive: true });
 		const temporary = `${destination}.tmp-${process.pid}`;

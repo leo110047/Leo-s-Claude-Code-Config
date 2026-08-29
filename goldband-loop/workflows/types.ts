@@ -75,6 +75,7 @@ export type WorkflowDefinition = {
   entrypointType: EntrypointType;
   integrationStatus: IntegrationStatus;
   lifecycle: WorkflowLifecycle;
+  dispatch: 'trusted-launcher' | 'host-runtime' | 'prompt-contract' | 'registered-only';
   runtimeOwner: string | null;
   runtimeContract: RuntimeActionContract | null;
   safetyGates: SafetyGateContract[];

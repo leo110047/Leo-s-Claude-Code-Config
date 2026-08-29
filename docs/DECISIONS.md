@@ -1868,6 +1868,57 @@ Revisit triggers:
 - Stable project behavior contracts can be generated from another authoritative
   artifact without losing owner review or explicit dispositions.
 
+## ADR: Review contract freshness and installed distribution identity
+
+Status: Accepted
+
+Decision:
+
+- Keep one review authority. Add `check:review-contracts` to the existing root
+  test and CI graph instead of creating a parallel review, approval, receipt, or
+  release workflow.
+- Require every reusable provider to declare `persistent` lifecycle, explicit
+  path-scoped or reasoned-global applicability, and an execution context with
+  one sandbox owner. Repository manifests reject `transition` providers and
+  persistent base/nonzero RED operations.
+- Bind transition evidence to the exact repository, base, candidate, scope, and
+  normalized operation contract. Explicit transition manifests and persisted
+  initial artifacts use that validator in the production ingestion path; a
+  successor candidate cannot inherit them.
+- Use applicable providers to derive the effective behavior-cell set for
+  completeness. Cells owned only by unrelated path scopes do not become
+  coverage gaps; ownerless explicit dispositions remain global.
+- Return a typed partial record before dispatch when a provider-owned Seatbelt
+  suite cannot run inside the sealed evidence runner. Only the named macOS host
+  lane runs that boundary; partial results have no completion or closure
+  authority.
+- Derive one installer-owned source-input digest from all setup/build/config,
+  generated contracts, launcher/runtime sources, rules, skills, migrations,
+  review/QA/design assets, and browser/PDF bundles read or copied by setup. The
+  trusted install stores a separate artifact inventory and digest over runtime
+  bytes plus the launcher marker and execpolicy rule written beside it.
+- Declare dispatch per canonical action as `trusted-launcher`, `host-runtime`,
+  `prompt-contract`, or `registered-only`. Status and temp-install inventory run
+  bounded fake-handler probes through the same production router used by the
+  explicitly trusted launcher set.
+
+Why:
+
+Local gates previously proved only their own files. They could all pass while a
+one-time RED became permanent, empty applicability silently became global,
+nested Seatbelt was misclassified as a regression, or installed runtime bytes
+drifted outside a two-file fingerprint.
+
+Consequences:
+
+- Missing applicability, empty path lists, unexplained global scope, stale RED,
+  unsupported execution context, source drift, artifact corruption, and
+  dispatch mismatch now fail with the owner, actual/expected contract, scope,
+  context, and repair location.
+- A source change and an installed-byte mutation are reported separately.
+- Compatibility actions such as `investigate/code` are not promoted into the
+  fixed launcher, and registered-only actions remain blocked.
+
 ## ADR: Runtime-owned review acceptance lineage
 
 Status: Accepted

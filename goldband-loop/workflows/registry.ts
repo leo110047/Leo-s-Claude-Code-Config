@@ -31,6 +31,7 @@ export const WORKFLOW_REGISTRY: WorkflowDefinition[] = CAPABILITY_ACTIONS.map((e
           : 'legacy-thin',
     integrationStatus: entry.runtime === 'registered-only' ? 'registered-only' : 'integrated',
     lifecycle: entry.lifecycle,
+    dispatch: entry.dispatch,
     runtimeOwner: entry.runtimeOwner,
     runtimeContract: entry.runtimeContract,
     safetyGates: entry.safetyGates,

@@ -7,7 +7,9 @@ import {
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +19,7 @@ import {
 	installCodexReviewLauncher,
 	renderCodexReviewRule,
 } from "../scripts/install-codex-review-launcher.ts";
+import { inspectDistribution } from "../../scripts/lib/workflow-distribution-contract.mjs";
 
 const sourceRoot = resolve(import.meta.dir, "..");
 const bunPath = process.execPath;
@@ -149,6 +152,7 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(existsSync(join(runtimeRoot, "review", "shared-rubric.md"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "rules-resolver.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "rules", "manifest.json"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "distribution-manifest.json"))).toBe(true);
 			const trustedConfig = JSON.parse(
 				readFileSync(join(runtimeRoot, "trusted-runtime.json"), "utf8"),
 			);
@@ -161,10 +165,53 @@ describe("Codex trusted workflow launcher install", () => {
 			);
 			expect(readFileSync(markerFile, "utf8")).toContain('"schemaVersion": 1');
 			const rule = readFileSync(ruleFile, "utf8");
+			const sideArtifacts = [
+				{ role: "workflow-launcher-marker", path: markerFile },
+				{ role: "codex-execpolicy-rule", path: ruleFile },
+			];
 			expect(rule).toBe(renderCodexReviewRule(marker));
 			expect(rule).toContain('"review", "code", "--host", "codex"');
 			expect(rule).toContain('"browser", "session", "--host", "codex"');
 			expect(rule).not.toContain(sourceRoot);
+			expect(inspectDistribution(runtimeRoot, sourceRoot, sideArtifacts).ok).toBe(true);
+			const distributionManifestFile = join(runtimeRoot, "distribution-manifest.json");
+			const distributionManifest = JSON.parse(
+				readFileSync(distributionManifestFile, "utf8"),
+			);
+			writeFileSync(
+				distributionManifestFile,
+				`${JSON.stringify({
+					...distributionManifest,
+					sideArtifacts: [
+						distributionManifest.sideArtifacts[1],
+						distributionManifest.sideArtifacts[1],
+					],
+				}, null, 2)}\n`,
+			);
+			expect(inspectDistribution(runtimeRoot, sourceRoot, sideArtifacts)).toMatchObject({
+				ok: false,
+				status: "installed-corrupt",
+			});
+			writeFileSync(
+				distributionManifestFile,
+				`${JSON.stringify(distributionManifest, null, 2)}\n`,
+			);
+			writeFileSync(ruleFile, `${rule}\nprefix_rule(pattern=["bun"], decision="allow")\n`);
+			expect(inspectDistribution(runtimeRoot, sourceRoot, sideArtifacts)).toMatchObject({
+				ok: false,
+				status: "installed-corrupt",
+			});
+			writeFileSync(ruleFile, rule);
+			expect(inspectDistribution(runtimeRoot, sourceRoot, sideArtifacts).ok).toBe(true);
+			const realRule = `${ruleFile}.real`;
+			renameSync(ruleFile, realRule);
+			symlinkSync(realRule, ruleFile);
+			expect(inspectDistribution(runtimeRoot, sourceRoot, sideArtifacts)).toMatchObject({
+				ok: false,
+				status: "installed-corrupt",
+			});
+			rmSync(ruleFile);
+			renameSync(realRule, ruleFile);
 
 			const help = spawnSync(marker.argvPrefix[0], [marker.argvPrefix[1], "--help"], {
 				encoding: "utf8",
@@ -678,7 +725,12 @@ describe("Codex trusted workflow launcher install", () => {
 
 	test("an execpolicy probe matches only trusted review and browser prefixes", () => {
 		const codex = Bun.which("codex");
-		if (!codex) return;
+		if (!codex) {
+			if (process.env.GOLDBAND_REQUIRE_REVIEW_HOST_BOUNDARY === "1") {
+				throw new Error("required review host boundary prerequisite is unavailable: codex executable");
+			}
+			return;
+		}
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-codex-rule-probe-"));
 		try {
 			const launcher = join(fixture, "trusted", "bin", "goldband.js");
@@ -753,8 +805,10 @@ function installedReviewEvidenceManifest() {
 			id: "installed-gate",
 			owner: "codex-review-launcher-install.test.ts",
 			kind: "static",
+			lifecycle: "persistent",
 			cellIds: ["installed-review"],
-			changedPathPrefixes: [],
+			applicability: { kind: "global", reason: "Explicit installed-runtime test fixture." },
+			executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
 			operations: [{
 				id: "pass",
 				target: "candidate",

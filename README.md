@@ -102,6 +102,9 @@ git pull --ff-only
   distribution surface，不要互相宣稱替代。
 - `./install.sh status` 會 read back 安裝狀態；若 plugin 和 installer-managed
   Claude assets 同時存在，它會回報 duplicate asset。
+- Workflow status 會分開驗證 installer-owned source-input digest、trusted
+  runtime artifact manifest 與 bounded dispatch probe；source 已更新、installed
+  bytes/inventory 被修改，或 launcher 行為不符宣告時都會非零失敗並要求重裝。
 - hooks、rules、cross-review gate、sandbox 是防誤操作與 evidence gate，不是
   抵抗同權限 host 使用者的安全邊界。managed worktree 是較窄的例外：它用
   OS sandbox 限制 agent process 的 Git metadata 寫入；host 使用者仍可在
@@ -123,6 +126,16 @@ git pull --ff-only
 預設以每個 operation 各自獨立、唯讀且 read/write/network default-deny 的 snapshot 執行 typed checks，
 並驗證執行前後 tree digest、provider/cell 雙向 ownership 與 exact RED exit，確認 evidence completeness 與
 candidate provenance 後，才啟動一次 semantic review。script launcher 必須在 manifest 明確寫出 interpreter；
+repository-owned manifest 只接受 `persistent` provider；一次性的 RED/GREEN
+`transition` evidence 必須綁定 exact repository、base、candidate、scope 與
+operation contract digest，且只存在當次 artifact。Provider applicability 必須
+明確選擇非空 path prefixes 或附理由的 `global`，execution context 也必須宣告
+sandbox owner 與 runner；path applicability 會同時縮小 provider 與 effective
+behavior cells，無關的 high-risk cells 不會被誤算成 coverage gap。明確傳入的
+transition manifest 與 persisted review artifact 都會用當前 candidate binding
+走 production validator。需要 provider-owned Seatbelt 的 operation 在 sealed
+review runner 會先產生 typed `runtime-incomplete`，不會把 nested sandbox exit
+誤報成 candidate failure，也不具 completion/closure authority。
 macOS sandbox 會載入 Apple 的 common system process baseline，並精確重新封鎖 baseline 的 syslog、Mach service、
 shared-memory、network 與 system socket 通道。含非系統 dylib 的 Mach-O runtime 會先複製到私有 sealed projection，
 將已驗證的 load commands 改寫到 projection、ad-hoc sign 並重新雜湊最終 bytes；operation 不能讀原始 host package tree，

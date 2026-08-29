@@ -176,6 +176,7 @@
           "description": "Evidence-first code review with authoritative lineage and scoped closure.",
           "runtime": "typed",
           "owner": "review-runtime",
+          "dispatch": "trusted-launcher",
           "risk": "medium",
           "promptContract": {
             "relevantContext": [
@@ -317,6 +318,7 @@
           "description": "Create a versioned Work Map for tracked work.",
           "runtime": "typed",
           "owner": "work-map-store",
+          "dispatch": "trusted-launcher",
           "risk": "low",
           "hostSupport": ["claude", "codex"],
           "runtimeContract": {
@@ -349,6 +351,7 @@
 		  "runtime": "typed",
 		  "lifecycle": "public",
 		  "owner": "tracker-runtime",
+		  "dispatch": "trusted-launcher",
           "risk": "high",
 		  "runtimeContract": {
 			"modes": ["preview", "inspect", "publish-step"],
@@ -424,6 +427,7 @@
           "description": "Use the persistent browser for interactive work.",
           "runtime": "typed",
           "owner": "browse",
+          "dispatch": "trusted-launcher",
           "risk": "medium",
           "safetyGates": [
             {

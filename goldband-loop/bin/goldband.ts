@@ -53,6 +53,7 @@ import {
 	type ReviewScopeFlag,
 } from "../lib/review-runtime-contract";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
+import { TRUSTED_LAUNCHER_ACTIONS } from "../lib/trusted-launcher-actions.generated";
 
 type ReviewHost = "claude" | "codex";
 const MAX_PLAN_INPUT_BYTES = 1024 * 1024;
@@ -91,6 +92,15 @@ const TRUSTED_CODEX_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_CODEX_EXECUTABLE";
 const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
 const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV =
 	"GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG";
+
+const TRUSTED_LAUNCHER_ACTION_SET = new Set<string>(TRUSTED_LAUNCHER_ACTIONS);
+
+type TrustedLauncherHandlers = {
+	"review/code": (args: string[]) => number;
+	"browser/session": (args: string[]) => number;
+	"plan/create": (args: string[]) => number;
+	"plan/sync": (args: string[]) => number;
+};
 
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
@@ -1083,30 +1093,83 @@ function isStateRootPermissionError(error: unknown): boolean {
 	return ["EACCES", "EPERM", "EROFS"].includes(String(error.code));
 }
 
+function dispatchTrustedLauncherAction(
+	action: string,
+	args: string[],
+	handlers: TrustedLauncherHandlers,
+): number | undefined {
+	if (action === "review/code") return handlers["review/code"](args);
+	if (action === "browser/session") return handlers["browser/session"](args);
+	if (action === "plan/create") return handlers["plan/create"](args);
+	if (action === "plan/sync") return handlers["plan/sync"](args);
+	return undefined;
+}
+
+const TRUSTED_LAUNCHER_HANDLERS: TrustedLauncherHandlers = {
+	"review/code": reviewCode,
+	"browser/session": browserSession,
+	"plan/create": planCreate,
+	"plan/sync": planSync,
+};
+
 export function main(args = process.argv.slice(2)): number {
 	const [scope, action, name, ...rest] = args;
+	if (scope === "--contract-probe" && args.length === 1) {
+		console.log(
+			JSON.stringify({
+				schemaVersion: 1,
+				dispatch: "trusted-launcher",
+				actions: TRUSTED_LAUNCHER_ACTIONS,
+			}),
+		);
+		return 0;
+	}
+	if (scope === "--contract-probe" && args.length === 2) {
+		if (!action || !TRUSTED_LAUNCHER_ACTION_SET.has(action)) return 2;
+		let routedAction: string | undefined;
+		const fakeRoute = (declaredAction: string) => () => {
+			routedAction = declaredAction;
+			return 0;
+		};
+		const fakeHandlers: TrustedLauncherHandlers = {
+			"review/code": fakeRoute("review/code"),
+			"browser/session": fakeRoute("browser/session"),
+			"plan/create": fakeRoute("plan/create"),
+			"plan/sync": fakeRoute("plan/sync"),
+		};
+		const status = dispatchTrustedLauncherAction(action, [], fakeHandlers);
+		if (status !== 0 || routedAction !== action) return 2;
+		console.log(
+			JSON.stringify({
+				schemaVersion: 1,
+				action,
+				routable: true,
+				behavior: "bounded-read-only-fake-host-probe",
+			}),
+		);
+		return 0;
+	}
 	if (scope === "-h" || scope === "--help" || scope === "help") {
 		printUsage(console);
 		return 0;
 	}
+	const trustedAction = action ? `${scope}/${action}` : "";
+	const trustedResult = dispatchTrustedLauncherAction(
+		trustedAction,
+		[name, ...rest].filter((value): value is string => value !== undefined),
+		TRUSTED_LAUNCHER_HANDLERS,
+	);
+	if (trustedResult !== undefined) return trustedResult;
 	if (scope === "review") {
-		if (action !== "code") usage();
-		return reviewCode(
-			[name, ...rest].filter((value): value is string => value !== undefined),
-		);
+		usage();
 	}
 	if (scope === "browser") {
-		if (action !== "session") usage();
-		return browserSession(
-			[name, ...rest].filter((value): value is string => value !== undefined),
-		);
+		usage();
 	}
 	if (scope === "plan") {
 		const planArgs = [name, ...rest].filter(
 			(value): value is string => value !== undefined,
 		);
-		if (action === "create") return planCreate(planArgs);
-		if (action === "sync") return planSync(planArgs);
 		if (action === "block" || action === "resume" || action === "cancel") {
 			return planLifecycle(action, planArgs);
 		}

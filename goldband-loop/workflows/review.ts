@@ -45,6 +45,7 @@ import {
   reviewLineageAuthority,
   removeInitialReviewRuntimeReceipt,
   validateClosureResults,
+  validateTransitionReviewEvidenceManifest,
   writeInitialReviewArtifact,
   type ClosureReviewInput,
   type InitialReviewArtifact,
@@ -270,11 +271,14 @@ function planEvidence(ctx: WorkflowContext) {
   }
   const defaultManifestExists = existsSync(join(ctx.cwd, 'goldband.review-evidence.json'));
   const loaded = ctx.options.evidenceManifestFile
-    ? loadReviewEvidenceManifest(ctx)
+    ? loadReviewEvidenceManifest(ctx, input)
     : closureArtifact && !defaultManifestExists
       ? { manifest: closureArtifact.evidence.manifest, source: closureArtifact.evidence.manifestSource }
       : loadReviewEvidenceManifest(ctx);
   const binding = createCandidateBinding(ctx.cwd, input, loaded.manifest, ctx.options.base);
+  const manifest = loaded.manifest.providers.some((provider) => provider.lifecycle === 'transition')
+    ? validateTransitionReviewEvidenceManifest(loaded.manifest, binding)
+    : loaded.manifest;
   const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
   const rules = coreReviewRules(
     ctx.cwd,
@@ -315,14 +319,14 @@ function planEvidence(ctx: WorkflowContext) {
     policyIdentityDigest,
     candidateDigest: binding.candidateDigest,
     behaviorContractDigest: binding.behaviorContractDigest,
-    manifest: loaded.manifest,
+    manifest,
     closureArtifact,
     runId: ctx.runId,
   });
   let closure: ClosureReviewInput | undefined;
   try {
     closure = closureArtifact
-      ? buildClosureInput(closureArtifact, binding, input.diff, loaded.manifest)
+      ? buildClosureInput(closureArtifact, binding, input.diff, manifest)
       : undefined;
     if (closureArtifact && closure) {
       claimInitialReviewClosure(ctx, closureArtifact, binding.candidateDigest);
@@ -333,10 +337,10 @@ function planEvidence(ctx: WorkflowContext) {
   }
   reviewEvidenceRuns.set(ctx.runId, {
     input,
-    manifest: loaded.manifest,
+    manifest,
     evidence: {
       schemaVersion: 1,
-      manifest: loaded.manifest,
+      manifest,
       binding,
       records: [],
       completeness: {

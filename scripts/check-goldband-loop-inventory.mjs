@@ -14,6 +14,7 @@ import {
 import { assertInstalledTaskEmissionCliRuns } from './lib/goldband-task-emission-smoke.mjs';
 import { assertInstalledManagedWorktreeSurface } from './lib/managed-worktree-install-check.mjs';
 import { assertInstalledWorkflowDocuments } from './lib/workflow-contract-install-check.mjs';
+import { assertInstalledWorkflowDistribution } from './lib/workflow-distribution-install-check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT_DIR = path.resolve(path.dirname(__filename), '..');
@@ -78,6 +79,7 @@ function main() {
     runInstall(tmpHome, 'workflow-codex');
     assertInstalledStandardInventory(tmpHome, inventory, capabilityContract);
     assertInstalledManagedWorktreeSurface(tmpHome);
+    assertInstalledWorkflowDistribution(tmpHome, LOOP_DIR);
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });

@@ -177,8 +177,10 @@ describe('authoritative review lineage', () => {
       id: 'extra-provider',
       owner: 'project',
       kind: 'static',
+      lifecycle: 'persistent',
       cellIds: ['extra-coverage'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit additive lineage fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [operation('extra-check', 'local')],
     });
     const next = prepare(fixture, additive);
@@ -671,8 +673,10 @@ function manifest(): ReviewEvidenceManifest {
       id: 'gate',
       owner: 'project',
       kind: 'runtime-integration',
+      lifecycle: 'persistent',
       cellIds: ['deployment-safe'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit single-provider lineage fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [operation('check', 'sandboxed-service')],
     }],
     authorizations: [],

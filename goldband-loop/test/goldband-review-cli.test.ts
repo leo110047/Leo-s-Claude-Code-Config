@@ -94,8 +94,10 @@ describe("goldband review code launcher", () => {
 						id: "fixture-gate",
 						owner: "launcher-e2e-fixture",
 						kind: "static",
+						lifecycle: "persistent",
 						cellIds: ["fixture-contract"],
-						changedPathPrefixes: [],
+						applicability: { kind: "global", reason: "Explicit launcher E2E fixture." },
+						executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
 						operations: [{
 							id: "pass",
 							target: "candidate",

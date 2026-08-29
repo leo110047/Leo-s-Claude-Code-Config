@@ -177,12 +177,29 @@ type EvidenceOperation = {
   iterations?: number;
 };
 
+type EvidenceApplicability = { kind: 'paths'; pathPrefixes: string[] } | { kind: 'global'; reason: string };
+
+type EvidenceExecutionContext =
+  | { sandboxOwner: 'review-runtime'; runner: 'sealed' }
+  | { sandboxOwner: 'provider'; runner: 'host-seatbelt'; lane: string };
+
+type TransitionEvidenceBinding = {
+  repository: string;
+  baseDigest: string;
+  candidateDigest: string;
+  scopeDigest: string;
+  operationContractDigest: string;
+};
+
 type EvidenceProvider = {
   id: string;
   owner: string;
   kind: EvidenceProviderKind;
+  lifecycle: 'persistent' | 'transition';
   cellIds: string[];
-  changedPathPrefixes: string[];
+  applicability: EvidenceApplicability;
+  executionContext: EvidenceExecutionContext;
+  transitionBinding?: TransitionEvidenceBinding;
   operations: EvidenceOperation[];
 };
 
@@ -346,7 +363,7 @@ export const closureResultsSchema: SchemaValidator<ReviewClosureResult[]> = {
   },
 };
 
-export function loadReviewEvidenceManifest(ctx: WorkflowContext): {
+export function loadReviewEvidenceManifest(ctx: WorkflowContext, input?: ReviewDiffInput): {
   manifest: ReviewEvidenceManifest;
   source: string;
 } {
@@ -361,6 +378,18 @@ export function loadReviewEvidenceManifest(ctx: WorkflowContext): {
     );
   }
   const value = JSON.parse(readFileSync(source, 'utf8'));
+  if (configured && input) {
+    const provisionalBinding = createCandidateBinding(
+      ctx.cwd,
+      input,
+      value as ReviewEvidenceManifest,
+      ctx.options.base,
+    );
+    return {
+      manifest: validateTransitionReviewEvidenceManifest(value, provisionalBinding),
+      source,
+    };
+  }
   return { manifest: validateReviewEvidenceManifest(value), source };
 }
 
@@ -415,8 +444,7 @@ export async function executeEvidencePlan(
   const preparedRuntimes = new Map<string, PreparedEvidenceRuntime>();
   let outputBytes = 0;
   try {
-    const selectedCells = manifest.behaviorMatrix.filter((cell) =>
-      !onlyCellIds || onlyCellIds.has(cell.id));
+    const selectedCells = effectiveEvidenceCells(manifest, binding.changedFiles, onlyCellIds);
     const providers = manifest.providers.filter((provider) =>
       provider.cellIds.some((cellId) => selectedCells.some((cell) => cell.id === cellId)) &&
       providerApplies(provider, binding.changedFiles));
@@ -433,6 +461,10 @@ export async function executeEvidencePlan(
           throw new Error(`review evidence operation limit exceeded: ${MAX_REVIEW_EVIDENCE_OPERATIONS}`);
         }
         validateOperationAuthorization(operation, manifest);
+        if (provider.executionContext.runner === 'host-seatbelt') {
+          records.push(executionContextIncompleteRecord(provider, operation, binding));
+          continue;
+        }
         const operationKey = `${records.length}-${safePathSegment(provider.id)}-${safePathSegment(operation.id)}`;
         const operationRoot = join(
           tempRoot,
@@ -601,7 +633,6 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
   assertSha256(runtimeReceipt.digest, 'initial review artifact.runtimeReceipt.digest');
   assertSha256(runtimeReceipt.signature, 'initial review artifact.runtimeReceipt.signature');
   validateInitialReviewScope(runtimeReceipt.reviewScope);
-  const manifest = validateReviewEvidenceManifest(artifact.evidence?.manifest);
   const binding = artifact.binding;
   if (!binding || typeof binding.repository !== 'string' || typeof binding.baseRef !== 'string') {
     throw new Error('initial review artifact binding is invalid');
@@ -612,6 +643,7 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
     ['scopeDigest', binding.scopeDigest],
     ['behaviorContractDigest', binding.behaviorContractDigest],
   ] as const) assertSha256(digest, `initial review artifact.binding.${label}`);
+  const manifest = validateTransitionReviewEvidenceManifest(artifact.evidence?.manifest, binding);
   if (!Array.isArray(binding.redactedUntrackedFiles)) {
     throw new Error('initial review artifact binding redacted untracked projection is invalid');
   }
@@ -648,7 +680,7 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
   const recomputedCompleteness = evaluateEvidenceCompleteness(
     manifest,
     artifact.evidence.records,
-    manifest.behaviorMatrix,
+    effectiveEvidenceCells(manifest, binding.changedFiles),
   );
   if (stableJson(recomputedCompleteness) !== stableJson(artifact.evidence.completeness)) {
     throw new Error('initial review artifact evidence completeness is not recomputable');
@@ -914,7 +946,10 @@ function sameEvidenceOperationContract(
         id: provider.id,
         owner: provider.owner,
         kind: provider.kind,
+        lifecycle: provider.lifecycle,
         cellIds: provider.cellIds,
+        applicability: provider.applicability,
+        executionContext: provider.executionContext,
       },
       operation: {
         id: operation.id,
@@ -946,7 +981,11 @@ function cellContractDigest(
   return sha256(stableJson({ cell, providers }));
 }
 
-function validateReviewEvidenceManifest(value: unknown): ReviewEvidenceManifest {
+function validateReviewEvidenceManifest(
+  value: unknown,
+  storage: 'repository' | 'transition-artifact' = 'repository',
+  binding?: CandidateBinding,
+): ReviewEvidenceManifest {
   const item = asObject(value, 'review evidence manifest');
   if (item.schemaVersion !== REVIEW_EVIDENCE_SCHEMA_VERSION) {
     throw new Error(`review evidence manifest.schemaVersion must be ${REVIEW_EVIDENCE_SCHEMA_VERSION}`);
@@ -996,6 +1035,14 @@ function validateReviewEvidenceManifest(value: unknown): ReviewEvidenceManifest 
       }
     }
     validateProviderContract(provider);
+    if (storage === 'repository' && provider.lifecycle !== 'persistent') {
+      throw new Error(
+        `evidence provider ${provider.id} is transition evidence and cannot be stored in the repository-owned persistent manifest; move it to the exact review artifact`,
+      );
+    }
+    if (storage === 'transition-artifact' && provider.lifecycle === 'transition') {
+      validateTransitionProviderBinding(provider, binding);
+    }
   }
   return { schemaVersion: 1, behaviorMatrix, providers, authorizations };
 }
@@ -1039,14 +1086,90 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
   if (!Array.isArray(item.operations) || item.operations.length === 0) {
     throw new Error(`evidence provider ${String(item.id)} operations must be non-empty`);
   }
+  const lifecycle = requiredString(item.lifecycle, 'evidence provider.lifecycle');
+  if (lifecycle !== 'persistent' && lifecycle !== 'transition') {
+    throw new Error(`invalid evidence provider lifecycle: ${lifecycle}`);
+  }
+  const applicability = validateEvidenceApplicability(item.applicability);
+  const executionContext = validateEvidenceExecutionContext(item.executionContext);
+  const operations = item.operations.map(validateEvidenceOperation);
+  const transitionBinding =
+    item.transitionBinding === undefined ? undefined : validateTransitionEvidenceBinding(item.transitionBinding);
+  if (lifecycle === 'persistent' && transitionBinding) {
+    throw new Error(`persistent evidence provider ${String(item.id)} cannot declare transitionBinding`);
+  }
+  if (lifecycle === 'transition' && !transitionBinding) {
+    throw new Error(`transition evidence provider ${String(item.id)} requires exact transitionBinding`);
+  }
   return {
     id: requiredId(item.id, 'evidence provider.id'),
     owner: requiredString(item.owner, 'evidence provider.owner'),
     kind,
+    lifecycle,
     cellIds: requiredIdArray(item.cellIds, 'evidence provider.cellIds'),
-    changedPathPrefixes: optionalStringArray(item.changedPathPrefixes, 'evidence provider.changedPathPrefixes'),
-    operations: item.operations.map(validateEvidenceOperation),
+    applicability,
+    executionContext,
+    transitionBinding,
+    operations,
   };
+}
+
+function validateEvidenceApplicability(value: unknown): EvidenceApplicability {
+  const item = asObject(value, 'evidence provider.applicability');
+  const kind = requiredString(item.kind, 'evidence provider.applicability.kind');
+  if (kind === 'paths') {
+    const pathPrefixes = requiredStringArray(item.pathPrefixes, 'evidence provider.applicability.pathPrefixes');
+    if (item.reason !== undefined) {
+      throw new Error('path-scoped evidence provider applicability cannot declare a global reason');
+    }
+    return { kind, pathPrefixes: uniqueSorted(pathPrefixes) };
+  }
+  if (kind === 'global') {
+    if (item.pathPrefixes !== undefined) {
+      throw new Error('global evidence provider applicability cannot declare pathPrefixes');
+    }
+    return {
+      kind,
+      reason: requiredString(item.reason, 'evidence provider.applicability.reason'),
+    };
+  }
+  throw new Error(`invalid evidence provider applicability kind: ${kind}`);
+}
+
+function validateEvidenceExecutionContext(value: unknown): EvidenceExecutionContext {
+  const item = asObject(value, 'evidence provider.executionContext');
+  const sandboxOwner = requiredString(item.sandboxOwner, 'evidence provider.executionContext.sandboxOwner');
+  const runner = requiredString(item.runner, 'evidence provider.executionContext.runner');
+  if (sandboxOwner === 'review-runtime' && runner === 'sealed') {
+    if (item.lane !== undefined) {
+      throw new Error('sealed review-runtime execution context cannot declare a host lane');
+    }
+    return { sandboxOwner, runner };
+  }
+  if (sandboxOwner === 'provider' && runner === 'host-seatbelt') {
+    return {
+      sandboxOwner,
+      runner,
+      lane: requiredString(item.lane, 'evidence provider.executionContext.lane'),
+    };
+  }
+  throw new Error(`unsupported evidence execution context: sandboxOwner=${sandboxOwner}, runner=${runner}`);
+}
+
+function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBinding {
+  const item = asObject(value, 'evidence provider.transitionBinding');
+  const result = {
+    repository: requiredString(item.repository, 'transitionBinding.repository'),
+    baseDigest: requiredString(item.baseDigest, 'transitionBinding.baseDigest'),
+    candidateDigest: requiredString(item.candidateDigest, 'transitionBinding.candidateDigest'),
+    scopeDigest: requiredString(item.scopeDigest, 'transitionBinding.scopeDigest'),
+    operationContractDigest: requiredString(item.operationContractDigest, 'transitionBinding.operationContractDigest'),
+  };
+  assertSha256(result.baseDigest, 'transitionBinding.baseDigest');
+  assertSha256(result.candidateDigest, 'transitionBinding.candidateDigest');
+  assertSha256(result.scopeDigest, 'transitionBinding.scopeDigest');
+  assertSha256(result.operationContractDigest, 'transitionBinding.operationContractDigest');
+  return result;
 }
 
 function validateEvidenceOperation(value: unknown): EvidenceOperation {
@@ -1125,6 +1248,12 @@ function validateProviderContract(provider: EvidenceProvider): void {
         candidate.some((operation) => operation.expectedExit === 'zero'))) {
     throw new Error(`regression provider ${provider.id} requires base/nonzero RED and candidate/zero GREEN operations`);
   }
+  const staleRed = base.find((operation) => operation.expectedExit === 'nonzero');
+  if (provider.lifecycle === 'persistent' && staleRed) {
+    throw new Error(
+      `persistent evidence provider ${provider.id} contains stale-prone operation=${staleRed.id}; actual=target:${staleRed.target},expectedExit:${staleRed.expectedExit}; expected=persistent candidate/zero or exact-bound transition RED; owner=${provider.owner}; scope=${stableJson(provider.applicability)}; executionContext=${stableJson(provider.executionContext)}; fix=move exact RED evidence to a transition artifact or replace it with a successor-safe candidate fixture`,
+    );
+  }
   if (provider.kind !== 'regression' && base.length > 0) {
     throw new Error(`only regression providers may execute against base: ${provider.id}`);
   }
@@ -1139,6 +1268,56 @@ function validateProviderContract(provider: EvidenceProvider): void {
       provider.operations.some((operation) => !LEVELS.has(operation.evidenceLevel))) {
     throw new Error(`runtime integration provider ${provider.id} requires an evidence level`);
   }
+}
+
+function validateTransitionProviderBinding(provider: EvidenceProvider, binding: CandidateBinding | undefined): void {
+  if (!binding) {
+    throw new Error(`transition evidence provider ${provider.id} requires the current candidate binding`);
+  }
+  const expected = provider.transitionBinding!;
+  const actual = {
+    repository: binding.repository,
+    baseDigest: binding.baseDigest,
+    candidateDigest: binding.candidateDigest,
+    scopeDigest: binding.scopeDigest,
+    operationContractDigest: transitionEvidenceOperationContractDigest(provider.operations),
+  };
+  for (const key of Object.keys(actual) as Array<keyof typeof actual>) {
+    if (expected[key] !== actual[key]) {
+      throw new Error(
+        `transition evidence provider ${provider.id} binding mismatch for ${key}: actual=${actual[key]} expected=${expected[key]}; owner=${provider.owner}; scope=${binding.scopeDigest}; fix=regenerate transition evidence for this exact repository/base/candidate/scope/operation`,
+      );
+    }
+  }
+}
+
+export function validateTransitionReviewEvidenceManifest(
+  value: unknown,
+  binding: CandidateBinding,
+): ReviewEvidenceManifest {
+  return validateReviewEvidenceManifest(value, 'transition-artifact', binding);
+}
+
+export function transitionEvidenceOperationContractDigest(operations: EvidenceOperation[]): string {
+  return sha256(
+    stableJson(
+      operations.map((operation) => ({
+        id: operation.id,
+        target: operation.target,
+        argv: operation.argv,
+        expectedExit: operation.expectedExit,
+        expectedExitCode: operation.expectedExitCode ?? null,
+        timeoutMs: operation.timeoutMs,
+        maxOutputBytes: operation.maxOutputBytes,
+        network: operation.network,
+        authorizationId: operation.authorizationId ?? null,
+        evidenceLevel: operation.evidenceLevel,
+        requiredSystemTools: operation.requiredSystemTools ?? [],
+        seed: operation.seed ?? null,
+        iterations: operation.iterations ?? null,
+      })),
+    ),
+  );
 }
 
 function validateOperationAuthorization(
@@ -2250,9 +2429,73 @@ function dispositionRecord(
 }
 
 function providerApplies(provider: EvidenceProvider, changedFiles: string[]): boolean {
-  if (provider.changedPathPrefixes.length === 0) return true;
-  return changedFiles.some((file) =>
-    provider.changedPathPrefixes.some((prefix) => file === prefix || file.startsWith(`${prefix}/`)));
+  if (provider.applicability.kind === 'global') return true;
+  const pathPrefixes = provider.applicability.pathPrefixes;
+  return changedFiles.some((file) => pathPrefixes.some((prefix) => file === prefix || file.startsWith(`${prefix}/`)));
+}
+
+function effectiveEvidenceCells(
+  manifest: ReviewEvidenceManifest,
+  changedFiles: string[],
+  onlyCellIds?: Set<string>,
+): BehaviorCell[] {
+  const requestedCells = manifest.behaviorMatrix.filter(
+    (cell) => !onlyCellIds || onlyCellIds.has(cell.id),
+  );
+  const applicableCellIds = new Set(
+    manifest.providers
+      .filter((provider) => providerApplies(provider, changedFiles))
+      .flatMap((provider) => provider.cellIds),
+  );
+  return requestedCells.filter(
+    (cell) => cell.providerIds.length === 0 || applicableCellIds.has(cell.id),
+  );
+}
+
+export function selectedEvidenceProviderIds(manifest: ReviewEvidenceManifest, changedFiles: string[]): string[] {
+  return manifest.providers
+    .filter((provider) => providerApplies(provider, changedFiles))
+    .map((provider) => provider.id)
+    .sort();
+}
+
+function executionContextIncompleteRecord(
+  provider: EvidenceProvider,
+  operation: EvidenceOperation,
+  binding: CandidateBinding,
+): ReviewEvidenceRecord {
+  const now = new Date().toISOString();
+  const expected = `${provider.executionContext.runner}/${provider.executionContext.sandboxOwner}`;
+  const actual = 'sealed/review-runtime';
+  const lane = provider.executionContext.runner === 'host-seatbelt' ? provider.executionContext.lane : 'none';
+  const outputSummary = [
+    `contract owner=${provider.owner}`,
+    `actual=${actual}`,
+    `expected=${expected}`,
+    `scope=${binding.scopeDigest}`,
+    `executionContext=${stableJson(provider.executionContext)}`,
+    `fix=run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`,
+  ].join('; ');
+  return {
+    id: `${provider.id}:${operation.id}`,
+    providerId: provider.id,
+    operationId: operation.id,
+    cellIds: [...provider.cellIds],
+    owner: provider.owner,
+    kind: provider.kind,
+    status: 'runtime-incomplete',
+    evidenceLevel: operation.evidenceLevel,
+    environment: actual,
+    commandDigest: sha256(stableJson(operation.argv)),
+    startedAt: now,
+    finishedAt: now,
+    outputDigest: sha256(outputSummary),
+    outputSummary,
+    candidateDigest: binding.candidateDigest,
+    baseDigest: binding.baseDigest,
+    scopeDigest: binding.scopeDigest,
+    fresh: false,
+  };
 }
 
 function recordAuthorizedForCell(
@@ -2666,8 +2909,13 @@ function mockEvidenceManifest(): ReviewEvidenceManifest {
       id: 'mock-static-gate',
       owner: 'review-runtime-test-fixture',
       kind: 'static',
+      lifecycle: 'persistent',
       cellIds: ['mock-review-contract'],
-      changedPathPrefixes: [],
+      applicability: {
+        kind: 'global',
+        reason: 'The mock manifest is an explicit single-provider fixture.',
+      },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [{
         id: 'mock-pass',
         target: 'candidate',

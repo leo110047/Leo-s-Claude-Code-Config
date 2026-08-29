@@ -297,8 +297,10 @@ describe("Work Map review readback", () => {
 				id: "candidate-gate-provider",
 				owner: "work-map-review.test.ts",
 				kind: "static",
+				lifecycle: "persistent",
 				cellIds: ["candidate-gate"],
-				changedPathPrefixes: [],
+				applicability: { kind: "global", reason: "Explicit Work Map test fixture." },
+				executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
 				operations: [{
 					id: "fail",
 					target: "candidate",

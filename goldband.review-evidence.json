@@ -271,7 +271,8 @@
     {
       "id": "review-evidence-tests",
       "owner": "goldband-loop/test/review-evidence.test.ts",
-      "kind": "regression",
+      "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": [
         "evidence-operation-isolation",
         "evidence-runner-state-isolation",
@@ -292,19 +293,21 @@
         "sandbox-error-signature",
         "closure-git-path-decoding"
       ],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.review-evidence.json",
+          "schemas/review-evidence-manifest.schema.json",
+          "goldband-loop/workflows/review-evidence.ts",
+          "goldband-loop/test/review-evidence.test.ts"
+        ]
+      },
+      "executionContext": {
+        "sandboxOwner": "provider",
+        "runner": "host-seatbelt",
+        "lane": "macos-review-contract-host"
+      },
       "operations": [
-        {
-          "id": "base-red",
-          "target": "base",
-          "argv": ["node", "-e", "const fs=require('node:fs'); if(!fs.existsSync('goldband-loop/workflows/review-evidence.ts')){console.error('RED: evidence-first review runtime owner is absent');process.exit(42)}"],
-          "expectedExit": "nonzero",
-          "expectedExitCode": 42,
-          "timeoutMs": 120000,
-          "maxOutputBytes": 65536,
-          "network": "deny",
-          "evidenceLevel": "local"
-        },
         {
           "id": "candidate-green",
           "target": "candidate",
@@ -322,8 +325,13 @@
       "id": "workflow-typecheck",
       "owner": "goldband-loop/package.json#typecheck",
       "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": ["typed-evidence-contracts"],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": ["goldband-loop"]
+      },
+      "executionContext": { "sandboxOwner": "review-runtime", "runner": "sealed" },
       "operations": [
         {
           "id": "candidate-typecheck",
@@ -342,12 +350,27 @@
       "id": "work-map-review-tests",
       "owner": "goldband-loop/test/work-map-review.test.ts",
       "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": [
         "work-map-deterministic-failure",
         "deterministic-finding-preservation",
         "work-map-review-transition-reconciliation"
       ],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.review-evidence.json",
+          "schemas/review-evidence-manifest.schema.json",
+          "goldband-loop/workflows/review-evidence.ts",
+          "goldband-loop/workflows/work-map",
+          "goldband-loop/test/work-map-review.test.ts"
+        ]
+      },
+      "executionContext": {
+        "sandboxOwner": "provider",
+        "runner": "host-seatbelt",
+        "lane": "macos-review-contract-host"
+      },
       "operations": [
         {
           "id": "candidate-work-map-review",
@@ -366,8 +389,30 @@
       "id": "installed-runtime-tests",
       "owner": "goldband-loop installed runtime test suite",
       "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": ["installed-codex-runtime-path", "runtime-owned-initial-receipt"],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.review-evidence.json",
+          "schemas/review-evidence-manifest.schema.json",
+          "goldband-loop/bin/goldband.ts",
+          "goldband-loop/review",
+          "goldband-loop/scripts/install-codex-review-launcher.ts",
+          "goldband-loop/setup",
+          "goldband-loop/test/codex-review-launcher-install.test.ts",
+          "goldband-loop/test/review-receipt-authority-install.test.ts",
+          "goldband-loop/workflows",
+          "rules",
+          "scripts/lib/workflow-distribution-contract.mjs",
+          "shell/install"
+        ]
+      },
+      "executionContext": {
+        "sandboxOwner": "provider",
+        "runner": "host-seatbelt",
+        "lane": "macos-review-contract-host"
+      },
       "operations": [
         {
           "id": "candidate-installed-runtime",
@@ -386,8 +431,18 @@
       "id": "generated-surface-check",
       "owner": "scripts/test-workflow-contracts.mjs",
       "kind": "project-gate",
+      "lifecycle": "persistent",
       "cellIds": ["generated-review-surfaces"],
-      "changedPathPrefixes": [],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.manifest.json",
+          "scripts/generate-goldband-surfaces.mjs",
+          "scripts/test-workflow-contracts.mjs",
+          "goldband-loop/generated"
+        ]
+      },
+      "executionContext": { "sandboxOwner": "review-runtime", "runner": "sealed" },
       "operations": [
         {
           "id": "candidate-generated-check",

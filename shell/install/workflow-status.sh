@@ -163,6 +163,62 @@ workflow_goldband_top_level_count() {
     printf '%s\n' "$count"
 }
 
+verify_codex_workflow_distribution() {
+    local runtime_root="$1"
+    local bun_path="$2"
+    local launcher_path="$3"
+    local marker_file="$4"
+    local rule_file="$5"
+    local source result values status detail actual_probe expected_probe actions action
+    source="$(workflow_contract_source "$HOME/.codex/skills/goldband" 2>/dev/null || true)"
+    result="$(node "$REPO_DIR/scripts/check-workflow-distribution.mjs" inspect "$source" "$runtime_root" "$marker_file" "$rule_file" 2>/dev/null || true)"
+    values="$(node -e '
+const value = JSON.parse(process.argv[1]);
+process.stdout.write(String(value.status || "invalid") + "\t" + String(value.detail || ""));
+' "$result" 2>/dev/null || true)"
+    IFS=$'\t' read -r status detail <<<"$values"
+    if [ "$status" != "ok" ]; then
+        show_workflow_distribution_failure "$status" "$detail"
+        return 1
+    fi
+    actual_probe="$("$bun_path" "$launcher_path" --contract-probe 2>/dev/null || true)"
+    expected_probe="$(node "$REPO_DIR/scripts/check-workflow-distribution.mjs" expected-probe "$source" 2>/dev/null || true)"
+    if [ -z "$actual_probe" ] || [ "$actual_probe" != "$expected_probe" ]; then
+        echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — declared dispatch behavior probe failed"
+        return 1
+    fi
+    actions="$(node -e 'for (const action of JSON.parse(process.argv[1]).actions || []) console.log(action)' "$expected_probe" 2>/dev/null || true)"
+    while IFS= read -r action; do
+        [ -n "$action" ] || continue
+        actual_probe="$("$bun_path" "$launcher_path" --contract-probe "$action" 2>/dev/null || true)"
+        if ! node -e 'const value=JSON.parse(process.argv[1]); if (value.action !== process.argv[2] || value.routable !== true) process.exit(2)' "$actual_probe" "$action" 2>/dev/null; then
+            echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — action dispatch behavior probe failed: $action"
+            return 1
+        fi
+    done <<<"$actions"
+}
+
+show_workflow_distribution_failure() {
+    local status="$1"
+    local detail="$2"
+    case "$status" in
+        source-stale)
+            echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — source inputs changed but runtime was not rebuilt"
+            ;;
+        installed-corrupt)
+            echo -e "  ${RED}[corrupt]${NC} trusted Codex workflow launcher — installed artifact bytes or inventory changed"
+            ;;
+        dispatch-stale)
+            echo -e "  ${RED}[stale]${NC} trusted Codex workflow launcher — declared dispatch contract drift"
+            ;;
+        *)
+            echo -e "  ${RED}[unverifiable]${NC} trusted Codex workflow launcher — distribution contract unavailable"
+            ;;
+    esac
+    [ -n "$detail" ] && echo "    $detail"
+    echo "    建議: 重跑 ./install.sh workflow-codex。"
+}
+
 show_tracker_projection_status() {
     local state_root="${GOLDBAND_HOME:-$HOME/.goldband}"
     local config_file="$state_root/tracker/config.json"

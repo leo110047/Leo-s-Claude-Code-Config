@@ -23,12 +23,16 @@ import {
   executeEvidencePlan,
   evidenceRuntimeReadAccess,
   isEvidenceSandboxRuntimeFailure,
+  loadReviewEvidenceManifest,
   readClosureArtifact,
   reviewEvidenceManifestSchema,
   runtimeImageContentDigest,
   runtimeLibraryLiteralPaths,
+  selectedEvidenceProviderIds,
+  transitionEvidenceOperationContractDigest,
   validateClosureResults,
   validateInitialReviewArtifact,
+  validateTransitionReviewEvidenceManifest,
   writeInitialReviewArtifact,
   type InitialReviewArtifact,
   type ReviewEvidenceBundle,
@@ -44,6 +48,14 @@ import {
 } from '../workflows/review';
 
 const roots: string[] = [];
+const requireReviewHostBoundary = process.env.GOLDBAND_REQUIRE_REVIEW_HOST_BOUNDARY === '1';
+
+function hostBoundaryPrerequisite(available: boolean, detail: string): boolean {
+  if (!available && requireReviewHostBoundary) {
+    throw new Error(`required review host boundary prerequisite is unavailable: ${detail}`);
+  }
+  return available;
+}
 
 // Sealed Mach-O projection rewrites, signs, and re-attests a complete runtime
 // before the supervised operation timeout begins.
@@ -55,9 +67,9 @@ afterEach(() => {
 
 describe('review evidence contracts', () => {
   test('attests Homebrew-style Mach-O rpath dependencies without widening directory reads', () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const node = spawnSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).stdout.trim();
-    if (!node) return;
+    if (!hostBoundaryPrerequisite(Boolean(node), 'node executable')) return;
     const access = evidenceRuntimeReadAccess(node);
     expect(access.literals).toContain(realpathSync(node));
     expect(access.identityDigest).toMatch(/^[a-f0-9]{64}$/);
@@ -81,9 +93,9 @@ describe('review evidence contracts', () => {
   });
 
   test('preserves native LC_RPATH declaration and loader-chain precedence in projections', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
-    if (clang.status !== 0) return;
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
     const root = mkdtempSync(join(tmpdir(), 'review-runtime-rpath-'));
     roots.push(root);
 
@@ -403,16 +415,16 @@ describe('review evidence contracts', () => {
   });
 
   test('rejects PATH script launchers and requires an explicit interpreter', () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const npm = spawnSync('/usr/bin/which', ['npm'], { encoding: 'utf8' }).stdout.trim();
-    if (!npm) return;
+    if (!hostBoundaryPrerequisite(Boolean(npm), 'npm executable')) return;
     expect(() => evidenceRuntimeReadAccess(npm)).toThrow('invoke an interpreter explicitly');
   });
 
   test('pre-main dyld load failure cannot satisfy an exact RED exit', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
-    if (clang.status !== 0) return;
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
     const root = mkdtempSync(join(tmpdir(), 'review-runtime-missing-required-'));
     roots.push(root);
     const library = join(root, 'libRequired.dylib');
@@ -455,8 +467,8 @@ describe('review evidence contracts', () => {
         operation('green', ['true'], 'candidate', 'zero'),
       ],
     };
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const validated = validateTransitionManifest(value, repo, input);
     const previousPath = process.env.PATH;
     process.env.PATH = `${root}:${previousPath ?? '/usr/bin:/bin'}`;
     try {
@@ -475,9 +487,9 @@ describe('review evidence contracts', () => {
   });
 
   test('pre-main dyld symbol failure cannot satisfy an exact RED exit', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
-    if (clang.status !== 0) return;
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
     const root = mkdtempSync(join(tmpdir(), 'review-runtime-missing-symbol-'));
     roots.push(root);
     const library = join(root, 'libSymbol.dylib');
@@ -518,8 +530,8 @@ describe('review evidence contracts', () => {
         operation('green', ['true'], 'candidate', 'zero'),
       ],
     };
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const validated = validateTransitionManifest(value, repo, input);
     const previousPath = process.env.PATH;
     process.env.PATH = `${root}:${previousPath ?? '/usr/bin:/bin'}`;
     try {
@@ -637,6 +649,166 @@ describe('review evidence contracts', () => {
     ];
     expect(() => reviewEvidenceManifestSchema.validate(ambiguousRed))
       .toThrow('requires expectedExitCode');
+  });
+
+  test('persistent manifests require explicit lifecycle, applicability, and execution context', () => {
+    const missingLifecycle = structuredClone(manifest()) as unknown as {
+      providers: Array<Record<string, unknown>>;
+    };
+    delete missingLifecycle.providers[0]!.lifecycle;
+    expect(() => reviewEvidenceManifestSchema.validate(missingLifecycle))
+      .toThrow('evidence provider.lifecycle must be a non-empty string');
+
+    const emptyPaths = structuredClone(manifest());
+    emptyPaths.providers[0]!.applicability = { kind: 'paths', pathPrefixes: [] };
+    expect(() => reviewEvidenceManifestSchema.validate(emptyPaths))
+      .toThrow('evidence provider.applicability.pathPrefixes must be a non-empty string array');
+
+    const missingGlobalReason = structuredClone(manifest()) as unknown as {
+      providers: Array<Record<string, unknown>>;
+    };
+    missingGlobalReason.providers[0]!.applicability = { kind: 'global' };
+    expect(() => reviewEvidenceManifestSchema.validate(missingGlobalReason))
+      .toThrow('evidence provider.applicability.reason must be a non-empty string');
+  });
+
+  test('transition evidence is exact-bound and cannot pollute a successor repository manifest', () => {
+    const repo = gitFixture();
+    const value = manifest();
+    value.providers[0] = {
+      ...value.providers[0]!,
+      kind: 'regression',
+      operations: [
+        operation('red', ['node', 'check.mjs'], 'base', 'nonzero'),
+        operation('green', ['true'], 'candidate', 'zero'),
+      ],
+    };
+    expect(() => reviewEvidenceManifestSchema.validate(value)).toThrow(
+      /provider-a.*operation=red.*actual=target:base,expectedExit:nonzero.*expected=persistent candidate\/zero.*owner=test.*scope=.*executionContext=.*fix=move exact RED evidence/,
+    );
+    const input = { source: 'git diff', diff: git(repo, ['diff']), changedFiles: ['a.ts'] };
+    const transition = validateTransitionManifest(value, repo, input);
+    expect(() => reviewEvidenceManifestSchema.validate(transition))
+      .toThrow('cannot be stored in the repository-owned persistent manifest');
+    const binding = createCandidateBinding(repo, input, transition);
+    expect(() => validateTransitionReviewEvidenceManifest(transition, {
+      ...binding,
+      candidateDigest: 'f'.repeat(64),
+    })).toThrow(/binding mismatch for candidateDigest.*owner=test.*fix=regenerate transition evidence/);
+
+    const transitionFile = join(repo, 'transition-evidence.json');
+    writeFileSync(transitionFile, `${JSON.stringify(transition)}\n`);
+    const loaded = loadReviewEvidenceManifest(
+      {
+        ...context(repo),
+        options: { mode: 'real' as const, evidenceManifestFile: transitionFile },
+      },
+      input,
+    );
+    expect(loaded.manifest.providers[0]!.lifecycle).toBe('transition');
+
+    const reusableTransition = validateTransitionManifest(manifest(), repo, input);
+    const reusableBinding = createCandidateBinding(repo, input, reusableTransition);
+    const artifact = initialArtifact();
+    artifact.binding = reusableBinding;
+    artifact.evidence.binding = reusableBinding;
+    artifact.evidence.manifest = reusableTransition;
+    artifact.evidence.records[0] = {
+      ...artifact.evidence.records[0]!,
+      id: 'provider-a:pass',
+      candidateDigest: reusableBinding.candidateDigest,
+      baseDigest: reusableBinding.baseDigest,
+      scopeDigest: reusableBinding.scopeDigest,
+    };
+    artifact.evidence.completeness = evaluateEvidenceCompleteness(
+      reusableTransition,
+      artifact.evidence.records,
+    );
+    artifact.findings[0]!.evidenceIds = ['provider-a:pass'];
+    artifact.diff = input.diff;
+    expect(validateInitialReviewArtifact(artifact).evidence.manifest.providers[0]!.lifecycle)
+      .toBe('transition');
+  });
+
+  test('applicability selects only scoped providers and excludes unrelated cells from completeness', async () => {
+    const value = manifest();
+    value.providers[0]!.applicability = { kind: 'paths', pathPrefixes: ['src'] };
+    const second = structuredClone(value.providers[0]!);
+    second.id = 'global-provider';
+    second.cellIds = ['behavior-b'];
+    second.applicability = { kind: 'paths', pathPrefixes: ['docs'] };
+    value.behaviorMatrix.push({
+      ...value.behaviorMatrix[0]!,
+      id: 'behavior-b',
+      providerIds: ['global-provider'],
+    });
+    value.providers.push(second);
+    expect(selectedEvidenceProviderIds(value, ['docs/readme.md'])).toEqual(['global-provider']);
+    expect(selectedEvidenceProviderIds(value, ['src/owner.ts'])).toEqual(['provider-a']);
+    const repo = gitFixture();
+    const input = { source: 'git diff', diff: '', changedFiles: ['docs/readme.md'] };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const evidence = await executeEvidencePlan(
+      context(repo),
+      input,
+      validated,
+      createCandidateBinding(repo, input, validated),
+    );
+    expect(evidence.records.map((record) => record.providerId)).toEqual(['global-provider']);
+    expect(evidence.completeness.coverageGapCellIds).toEqual([]);
+    expect(evidence.completeness.blockingCellIds).toEqual([]);
+    expect(evidence.completeness.runtimeIncompleteCellIds).not.toContain('behavior-a');
+    const passingRecords = evidence.records.map((record) => ({
+      ...record,
+      status: 'verified-pass' as const,
+      fresh: true,
+      exitStatus: 0,
+    }));
+    expect(evaluateEvidenceCompleteness(
+      validated,
+      passingRecords,
+      validated.behaviorMatrix.filter((cell) => cell.id === 'behavior-b'),
+    )).toMatchObject({
+      complete: true,
+      hostEligible: true,
+      blockingCellIds: [],
+      coverageGapCellIds: [],
+    });
+
+    const persisted = initialArtifact();
+    persisted.binding = evidence.binding;
+    persisted.evidence = evidence;
+    persisted.diff = input.diff;
+    persisted.findings[0]!.evidenceIds = [evidence.records[0]!.id];
+    expect(validateInitialReviewArtifact(persisted).evidence.completeness)
+      .toEqual(evidence.completeness);
+  });
+
+  test('unsupported provider-owned sandbox context is typed partial before dispatch', async () => {
+    const repo = gitFixture();
+    const value = manifest();
+    value.providers[0]!.executionContext = {
+      sandboxOwner: 'provider',
+      runner: 'host-seatbelt',
+      lane: 'macos-review-contract-host',
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const evidence = await executeEvidencePlan(
+      context(repo),
+      input,
+      validated,
+      createCandidateBinding(repo, input, validated),
+    );
+    expect(evidence.records[0]).toMatchObject({
+      status: 'runtime-incomplete',
+      fresh: false,
+      environment: 'sealed/review-runtime',
+    });
+    expect(evidence.records[0]!.exitStatus).toBeUndefined();
+    expect(evidence.records[0]!.outputSummary).toContain('actual=sealed/review-runtime');
+    expect(evidence.records[0]!.outputSummary).toContain('fix=run the named deterministic host lane');
+    expect(evidence.completeness).toMatchObject({ complete: false, hostEligible: false });
   });
 
   test('high-risk unsupported cells fail closed before a semantic host is eligible', () => {
@@ -815,16 +987,18 @@ describe('review evidence contracts', () => {
       id: 'property-provider',
       owner: 'test',
       kind: 'property-fuzz',
+      lifecycle: 'persistent',
       cellIds: ['property-a'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit property fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [{
         ...operation('property', ['true'], 'candidate', 'zero'),
         seed: 'seed-42',
         iterations: 25,
       }],
     });
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff, changedFiles: ['check.mjs'] };
+    const validated = validateTransitionManifest(value, repo, input);
     const binding = createCandidateBinding(repo, input, validated);
     const evidence = await executeEvidencePlan(context(repo), input, validated, binding);
     expect(evidence.records.map((entry) => [entry.id, entry.status])).toEqual([
@@ -870,8 +1044,8 @@ describe('review evidence contracts', () => {
         'zero',
       ),
     ];
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: git(repo, ['diff']), changedFiles: ['a.ts'] };
+    const validated = reviewEvidenceManifestSchema.validate(value);
     const evidence = await executeEvidencePlan(
       context(repo),
       input,
@@ -915,7 +1089,7 @@ describe('review evidence contracts', () => {
   });
 
   test('sealed Bun runtime can resolve the candidate cwd and a declared --cwd', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const repo = gitFixture();
     mkdirSync(join(repo, 'nested'));
     writeFileSync(
@@ -932,8 +1106,8 @@ describe('review evidence contracts', () => {
       'zero',
     );
     value.providers[0]!.operations[0]!.requiredSystemTools = ['git', 'node', 'tar'];
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const validated = reviewEvidenceManifestSchema.validate(value);
     const evidence = await executeEvidencePlan(
       context(repo), input, validated, createCandidateBinding(repo, input, validated),
     );
@@ -985,7 +1159,7 @@ describe('review evidence contracts', () => {
   });
 
   test('sealed child process inherits the sandbox without broker credentials', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const repo = gitFixture();
     writeFileSync(join(repo, 'module.cjs'), 'module.exports = 42;\n');
     git(repo, ['add', 'module.cjs']);
@@ -1025,13 +1199,13 @@ describe('review evidence contracts', () => {
   });
 
   test('sealed runtime projection cannot read source images or mutate projected images', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const node = spawnSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).stdout.trim();
-    if (!node) return;
+    if (!hostBoundaryPrerequisite(Boolean(node), 'node executable')) return;
     const sourceImage = evidenceRuntimeReadAccess(node).images
       .map((image) => image.sourcePath)
       .find((path) => path.startsWith('/opt/homebrew/'));
-    if (!sourceImage) return;
+    if (!hostBoundaryPrerequisite(Boolean(sourceImage), 'Homebrew runtime source image')) return;
     const repo = gitFixture();
     const value = manifest();
     value.providers[0]!.operations[0]!.argv = [
@@ -1048,7 +1222,7 @@ describe('review evidence contracts', () => {
   });
 
   test('sealed runtime projection identity is stable across separate evidence plans', async () => {
-    if (process.platform !== 'darwin') return;
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const repo = gitFixture();
     const value = manifest();
     value.providers[0]!.operations[0]!.argv = [
@@ -1097,8 +1271,8 @@ describe('review evidence contracts', () => {
         operation('green', ['true'], 'candidate', 'zero'),
       ],
     };
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: git(repo, ['diff']), changedFiles: ['a.ts'] };
+    const validated = validateTransitionManifest(value, repo, input);
     const evidence = await executeEvidencePlan(
       context(repo),
       input,
@@ -1127,8 +1301,8 @@ describe('review evidence contracts', () => {
         operation('green', ['true'], 'candidate', 'zero'),
       ],
     };
-    const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const validated = validateTransitionManifest(value, repo, input);
     const evidence = await executeEvidencePlan(
       context(repo), input, validated, createCandidateBinding(repo, input, validated),
     );
@@ -1647,8 +1821,10 @@ describe('review evidence contracts', () => {
       id: 'provider-b',
       owner: 'test',
       kind: 'static',
+      lifecycle: 'persistent',
       cellIds: ['behavior-b'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit closure fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [operation('pass-b', ['true'], 'candidate', 'zero')],
     });
     const repairedBinding = {
@@ -1674,7 +1850,7 @@ describe('review evidence contracts', () => {
     original.diff = `${header}\n--- ${JSON.stringify(`a/${path}`)}\n+++ ${JSON.stringify(`b/${path}`)}\n@@ -1 +1 @@\n-old();\n+bad();\n`;
     original.binding.candidateDigest = digest(original.diff);
     original.evidence.binding = original.binding;
-    original.evidence.manifest.providers[0]!.changedPathPrefixes = [path];
+    original.evidence.manifest.providers[0]!.applicability = { kind: 'paths', pathPrefixes: [path] };
     const repairedDiff = original.diff.replace('+bad();', '+fixed();');
     const closure = buildClosureInput(
       original,
@@ -1698,7 +1874,7 @@ describe('review evidence contracts', () => {
     original.diff = originalDiff;
     original.binding.candidateDigest = digest(originalDiff);
     original.evidence.binding = original.binding;
-    original.evidence.manifest.providers[0]!.changedPathPrefixes = [path];
+    original.evidence.manifest.providers[0]!.applicability = { kind: 'paths', pathPrefixes: [path] };
     const repairedDiff = originalDiff.replace('+bad();', '+fixed();');
     const closure = buildClosureInput(
       original,
@@ -1714,7 +1890,7 @@ describe('review evidence contracts', () => {
     original.diff = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1,2 @@\n-old();\n+bad();\n+++ b/spoofed.ts\n';
     original.binding.candidateDigest = digest(original.diff);
     original.evidence.binding = original.binding;
-    original.evidence.manifest.providers[0]!.changedPathPrefixes = ['a.ts'];
+    original.evidence.manifest.providers[0]!.applicability = { kind: 'paths', pathPrefixes: ['a.ts'] };
     const repairedDiff = original.diff.replace('+bad();', '+fixed();');
     const closure = buildClosureInput(
       original,
@@ -1739,7 +1915,7 @@ describe('review evidence contracts', () => {
     original.diff = originalDiff;
     original.binding.candidateDigest = digest(originalDiff);
     original.evidence.binding = original.binding;
-    original.evidence.manifest.providers[0]!.changedPathPrefixes = [path];
+    original.evidence.manifest.providers[0]!.applicability = { kind: 'paths', pathPrefixes: [path] };
     const repairedDiff = originalDiff.replace('literal 4', 'literal 5');
     const closure = buildClosureInput(
       original,
@@ -1765,7 +1941,7 @@ describe('review evidence contracts', () => {
     original.diff = originalDiff;
     original.binding.candidateDigest = digest(originalDiff);
     original.evidence.binding = original.binding;
-    original.evidence.manifest.providers[0]!.changedPathPrefixes = ['fixed name.ts'];
+    original.evidence.manifest.providers[0]!.applicability = { kind: 'paths', pathPrefixes: ['fixed name.ts'] };
     const closure = buildClosureInput(
       original,
       { ...original.binding, candidateDigest: digest(repairedDiff) },
@@ -1989,8 +2165,10 @@ describe('review evidence contracts', () => {
       id: 'provider-b',
       owner: 'test',
       kind: 'static',
+      lifecycle: 'persistent',
       cellIds: ['behavior-b'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit closure fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [operation('pass-b', ['true'], 'candidate', 'zero')],
     });
     writeFileSync(evidenceFile, `${JSON.stringify(repairedManifest)}\n`);
@@ -2017,6 +2195,59 @@ describe('review evidence contracts', () => {
       originalDiffBytesSent: 0,
     });
     expect(telemetry.repairDeltaBytes).toBeGreaterThan(0);
+  });
+
+  test('closure cannot inherit transition evidence bound to the original candidate', async () => {
+    const repo = gitFixture();
+    const state = join(repo, '.state');
+    const diffFile = join(repo, 'candidate.diff');
+    const transitionFile = join(repo, 'transition.json');
+    const originalDiff = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+bad();\n';
+    writeFileSync(diffFile, originalDiff);
+    const input = {
+      source: `diff-file:${diffFile}`,
+      diff: originalDiff,
+      changedFiles: ['a.ts'],
+    };
+    writeFileSync(
+      transitionFile,
+      `${JSON.stringify(validateTransitionManifest(manifest(), repo, input))}\n`,
+    );
+    const transition = validateTransitionReviewEvidenceManifest(
+      JSON.parse(readFileSync(transitionFile, 'utf8')),
+      createCandidateBinding(repo, input, JSON.parse(readFileSync(transitionFile, 'utf8'))),
+    );
+    const binding = createCandidateBinding(repo, input, transition);
+    const { runtimeReceipt: _fixtureReceipt, ...payload } = initialArtifact();
+    payload.binding = binding;
+    payload.diff = originalDiff;
+    payload.evidence.manifest = transition;
+    payload.evidence.binding = binding;
+    payload.evidence.records[0] = {
+      ...payload.evidence.records[0]!,
+      id: 'provider-a:pass',
+      candidateDigest: binding.candidateDigest,
+      baseDigest: binding.baseDigest,
+      scopeDigest: binding.scopeDigest,
+    };
+    payload.findings[0]!.evidenceIds = ['provider-a:pass'];
+    const artifact = join(repo, 'initial-transition-review.json');
+    writeInitialReviewArtifact(artifact, payload, {
+      ...context(repo),
+      options: { mode: 'mock' as const, goldbandHome: state },
+    });
+    writeFileSync(
+      diffFile,
+      'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+fixed();\n',
+    );
+    expect(runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      closureArtifactFile: artifact,
+    })).rejects.toThrow(/transition evidence provider provider-a binding mismatch for candidateDigest/);
   });
 });
 
@@ -2059,12 +2290,32 @@ function manifest(): ReviewEvidenceManifest {
       id: 'provider-a',
       owner: 'test',
       kind: 'static',
+      lifecycle: 'persistent',
       cellIds: ['behavior-a'],
-      changedPathPrefixes: [],
+      applicability: { kind: 'global', reason: 'Explicit single-provider test fixture.' },
+      executionContext: { sandboxOwner: 'review-runtime', runner: 'sealed' },
       operations: [operation('pass', ['true'], 'candidate', 'zero')],
     }],
     authorizations: [],
   };
+}
+
+function validateTransitionManifest(
+  value: ReviewEvidenceManifest,
+  repo: string,
+  input: { source: string; diff: string; changedFiles: string[] },
+): ReviewEvidenceManifest {
+  const provider = value.providers[0]!;
+  provider.lifecycle = 'transition';
+  const preliminaryBinding = createCandidateBinding(repo, input, value);
+  provider.transitionBinding = {
+    repository: preliminaryBinding.repository,
+    baseDigest: preliminaryBinding.baseDigest,
+    candidateDigest: preliminaryBinding.candidateDigest,
+    scopeDigest: preliminaryBinding.scopeDigest,
+    operationContractDigest: transitionEvidenceOperationContractDigest(provider.operations),
+  };
+  return validateTransitionReviewEvidenceManifest(value, preliminaryBinding);
 }
 
 function operation(

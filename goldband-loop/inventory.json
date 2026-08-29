@@ -18,6 +18,7 @@
           "description": "Evidence-first code review with authoritative lineage and scoped closure.",
           "runtime": "typed",
           "owner": "review-runtime",
+          "dispatch": "trusted-launcher",
           "risk": "medium"
         },
         {
@@ -25,7 +26,8 @@
           "description": "Review security and trust boundaries.",
           "runtime": "compatibility",
           "owner": "prompt-contract-dispatch",
-          "risk": "medium"
+          "risk": "medium",
+          "dispatch": "prompt-contract"
         }
       ]
     },
@@ -39,7 +41,8 @@
           "description": "Investigate code or runtime behavior.",
           "runtime": "compatibility",
           "owner": "prompt-contract-dispatch",
-          "risk": "medium"
+          "risk": "medium",
+          "dispatch": "prompt-contract"
         }
       ]
     },
@@ -53,7 +56,8 @@
           "description": "Run product QA and record evidence.",
           "runtime": "typed",
           "owner": "qa-runtime",
-          "risk": "medium"
+          "risk": "medium",
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -109,7 +113,8 @@
                 "observation-window-complete"
               ]
             }
-          ]
+          ],
+          "dispatch": "registered-only"
         },
         {
           "id": "setup",
@@ -140,7 +145,8 @@
                 "deployment-health"
               ]
             }
-          ]
+          ],
+          "dispatch": "registered-only"
         }
       ]
     },
@@ -154,6 +160,7 @@
           "description": "Create a versioned Work Map for tracked work.",
           "runtime": "typed",
           "owner": "work-map-store",
+          "dispatch": "trusted-launcher",
           "risk": "low",
           "hostSupport": [
             "claude",
@@ -191,6 +198,7 @@
           "runtime": "typed",
           "lifecycle": "public",
           "owner": "tracker-runtime",
+          "dispatch": "trusted-launcher",
           "risk": "high",
           "runtimeContract": {
             "modes": [
@@ -277,6 +285,7 @@
           "description": "Use the persistent browser for interactive work.",
           "runtime": "typed",
           "owner": "browse",
+          "dispatch": "trusted-launcher",
           "risk": "medium",
           "safetyGates": [
             {
@@ -313,7 +322,8 @@
           "description": "Define a design direction and system.",
           "runtime": "typed",
           "owner": "design-decision-store",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -330,7 +340,8 @@
           "risk": "low",
           "hostSupport": [
             "claude"
-          ]
+          ],
+          "dispatch": "host-runtime"
         },
         {
           "id": "freeze",
@@ -340,7 +351,8 @@
           "risk": "low",
           "hostSupport": [
             "claude"
-          ]
+          ],
+          "dispatch": "host-runtime"
         },
         {
           "id": "unfreeze",
@@ -350,7 +362,8 @@
           "risk": "low",
           "hostSupport": [
             "claude"
-          ]
+          ],
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -364,21 +377,24 @@
           "description": "Save current working context.",
           "runtime": "typed",
           "owner": "context-checkpoint-store",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         },
         {
           "id": "restore",
           "description": "Restore saved working context.",
           "runtime": "typed",
           "owner": "context-checkpoint-store",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         },
         {
           "id": "retro",
           "description": "Summarize recent work and lessons.",
           "runtime": "compatibility",
           "owner": "prompt-contract-dispatch",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "prompt-contract"
         }
       ]
     },
@@ -392,7 +408,8 @@
           "description": "Inspect Goldband learnings and knowledge.",
           "runtime": "typed",
           "owner": "goldband-knowledge",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         },
         {
           "id": "setup",
@@ -423,7 +440,8 @@
                 "repository-scope"
               ]
             }
-          ]
+          ],
+          "dispatch": "registered-only"
         },
         {
           "id": "sync",
@@ -456,7 +474,8 @@
                 "rejected-item-count"
               ]
             }
-          ]
+          ],
+          "dispatch": "registered-only"
         }
       ]
     },
@@ -470,7 +489,8 @@
           "description": "Benchmark product or workflow performance.",
           "runtime": "typed",
           "owner": "benchmark-evidence-aggregator",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -501,7 +521,8 @@
             "sideEffects": {
               "pr-body-update": "native-host-approval"
             }
-          }
+          },
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -515,7 +536,8 @@
           "description": "Inspect Goldband health and installation state.",
           "runtime": "typed",
           "owner": "goldband-installation",
-          "risk": "low"
+          "risk": "low",
+          "dispatch": "host-runtime"
         },
         {
           "id": "upgrade",
@@ -574,7 +596,8 @@
                 "completed-preflight"
               ]
             }
-          ]
+          ],
+          "dispatch": "host-runtime"
         }
       ]
     },
@@ -648,7 +671,8 @@
                 "build-status"
               ]
             }
-          ]
+          ],
+          "dispatch": "host-runtime"
         }
       ]
     }
