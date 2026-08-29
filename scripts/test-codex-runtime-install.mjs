@@ -363,6 +363,11 @@ const autoReviewInstalled = path.join(
   'auto_review_experiment.config.toml',
 );
 const originalSource = fs.readFileSync(autoReviewSource, 'utf8');
+assert.match(
+  originalSource,
+  /^model = "gpt-5\.6-sol"$/m,
+  'auto-review profile must keep the gpt-5.6-sol model contract',
+);
 fs.appendFileSync(
   autoReviewInstalled,
   [
@@ -438,7 +443,7 @@ fs.writeFileSync(
   fs
     .readFileSync(autoReviewInstalled, 'utf8')
     .replace(
-      'model_reasoning_effort = "high"',
+      'model_reasoning_effort = "medium"',
       'model_reasoning_effort = "low"',
     ),
 );
