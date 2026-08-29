@@ -1200,25 +1200,59 @@ describe('review evidence contracts', () => {
 
   test('sealed runtime projection cannot read source images or mutate projected images', async () => {
     if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
-    const node = spawnSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).stdout.trim();
-    if (!hostBoundaryPrerequisite(Boolean(node), 'node executable')) return;
-    const sourceImage = evidenceRuntimeReadAccess(node).images
-      .map((image) => image.sourcePath)
-      .find((path) => path.startsWith('/opt/homebrew/'));
-    if (!hostBoundaryPrerequisite(Boolean(sourceImage), 'Homebrew runtime source image')) return;
+    const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'review-runtime-source-denial-'));
+    roots.push(fixtureRoot);
+    const library = join(fixtureRoot, 'libProjectionFixture.dylib');
+    const librarySource = join(fixtureRoot, 'projection-fixture.c');
+    writeFileSync(librarySource, 'int projection_fixture(void) { return 7; }\n');
+    compileMachO([
+      '-dynamiclib', librarySource,
+      '-install_name', library,
+      '-o', library,
+    ]);
+    const probe = join(fixtureRoot, 'projection-denial-probe');
+    const probeSource = join(fixtureRoot, 'projection-denial-probe.c');
+    writeFileSync(
+      probeSource,
+      [
+        '#include <errno.h>',
+        '#include <fcntl.h>',
+        '#include <unistd.h>',
+        'extern int projection_fixture(void);',
+        'static int denied(const char *path, int flags) {',
+        '  int fd = open(path, flags, 0);',
+        '  if (fd >= 0) { close(fd); return 0; }',
+        '  return errno == EPERM || errno == EACCES;',
+        '}',
+        'int main(int argc, char **argv) {',
+        '  if (argc < 1 || projection_fixture() != 7) return 8;',
+        `  if (!denied(${JSON.stringify(library)}, O_RDONLY)) return 9;`,
+        '  if (!denied(argv[0], O_WRONLY | O_APPEND)) return 10;',
+        '  return 0;',
+        '}',
+      ].join('\n'),
+    );
+    compileMachO([probeSource, '-L', fixtureRoot, '-lProjectionFixture', '-o', probe]);
+    expect(evidenceRuntimeReadAccess(probe).images.map((image) => image.sourcePath))
+      .toContain(realpathSync(library));
     const repo = gitFixture();
     const value = manifest();
-    value.providers[0]!.operations[0]!.argv = [
-      'node',
-      '-e',
-      `const fs=require('node:fs');for(const [path,write] of [[${JSON.stringify(sourceImage)},false],[process.execPath,true]]){try{write?fs.appendFileSync(path,'x'):fs.readFileSync(path);process.exit(9)}catch(error){if(!['EPERM','EACCES'].includes(error.code))throw error}}`,
-    ];
+    value.providers[0]!.operations[0]!.argv = [basename(probe)];
     const validated = reviewEvidenceManifestSchema.validate(value);
     const input = { source: 'git diff', diff: '', changedFiles: [] };
-    const evidence = await executeEvidencePlan(
-      context(repo), input, validated, createCandidateBinding(repo, input, validated),
-    );
-    expect(evidence.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fixtureRoot}:${previousPath ?? '/usr/bin:/bin'}`;
+    try {
+      const evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      expect(evidence.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   test('sealed runtime projection identity is stable across separate evidence plans', async () => {

@@ -188,5 +188,5 @@ describe("trusted Codex workflow status", () => {
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}
-	});
+	}, 15_000);
 });

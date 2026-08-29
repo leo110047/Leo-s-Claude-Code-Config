@@ -27,6 +27,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
+import {
+  MACOS_REVIEW_HOST_TEST_NAMES,
+  testNamePatternForPlatform,
+} from './test-workflows';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const TEST_ROOTS = ['browse/test', 'test', 'make-pdf/test'] as const;
@@ -220,8 +224,15 @@ export function assignFilesToShards(files: string[], shardCount: number): string
     .filter(filesInShard => filesInShard.length > 0);
 }
 
-export function buildShardArgs(files: string[]): string[] {
-  return ['test', ...files, '--max-concurrency=1', `--timeout=${FREE_TEST_TIMEOUT_MS}`];
+export function buildShardArgs(
+  files: string[],
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  const args = ['test'];
+  const testNamePattern = testNamePatternForPlatform(platform);
+  if (testNamePattern) args.push('--test-name-pattern', testNamePattern);
+  args.push(...files, '--max-concurrency=1', `--timeout=${FREE_TEST_TIMEOUT_MS}`);
+  return args;
 }
 
 type CliOptions = {
@@ -294,9 +305,12 @@ function main(): number {
   }
 
   let files = allFiles;
+  if (process.platform !== 'darwin') {
+    console.log(`[test:free] ${MACOS_REVIEW_HOST_TEST_NAMES.length} macOS review-host cases excluded`);
+  }
   let curationReport: CurationResult | null = null;
   if (options.windowsOnly) {
-    curationReport = curateWindowsSafe(allFiles);
+    curationReport = curateWindowsSafe(files);
     files = curationReport.safe;
     console.log(`[test:free] curated ${files.length} Windows-safe tests (${curationReport.excluded.length} excluded)`);
     if (options.listOnly && curationReport.excluded.length > 0) {
