@@ -3,19 +3,68 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
-IMAGE="${GOLDBAND_SANDBOX_IMAGE:-goldband-sandbox:test}"
 TMP_ROOT="${GOLDBAND_SANDBOX_TMPDIR:-/tmp}"
 TMP_PROJECT=$(mktemp -d "$TMP_ROOT/goldband-sandbox-project.XXXXXX")
 LOG_DIR=$(mktemp -d "$TMP_ROOT/goldband-sandbox-logs.XXXXXX")
 IGNORE_PROBES=".claude/.sandbox-secret .goldband/.sandbox-secret codex/local/.sandbox-secret.env sandbox-local.log"
+INVOCATION_ID=${TMP_PROJECT##*.}
+IMAGE_PREFIX="${GOLDBAND_SANDBOX_IMAGE:-goldband-sandbox:test}"
+OWNERSHIP_LABEL_KEY="dev.goldband.sandbox-test-invocation"
+OWNERSHIP_TOKEN="$INVOCATION_ID-$$"
+IMAGE="$IMAGE_PREFIX-$OWNERSHIP_TOKEN"
+RT=""
+BUILD_STARTED=0
+CLEANUP_DONE=0
+
+inspect_image_id() {
+    "$RT" image inspect --format '{{.Id}}' "$1" 2>/dev/null
+}
+
+cleanup_test_image() {
+    [ "$BUILD_STARTED" -eq 1 ] || return 0
+
+    cleanup_status=0
+    owned_image_ids=$("$RT" image ls --all --quiet \
+        --filter "label=$OWNERSHIP_LABEL_KEY=$OWNERSHIP_TOKEN") \
+        || { printf 'sandbox image cleanup failed to list test-owned images\n' >&2; return 1; }
+    for owned_image_id in $owned_image_ids; do
+        "$RT" image rm --no-prune "$owned_image_id" >/dev/null \
+            || { printf 'sandbox image cleanup failed to remove test-owned image: %s\n' "$owned_image_id" >&2; cleanup_status=1; }
+    done
+    return "$cleanup_status"
+}
 
 cleanup() {
+    [ "$CLEANUP_DONE" -eq 0 ] || return 0
+    CLEANUP_DONE=1
+    cleanup_status=0
+    cleanup_test_image || cleanup_status=$?
     rm -rf "$TMP_PROJECT" "$LOG_DIR"
     for probe in $IGNORE_PROBES; do
         rm -f "$ROOT_DIR/$probe"
     done
+    return "$cleanup_status"
 }
-trap cleanup EXIT INT TERM
+
+on_exit() {
+    command_status=$?
+    trap - EXIT INT TERM
+    cleanup_status=0
+    cleanup || cleanup_status=$?
+    if [ "$command_status" -ne 0 ]; then
+        exit "$command_status"
+    fi
+    exit "$cleanup_status"
+}
+
+on_signal() {
+    signal_status=$1
+    trap - INT TERM
+    exit "$signal_status"
+}
+trap on_exit EXIT
+trap 'on_signal 130' INT
+trap 'on_signal 143' TERM
 
 fail() {
     printf '%s\n' "$*" >&2
@@ -50,6 +99,10 @@ run() {
 
 RT=$(runtime) || fail "No container runtime found. Install Docker Desktop or Podman, then retry."
 
+if inspect_image_id "$IMAGE" >/dev/null; then
+    fail "Refusing to replace an existing sandbox test image: $IMAGE"
+fi
+
 printf 'sandbox runtime: %s\n' "$RT"
 printf 'sandbox image: %s\n' "$IMAGE"
 
@@ -58,20 +111,25 @@ for probe in $IGNORE_PROBES; do
     printf 'sandbox ignore probe\n' > "$ROOT_DIR/$probe"
 done
 
+BUILD_STARTED=1
 if [ "${GOLDBAND_SANDBOX_USE_BUILDX:-0}" = "1" ] && [ "$RT" = "docker" ]; then
     run docker buildx build \
         --load \
         --cache-from type=gha \
         --cache-to type=gha,mode=max \
+        --label "$OWNERSHIP_LABEL_KEY=$OWNERSHIP_TOKEN" \
         -f "$ROOT_DIR/sandbox/devcontainer/Dockerfile" \
         -t "$IMAGE" \
         "$ROOT_DIR"
 else
     run "$RT" build \
+        --label "$OWNERSHIP_LABEL_KEY=$OWNERSHIP_TOKEN" \
         -f "$ROOT_DIR/sandbox/devcontainer/Dockerfile" \
         -t "$IMAGE" \
         "$ROOT_DIR"
 fi
+inspect_image_id "$IMAGE" >/dev/null \
+    || fail "Container runtime did not expose the built sandbox image: $IMAGE"
 
 printf 'sandbox project fixture\n' > "$TMP_PROJECT/README.md"
 HOST_PROBE_PATH="$ROOT_DIR/.goldband-sandbox-unmounted-probe"

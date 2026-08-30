@@ -26,6 +26,7 @@
     "test:style-gate": "node scripts/test-code-style-gate.mjs && node scripts/test-style-gate-install.mjs && node scripts/test-goldband-loop-source-gates.mjs",
     "test:auto-update": "node scripts/test-auto-update.mjs",
     "test:project-style-gate": "node scripts/test-goldband-project-style-gate.mjs",
+    "test:sandbox-image-lifecycle": "node scripts/test-sandbox-image-lifecycle.mjs",
     "test:codex-portability": "node scripts/test-codex-portability.mjs",
     "sync:app-support": "node scripts/sync-app-support-assets.mjs && node scripts/build-claude-app-adapters.mjs",
     "test:app-support": "node scripts/check-app-support.mjs"

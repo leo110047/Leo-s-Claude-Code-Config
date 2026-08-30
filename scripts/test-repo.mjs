@@ -84,6 +84,13 @@ export const TEST_SUITES = [
     args: ['run', 'test:project-style-gate'],
   }),
   suite({
+    id: 'root:sandbox-image-lifecycle',
+    label: 'Sandbox test image lifecycle',
+    cwd: ROOT,
+    command: npmCmd,
+    args: ['run', 'test:sandbox-image-lifecycle'],
+  }),
+  suite({
     id: 'root:codex-portability',
     label: 'Root Codex portability tests',
     cwd: ROOT,
