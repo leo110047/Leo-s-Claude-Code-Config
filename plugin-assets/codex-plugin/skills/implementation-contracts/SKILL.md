@@ -24,6 +24,28 @@ Hard rules for production contract changes. Follow stricter repo rules when pres
 - Before generalizing a workflow that may hide a platform-specific or customer-specific contract
 - When missing data, permissions, or runtime state could otherwise be guessed or silently downgraded
 
+## Pre-Implementation Proportionality
+
+Before adding or expanding a permanent permission, state, workflow, gate,
+artifact, lineage, external side effect, or generic mechanism:
+
+- Name the current requirement, root-cause class, or required safety boundary.
+- Name the smallest sufficient alternative and its permanent operational or
+  maintenance cost.
+- If choosing a heavier mechanism, cite current evidence for the named
+  requirement, reachable failure path, boundary invariant, or measured
+  constraint the smaller option cannot cover.
+- Reject changes that impose permanent work on unrelated normal operations or
+  create a second authority, state owner, or decision path without that
+  evidence.
+
+Do not trade away native approval, authorization, destructive-action, data
+safety, or external-side-effect boundaries for simplicity. Smallest sufficient
+must still fix the failure class at its authoritative owner; it does not permit
+a symptom patch, fallback, special case, or fake generic layer. Routine coding
+turns do not need a proportionality report when no permanent mechanism is being
+added or expanded.
+
 ## Broken Contracts Must Fail Clearly
 
 - Missing config, credentials, permissions, required data, or invalid state must become a clear error, blocked state, or failed state.

@@ -9,6 +9,7 @@ import {
   curateWindowsSafe,
   stableHash,
   assignFilesToShards,
+  buildShardArgs,
   normalizeRelativePath,
 } from '../scripts/test-free-shards';
 
@@ -97,6 +98,34 @@ describe('test-free-shards: Windows curation', () => {
     for (const { reason } of result.excluded) {
       expect(reason.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('test-free-shards: platform ownership', () => {
+  test('Linux keeps mixed files while excluding only macOS review-host cases', () => {
+    const files = collectFreeTestFiles(ROOT);
+    expect(files).toContain('test/review-evidence.test.ts');
+    expect(files).toContain('test/work-map-review.test.ts');
+    expect(files).toContain('test/codex-review-launcher-install.test.ts');
+    expect(files).toContain('test/review-receipt-authority-install.test.ts');
+    expect(files).toContain('test/workflows-runtime.test.ts');
+    expect(files).toContain('test/goldband-review-cli.test.ts');
+  });
+
+  test('Linux shard arguments exclude only macOS review-host cases inside mixed files', () => {
+    const args = buildShardArgs([
+      'test/workflows-runtime.test.ts',
+      'test/goldband-review-cli.test.ts',
+    ], 'linux');
+    const patternIndex = args.indexOf('--test-name-pattern');
+    expect(patternIndex).toBeGreaterThan(0);
+    const pattern = args[patternIndex + 1]!;
+    expect(new RegExp(pattern).test(
+      'workflow runtime > review/code typed flow renders validated report',
+    )).toBe(false);
+    expect(new RegExp(pattern).test(
+      'workflow runtime > runtime rejects invocations outside manifest hostSupport',
+    )).toBe(true);
   });
 });
 

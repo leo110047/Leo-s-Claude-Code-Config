@@ -11,10 +11,34 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+	workflowSourceInputManifest,
+	writeDistributionManifest,
+} from "../../scripts/lib/workflow-distribution-contract.mjs";
 
 const statusScript = resolve(import.meta.dir, "../..", "shell/install/status.sh");
+const workflowScript = resolve(import.meta.dir, "../..", "shell/install/workflow.sh");
+const workflowStatusScript = resolve(import.meta.dir, "../..", "shell/install/workflow-status.sh");
+const repoRoot = resolve(import.meta.dir, "../..");
+const loopRoot = resolve(import.meta.dir, "..");
 
 describe("trusted Codex workflow status", () => {
+	test("source input digest changes when a declared runtime input changes", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-source-digest-"));
+		try {
+			const sourceRoot = join(fixture, "goldband-loop");
+			mkdirSync(sourceRoot);
+			const input = join(sourceRoot, "runtime.ts");
+			writeFileSync(input, "export const version = 1;\n");
+			const before = workflowSourceInputManifest(sourceRoot, ["goldband-loop/runtime.ts"]);
+			writeFileSync(input, "export const version = 2;\n");
+			const after = workflowSourceInputManifest(sourceRoot, ["goldband-loop/runtime.ts"]);
+			expect(after.digest).not.toBe(before.digest);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
 	test("probes the pinned Codex executable and rejects it when missing", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-codex-status-"));
 		try {
@@ -39,16 +63,21 @@ describe("trusted Codex workflow status", () => {
 			const pinnedCodex = join(trustedBin, "codex");
 			const poisonCodex = join(poisonBin, "codex");
 			const bunExecutable = join(trustedBin, "bun");
+			const brokenRouterFlag = join(fixture, "broken-router");
 			const browserExecutable = join(runtimeRoot, "browse", "browse");
 			const browserServer = join(runtimeRoot, "browse", "server", "server.js");
 			const rulesResolver = join(runtimeRoot, "review", "rules-resolver.js");
 			const rulesDirectory = join(runtimeRoot, "review", "rules");
 			const launcher = join(runtimeRoot, "bin", "goldband.js");
 			const rule = join(rulesRoot, "goldband-workflows.rules");
-			for (const executable of [bunExecutable, browserExecutable]) {
-				writeFileSync(executable, "#!/usr/bin/env bash\nexit 0\n");
-				chmodSync(executable, 0o755);
-			}
+			const markerFile = join(skillRoot, ".workflow-launcher.json");
+			writeFileSync(
+				bunExecutable,
+				'#!/usr/bin/env bash\nif [ "$2" = "--contract-probe" ] && [ -n "${3:-}" ]; then [ ! -f "$BROKEN_ROUTER_FLAG" ] || exit 2; printf \'{"schemaVersion":1,"action":"%s","routable":true}\\n\' "$3"; exit 0; fi\nif [ "$2" = "--contract-probe" ]; then printf \'%s\\n\' \'{"schemaVersion":1,"dispatch":"trusted-launcher","actions":["browser/session","plan/create","plan/sync","review/code"]}\'; fi\nexit 0\n',
+			);
+			writeFileSync(browserExecutable, "#!/usr/bin/env bash\nexit 0\n");
+			chmodSync(bunExecutable, 0o755);
+			chmodSync(browserExecutable, 0o755);
 			writeFileSync(launcher, "// fixture\n");
 			writeFileSync(browserServer, "// fixture\n");
 			writeFileSync(rulesResolver, "module.exports = {};\n");
@@ -77,7 +106,7 @@ describe("trusted Codex workflow status", () => {
 				}),
 			);
 			writeFileSync(
-				join(skillRoot, ".workflow-launcher.json"),
+				markerFile,
 				JSON.stringify({
 					schemaVersion: 1,
 					argvPrefix: [bunExecutable, launcher],
@@ -85,14 +114,23 @@ describe("trusted Codex workflow status", () => {
 					runtimeRoot,
 				}),
 			);
+			writeFileSync(join(skillRoot, ".installed-source"), `${loopRoot}\n`);
+			const sideArtifacts = [
+				{ role: "codex-execpolicy-rule", path: rule },
+				{ role: "workflow-launcher-marker", path: markerFile },
+			];
+			writeDistributionManifest(runtimeRoot, loopRoot, sideArtifacts);
 
 			const runStatus = () => spawnSync(
 				"bash",
 				[
 					"-c",
-					'source "$1"; RED=""; GREEN=""; YELLOW=""; NC=""; GOLDBAND_STATUS_EXIT_CODE=0; show_codex_workflow_launcher_status',
+					'REPO_DIR="$4"; source "$1"; source "$2"; source "$3"; RED=""; GREEN=""; YELLOW=""; NC=""; GOLDBAND_STATUS_EXIT_CODE=0; show_codex_workflow_launcher_status',
 					"status-test",
+					workflowScript,
+					workflowStatusScript,
 					statusScript,
+					repoRoot,
 				],
 				{
 					encoding: "utf8",
@@ -102,6 +140,7 @@ describe("trusted Codex workflow status", () => {
 						PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
 						PINNED_LOG: pinnedLog,
 						POISON_LOG: poisonLog,
+						BROKEN_ROUTER_FLAG: brokenRouterFlag,
 					},
 				},
 			);
@@ -111,6 +150,28 @@ describe("trusted Codex workflow status", () => {
 			expect(healthy.stdout).toContain("[OK] trusted Codex workflow launcher");
 			expect(readFileSync(pinnedLog, "utf8").trim().split("\n")).toHaveLength(2);
 			expect(() => readFileSync(poisonLog, "utf8")).toThrow();
+			writeFileSync(brokenRouterFlag, "broken\n");
+			const brokenRouter = runStatus();
+			expect(brokenRouter.stdout).toContain("action dispatch behavior probe failed");
+			unlinkSync(brokenRouterFlag);
+
+			writeFileSync(rule, "# fixture\nprefix_rule(pattern=[\"bun\"], decision=\"allow\")\n");
+			const widenedRule = runStatus();
+			expect(widenedRule.stdout).toContain("[corrupt] trusted Codex workflow launcher");
+			writeFileSync(rule, "# fixture\n");
+
+			writeFileSync(launcher, "// tampered fixture\n");
+			const corrupt = runStatus();
+			expect(corrupt.stdout).toContain("[corrupt] trusted Codex workflow launcher");
+			writeFileSync(launcher, "// fixture\n");
+
+			const distributionFile = join(runtimeRoot, "distribution-manifest.json");
+			const distribution = JSON.parse(readFileSync(distributionFile, "utf8"));
+			distribution.sourceDigest = "0".repeat(64);
+			writeFileSync(distributionFile, `${JSON.stringify(distribution)}\n`);
+			const sourceStale = runStatus();
+			expect(sourceStale.stdout).toContain("source inputs changed but runtime was not rebuilt");
+			writeDistributionManifest(runtimeRoot, loopRoot, sideArtifacts);
 
 			unlinkSync(rulesResolver);
 			const missingRulesRuntime = runStatus();
@@ -127,5 +188,5 @@ describe("trusted Codex workflow status", () => {
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
 		}
-	});
+	}, 15_000);
 });

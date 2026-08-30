@@ -829,8 +829,12 @@ create_internal_workflow_docs() {
   local linked=()
   local capability action contract_path contract_file target manual_id manual_source
 
-  rm -rf "$workflow_root"
-  mkdir -p "$workflow_root"
+  # A source tree may itself be the selected skills/goldband runtime. Its
+  # workflows/ directory owns executable TypeScript and must never be replaced
+  # by generated Markdown. The dedicated helper owns and tests that destructive
+  # boundary; materialized runtime roots are rebuilt cleanly.
+  bash "$SOURCE_GOLDBAND_DIR/scripts/prepare-internal-workflow-root.sh" \
+    "$runtime_root" "$SOURCE_GOLDBAND_DIR"
   [ -f "$capability_contract" ] || { echo "goldband setup failed: missing generated capability contract: $capability_contract" >&2; exit 1; }
 
   while IFS=$'\t' read -r capability action contract_path; do
@@ -904,7 +908,7 @@ create_codex_runtime_root() {
     _link_or_copy "$goldband_dir/browse/bin" "$codex_goldband/browse/bin"
   fi
   # Review runtime assets (individual files, NOT the whole review/ dir which has SKILL.md)
-  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md evidence-omission.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$codex_goldband/review/$f"
     fi
@@ -963,6 +967,9 @@ create_claude_runtime_root() {
   if [ ! -L "$claude_goldband" ] && same_dir_path "$goldband_dir" "$claude_goldband"; then
     mkdir -p "$claude_goldband/workflows"
     create_internal_workflow_docs "$claude_goldband"
+    bun "$SOURCE_GOLDBAND_DIR/scripts/provision-review-receipt-authority.ts" \
+      --runtime-root "$claude_goldband" \
+      --authority-root "$HOME/.goldband/review-authority/claude"
     return 0
   fi
 
@@ -995,7 +1002,7 @@ create_claude_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$claude_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md evidence-omission.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
     fi
@@ -1004,6 +1011,9 @@ create_claude_runtime_root() {
     _link_or_copy "$goldband_dir/ETHOS.md" "$claude_goldband/ETHOS.md"
   fi
   create_internal_workflow_docs "$claude_goldband"
+  bun "$SOURCE_GOLDBAND_DIR/scripts/provision-review-receipt-authority.ts" \
+    --runtime-root "$claude_goldband" \
+    --authority-root "$HOME/.goldband/review-authority/claude"
 }
 
 create_factory_runtime_root() {
@@ -1037,7 +1047,7 @@ create_factory_runtime_root() {
   if [ -d "$goldband_dir/browse/bin" ]; then
     _link_or_copy "$goldband_dir/browse/bin" "$factory_goldband/browse/bin"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md evidence-omission.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$factory_goldband/review/$f"
     fi
@@ -1082,7 +1092,7 @@ create_opencode_runtime_root() {
   if [ -d "$goldband_dir/design/dist" ]; then
     _link_or_copy "$goldband_dir/design/dist" "$opencode_goldband/design/dist"
   fi
-  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md evidence-omission.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$goldband_dir/review/$f" ]; then
       _link_or_copy "$goldband_dir/review/$f" "$opencode_goldband/review/$f"
     fi
@@ -1229,7 +1239,7 @@ if [ "$INSTALL_KIRO" -eq 1 ]; then
     _link_or_copy "$SOURCE_GOLDBAND_DIR/ETHOS.md" "$KIRO_GOLDBAND/ETHOS.md"
   fi
   # Review runtime assets (individual files, not whole dir)
-  for f in shared-rubric.md findings-schema.md checklist.md design-checklist.md greptile-triage.md TODOS-format.md; do
+  for f in shared-rubric.md findings-schema.md checklist.md evidence-omission.md design-checklist.md greptile-triage.md TODOS-format.md; do
     if [ -f "$SOURCE_GOLDBAND_DIR/review/$f" ]; then
       _link_or_copy "$SOURCE_GOLDBAND_DIR/review/$f" "$KIRO_GOLDBAND/review/$f"
     fi

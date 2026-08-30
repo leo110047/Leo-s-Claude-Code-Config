@@ -31,6 +31,53 @@ not aliases.
 The generated [capability catalog](../docs/generated/capabilities.md) is the
 authoritative list of supported capability/action pairs and runtime status.
 
+Real `review/code` runs require an explicitly resolvable evidence contract. A
+repository `goldband.review-evidence.json` is authoritative. If it is absent,
+use `goldband review contract import --manifest <path>` to register a
+runtime-owned contract for that Git common directory; `inspect` reads back the
+identity, selected source, shadowing, and digests, while `remove` deletes only
+that runtime-store entry. `--evidence-manifest` is a primary contract only when
+no repository or runtime-store baseline exists. Otherwise it must be a complete
+monotonic effective contract and cannot weaken the baseline. Review itself never
+creates, moves, or deletes manifests.
+
+The effective contract declares behavior cells and typed provider commands; the
+runtime executes each operation in its own read-only,
+default-deny read/write/network snapshot, verifies the pre/post tree digest, and requires reciprocal provider/cell
+ownership plus an exact RED exit code before one semantic host call. After a finding is repaired, pass the initial JSON
+artifact through `--closure-artifact` with the same review scope to run one
+repair-delta-only closure call. Closure also accepts a repaired manifest and
+reruns newly added or modified affected cells; `closed` requires fresh passing
+evidence. Installed-runtime receipt plus Work Map requested-changes readback rejects
+caller-edited, cross-scope, or prior-attempt initial artifacts. The same OS user remains
+inside the trusted host boundary. Receipt claims are atomic and at-most-once; crash or later
+failure requires a new initial review. Prompt-redacted untracked files remain digest-bound and executable
+through a separate snapshot-only channel. Missing resolvable contracts, unsupported isolation,
+candidate drift, and provenance mismatch fail closed before semantic review.
+On macOS, the default-deny profile imports Apple's common system process baseline
+for process startup, then exactly re-denies its syslog, Mach service, and shared-memory
+channels as well as broad network and system-socket access. Dynamically linked
+non-system Mach-O runtimes execute from a rewritten, ad-hoc-signed, content-attested
+private projection; the command cannot read the source package tree or write the
+projection. Only the candidate, isolated runner state, sealed runtime projection,
+and projected dependency roots are readable.
+
+The installed runtime also persists a signed acceptance lineage. It compares
+every successor manifest before evidence or host dispatch, preserves unresolved
+finding IDs across restarts, and forces repaired candidates through the exact
+initial artifact's scoped closure. Empty initial candidates fail before lineage
+creation. Standalone lineages include the normalized changed-file scope, while
+signed legacy records are read through only when their authoritative artifact
+proves the same scope. If that artifact is unavailable, an exact signed
+candidate-digest match still preserves the blocker; an unrelated candidate does
+not inherit the unverifiable broad scope. A new initial candidate that overlaps
+an unresolved changed-file scope must use closure, including repairs that add or
+remove files. Sorted per-path authority locks make overlap detection atomic while
+disjoint scopes remain independent. Optional base-committed
+`goldband.review-policy.json` sets per-cell minimum evidence levels and typed,
+auditable waivers. Reports keep `no-new-findings`, deterministic completeness,
+runtime completeness, closure completeness, and completion authority separate.
+
 Managed parallel work uses two host commands:
 
 ```bash

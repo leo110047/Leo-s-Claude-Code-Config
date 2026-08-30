@@ -46,19 +46,9 @@ read_workflow_version() {
 
 workflow_contract_fingerprint() {
     local repo_dir="$1"
-    local relative_path file_path
-    command -v cksum >/dev/null 2>&1 || return 1
-
-    for relative_path in setup generated/capability-actions.json; do
-        [ -f "$repo_dir/$relative_path" ] || return 1
-    done
-
-    {
-        for relative_path in setup generated/capability-actions.json; do
-            file_path="$repo_dir/$relative_path"
-            cksum "$file_path" | awk '{print $1 ":" $2}'
-        done
-    } | cksum | awk '{print $1 ":" $2}'
+    command -v node >/dev/null 2>&1 || return 1
+    [ -f "$REPO_DIR/scripts/check-workflow-distribution.mjs" ] || return 1
+    node "$REPO_DIR/scripts/check-workflow-distribution.mjs" source-digest "$repo_dir"
 }
 
 find_workflow_config_bin() {

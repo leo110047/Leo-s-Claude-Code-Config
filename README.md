@@ -102,6 +102,9 @@ git pull --ff-only
   distribution surface，不要互相宣稱替代。
 - `./install.sh status` 會 read back 安裝狀態；若 plugin 和 installer-managed
   Claude assets 同時存在，它會回報 duplicate asset。
+- Workflow status 會分開驗證 installer-owned source-input digest、trusted
+  runtime artifact manifest 與 bounded dispatch probe；source 已更新、installed
+  bytes/inventory 被修改，或 launcher 行為不符宣告時都會非零失敗並要求重裝。
 - hooks、rules、cross-review gate、sandbox 是防誤操作與 evidence gate，不是
   抵抗同權限 host 使用者的安全邊界。managed worktree 是較窄的例外：它用
   OS sandbox 限制 agent process 的 Git metadata 寫入；host 使用者仍可在
@@ -118,6 +121,61 @@ git pull --ff-only
 
 目前支援的 capability/action 清單以
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
+
+`review/code` 會先解析不可降級的 evidence contract。Repo 內的
+`goldband.review-evidence.json` 是 authoritative baseline；repo 沒有 manifest
+時，才會使用使用者明確以 `goldband review contract import --manifest <path>`
+註冊的 runtime-owned per-repository contract。`--evidence-manifest` 在已有
+baseline 時只能提供完整、monotonic 的 effective contract，不能取代或縮小
+baseline。`inspect` 可讀回 repository identity、baseline、shadowed central
+entry 與 digests，`remove` 只移除 central entry；review 本身不會建立、搬移或
+刪除 manifest。
+
+解析完成後，runtime 在隔離、
+預設以每個 operation 各自獨立、唯讀且 read/write/network default-deny 的 snapshot 執行 typed checks，
+並驗證執行前後 tree digest、provider/cell 雙向 ownership 與 exact RED exit，確認 evidence completeness 與
+candidate provenance 後，才啟動一次 semantic review。script launcher 必須在 manifest 明確寫出 interpreter；
+repository-owned manifest 只接受 `persistent` provider；一次性的 RED/GREEN
+`transition` evidence 必須綁定 exact repository、base、candidate、scope 與
+operation contract digest，且只存在當次 artifact。Provider applicability 必須
+明確選擇非空 path prefixes 或附理由的 `global`，execution context 也必須宣告
+sandbox owner 與 runner；path applicability 會同時縮小 provider 與 effective
+behavior cells，無關的 high-risk cells 不會被誤算成 coverage gap。明確傳入的
+transition manifest 與 persisted review artifact 都會用當前 candidate binding
+走 production validator。需要 provider-owned Seatbelt 的 operation 在 sealed
+review runner 會先產生 typed `runtime-incomplete`，不會把 nested sandbox exit
+誤報成 candidate failure，也不具 completion/closure authority。
+macOS sandbox 會載入 Apple 的 common system process baseline，並精確重新封鎖 baseline 的 syslog、Mach service、
+shared-memory、network 與 system socket 通道。含非系統 dylib 的 Mach-O runtime 會先複製到私有 sealed projection，
+將已驗證的 load commands 改寫到 projection、ad-hoc sign 並重新雜湊最終 bytes；operation 不能讀原始 host package tree，
+也不能修改 projection。除此之外只允許 candidate 與必要 dependency roots，
+不會因此允許任意 HOME、其他 workspace 或 `/tmp` 內容。初審有 findings 且
+候選內容修正後，可用 `--closure-artifact <initial-artifact>` 做一次只看 repair
+delta、原 finding IDs 與 rerun evidence 的 closure；修正版 manifest 新增或修改的
+affected cells 也會重跑，且沒有 fresh passing evidence 就不能標成 `closed`。初審無
+findings 時不會啟動 closure；closure 也必須讀回 installed runtime authority 簽發的 receipt，caller
+只靠修改 JSON、跨 Work Map scope 或重播舊 claim attempt 都會 fail closed。這個邊界把 reviewed
+candidate、model output 與 artifact input 視為不可信，但信任同一 OS account 下的 Goldband installer/runtime；
+若同一 host user 已惡意控制 authority store，需另加 privileged helper 或 OS-backed key 才能隔離。
+Closure receipt 採 at-most-once：repair binding 與 Work Map 因果鏈驗證完成後會以 atomic claim 消耗；
+claim 後若 process crash 或後續失敗，必須重新做 initial review，不能重播同一 receipt。
+被 secret redaction 隱藏的 untracked 檔仍會以 digest 綁定並經非 prompt 通道放入 executable snapshot。Fixture/local/live/device/production evidence 會分開標示，green gate 不會
+被解讀成整體 deploy readiness。
+
+跨次 review 由 installed runtime 的 signed acceptance lineage 管理。新
+manifest 只能增加 coverage，不能刪除、反轉或降低既有 required cells；有未關閉
+finding 時只能走 scoped closure。空的 initial candidate 會在建立 lineage 前被拒絕；
+standalone lineage 會綁定正規化 changed-file scope，舊 signed record 也只有在
+authoritative artifact 證明 scope 相同時才會遷移；若 artifact 無法驗證，signed
+candidate digest 完全相同仍會保留 blocker，但不會讓無關候選繼承不可判定的 broad scope。
+同一 collection scope 下，只要新 initial candidate 與未關閉 changed-file scope 有重疊，
+包含新增或移除修復檔，都必須走 closure；排序後的 per-path authority locks 讓 overlap
+scan 到 finalize 保持原子性，而完全 disjoint 的 scope 仍可獨立執行。
+專案可在 base commit 提交 typed
+`goldband.review-policy.json`，設定 minimum evidence level 或有歸責、期限的
+waiver；model prose 與 candidate 臨時檔沒有 waiver 權限。`No new findings`
+也不等於完成，report 會分開列出 contract completeness、prior blockers、closure
+與 completion authority。
 
 平行 agent worktree 使用兩個 user-triggered 指令：
 

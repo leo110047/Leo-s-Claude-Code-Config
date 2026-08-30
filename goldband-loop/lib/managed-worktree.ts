@@ -858,6 +858,33 @@ function validateBoundEvidence(lease: ManagedWorktreeLease): void {
 	) {
 		throw new Error("managed worktree review artifact provenance is invalid");
 	}
+	if (review.schemaVersion !== 2) {
+		throw new Error("managed worktree review artifact requires a schema-v2 evidence chain");
+	}
+	const chain = review.evidenceChain as Record<string, unknown> | undefined;
+	const records = review.evidenceRecords;
+	const completeness = chain?.completeness as Record<string, unknown> | undefined;
+	if (
+		!chain ||
+		!Array.isArray(records) ||
+		typeof review.candidateDigest !== "string" ||
+		chain.candidateDigest !== review.candidateDigest ||
+		typeof chain.behaviorContractDigest !== "string" ||
+		typeof chain.scopeDigest !== "string" ||
+		typeof chain.recordsDigest !== "string" ||
+		createHash("sha256").update(JSON.stringify(records)).digest("hex") !==
+			chain.recordsDigest ||
+		!completeness ||
+		typeof completeness.complete !== "boolean" ||
+		typeof completeness.hostEligible !== "boolean" ||
+		!Array.isArray(completeness.blockingCellIds) ||
+		!Array.isArray(completeness.coverageGapCellIds) ||
+		!Array.isArray(completeness.runtimeIncompleteCellIds) ||
+		(chain.phase !== "initial" && chain.phase !== "closure") ||
+		(chain.hostCallCount !== 0 && chain.hostCallCount !== 1)
+	) {
+		throw new Error("managed worktree review evidence chain is invalid");
+	}
 }
 
 function markBoundTicketIntegrated(

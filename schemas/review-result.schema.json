@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://goldband.dev/schemas/review-result.schema.json",
+  "title": "Goldband Evidence-first Review Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "severity", "summary", "classification"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "file": { "type": "string", "minLength": 1 },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+          "summary": { "type": "string", "minLength": 1 },
+          "evidence": { "type": ["string", "null"] },
+          "recommendation": { "type": ["string", "null"] },
+          "category": { "type": ["string", "null"] },
+          "ruleId": { "type": ["string", "null"] },
+          "policySource": { "type": ["string", "null"] },
+          "classification": { "enum": ["verified-failure", "coverage-gap", "semantic-concern", "runtime-incomplete"] },
+          "evidenceIds": { "type": ["array", "null"], "items": { "type": "string" } },
+          "behaviorCellIds": { "type": ["array", "null"], "items": { "type": "string" } },
+          "failureScenario": { "type": ["string", "null"] },
+          "reproductionStep": { "type": ["string", "null"] },
+          "suggestedVerification": { "type": ["string", "null"] },
+          "blocking": { "type": ["boolean", "null"] },
+          "specialist": { "type": ["string", "null"] },
+          "contributingSpecialists": { "type": ["array", "null"], "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

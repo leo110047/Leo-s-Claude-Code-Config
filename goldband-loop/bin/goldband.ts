@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
 	chmodSync,
 	closeSync,
@@ -39,6 +38,11 @@ import {
 	releaseReviewExecutionLease,
 } from "../lib/review-execution-lease";
 import {
+	evidenceChildProcessEnvironment,
+	EVIDENCE_SANDBOX_ACTIVE_ENV,
+	EVIDENCE_TEMP_ROOT_ENV,
+} from "../lib/evidence-runtime-contract";
+import {
 	assertReviewNotNested,
 	assertValidReviewScopeFlags,
 	INDEPENDENT_REVIEWER_ERROR,
@@ -49,6 +53,7 @@ import {
 	type ReviewScopeFlag,
 } from "../lib/review-runtime-contract";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
+import { TRUSTED_LAUNCHER_ACTIONS } from "../lib/trusted-launcher-actions.generated";
 
 type ReviewHost = "claude" | "codex";
 const MAX_PLAN_INPUT_BYTES = 1024 * 1024;
@@ -85,11 +90,25 @@ type ReviewProcessEnvironmentOptions = {
 
 const TRUSTED_CODEX_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_CODEX_EXECUTABLE";
 const TRUSTED_BROWSER_EXECUTABLE_ENV = "GOLDBAND_TRUSTED_BROWSER_EXECUTABLE";
+const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV =
+	"GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG";
+
+const TRUSTED_LAUNCHER_ACTION_SET = new Set<string>(TRUSTED_LAUNCHER_ACTIONS);
+
+type TrustedLauncherHandlers = {
+	"review/code": (args: string[]) => number;
+	"browser/session": (args: string[]) => number;
+	"plan/create": (args: string[]) => number;
+	"plan/sync": (args: string[]) => number;
+};
 
 function printUsage(stream: Pick<Console, "log">): void {
 	stream.log("Usage:");
 	stream.log(
-		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>]",
+		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--evidence-manifest <file>] [--closure-artifact <initial-review-artifact>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
+	);
+	stream.log(
+		"  goldband review contract <inspect|import|remove> [--manifest <path>]",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
@@ -198,6 +217,9 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 	const scopeFlags: ReviewScopeFlag[] = [];
 	let workId: string | undefined;
 	let ticketId: string | undefined;
+	let hasClaudeBudgetOverride = false;
+	let hasEvidenceManifest = false;
+	let hasClosureArtifact = false;
 
 	for (let index = 0; index < args.length; index += 1) {
 		const arg = args[index];
@@ -215,6 +237,12 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			throw new Error(
 				"review code always uses real mode; --mode is not accepted",
 			);
+		}
+		if (arg === "--goldband-home") {
+			throw new Error("review state root is runtime-owned");
+		}
+		if (arg === "--review-receipt-trusted-config") {
+			throw new Error("review receipt authority is runtime-owned");
 		}
 		if (arg === "--work-id" || arg === "--ticket-id") {
 			const value = args[index + 1];
@@ -244,6 +272,31 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 			index += 1;
 			continue;
 		}
+		if (arg === "--review-claude-max-budget-usd") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (hasClaudeBudgetOverride) {
+				throw new Error(`${arg} may be supplied only once`);
+			}
+			hasClaudeBudgetOverride = true;
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
+		}
+		if (arg === "--evidence-manifest" || arg === "--closure-artifact") {
+			const value = args[index + 1];
+			if (!value) throw new Error(`${arg} requires a value`);
+			if (arg === "--evidence-manifest") {
+				if (hasEvidenceManifest) throw new Error(`${arg} may be supplied only once`);
+				hasEvidenceManifest = true;
+			} else {
+				if (hasClosureArtifact) throw new Error(`${arg} may be supplied only once`);
+				hasClosureArtifact = true;
+			}
+			forwarded.push(arg, value);
+			index += 1;
+			continue;
+		}
 		if (REVIEW_SCOPE_FLAGS.includes(arg as ReviewScopeFlag)) {
 			scopeFlags.push(arg as ReviewScopeFlag);
 		}
@@ -255,6 +308,9 @@ export function buildReviewRuntimeArgs(args: string[]): string[] {
 
 	if (!host)
 		throw new Error("review code requires --host claude or --host codex");
+	if (hasClaudeBudgetOverride && host !== "claude") {
+		throw new Error("--review-claude-max-budget-usd requires --host claude");
+	}
 	if (Boolean(workId) !== Boolean(ticketId)) {
 		throw new Error("--work-id and --ticket-id must be supplied together");
 	}
@@ -310,6 +366,16 @@ function reviewCode(args: string[]): number {
 	const runtimeFile = resolveWorkflowRuntimeFile();
 	const runtimeArgs = buildReviewRuntimeArgs(args);
 	const reviewEnvironment = prepareReviewProcessEnvironment(process.env);
+	runtimeArgs.push("--goldband-home", reviewEnvironment.evidenceRoot);
+	const trustedRuntime = readTrustedRuntimeConfig(fileURLToPath(import.meta.url));
+	if (trustedRuntime) {
+		reviewEnvironment.env[REVIEW_RECEIPT_TRUSTED_CONFIG_ENV] =
+			trustedRuntime.configFile;
+		runtimeArgs.push(
+			"--review-receipt-trusted-config",
+			trustedRuntime.configFile,
+		);
+	}
 	const trustedCodexExecutable = resolveTrustedCodexExecutable();
 	if (trustedCodexExecutable) resolveTrustedRulesRuntime();
 	if (trustedCodexExecutable) {
@@ -343,6 +409,37 @@ function reviewCode(args: string[]): number {
 	} finally {
 		releaseReviewExecutionLease(lease);
 	}
+}
+
+function reviewContract(args: string[]): number {
+	const runtimeFile = join(dirname(resolveWorkflowRuntimeFile()), "review-contract-cli.ts");
+	if (!existsSync(runtimeFile) || !lstatSync(runtimeFile).isFile()) {
+		throw new Error(
+			"review contract runtime unavailable: rerun the Goldband workflow installer",
+		);
+	}
+	const runtimeEnvironment = prepareReviewProcessEnvironment(process.env);
+	if (runtimeEnvironment.durability !== "durable") {
+		throw new Error(
+			"review contract store requires a writable durable Goldband state root",
+		);
+	}
+	const result = spawnSync(
+		process.execPath,
+		[runtimeFile, ...args, "--goldband-home", runtimeEnvironment.evidenceRoot],
+		{
+			cwd: process.cwd(),
+			env: runtimeEnvironment.env,
+			stdio: "inherit",
+		},
+	);
+	if (result.error) throw result.error;
+	if (result.status === null) {
+		throw new Error(
+			`review contract runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
+		);
+	}
+	return result.status;
 }
 
 function browserSession(args: string[]): number {
@@ -785,7 +882,10 @@ export function prepareReviewProcessEnvironment(
 	env: NodeJS.ProcessEnv,
 	options: ReviewProcessEnvironmentOptions = {},
 ): ReviewProcessEnvironment {
-	const cleanEnv = { ...env };
+	const cleanEnv = {
+		...env,
+		...evidenceChildProcessEnvironment(env),
+	};
 	delete cleanEnv[REVIEW_EVIDENCE_DURABILITY_ENV];
 	delete cleanEnv[TRUSTED_CODEX_EXECUTABLE_ENV];
 	delete cleanEnv[TRUSTED_BROWSER_EXECUTABLE_ENV];
@@ -804,7 +904,7 @@ export function prepareReviewProcessEnvironment(
 			env: cleanEnv,
 			evidenceRoot,
 			coordinationRoot: prepareTemporaryReviewCoordinationRoot(
-				options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+				options.coordinationRoot ?? defaultReviewCoordinationRoot(evidenceRoot, "durable"),
 			),
 			durability: "durable",
 		};
@@ -814,10 +914,10 @@ export function prepareReviewProcessEnvironment(
 
 	const temporaryRoot = options.createTemporaryRoot
 		? options.createTemporaryRoot()
-		: mkdtempSync(join(tmpdir(), "goldband-review-state-"));
+		: mkdtempSync(join(reviewTemporaryDirectory(env), "goldband-review-state-"));
 	probe(temporaryRoot);
 	const coordinationRoot = prepareTemporaryReviewCoordinationRoot(
-		options.coordinationRoot ?? defaultReviewCoordinationRoot(options.home),
+		options.coordinationRoot ?? defaultReviewCoordinationRoot(temporaryRoot, "ephemeral"),
 	);
 	return {
 		env: {
@@ -831,15 +931,44 @@ export function prepareReviewProcessEnvironment(
 	};
 }
 
-function defaultReviewCoordinationRoot(home = homedir()): string {
-	const identity =
-		typeof process.getuid === "function"
-			? String(process.getuid())
-			: createHash("sha256").update(home).digest("hex").slice(0, 12);
-	return join(
-		realpathSync(tmpdir()),
-		`goldband-review-coordination-${identity}`,
-	);
+function defaultReviewCoordinationRoot(
+	stateRoot: string,
+	durability: "durable" | "ephemeral",
+): string {
+	if (durability === "durable") return join(stateRoot, "review-coordination");
+	const identity = typeof process.getuid === "function"
+		? String(process.getuid())
+		: "current-user";
+	return join(dirname(stateRoot), `goldband-review-coordination-${identity}`);
+}
+
+function reviewTemporaryDirectory(env: NodeJS.ProcessEnv): string {
+	const runtimeOwnedEvidenceRoot = env[EVIDENCE_TEMP_ROOT_ENV];
+	if (
+		env[EVIDENCE_SANDBOX_ACTIVE_ENV] === "1" &&
+		runtimeOwnedEvidenceRoot &&
+		isAbsolute(runtimeOwnedEvidenceRoot) &&
+		resolve(runtimeOwnedEvidenceRoot) === runtimeOwnedEvidenceRoot
+	) {
+		// The outer evidence runtime creates, canonicalizes, and grants this root
+		// before entering Seatbelt. Re-probing it here can itself be denied and
+		// must not make the installed launcher fall back to an unauthorized /tmp.
+		return runtimeOwnedEvidenceRoot;
+	}
+	for (const key of [EVIDENCE_TEMP_ROOT_ENV, "TMPDIR", "TMP", "TEMP"] as const) {
+		const candidate = env[key];
+		if (!candidate || !isAbsolute(candidate) || !existsSync(candidate)) continue;
+		let metadata;
+		try {
+			metadata = lstatSync(candidate);
+		} catch {
+			continue;
+		}
+		if (!metadata.isDirectory() || metadata.isSymbolicLink()) continue;
+		if (typeof process.getuid === "function" && metadata.uid !== process.getuid()) continue;
+		return realpathSync(candidate);
+	}
+	return realpathSync(tmpdir());
 }
 
 function prepareTemporaryReviewCoordinationRoot(root: string): string {
@@ -868,6 +997,7 @@ export function resolveTrustedCodexExecutable(
 ): string | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return requireTrustedExecutable(
 		resolved.configFile,
 		"codexExecutable",
@@ -880,6 +1010,7 @@ export function resolveTrustedBrowserRuntime(
 ): TrustedBrowserRuntime | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return {
 		browserExecutable: requireTrustedExecutable(
 			resolved.configFile,
@@ -904,6 +1035,7 @@ export function resolveTrustedRulesRuntime(
 ): TrustedRulesRuntime | undefined {
 	const resolved = readTrustedRuntimeConfig(entryFile);
 	if (!resolved) return undefined;
+	if (resolved.config.runtimeHost === "claude") return undefined;
 	return {
 		rulesResolverScript: requireTrustedFile(
 			resolved.configFile,
@@ -995,30 +1127,88 @@ function isStateRootPermissionError(error: unknown): boolean {
 	return ["EACCES", "EPERM", "EROFS"].includes(String(error.code));
 }
 
+function dispatchTrustedLauncherAction(
+	action: string,
+	args: string[],
+	handlers: TrustedLauncherHandlers,
+): number | undefined {
+	if (action === "review/code") return handlers["review/code"](args);
+	if (action === "browser/session") return handlers["browser/session"](args);
+	if (action === "plan/create") return handlers["plan/create"](args);
+	if (action === "plan/sync") return handlers["plan/sync"](args);
+	return undefined;
+}
+
+const TRUSTED_LAUNCHER_HANDLERS: TrustedLauncherHandlers = {
+	"review/code": reviewCode,
+	"browser/session": browserSession,
+	"plan/create": planCreate,
+	"plan/sync": planSync,
+};
+
 export function main(args = process.argv.slice(2)): number {
 	const [scope, action, name, ...rest] = args;
+	if (scope === "--contract-probe" && args.length === 1) {
+		console.log(
+			JSON.stringify({
+				schemaVersion: 1,
+				dispatch: "trusted-launcher",
+				actions: TRUSTED_LAUNCHER_ACTIONS,
+			}),
+		);
+		return 0;
+	}
+	if (scope === "--contract-probe" && args.length === 2) {
+		if (!action || !TRUSTED_LAUNCHER_ACTION_SET.has(action)) return 2;
+		let routedAction: string | undefined;
+		const fakeRoute = (declaredAction: string) => () => {
+			routedAction = declaredAction;
+			return 0;
+		};
+		const fakeHandlers: TrustedLauncherHandlers = {
+			"review/code": fakeRoute("review/code"),
+			"browser/session": fakeRoute("browser/session"),
+			"plan/create": fakeRoute("plan/create"),
+			"plan/sync": fakeRoute("plan/sync"),
+		};
+		const status = dispatchTrustedLauncherAction(action, [], fakeHandlers);
+		if (status !== 0 || routedAction !== action) return 2;
+		console.log(
+			JSON.stringify({
+				schemaVersion: 1,
+				action,
+				routable: true,
+				behavior: "bounded-read-only-fake-host-probe",
+			}),
+		);
+		return 0;
+	}
 	if (scope === "-h" || scope === "--help" || scope === "help") {
 		printUsage(console);
 		return 0;
 	}
+	const trustedAction = action ? `${scope}/${action}` : "";
+	const trustedResult = dispatchTrustedLauncherAction(
+		trustedAction,
+		[name, ...rest].filter((value): value is string => value !== undefined),
+		TRUSTED_LAUNCHER_HANDLERS,
+	);
+	if (trustedResult !== undefined) return trustedResult;
 	if (scope === "review") {
-		if (action !== "code") usage();
-		return reviewCode(
-			[name, ...rest].filter((value): value is string => value !== undefined),
-		);
+		if (action === "contract") {
+			return reviewContract(
+				[name, ...rest].filter((value): value is string => value !== undefined),
+			);
+		}
+		usage();
 	}
 	if (scope === "browser") {
-		if (action !== "session") usage();
-		return browserSession(
-			[name, ...rest].filter((value): value is string => value !== undefined),
-		);
+		usage();
 	}
 	if (scope === "plan") {
 		const planArgs = [name, ...rest].filter(
 			(value): value is string => value !== undefined,
 		);
-		if (action === "create") return planCreate(planArgs);
-		if (action === "sync") return planSync(planArgs);
 		if (action === "block" || action === "resume" || action === "cancel") {
 			return planLifecycle(action, planArgs);
 		}

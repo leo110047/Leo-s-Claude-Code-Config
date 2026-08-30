@@ -78,6 +78,7 @@ const capabilityActions = manifest.capabilities.flatMap((capability) =>
       '',
     ),
     runtime: action.runtime,
+    dispatch: actionDispatch(action),
     lifecycle: action.lifecycle ?? 'public',
     runtimeOwner: action.owner ?? null,
     runtimeContract: action.runtimeContract ?? null,
@@ -128,7 +129,10 @@ const outputs = new Map([
         }) => ({
           ...capability,
           actions: capabilityActions.map(
-            ({ promptContract: _actionPromptContract, ...action }) => action,
+            ({ promptContract: _actionPromptContract, ...action }) => ({
+              ...action,
+              dispatch: actionDispatch(action),
+            }),
           ),
         }),
       ),
@@ -140,6 +144,10 @@ const outputs = new Map([
   [
     'goldband-loop/workflows/capability-registry.generated.ts',
     generatedRegistry(capabilityActions),
+  ],
+  [
+    'goldband-loop/lib/trusted-launcher-actions.generated.ts',
+    generatedTrustedLauncherActions(capabilityActions),
   ],
   [
     'hooks/scripts/lib/skill-activation/capability-routing.generated.json',
@@ -291,6 +299,7 @@ function validateAction(capabilityId, action, seen) {
   if (!['typed', 'compatibility', 'registered-only'].includes(action.runtime)) {
     throw new Error(`${name}: invalid runtime: ${action.runtime}`);
   }
+  validateActionDispatch(name, action);
   const lifecycle = action.lifecycle ?? 'public';
   if (!['public', 'experimental'].includes(lifecycle)) {
     throw new Error(`${name}: invalid lifecycle: ${lifecycle}`);
@@ -308,6 +317,36 @@ function validateAction(capabilityId, action, seen) {
   }
   if (action.runtimeContract !== undefined) {
     validateRuntimeContract(name, action.runtimeContract);
+  }
+}
+
+function actionDispatch(action) {
+  if (action.dispatch) return action.dispatch;
+  if (action.runtime === 'compatibility') return 'prompt-contract';
+  if (action.runtime === 'registered-only') return 'registered-only';
+  return 'host-runtime';
+}
+
+function validateActionDispatch(name, action) {
+  const dispatch = actionDispatch(action);
+  const valid = [
+    'trusted-launcher',
+    'host-runtime',
+    'prompt-contract',
+    'registered-only',
+  ];
+  if (!valid.includes(dispatch)) {
+    throw new Error(`${name}: invalid dispatch: ${dispatch}`);
+  }
+  const expectedRuntime = {
+    'trusted-launcher': 'typed',
+    'prompt-contract': 'compatibility',
+    'registered-only': 'registered-only',
+  }[dispatch];
+  if (expectedRuntime && action.runtime !== expectedRuntime) {
+    throw new Error(
+      `${name}: ${dispatch} dispatch requires ${expectedRuntime} runtime`,
+    );
   }
 }
 
@@ -381,12 +420,23 @@ function generatedRegistry(entries) {
   return (
     `// AUTO-GENERATED from goldband.manifest.json. Do not edit.\n` +
     `import type { HostName, RiskLevel, RuntimeActionContract, SafetyGateContract } from './types';\n\n` +
-    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  lifecycle: 'public' | 'experimental';\n  runtimeOwner: string | null;\n  runtimeContract: RuntimeActionContract | null;\n  safetyGates: SafetyGateContract[];\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
+    `export type CapabilityActionRecord = {\n  capability: string;\n  action: string;\n  name: string;\n  description: string;\n  contractPath: string;\n  runtime: 'typed' | 'compatibility' | 'registered-only';\n  dispatch: 'trusted-launcher' | 'host-runtime' | 'prompt-contract' | 'registered-only';\n  lifecycle: 'public' | 'experimental';\n  runtimeOwner: string | null;\n  runtimeContract: RuntimeActionContract | null;\n  safetyGates: SafetyGateContract[];\n  riskLevel: RiskLevel;\n  hostSupport: HostName[];\n};\n\n` +
     `export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = ${JSON.stringify(
       entries,
       null,
       2,
     )};\n`
+  );
+}
+
+function generatedTrustedLauncherActions(entries) {
+  const actions = entries
+    .filter((entry) => entry.dispatch === 'trusted-launcher')
+    .map((entry) => entry.name)
+    .sort();
+  return (
+    '// AUTO-GENERATED from goldband.manifest.json. Do not edit.\n' +
+    `export const TRUSTED_LAUNCHER_ACTIONS = ${JSON.stringify(actions, null, 2)} as const;\n`
   );
 }
 
@@ -458,13 +508,13 @@ function generatedDocs(value) {
   const rows = publicActions
     .map(
       (action) =>
-        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | \`${action.runtimeOwner}\` | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
+        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | \`${action.runtimeOwner}\` | \`${action.runtime}\` | \`${action.dispatch}\` | \`${action.riskLevel}\` |`,
     )
     .join('\n');
   const experimentalRows = experimentalActions
     .map(
       (action) =>
-        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | — | \`${action.runtime}\` | \`${action.riskLevel}\` |`,
+        `| \`${action.capability}\` | \`${action.action}\` | ${action.description} | — | \`${action.runtime}\` | \`${action.dispatch}\` | \`${action.riskLevel}\` |`,
     )
     .join('\n');
   const safetyRows = collectSafetyGates(value.capabilities)
@@ -473,7 +523,7 @@ function generatedDocs(value) {
         `| \`${gate.operation}\` | \`${gate.action}\` | \`${gate.mode}\` | \`${gate.enforcement}\` | \`${gate.authorization}\` | ${gate.owner ? `\`${gate.owner}\`` : '—'} |`,
     )
     .join('\n');
-  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\nPublic inventory: ${publicActions.length} actions. Experimental actions are excluded from routing and activation hints.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${rows}\n\n## Experimental inventory\n\nThese actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Risk |\n| --- | --- | --- | --- | --- | --- |\n${experimentalRows}\n\n## High-risk safety gates\n\nThese operation IDs are internal safety inventory, not public action aliases. \`blocked-before-runtime\` operations cannot run until a matching owner replaces the block and implements every precondition, authorization boundary, side effect, and readback requirement. \`runtime-owner\` operations record successful gate evidence only after an operation-specific verifier validates the declared contract against owner output and trusted readback; blocked or mock-only runs remain pending.\n\n| Operation | Active action | Mode | Enforcement | Authorization | Gate owner |\n| --- | --- | --- | --- | --- | --- |\n${safetyRows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
+  return `<!-- AUTO-GENERATED from goldband.manifest.json. Do not edit. -->\n# Goldband capabilities\n\nFormal interface: \`${value.capabilityInterface}\`. Old workflow names are not aliases.\n\nPublic inventory: ${publicActions.length} actions. Experimental actions are excluded from routing and activation hints.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Dispatch | Risk |\n| --- | --- | --- | --- | --- | --- | --- |\n${rows}\n\n## Experimental inventory\n\nThese actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.\n\n| Capability | Action | Outcome | Runtime owner | Runtime | Dispatch | Risk |\n| --- | --- | --- | --- | --- | --- | --- |\n${experimentalRows}\n\n## High-risk safety gates\n\nThese operation IDs are internal safety inventory, not public action aliases. \`blocked-before-runtime\` operations cannot run until a matching owner replaces the block and implements every precondition, authorization boundary, side effect, and readback requirement. \`runtime-owner\` operations record successful gate evidence only after an operation-specific verifier validates the declared contract against owner output and trusted readback; blocked or mock-only runs remain pending.\n\n| Operation | Active action | Mode | Enforcement | Authorization | Gate owner |\n| --- | --- | --- | --- | --- | --- |\n${safetyRows}\n\n## Prompt/runtime boundary\n\n- Prompt contract: ${value.promptArchitecture.contract.join(', ')}.\n- Model owns: ${value.promptArchitecture.modelOwns.join(', ')}.\n- Runtime owns: ${value.promptArchitecture.runtimeOwns.join(', ')}.\n- Installed workflow documents are thin contracts generated from manifest-owned \`promptContract\` fields. Per-workflow \`SKILL.md\` and \`SKILL.md.tmpl\` prompt surfaces are not part of the architecture.\n\n${generatedInteractionPolicy(value.promptArchitecture.interactionPolicy)}\n`;
 }
 
 function generatedInteractionPolicy(policy) {

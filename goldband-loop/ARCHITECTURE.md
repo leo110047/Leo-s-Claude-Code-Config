@@ -2,6 +2,70 @@
 
 This document explains **why** goldband is built the way it is. For setup and commands, see CLAUDE.md. For contributing, see CONTRIBUTING.md.
 
+## Evidence-first review runtime
+
+`workflows/review.ts` owns review orchestration,
+`workflows/review-contract-resolution.ts` owns baseline selection and provenance,
+`workflows/review-contract-store.ts` owns the local per-repository store, and
+`workflows/review-evidence.ts` owns deterministic behavior/evidence contracts.
+A repository manifest always owns the baseline when present. Without one, an
+explicitly imported store entry bound to the Git common-directory path,
+filesystem instance, and remote
+identity may supply it. Caller-provided manifests cannot replace an existing
+baseline: the runtime rejects contract downgrade before any provider or semantic
+host dispatch. The artifact binds baseline, explicit, and effective digests.
+Import/remove are explicit CLI mutations with private regular-file checks and
+atomic writes; review never mutates the repository or store.
+
+The resolved code validates the behavior
+matrix and provider registry, materializes isolated base/candidate snapshots,
+executes bounded argument arrays under a default-deny read/write/network OS
+sandbox with the platform common process baseline plus explicit candidate,
+runner-state, sealed runtime-projection, and dependency roots, and binds
+records to the current candidate before the semantic host can start.
+Non-system Mach-O dependencies are copied into a private per-review projection,
+rewritten to projected loader paths, ad-hoc signed, and content-attested after
+transformation. Evidence commands cannot read the source package tree or write
+the projection. The macOS adapter exactly re-denies inherited syslog, Mach service,
+and shared-memory channels rather than relying only on broad operation denies.
+Prompt-redacted untracked files remain content-digest-bound and are copied only
+through the executable snapshot channel.
+
+The initial host sees one immutable full diff plus bounded matrix, evidence,
+Rules, and impact projections. It looks for omissions; it does not rerun gates
+or decide whether a command passed. Runtime classification only permits
+candidate-bound replayable failures to become verified blockers.
+
+Closure is a distinct conditional invocation over an initial artifact whose
+complete payload and standalone or Work Map scope match an installed-runtime receipt, and a
+repaired candidate. Runtime derives the repair delta, selects affected behavior
+cells, reruns their evidence, and permits one host response over original
+finding IDs. It does not resend the unchanged original diff or reopen the full
+findings inventory. Work Map closure additionally requires the exact requested-changes
+artifact and immediately following claim attempt. The same-permission host user is
+trusted; reviewed code, model output, and artifact input are not. After those checks,
+runtime atomically claims the receipt with at-most-once semantics; crash or later failure
+requires a new initial review. Reports, telemetry, and Work Map artifacts retain the
+candidate/evidence/host-call chain.
+
+`workflows/review-lineage.ts` owns cross-run authority. Before any evidence
+provider or semantic host dispatch, it locks and verifies a signed lineage
+record under the installed receipt authority. The record inherits required
+cells/providers, Work Map or standalone acceptance, selected Rules, minimum
+evidence levels, and unresolved finding IDs. Existing contracts are monotonic;
+additive coverage remains valid. Open blockers require the exact authoritative
+artifact and scoped closure. Empty initial candidates are rejected before the
+lineage lock or record is created. Standalone lineage identity includes the
+normalized changed-file scope; legacy broad-scope records migrate only when the
+signed artifact digest proves the same scope. When the artifact cannot be
+verified, an exact signed candidate-digest match still preserves the blocker;
+other candidates do not inherit the unverifiable scope. Any initial candidate
+whose paths overlap an unresolved scope in the same collection authority must
+use closure. Sorted per-path locks cover overlap discovery through lineage
+finalization; disjoint scopes do not share those locks. Typed waivers are loaded only from
+`goldband.review-policy.json` in the base commit and are persisted in the signed
+audit record; candidate files and model prose cannot authorize them.
+
 ## The core idea
 
 goldband gives Claude Code a persistent browser and a set of opinionated workflow skills. The browser is the hard part — everything else is Markdown.

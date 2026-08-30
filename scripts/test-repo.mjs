@@ -28,6 +28,13 @@ export const TEST_SUITES = [
     args: ['run', 'check:manifest'],
   }),
   suite({
+    id: 'root:review-contracts',
+    label: 'Review contract freshness',
+    cwd: ROOT,
+    command: npmCmd,
+    args: ['run', 'check:review-contracts'],
+  }),
+  suite({
     id: 'root:capability-invocations',
     label: 'Root capability invocation validation',
     cwd: ROOT,
@@ -40,6 +47,13 @@ export const TEST_SUITES = [
     cwd: ROOT,
     command: npmCmd,
     args: ['run', 'test:workflow-contracts'],
+  }),
+  suite({
+    id: 'root:decision-guidance',
+    label: 'Root decision guidance and installer readback',
+    cwd: ROOT,
+    command: npmCmd,
+    args: ['run', 'test:decision-guidance'],
   }),
   suite({
     id: 'root:app-support',
@@ -68,6 +82,13 @@ export const TEST_SUITES = [
     cwd: ROOT,
     command: npmCmd,
     args: ['run', 'test:project-style-gate'],
+  }),
+  suite({
+    id: 'root:sandbox-image-lifecycle',
+    label: 'Sandbox test image lifecycle',
+    cwd: ROOT,
+    command: npmCmd,
+    args: ['run', 'test:sandbox-image-lifecycle'],
   }),
   suite({
     id: 'root:codex-portability',

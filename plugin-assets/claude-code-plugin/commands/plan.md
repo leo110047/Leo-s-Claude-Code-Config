@@ -33,7 +33,7 @@ do not route a draft through a second public action.
 
 1. **Restate Requirements** - Clarify what needs to be built
 2. **Explore Codebase** - Read relevant files to understand current architecture
-3. **State the Direction** - Name the recommended approach and why it fits now
+3. **State the Direction** - Name the smallest sufficient approach and why it covers the current need, root-cause class, and required safety boundaries
 4. **Run a Pre-Mortem** - Surface failure modes, early warning signals, fallback path, and the best alternative
 5. **Break Down into Phases** - Specific, actionable steps with dependencies
 6. **Assess Risks** - Surface implementation issues and blockers
@@ -59,6 +59,10 @@ do not route a draft through a second public action.
 ## Decision Check
 - Recommendation: [recommended direction]
 - Why Now: [why this direction fits the current constraints]
+- Current Need or Risk: [requirement, root-cause class, or required boundary]
+- Smallest Sufficient Option: [least permanent mechanism that fully covers it]
+- Permanent Cost: [ongoing operational or maintenance cost introduced]
+- Evidence for Heavier Mechanism: [named gap and current evidence, or "not justified"]
 - Assumptions: [what must hold true]
 - Best Alternative: [next-best option] — choose it when [switch criteria]
 
@@ -96,6 +100,7 @@ do not route a draft through a second public action.
 - Within this `/plan` command flow, do not write code until the user explicitly
   confirms with "yes" or "proceed"
 - Always verify assumptions with actual code (Read, Grep, Glob) before planning
-- For architecture or direction-setting work, do not optimize for minimal diff; explain why this is the healthiest option now and when it should be replaced
+- For architecture or direction-setting work, choose the smallest sufficient solution that fully covers the current requirement, root-cause class, ownership, and required safety boundaries; this is not permission for a symptom patch, fallback, special case, or duplicated authority
+- Recommend a heavier permanent mechanism only when current evidence names the requirement, reachable failure path, or boundary invariant the smaller option cannot cover, and surface the ongoing operational or maintenance cost
 - If the plan is complex, risky, or cross-module, include the engineering review before implementation
 - If user says "modify", adjust the plan and present again

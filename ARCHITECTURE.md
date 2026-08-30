@@ -102,6 +102,119 @@ directory symlink.
 Semantic findings are produced by independent review, not by PreToolUse, Stop,
 workspace leases, shell classification, or writer self-attestation.
 
+`review/code` is evidence-first. `workflows/review-contract-resolution.ts`
+selects one authoritative baseline before evidence or host dispatch. A repository
+`goldband.review-evidence.json` always wins; only its absence permits a
+runtime-owned per-repository store entry. An explicit manifest is either the
+primary contract when no baseline exists or a complete monotonic extension that
+cannot remove or weaken baseline cells, providers, applicability, risk,
+disposition, or evidence level. Resolution provenance records repository
+identity, source identities, baseline/explicit/effective digests, and schema/runtime
+compatibility. The store binds Git worktrees through their common directory path
+and filesystem instance, and also records remote identity; moves, path reuse,
+clones, remote changes, and ambiguity fail
+closed until explicit re-import. Review never mutates repository manifests.
+
+The resolved contract declares stable behavior cells and typed providers. The
+runtime validates every disposition and reciprocal provider/cell
+ownership, materializes a fresh read-only candidate snapshot per operation,
+executes declared argument arrays under a default-deny read/write/network OS
+sandbox with the platform's common process-runtime baseline plus only the snapshot,
+isolated runner state, sealed runtime projection, and projected dependencies
+readable outside that baseline, verifies the
+snapshot digest again after execution, isolates and removes each operation's
+HOME/TMP state, bounds output and time, and binds every record to repository, base,
+candidate, scope, behavior contract, owner, environment, command, and time
+digests before starting the semantic host. Regression providers preserve a
+base/exact-nonzero RED and candidate/zero GREEN pair; property/fuzz providers also
+preserve seed, iteration budget, and replay command. Unsupported high-risk
+cells, missing runners, malformed evidence, candidate drift, and provenance
+mismatch fail closed before model dispatch.
+
+The repository-owned provider store is persistent-only. Exact base-to-candidate
+RED/GREEN transitions carry repository, base, candidate, scope, and operation
+contract digests in the one review artifact and fail validation on a successor
+binding. Applicability is an explicit union: a non-empty path-prefix set or a
+global declaration with a reviewable reason. The selected provider set also
+owns the effective behavior-cell set used by completeness; unrelated scoped
+cells cannot become blocking coverage gaps. Explicit transition manifests and
+persisted initial artifacts both pass the exact-binding validator in the
+production ingestion path. Execution context names both the
+sandbox owner and runner. Provider-owned Seatbelt suites are never nested inside
+the sealed evidence runner; it emits a typed `runtime-incomplete` record with
+owner, actual/expected context, scope, lane, and remediation. The named macOS
+host lane executes those tests directly, while partial evidence never gains
+completion or closure authority.
+For Mach-O executables with non-system dependencies, the runtime copies all attested
+images into a private projection, rewrites their load commands to projected paths,
+ad-hoc signs and re-attests the transformed bytes, and keeps the original host package
+tree unreadable. The macOS adapter also exactly re-denies inherited syslog, Mach service,
+and shared-memory channels.
+Secret-like bounded regular untracked files use a separate non-prompt channel:
+their paths and content digests remain in the candidate binding and their exact
+bytes are copied into each isolated executable snapshot, while the semantic diff
+contains only the redaction marker. Unsafe or oversized redacted files fail
+closed before provider execution.
+
+The one initial semantic host receives the immutable candidate diff once plus
+bounded matrix and evidence projections. Raw logs and deterministic control
+rules remain outside the prompt. Only deterministic evidence code can mint a
+`verified-failure`; semantic output requesting that classification becomes a
+non-blocking `semantic-concern`, and unrelated evidence IDs are discarded.
+Fixture, local, sandboxed-service, live-provider,
+device-platform, and production-readback evidence remain distinct in records
+and reports. The local runner can attest only local levels; live, device, and
+production levels require an authorized external runner.
+
+Repair closure is a separate conditional invocation. It consumes the initial
+artifact only after a canonical HMAC receipt is read back from the installed
+runtime authority store. The receipt binds the complete serialized artifact,
+findings, evidence, timestamps, candidate, behavior contract, and standalone or
+Work Map scope including map revision, subject, and claim attempt. Work Map closure also
+reads back the exact requested-changes artifact and requires the immediately following
+repair attempt; caller-authored, cross-scope, or prior-attempt JSON cannot authorize closure.
+The trust boundary excludes reviewed candidate code, model output, and artifact inputs, but
+intentionally trusts the same-permission host user and installed Goldband runtime. Protecting
+against a malicious same-user host process requires a privileged helper or OS-backed signing key. Closure then proves
+repository/scope provenance and records the original and repaired
+behavior-contract digests, derives a bounded multi-hunk repair delta without
+unchanged middle regions. After repaired binding and Work Map causality validate,
+runtime atomically claims the initial receipt with at-most-once semantics. A crash or later
+failure leaves it spent and requires a new initial review; this favors fail-closed behavior
+over replayable closure authority. Closure reruns original plus new or changed affected cells,
+and permits exactly one host call returning
+only `closed`, `still-open`, `direct-regression`, or `evidence-incomplete` for
+original finding IDs. A zero-finding initial review cannot start closure, and
+closure never receives the unchanged full original diff or opens a new findings
+inventory. Closure evidence must intersect the original finding's authorized
+behavior cells. Persisted evidence records and completeness are revalidated and
+recomputed before reuse. Work Map review artifacts add the behavior contract, evidence
+records plus their recomputable digest, completeness state, candidate digest,
+phase, and host-call count to the existing receipt and tree chain.
+An operation identity also binds seed/iterations, resolved executable content,
+runner policy, platform, dependency contracts, package metadata, and projected
+command shims; closure cannot weaken that identity behind a stable operation ID.
+
+Cross-run acceptance is owned by a signed runtime lineage, not by the newest
+caller manifest. Before evidence or semantic dispatch, the runtime compares the
+current contract with inherited cells/providers, the Work Map acceptance or
+standalone scope, selected Rules, minimum evidence policy, and unresolved
+finding IDs. Existing requirements cannot be removed, reversed, downgraded, or
+detached from blockers. Additive coverage remains valid. Open blockers force
+the exact authoritative initial artifact through scoped closure. Empty initial
+candidates are rejected before lineage creation. Standalone lineage identity
+includes normalized changed paths, and a legacy broad-scope blocker is inherited
+when its signed artifact digest proves the same scope or its signed candidate
+digest exactly matches. An unrelated candidate does not inherit an unverifiable
+legacy scope. A new initial candidate whose changed paths overlap any unresolved
+scope under the same collection authority must use closure. Sorted per-path
+locks cover overlap discovery through lineage finalization while disjoint scopes
+remain independent. Optional
+waivers and per-cell minimum evidence levels are accepted only from typed
+`goldband.review-policy.json` in the base commit and are copied into the signed
+audit record. Reports and Work Map artifacts keep no-new-findings, deterministic
+completeness, runtime completeness, closure, and completion authority distinct.
+
 Cross-review hook adapters are host-specific projections over
 `goldband-loop/cross-review/core.cjs`. Minimal workflow runtime roots include
 the complete `cross-review/` directory next to `bin/`; explicit module discovery
@@ -478,6 +591,13 @@ toolchains and file-shape rules.
   dependencies, installs the Playwright browser asset, runs
   `node scripts/check-goldband-loop-inventory.mjs`, and then runs
   `cd goldband-loop && bun run test:free`.
+- `npm run check:review-contracts` is the single freshness entrypoint in the
+  root test graph. It lints the real manifests, scoped provider selection,
+  lifecycle/execution declarations, canonical dispatch groups, and the
+  installer-owned source-input set. Temp-install inventory then verifies the
+  installed artifact digest and bounded probes for every action explicitly
+  declared `trusted-launcher`; compatibility actions remain workflow-document
+  dispatch, and registered-only actions remain non-executable.
 - The sandbox story is additive defense in depth. `sandbox/sandbox.sh` starts a
   Docker/Podman container with goldband baked into a non-writable
   `/opt/goldband`, a clean container HOME, and one target project mounted

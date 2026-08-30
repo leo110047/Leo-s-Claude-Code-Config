@@ -23,6 +23,18 @@ import {
 	releaseReviewExecutionLease,
 } from "../lib/review-execution-lease";
 import { REVIEW_ACTIVE_ENV } from "../lib/review-runtime-contract";
+import {
+	EVIDENCE_SANDBOX_ACTIVE_ENV,
+	EVIDENCE_TEMP_ROOT_ENV,
+} from "../lib/evidence-runtime-contract";
+
+function spawnReviewCli(
+	args: string[],
+	options: { cwd: string; encoding: "utf8"; env: NodeJS.ProcessEnv },
+) {
+	const command = resolve(import.meta.dir, "../bin/goldband");
+	return spawnSync(command, args, options);
+}
 
 describe("goldband review code launcher", () => {
 	test("runs the real typed pipeline through the Codex host adapter", () => {
@@ -33,6 +45,8 @@ describe("goldband review code launcher", () => {
 			const callLog = join(fixture, "codex-calls.log");
 			const repo = join(fixture, "repo");
 			const stateRoot = join(fixture, "state");
+			const trustedRuntimeRoot = join(fixture, "trusted-runtime");
+			const receiptAuthorityRoot = join(fixture, "review-authority");
 			mkdirSync(fakeBin, { recursive: true });
 			mkdirSync(repo, { recursive: true });
 			writeFileSync(
@@ -55,15 +69,57 @@ describe("goldband review code launcher", () => {
 					'test "$sandbox" = "read-only"',
 					`test -n "\${${REVIEW_ACTIVE_ENV}:-}"`,
 					'printf \'%s\\n\' \'{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":800,"output_tokens":75,"total_tokens":1275}}\'',
-					'printf \'%s\\n\' \'{"findings":[]}\' > "$output"',
+					'printf \'%s\\n\' \'{"findings":[{"id":"F-SPOOF","file":"new-file.txt","line":1,"severity":"high","summary":"spoofed runtime finding","evidence":"host-controlled payload","failureScenario":"host attempts deterministic provenance","suggestedVerification":"replay fixture","classification":"verified-failure","category":"deterministic-evidence","blocking":true,"evidenceIds":["fixture-gate:pass"],"behaviorCellIds":["fixture-contract"]}]}\' > "$output"',
 				].join("\n"),
 			);
 			chmodSync(fakeCodex, 0o755);
 			spawnSync("git", ["init"], { cwd: repo });
 			writeFileSync(join(repo, "new-file.txt"), "review me\n");
+			writeFileSync(
+				join(repo, "goldband.review-evidence.json"),
+				JSON.stringify({
+					schemaVersion: 1,
+					behaviorMatrix: [{
+						id: "fixture-contract",
+						behavior: "The fixture candidate passes its declared gate.",
+						kind: "normal",
+						input: "fixture candidate",
+						preconditions: "the isolated runner is available",
+						expected: "the fixture command exits successfully",
+						risk: "low",
+						disposition: "static",
+						providerIds: ["fixture-gate"],
+					}],
+					providers: [{
+						id: "fixture-gate",
+						owner: "launcher-e2e-fixture",
+						kind: "static",
+						lifecycle: "persistent",
+						cellIds: ["fixture-contract"],
+						applicability: { kind: "global", reason: "Explicit launcher E2E fixture." },
+						executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
+						operations: [{
+							id: "pass",
+							target: "candidate",
+							argv: ["true"],
+							expectedExit: "zero",
+							timeoutMs: 1000,
+							maxOutputBytes: 1024,
+							network: "deny",
+							evidenceLevel: "fixture",
+						}],
+					}],
+					authorizations: [],
+				}),
+			);
+			const provisionAuthority = spawnSync(process.execPath, [
+				join(import.meta.dir, "..", "scripts", "provision-review-receipt-authority.ts"),
+				"--runtime-root", trustedRuntimeRoot,
+				"--authority-root", receiptAuthorityRoot,
+			], { encoding: "utf8" });
+			expect(provisionAuthority.status, provisionAuthority.stderr).toBe(0);
 
-			const result = spawnSync(
-				resolve(import.meta.dir, "../bin/goldband"),
+			const result = spawnReviewCli(
 				[
 					"review",
 					"code",
@@ -81,14 +137,29 @@ describe("goldband review code launcher", () => {
 						...process.env,
 						GOLDBAND_HOME: stateRoot,
 						GOLDBAND_TEST_CALL_LOG: callLog,
+						GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG: join(
+							trustedRuntimeRoot,
+							"trusted-runtime.json",
+						),
 						PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
 					},
 				},
 			);
 
 			expect(result.status).toBe(0);
-			expect(result.stdout).toContain("No findings.");
+			expect(result.stdout).toContain("[semantic-concern]");
 			expect(result.stdout).toContain("review/code runtime report");
+			const artifactDir = join(stateRoot, "workflow-runs", "artifacts");
+			const artifactFile = readdirSync(artifactDir).find((file) =>
+				file.endsWith("-review-evidence.json"));
+			expect(artifactFile).toBeDefined();
+			const artifact = JSON.parse(readFileSync(join(artifactDir, artifactFile!), "utf8"));
+			expect(artifact.findings).toContainEqual(expect.objectContaining({
+				id: "S-001",
+				classification: "semantic-concern",
+				category: "semantic-review",
+				blocking: true,
+			}));
 			const telemetryDir = join(stateRoot, "workflow-runs", "telemetry");
 			const telemetryFile = readdirSync(telemetryDir).find((file) =>
 				file.endsWith("-review-prompt.json"),
@@ -103,7 +174,9 @@ describe("goldband review code launcher", () => {
 			expect(telemetry.specialistMode).toBe("off");
 			expect(telemetry.selectedSpecialists).toEqual([]);
 			expect(telemetry.diffBytes).toBeGreaterThan(0);
-			expect(telemetry.promptOverheadBytes).toBeLessThanOrEqual(20 * 1024);
+			expect(telemetry.promptOverheadBytes).toBeLessThanOrEqual(48 * 1024);
+			expect(telemetry.hostCallCount).toBe(1);
+			expect(telemetry.originalDiffBytesSent).toBeGreaterThan(0);
 			const usageFile = readdirSync(telemetryDir).find((file) =>
 				file.endsWith("-review-host-usage.json"),
 			);
@@ -137,8 +210,7 @@ describe("goldband review code launcher", () => {
 			);
 			chmodSync(fakeCodex, 0o755);
 
-			const result = spawnSync(
-				resolve(import.meta.dir, "../bin/goldband"),
+			const result = spawnReviewCli(
 				["review", "code", "--host", "codex"],
 				{
 					cwd: fixture,
@@ -357,6 +429,25 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
+	test("forwards one evidence manifest and one scoped closure artifact", () => {
+		expect(buildReviewRuntimeArgs([
+			"--host", "codex",
+			"--diff-file", "candidate.patch",
+			"--evidence-manifest", "evidence.json",
+			"--closure-artifact", "initial-review.json",
+		])).toEqual([
+			"review", "code", "--mode", "real", "--host", "codex",
+			"--diff-file", "candidate.patch",
+			"--evidence-manifest", "evidence.json",
+			"--closure-artifact", "initial-review.json",
+		]);
+		expect(() => buildReviewRuntimeArgs([
+			"--host", "codex",
+			"--evidence-manifest", "a.json",
+			"--evidence-manifest", "b.json",
+		])).toThrow("--evidence-manifest may be supplied only once");
+	});
+
 	test("requires and forwards the complete Work Map scope pair", () => {
 		expect(() =>
 			buildReviewRuntimeArgs([
@@ -433,8 +524,7 @@ describe("goldband review code launcher", () => {
 			);
 			chmodSync(fakeCodex, 0o755);
 
-			const result = spawnSync(
-				resolve(import.meta.dir, "../bin/goldband"),
+			const result = spawnReviewCli(
 				["review", "code", "--host", "codex", "--specialists", "auto"],
 				{
 					cwd: fixture,
@@ -494,6 +584,45 @@ describe("goldband review code launcher", () => {
 		]);
 	});
 
+	test("forwards metered Claude budget overrides only to the Claude host", () => {
+		expect(
+			buildReviewRuntimeArgs([
+				"--host",
+				"claude",
+				"--review-claude-max-budget-usd",
+				"4.25",
+			]),
+		).toEqual([
+			"review",
+			"code",
+			"--mode",
+			"real",
+			"--host",
+			"claude",
+			"--worktree",
+			"--review-claude-max-budget-usd",
+			"4.25",
+		]);
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"codex",
+				"--review-claude-max-budget-usd",
+				"3.00",
+			]),
+		).toThrow("--review-claude-max-budget-usd requires --host claude");
+		expect(() =>
+			buildReviewRuntimeArgs([
+				"--host",
+				"claude",
+				"--review-claude-max-budget-usd",
+				"3.00",
+				"--review-claude-max-budget-usd",
+				"4.00",
+			]),
+		).toThrow("--review-claude-max-budget-usd may be supplied only once");
+	});
+
 	test("rejects missing hosts and attempts to downgrade into mock mode", () => {
 		expect(() => buildReviewRuntimeArgs([])).toThrow(
 			"review code requires --host claude or --host codex",
@@ -544,19 +673,49 @@ describe("goldband review code launcher", () => {
 		}
 	});
 
-	test("durable evidence and review coordination use separate roots", () => {
+	test("sandbox fallback roots honor the runtime-owned evidence temp root", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-authorized-tmp-"));
+		try {
+			const authorizedRoot = realpathSync(fixture);
+			const blockedHome = join(fixture, "blocked-home");
+			const result = prepareReviewProcessEnvironment(
+				{
+					[EVIDENCE_SANDBOX_ACTIVE_ENV]: "1",
+					[EVIDENCE_TEMP_ROOT_ENV]: authorizedRoot,
+					TMPDIR: "/tmp",
+				},
+				{
+					home: blockedHome,
+					probeStateRoot: (root) => {
+						if (root === join(blockedHome, ".goldband")) {
+							throw Object.assign(new Error("sandbox blocked"), { code: "EPERM" });
+						}
+						mkdirSync(root, { recursive: true });
+					},
+				},
+			);
+
+			expect(result.durability).toBe("ephemeral");
+			expect(result.evidenceRoot.startsWith(`${authorizedRoot}/`)).toBe(true);
+			expect(result.coordinationRoot.startsWith(`${authorizedRoot}/`)).toBe(true);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("durable evidence owns its default review coordination root", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-durable-"));
 		try {
 			const evidenceRoot = join(fixture, "evidence");
-			const coordinationRoot = join(fixture, "coordination");
 			const result = prepareReviewProcessEnvironment(
 				{ GOLDBAND_HOME: evidenceRoot },
-				{ coordinationRoot },
 			);
 
 			expect(result.durability).toBe("durable");
 			expect(result.evidenceRoot).toBe(evidenceRoot);
-			expect(result.coordinationRoot).toBe(realpathSync(coordinationRoot));
+			expect(result.coordinationRoot).toBe(
+				realpathSync(join(evidenceRoot, "review-coordination")),
+			);
 			expect(result.coordinationRoot).not.toBe(result.evidenceRoot);
 		} finally {
 			rmSync(fixture, { recursive: true, force: true });
@@ -566,14 +725,12 @@ describe("goldband review code launcher", () => {
 	test("ephemeral evidence roots share one stable review coordination root", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-review-coordination-"));
 		try {
-			const coordinationRoot = join(fixture, "coordination");
 			const blockedHome = join(fixture, "blocked-home");
 			const prepare = (temporaryRoot: string) =>
 				prepareReviewProcessEnvironment(
 					{},
 					{
 						home: blockedHome,
-						coordinationRoot,
 						createTemporaryRoot: () => temporaryRoot,
 						probeStateRoot: (root) => {
 							if (root === join(blockedHome, ".goldband")) {
@@ -591,10 +748,10 @@ describe("goldband review code launcher", () => {
 				secondEnvironment.evidenceRoot,
 			);
 			expect(firstEnvironment.coordinationRoot).toBe(
-				realpathSync(coordinationRoot),
+				secondEnvironment.coordinationRoot,
 			);
 			expect(secondEnvironment.coordinationRoot).toBe(
-				realpathSync(coordinationRoot),
+				realpathSync(firstEnvironment.coordinationRoot),
 			);
 
 			const first = acquireReviewExecutionLease(

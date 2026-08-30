@@ -9,8 +9,10 @@
     "test:repo-environment": "node scripts/test-repo-environment.mjs",
     "generate:manifest": "node scripts/generate-goldband-surfaces.mjs",
     "check:manifest": "node scripts/generate-goldband-surfaces.mjs --check",
+    "check:review-contracts": "bun run scripts/check-review-contracts.ts",
     "test:capability-invocations": "node scripts/test-capability-invocations.mjs",
     "test:workflow-contracts": "node scripts/test-workflow-contracts.mjs",
+    "test:decision-guidance": "bash scripts/verify-decision-guidance.sh",
     "lint:style": "node scripts/check-code-style.mjs",
     "lint:style:staged": "node scripts/check-code-style.mjs --staged",
     "test:hook-router": "node hooks/scripts/tools/replay-hook-router.js && node scripts/test-claude-hook-router-review-readonly.mjs && node scripts/test-codex-high-risk-policy.mjs && node scripts/test-codex-hook-router.mjs && node scripts/test-workflow-trigger-routing.mjs && node scripts/test-hook-noise-policy.mjs && node scripts/test-claude-config-verification-runtime.mjs",
@@ -24,6 +26,7 @@
     "test:style-gate": "node scripts/test-code-style-gate.mjs && node scripts/test-style-gate-install.mjs && node scripts/test-goldband-loop-source-gates.mjs",
     "test:auto-update": "node scripts/test-auto-update.mjs",
     "test:project-style-gate": "node scripts/test-goldband-project-style-gate.mjs",
+    "test:sandbox-image-lifecycle": "node scripts/test-sandbox-image-lifecycle.mjs",
     "test:codex-portability": "node scripts/test-codex-portability.mjs",
     "sync:app-support": "node scripts/sync-app-support-assets.mjs && node scripts/build-claude-app-adapters.mjs",
     "test:app-support": "node scripts/check-app-support.mjs"

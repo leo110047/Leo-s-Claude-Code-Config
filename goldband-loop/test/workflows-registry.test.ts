@@ -169,7 +169,8 @@ describe('workflow registry', () => {
       expect(cells[1].replaceAll('`', '')).toBe(entry.action);
       expect(cells[3].replaceAll('`', '')).toBe(entry.runtimeOwner ?? '—');
       expect(cells[4].replaceAll('`', '')).toBe(entry.integrationStatus === 'integrated' ? entry.entrypointType : 'registered-only');
-      expect(cells[5].replaceAll('`', '')).toBe(entry.riskLevel);
+      expect(cells[5].replaceAll('`', '')).toBe(entry.dispatch);
+      expect(cells[6].replaceAll('`', '')).toBe(entry.riskLevel);
     }
   });
 

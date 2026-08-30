@@ -592,14 +592,24 @@ export function materializeReviewUntrackedFile(
 		return skippedReviewFile(relative, `secret-like content (${secretMatch})`);
 	}
 	state.includedBytes += content.length;
-	return [
-		`diff --git a/${relative} b/${relative}`,
+	const leftPath = gitPatchPath("a", relative);
+	const rightPath = gitPatchPath("b", relative);
+	const header = [
+		`diff --git ${leftPath} ${rightPath}`,
 		`new file mode ${gitRegularFileMode(stat)}`,
 		"--- /dev/null",
-		`+++ b/${relative}`,
-		`@@ -0,0 +1,${text.split("\n").length} @@`,
-		text.split("\n").map((line) => `+${line}`).join("\n"),
-	].join("\n");
+		`+++ ${rightPath}`,
+	];
+	if (text.length === 0) return `${header.join("\n")}\n`;
+	const hasTrailingNewline = text.endsWith("\n");
+	const lines = (hasTrailingNewline ? text.slice(0, -1) : text).split("\n");
+	const body = lines.map((line) => `+${line}`).join("\n");
+	return `${[
+		...header,
+		`@@ -0,0 +1,${lines.length} @@`,
+		body,
+		...(hasTrailingNewline ? [] : ["\\ No newline at end of file"]),
+	].join("\n")}\n`;
 }
 
 function verificationReceiptPath(
@@ -974,14 +984,27 @@ function gitRegularFileMode(stat: fs.Stats): "100644" | "100755" {
 }
 
 function skippedReviewFile(relative: string, reason: string): string {
+	const leftPath = gitPatchPath("a", relative);
+	const rightPath = gitPatchPath("b", relative);
 	return [
-		`diff --git a/${relative} b/${relative}`,
+		`diff --git ${leftPath} ${rightPath}`,
 		"new file mode 100644",
 		"--- /dev/null",
-		`+++ b/${relative}`,
+		`+++ ${rightPath}`,
 		"@@ -0,0 +1,1 @@",
 		`+[[review/code skipped untracked file: ${reason}]]`,
 	].join("\n");
+}
+
+function gitPatchPath(side: "a" | "b", relative: string): string {
+	const value = `${side}/${relative}`;
+	if (!/[\t\n\r"\\]/.test(value)) return value;
+	return `"${value
+		.replaceAll("\\", "\\\\")
+		.replaceAll('"', '\\"')
+		.replaceAll("\t", "\\t")
+		.replaceAll("\n", "\\n")
+		.replaceAll("\r", "\\r")}"`;
 }
 
 function commandArray(value: string[]): string[] {

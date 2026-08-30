@@ -1,23 +1,28 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
 	copyFileSync,
 	cpSync,
 	chmodSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
+	readFileSync,
 	renameSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { AUTO_ALLOWED_BROWSER_SESSION_COMMANDS } from "../lib/browser-runtime-contract";
+import { writeDistributionManifest } from "../../scripts/lib/workflow-distribution-contract.mjs";
 
 const REVIEW_ASSETS = [
 	"shared-rubric.md",
 	"findings-schema.md",
 	"checklist.md",
+	"evidence-omission.md",
 	"design-checklist.md",
 	"greptile-triage.md",
 	"TODOS-format.md",
@@ -181,6 +186,15 @@ export function installCodexReviewLauncher(
 	const bunPath = requireAbsolute("bunPath", options.bunPath);
 	const codexPath = requireAbsolute("codexPath", options.codexPath);
 	const browserPath = requireAbsolute("browserPath", options.browserPath);
+	const reviewReceiptKeyFile = join(dirname(runtimeRoot), "review-receipt.key");
+	const marker: CodexReviewLauncherMarker = {
+		schemaVersion: 1,
+		argvPrefix: [bunPath, join(runtimeRoot, "bin", "goldband.js")],
+		ruleFile,
+		runtimeRoot,
+	};
+	const ruleContents = renderCodexReviewRule(marker);
+	const markerContents = `${JSON.stringify(marker, null, 2)}\n`;
 
 	if (pathIsWithin(sourceRoot, runtimeRoot)) {
 		throw new Error(
@@ -200,6 +214,7 @@ export function installCodexReviewLauncher(
 
 	const launcherEntry = join(sourceRoot, "bin", "goldband.ts");
 	const runtimeEntry = join(sourceRoot, "workflows", "run.ts");
+	const reviewContractEntry = join(sourceRoot, "workflows", "review-contract-cli.ts");
 	const browserServerEntry = join(sourceRoot, "browse", "src", "server.ts");
 	const rulesResolverSource = join(
 		sourceRoot,
@@ -213,6 +228,7 @@ export function installCodexReviewLauncher(
 	for (const required of [
 		launcherEntry,
 		runtimeEntry,
+		reviewContractEntry,
 		browserServerEntry,
 		rulesResolverSource,
 		join(rulesSource, "manifest.json"),
@@ -223,11 +239,17 @@ export function installCodexReviewLauncher(
 	const stageRoot = `${runtimeRoot}.tmp-${process.pid}`;
 	const backupRoot = `${runtimeRoot}.backup`;
 	mkdirSync(dirname(runtimeRoot), { recursive: true });
+	ensureReviewReceiptAuthorityKey(reviewReceiptKeyFile);
 	recoverInterruptedRuntimeSwap(runtimeRoot, backupRoot);
 	rmSync(stageRoot, { recursive: true, force: true });
 	try {
 		bundle(bunPath, launcherEntry, join(stageRoot, "bin", "goldband.js"));
 		bundle(bunPath, runtimeEntry, join(stageRoot, "workflows", "run.ts"));
+		bundle(
+			bunPath,
+			reviewContractEntry,
+			join(stageRoot, "workflows", "review-contract-cli.ts"),
+		);
 		const stagedBrowserExecutable = join(stageRoot, "browse", "browse");
 		mkdirSync(dirname(stagedBrowserExecutable), { recursive: true });
 		copyFileSync(browserPath, stagedBrowserExecutable);
@@ -257,6 +279,8 @@ export function installCodexReviewLauncher(
 			`${JSON.stringify(
 				{
 					schemaVersion: 2,
+					runtimeHost: "codex",
+					reviewHostEvidenceLane: "macos-review-contract-host",
 					codexExecutable: codexPath,
 					browserExecutable: join(runtimeRoot, "browse", "browse"),
 					browserServerScript: join(
@@ -272,12 +296,19 @@ export function installCodexReviewLauncher(
 						"rules-resolver.js",
 					),
 					rulesDirectory: join(runtimeRoot, "review", "rules"),
+					reviewReceiptKeyFile,
+					reviewReceiptAuthorityRoot: dirname(runtimeRoot),
+					reviewReceiptStore: join(dirname(runtimeRoot), "review-receipts"),
 				},
 				null,
 				2,
 			)}\n`,
 			{ mode: 0o600 },
 		);
+		writeDistributionManifest(stageRoot, sourceRoot, [
+			{ role: "codex-execpolicy-rule", path: ruleFile, contents: ruleContents, mode: 0o600 },
+			{ role: "workflow-launcher-marker", path: markerFile, contents: markerContents, mode: 0o600 },
+		]);
 
 		if (existsSync(runtimeRoot)) renameSync(runtimeRoot, backupRoot);
 		options.afterRuntimeBackup?.();
@@ -291,15 +322,9 @@ export function installCodexReviewLauncher(
 		throw error;
 	}
 
-	const marker: CodexReviewLauncherMarker = {
-		schemaVersion: 1,
-		argvPrefix: [bunPath, join(runtimeRoot, "bin", "goldband.js")],
-		ruleFile,
-		runtimeRoot,
-	};
 	for (const [destination, contents] of [
-		[ruleFile, renderCodexReviewRule(marker)],
-		[markerFile, `${JSON.stringify(marker, null, 2)}\n`],
+		[ruleFile, ruleContents],
+		[markerFile, markerContents],
 	] as const) {
 		mkdirSync(dirname(destination), { recursive: true });
 		const temporary = `${destination}.tmp-${process.pid}`;
@@ -308,6 +333,27 @@ export function installCodexReviewLauncher(
 	}
 
 	return marker;
+}
+
+function ensureReviewReceiptAuthorityKey(file: string): void {
+	if (!existsSync(file)) {
+		writeFileSync(file, `${randomBytes(32).toString("hex")}\n`, {
+			mode: 0o600,
+			flag: "wx",
+		});
+		return;
+	}
+	const stat = lstatSync(file);
+	if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) {
+		throw new Error(`review receipt authority key has unsafe permissions: ${file}`);
+	}
+	if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+		throw new Error(`review receipt authority key has the wrong owner: ${file}`);
+	}
+	const value = readFileSync(file, "utf8").trim();
+	if (!/^[a-f0-9]{64}$/.test(value)) {
+		throw new Error(`review receipt authority key is invalid: ${file}`);
+	}
 }
 
 function parseArgs(args: string[]): CodexReviewLauncherInstallOptions {

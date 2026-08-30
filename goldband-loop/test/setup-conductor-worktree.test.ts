@@ -8,6 +8,64 @@ const ROOT = path.resolve(import.meta.dir, '..');
 const SETUP_SCRIPT = path.join(ROOT, 'setup');
 
 describe('setup: Conductor worktree guard', () => {
+  test('same-directory Claude install provisions receipt authority before returning', () => {
+    const content = fs.readFileSync(SETUP_SCRIPT, 'utf-8');
+    const branch = content.slice(
+      content.indexOf('if [ ! -L "$claude_goldband" ] && same_dir_path'),
+      content.indexOf('if [ -L "$claude_goldband" ]', content.indexOf('if [ ! -L "$claude_goldband" ] && same_dir_path')),
+    );
+    expect(branch).toContain('create_internal_workflow_docs "$claude_goldband"');
+    expect(branch).toContain('provision-review-receipt-authority.ts');
+    expect(branch.indexOf('provision-review-receipt-authority.ts')).toBeLessThan(
+      branch.indexOf('return 0'),
+    );
+  });
+
+  test('same-directory workflow docs preserve the executable source owner', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-workflow-root-'));
+    try {
+      const source = path.join(tmp, 'skills', 'goldband');
+      const workflows = path.join(source, 'workflows');
+      fs.mkdirSync(workflows, { recursive: true });
+      fs.writeFileSync(path.join(workflows, 'run.ts'), '// executable owner\n');
+      fs.writeFileSync(path.join(workflows, 'review.ts'), '// executable owner\n');
+      const helper = path.join(ROOT, 'scripts', 'prepare-internal-workflow-root.sh');
+      const sameDir = spawnSync('bash', [helper, source, source], { encoding: 'utf8' });
+      expect(sameDir.status, sameDir.stderr).toBe(0);
+      expect(fs.readFileSync(path.join(workflows, 'run.ts'), 'utf8')).toContain('executable owner');
+      expect(fs.readFileSync(path.join(workflows, 'review.ts'), 'utf8')).toContain('executable owner');
+
+      const installed = path.join(tmp, 'installed', 'goldband');
+      fs.mkdirSync(path.join(installed, 'workflows'), { recursive: true });
+      fs.writeFileSync(path.join(installed, 'workflows', 'stale.ts'), '// stale\n');
+      const separate = spawnSync('bash', [helper, installed, source], { encoding: 'utf8' });
+      expect(separate.status, separate.stderr).toBe(0);
+      expect(fs.existsSync(path.join(installed, 'workflows', 'stale.ts'))).toBe(false);
+
+      const installedAlias = path.join(tmp, 'installed-alias');
+      fs.symlinkSync(installed, installedAlias);
+      fs.writeFileSync(path.join(installed, 'workflows', 'stale-again.ts'), '// stale\n');
+      const canonical = spawnSync('bash', [helper, installedAlias, source], { encoding: 'utf8' });
+      expect(canonical.status, canonical.stderr).toBe(0);
+      expect(fs.existsSync(path.join(installed, 'workflows', 'stale-again.ts'))).toBe(false);
+
+      const realTemporaryRoot = fs.realpathSync(os.tmpdir());
+      const traversalToRoot = `${realTemporaryRoot}/${'../'.repeat(
+        realTemporaryRoot.split(path.sep).filter(Boolean).length,
+      )}`;
+      const rootTraversal = spawnSync('bash', [
+        helper,
+        traversalToRoot,
+        source,
+      ], { encoding: 'utf8' });
+      expect(rootTraversal.status).toBe(2);
+      expect(rootTraversal.stderr).toContain('canonical filesystem root');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+
   test('setup contains the real-dir guard before the symlink-or-copy into ~/.claude/skills/', () => {
     const content = fs.readFileSync(SETUP_SCRIPT, 'utf-8');
     const guardIdx = content.indexOf('_SKIP_CLAUDE_REGISTER=0');

@@ -5,39 +5,39 @@ Formal interface: `$goldband <capability> <action>`. Old workflow names are not 
 
 Public inventory: 20 actions. Experimental actions are excluded from routing and activation hints.
 
-| Capability | Action | Outcome | Runtime owner | Runtime | Risk |
-| --- | --- | --- | --- | --- | --- |
-| `review` | `code` | Review a code diff. | `review-runtime` | `typed` | `medium` |
-| `review` | `security` | Review security and trust boundaries. | `prompt-contract-dispatch` | `compatibility` | `medium` |
-| `investigate` | `code` | Investigate code or runtime behavior. | `prompt-contract-dispatch` | `compatibility` | `medium` |
-| `qa` | `app` | Run product QA and record evidence. | `qa-runtime` | `typed` | `medium` |
-| `plan` | `create` | Create a versioned Work Map for tracked work. | `work-map-store` | `typed` | `low` |
-| `plan` | `sync` | Preview, inspect, or synchronize a Work Map tracker projection. | `tracker-runtime` | `typed` | `high` |
-| `browser` | `session` | Use the persistent browser for interactive work. | `browse` | `typed` | `medium` |
-| `design` | `consult` | Define a design direction and system. | `design-decision-store` | `typed` | `low` |
-| `safety` | `guard` | Enable careful-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `low` |
-| `safety` | `freeze` | Enable read-only freeze-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `low` |
-| `safety` | `unfreeze` | Disable freeze-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `low` |
-| `context` | `save` | Save current working context. | `context-checkpoint-store` | `typed` | `low` |
-| `context` | `restore` | Restore saved working context. | `context-checkpoint-store` | `typed` | `low` |
-| `context` | `retro` | Summarize recent work and lessons. | `prompt-contract-dispatch` | `compatibility` | `low` |
-| `knowledge` | `recall` | Inspect Goldband learnings and knowledge. | `goldband-knowledge` | `typed` | `low` |
-| `benchmark` | `workflow` | Benchmark product or workflow performance. | `benchmark-evidence-aggregator` | `typed` | `low` |
-| `document` | `generate` | Audit documentation coverage and prepare documentation artifacts. | `documentation-audit` | `typed` | `low` |
-| `system` | `health` | Inspect Goldband health and installation state. | `goldband-installation` | `typed` | `low` |
-| `system` | `upgrade` | Upgrade Goldband. | `goldband-setup-gate` | `typed` | `high` |
-| `ios` | `qa` | Run iOS QA. | `ios-qa-evidence` | `typed` | `high` |
+| Capability | Action | Outcome | Runtime owner | Runtime | Dispatch | Risk |
+| --- | --- | --- | --- | --- | --- | --- |
+| `review` | `code` | Evidence-first code review with authoritative lineage and scoped closure. | `review-runtime` | `typed` | `trusted-launcher` | `medium` |
+| `review` | `security` | Review security and trust boundaries. | `prompt-contract-dispatch` | `compatibility` | `prompt-contract` | `medium` |
+| `investigate` | `code` | Investigate code or runtime behavior. | `prompt-contract-dispatch` | `compatibility` | `prompt-contract` | `medium` |
+| `qa` | `app` | Run product QA and record evidence. | `qa-runtime` | `typed` | `host-runtime` | `medium` |
+| `plan` | `create` | Create a versioned Work Map for tracked work. | `work-map-store` | `typed` | `trusted-launcher` | `low` |
+| `plan` | `sync` | Preview, inspect, or synchronize a Work Map tracker projection. | `tracker-runtime` | `typed` | `trusted-launcher` | `high` |
+| `browser` | `session` | Use the persistent browser for interactive work. | `browse` | `typed` | `trusted-launcher` | `medium` |
+| `design` | `consult` | Define a design direction and system. | `design-decision-store` | `typed` | `host-runtime` | `low` |
+| `safety` | `guard` | Enable careful-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `host-runtime` | `low` |
+| `safety` | `freeze` | Enable read-only freeze-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `host-runtime` | `low` |
+| `safety` | `unfreeze` | Disable freeze-mode for a Claude session. | `claude-hook-mode-state` | `typed` | `host-runtime` | `low` |
+| `context` | `save` | Save current working context. | `context-checkpoint-store` | `typed` | `host-runtime` | `low` |
+| `context` | `restore` | Restore saved working context. | `context-checkpoint-store` | `typed` | `host-runtime` | `low` |
+| `context` | `retro` | Summarize recent work and lessons. | `prompt-contract-dispatch` | `compatibility` | `prompt-contract` | `low` |
+| `knowledge` | `recall` | Inspect Goldband learnings and knowledge. | `goldband-knowledge` | `typed` | `host-runtime` | `low` |
+| `benchmark` | `workflow` | Benchmark product or workflow performance. | `benchmark-evidence-aggregator` | `typed` | `host-runtime` | `low` |
+| `document` | `generate` | Audit documentation coverage and prepare documentation artifacts. | `documentation-audit` | `typed` | `host-runtime` | `low` |
+| `system` | `health` | Inspect Goldband health and installation state. | `goldband-installation` | `typed` | `host-runtime` | `low` |
+| `system` | `upgrade` | Upgrade Goldband. | `goldband-setup-gate` | `typed` | `host-runtime` | `high` |
+| `ios` | `qa` | Run iOS QA. | `ios-qa-evidence` | `typed` | `host-runtime` | `high` |
 
 ## Experimental inventory
 
 These actions are tracked for implementation, but are not discoverable or runnable. They cannot claim a runtime owner before integration.
 
-| Capability | Action | Outcome | Runtime owner | Runtime | Risk |
-| --- | --- | --- | --- | --- | --- |
-| `release` | `land` | Merge, deploy, and verify. | — | `registered-only` | `high` |
-| `release` | `setup` | Configure deployment. | — | `registered-only` | `high` |
-| `knowledge` | `setup` | Configure GBrain integration. | — | `registered-only` | `high` |
-| `knowledge` | `sync` | Synchronize GBrain knowledge. | — | `registered-only` | `high` |
+| Capability | Action | Outcome | Runtime owner | Runtime | Dispatch | Risk |
+| --- | --- | --- | --- | --- | --- | --- |
+| `release` | `land` | Merge, deploy, and verify. | — | `registered-only` | `registered-only` | `high` |
+| `release` | `setup` | Configure deployment. | — | `registered-only` | `registered-only` | `high` |
+| `knowledge` | `setup` | Configure GBrain integration. | — | `registered-only` | `registered-only` | `high` |
+| `knowledge` | `sync` | Synchronize GBrain knowledge. | — | `registered-only` | `registered-only` | `high` |
 
 ## High-risk safety gates
 

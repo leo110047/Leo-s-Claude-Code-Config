@@ -1351,9 +1351,11 @@ Implementation contract:
   same-directory replacement, and atomically renames it over the stale lease.
   Contenders never unlink a lease they merely observed earlier. The owner
   releases its token-matched lease in a `finally` block.
-- Durable and ephemeral evidence both use a separate stable, owner-only
-  coordination root under the canonical OS temp directory, so evidence-root
-  aliases and independent fallback roots still contend on the same lease.
+- Durable evidence owns an owner-only coordination directory inside its
+  authoritative state root. Ephemeral evidence uses an owner-specific
+  coordination directory in the common parent of its runtime-created state
+  roots, so independent fallback roots still contend on the same lease without
+  re-probing an unauthorized OS temp path.
 - Relative `--diff-file` scopes are canonicalized from the invocation directory,
   matching the runtime's actual diff-file resolution.
 - Scope flags are parsed into the runtime's effective structured options and
@@ -1387,9 +1389,9 @@ Implementation contract:
 Assumptions:
 
 - Public review execution goes through the installed Goldband launcher.
-- The durable state root and fallback coordination root are private to the local
-  user, and process liveness is a sufficient stale-lease signal for local
-  duplicate suppression.
+- The durable state root and the common parent used for ephemeral coordination
+  are private to the local user, and process liveness is a sufficient
+  stale-lease signal for local duplicate suppression.
 - A user who explicitly selects different scopes intends separate reviews.
 
 Consequences:
@@ -1656,3 +1658,455 @@ Failure signals:
 - Finish checks only ticket status and ignores artifact provenance.
 - Full command output or secret-like values are persisted as summaries.
 - Claude and Codex installed runtimes expose different evidence contracts.
+
+## 2026-08-23: Claude Review Cost Caps Follow the Active Billing Authority
+
+Decision: do not apply estimated-dollar limits to subscription-authenticated
+Claude reviews. Preserve an explicit bounded cap for metered credentials.
+
+Implementation contract:
+
+- Claude's documented environment credential precedence is applied before the
+  `claude auth status --json` projection. Higher-priority cloud-provider,
+  including Claude Platform on AWS, bearer-token, and API-key credentials stay
+  metered even when a lower-priority OAuth token is present. The adapter retains
+  only `loggedIn`, `authMethod`, and `apiProvider`; identity fields and
+  credential values are neither logged nor persisted.
+- `claude.ai` and `oauth_token` are subscription modes. Goldband omits
+  `--max-budget-usd` because locally estimated API-equivalent dollars are not
+  the subscription quota owner.
+- `api_key`, `api_key_helper`, and `third_party` are metered modes. Goldband
+  applies a `$3.00` default safety cap and accepts a validated per-run
+  `--review-claude-max-budget-usd` override.
+- Unknown, unauthenticated, inconsistent, or malformed auth state fails before
+  model dispatch. Goldband never guesses that a potentially paid call is safe.
+- The resolved billing mode and cap are written to host telemetry. Subscription
+  telemetry drops API-equivalent `costUsd`; metered telemetry retains it for
+  paid-run attribution. Raw auth status and account identity are not retained.
+- A budget-exhausted result remains an incomplete review. It cannot be rendered
+  as `No findings`, and the non-streaming JSON contract cannot claim that
+  partial findings were recovered.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep one hard-coded cap for every Claude login | Subscription quota is not denominated by the local API-equivalent estimate, and the old `$0.50` cap repeatedly terminated valid reviews. |
+| Remove the cap for every Claude login | Silently widens paid API, gateway, and cloud-provider side effects. |
+| Infer subscription mode only from absent environment variables | `apiKeyHelper` and provider configuration can be active without a visible API-key variable. |
+| Use `subscriptionType` as the authority | Claude CLI can report a valid Claude.ai auth method while the subscription field is absent or stale. |
+
+Failure signals:
+
+- A subscription review receives `--max-budget-usd`.
+- A metered review launches without a validated cap.
+- Auth status cannot be classified but model dispatch continues.
+- Account email, organization, token, or raw auth JSON appears in telemetry.
+- Budget exhaustion is reported as a completed review or `No findings`.
+
+## 2026-08-25: Review Is Evidence-First With Conditional Scoped Closure
+
+Decision: make typed runtime evidence the authority for reproducible behavior
+claims, keep one semantic host for omission discovery, and allow one separate
+closure host only after findings cause a candidate change.
+
+Implementation contract:
+
+- A project-owned `goldband.review-evidence.json` declares stable behavior cell
+  IDs, expected behavior, risk, disposition, provider owner, applicability,
+  sandbox, network, timeout, output, replay, and evidence-level contracts.
+- The runtime validates schemas and reciprocal provider/cell relationships
+  before model dispatch. Every operation receives a newly materialized read-only
+  snapshot; the runtime uses a default-deny read/write/network Seatbelt profile
+  with Apple's common system process baseline plus explicit candidate, runner-state,
+  sealed runtime-projection, and projected dependency roots. A Mach-O runtime with
+  non-system links is copied into a private projection; Goldband rewrites only its
+  attested non-system install names, ad-hoc signs the copies, sanitizes OpenSSL config
+  loading to `/dev/null`, and attests the final executable bytes. The sandbox cannot
+  read the original package tree or write the projection. Goldband explicitly
+  re-denies the baseline's exact syslog, Mach service, and shared-memory channels in
+  addition to broad network, system-socket, and Mach lookup denial,
+  so commands cannot use the local system log as an output side channel. The baseline
+  does not grant arbitrary HOME, workspace, or temporary-directory reads. The runtime
+  compares pre/post snapshot digests, gives it
+  unique HOME/TMP state that is removed after execution,
+  bounds time and output, and persists fresh
+  records bound to repository, base, candidate, scope, behavior, command,
+  owner, environment, timing, exit status, and output digest.
+- Regression providers require base/exact-nonzero RED and candidate/zero GREEN;
+  an unspecified non-zero exit is invalid and sandbox denial is runtime-incomplete.
+  Property/fuzz providers require a seed, iteration budget, and replay command.
+  High-risk unsupported cells and incomplete runtime evidence fail closed.
+- The initial semantic host receives the complete candidate diff exactly once,
+  plus bounded behavior and evidence projections and applicable review Rules.
+  Raw logs, runner policy, leases, timeout mechanics, and artifact management
+  stay in code.
+- Runtime normalization owns finding IDs, deduplication, evidence binding,
+  classification, and blocking eligibility. Only deterministic runtime findings
+  can produce a `verified-failure`; the semantic host cannot promote a concern
+  by citing a failed record, and unrelated record IDs are removed. Unbound risks are
+  `semantic-concern`, and gaps or unavailable runtime stay distinct.
+- Initial artifacts retain the diff for deterministic local delta derivation,
+  but host telemetry never stores prompt text. Reports and Work Map artifacts
+  bind evidence completeness, record digests, phase, and host-call count.
+- Every initial artifact is issued with a separate canonical installed-runtime
+  receipt binding its complete serialized payload, findings, evidence,
+  timestamps, candidate, behavior contract, and standalone or Work Map scope.
+  Work Map scope also binds map revision, reviewed subject, and claim attempt;
+  closure requires authoritative requested-changes readback from the immediately
+  following repair attempt. Caller-authored, edited, copied-across-scope,
+  prior-attempt, or receipt-less JSON has no closure authority.
+- Closure receipt consumption is an atomic, runtime-owned at-most-once claim made
+  only after repaired candidate binding and Work Map causality validation. Once
+  claimed, a crash, evidence failure, or host failure leaves the receipt spent;
+  retry requires a new initial review. This deliberately favors fail-closed
+  single-use authority over ambiguous crash recovery or concurrent replay.
+- The receipt authority protects against reviewed candidate code, model output,
+  and caller-provided artifact JSON. As elsewhere in the managed-worktree threat
+  model, the same-permission host user and installed Goldband runtime are trusted;
+  resisting a malicious same-user process would require a privileged helper or
+  an OS-backed key unavailable to that process.
+- Bounded regular untracked files omitted from the semantic diff for secret or
+  binary safety remain path/content-digest-bound. Their exact bytes enter only
+  the isolated executable snapshot. Unsafe, escaping, or oversized redacted
+  files fail closed before provider execution.
+- Closure is a separate invocation using the initial artifact and repaired
+  candidate. Runtime records both behavior-contract digests, derives a compact
+  multi-hunk repair delta that omits unchanged middle regions, includes newly
+  disclosed or modified cells, reruns only affected
+  providers, rejects non-original finding IDs, and accepts only
+  `closed`, `still-open`, `direct-regression`, or `evidence-incomplete`.
+- Closure evidence must intersect the original finding's authorized behavior
+  cells. Persisted records are fully validated against provider/disposition
+  contracts, and stored completeness is recomputed rather than trusted.
+- `closed` requires fresh passing rerun evidence; an original verified failure
+  specifically requires its failed operation to rerun successfully. Work Map
+  artifacts retain bounded evidence records so finish can recompute their digest.
+- A Work Map transition exception does not by itself authorize artifact cleanup.
+  The review runtime first triggers transaction recovery and reads back the predicted
+  transition revision plus exact review reference. A committed reference is preserved
+  and treated as success; cleanup occurs only when readback proves the ticket remains
+  at the pre-transition implemented revision. Ambiguous readback fails closed while
+  preserving artifacts and receipts that a recoverable transaction may reference.
+- The unchanged-operation check binds seed/iterations, source executable content,
+  transitive non-system runtime-library alias/target/content attestation, transformed
+  projection content/mode/tool identity and sanitized runtime environment,
+  runner policy/platform, dependency locks and package metadata, and projected
+  command shims. Runtime libraries are re-attested after execution; drift makes
+  the record incomplete and not fresh. A changed execution identity requires a
+  new initial review.
+- A zero-finding initial review cannot launch closure. Each invocation has a
+  one-host-call budget; closure receives zero bytes of the unchanged full
+  original diff and cannot create a general findings inventory.
+
+Assumptions:
+
+- Projects can own a small explicit behavior/evidence manifest instead of one
+  universal command list.
+- macOS Seatbelt is the current local evidence runner boundary. Other platforms
+  must add an equivalent deny-network snapshot runner before real review can
+  claim parity.
+- External network, credential, paid, shared-environment, device, and
+  production evidence needs a separate operation-specific runner and typed
+  authorization; the local runner remains deny-only.
+
+Consequences:
+
+- Reproducible checks run before semantic token spend, and the reviewer focuses
+  on omissions rather than redoing deterministic work.
+- Existing projects must add a valid evidence manifest before real semantic
+  review; missing configuration is an explicit blocked state.
+- Initial review remains one full-diff host call. A repair may add one bounded
+  closure call without hidden specialists or full-diff resend.
+- Fixture and local results cannot be mislabeled as live, device, provider, or
+  production proof.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Keep prose evidence fields and strengthen the prompt | A model cannot prove commands ran, replay failures, or enforce candidate freshness. |
+| Let the reviewer choose and run arbitrary commands | It weakens read-only isolation, hides side effects, and wastes semantic tokens on deterministic work. |
+| Automatically infer one universal test command | Projects own different contracts; guessed checks create false confidence and fake portability. |
+| Re-run the full review after every repair | It resends unchanged content, reopens the findings inventory, and hides a second full review cost. |
+| Treat every plausible concern as a blocker | Unreproduced risk is useful, but presenting it as verified failure corrupts the evidence model. |
+
+Failure signals:
+
+- A semantic host starts before matrix, provider, evidence, freshness, and
+  provenance validation finish.
+- Operations share a writable candidate snapshot or omit pre/post tree attestation.
+- Operations share HOME/TMP state or can read a previous operation's residue.
+- An evidence command can read content outside its candidate, runner state,
+  sealed runtime projection, or projected dependencies.
+- A dynamically linked runtime can read its original host package tree, mutate its
+  projection, or execute transformed bytes that are absent from the command identity.
+- A prompt-redacted untracked file disappears from the candidate binding or
+  executable snapshot.
+- A provider satisfies a cell without reciprocal manifest ownership.
+- A RED operation accepts an arbitrary non-zero process or sandbox failure.
+- A semantic finding is promoted to verified failure by citing a failed record.
+- A semantic finding gains deterministic authority by spoofing a runtime-owned category.
+- Closure accepts passing evidence unrelated to the original finding cells.
+- Artifact reuse trusts a forged disposition record or stored completeness.
+- Closure accepts an initial artifact without matching runtime-state readback,
+  or reuses a standalone receipt for a Work Map transition.
+- A verified blocker lacks fresh replayable candidate-bound failed evidence.
+- A fixture or local record is described as live, device, or production proof.
+- Closure runs after zero findings, accepts a new finding ID, resends the full
+  original diff, or invokes more than one host.
+- Raw logs or runtime-owned control prose re-enter the semantic prompt.
+- Work Map finish accepts a version-2 review artifact without its evidence
+  chain.
+
+Revisit triggers:
+
+- Linux or Windows gains an equivalent tested local snapshot and network
+  boundary.
+- A reusable external evidence runner can verify typed authorization and
+  concrete provider/device/production readback without widening local review.
+- Stable project behavior contracts can be generated from another authoritative
+  artifact without losing owner review or explicit dispositions.
+
+## ADR: Review contract freshness and installed distribution identity
+
+Status: Accepted
+
+Decision:
+
+- Keep one review authority. Add `check:review-contracts` to the existing root
+  test and CI graph instead of creating a parallel review, approval, receipt, or
+  release workflow.
+- Require every reusable provider to declare `persistent` lifecycle, explicit
+  path-scoped or reasoned-global applicability, and an execution context with
+  one sandbox owner. Repository manifests reject `transition` providers and
+  persistent base/nonzero RED operations.
+- Bind transition evidence to the exact repository, base, candidate, scope, and
+  normalized operation contract. Explicit transition manifests and persisted
+  initial artifacts use that validator in the production ingestion path; a
+  successor candidate cannot inherit them.
+- Use applicable providers to derive the effective behavior-cell set for
+  completeness. Cells owned only by unrelated path scopes do not become
+  coverage gaps; ownerless explicit dispositions remain global.
+- Return a typed partial record before dispatch when a provider-owned Seatbelt
+  suite cannot run inside the sealed evidence runner. Only the named macOS host
+  lane runs that boundary; partial results have no completion or closure
+  authority.
+- Derive one installer-owned source-input digest from all setup/build/config,
+  generated contracts, launcher/runtime sources, rules, skills, migrations,
+  review/QA/design assets, and browser/PDF bundles read or copied by setup. The
+  trusted install stores a separate artifact inventory and digest over runtime
+  bytes plus the launcher marker and execpolicy rule written beside it.
+- Declare dispatch per canonical action as `trusted-launcher`, `host-runtime`,
+  `prompt-contract`, or `registered-only`. Status and temp-install inventory run
+  bounded fake-handler probes through the same production router used by the
+  explicitly trusted launcher set.
+
+Why:
+
+Local gates previously proved only their own files. They could all pass while a
+one-time RED became permanent, empty applicability silently became global,
+nested Seatbelt was misclassified as a regression, or installed runtime bytes
+drifted outside a two-file fingerprint.
+
+Consequences:
+
+- Missing applicability, empty path lists, unexplained global scope, stale RED,
+  unsupported execution context, source drift, artifact corruption, and
+  dispatch mismatch now fail with the owner, actual/expected contract, scope,
+  context, and repair location.
+- A source change and an installed-byte mutation are reported separately.
+- Compatibility actions such as `investigate/code` are not promoted into the
+  fixed launcher, and registered-only actions remain blocked.
+
+## ADR: Runtime-owned review acceptance lineage
+
+Status: Accepted
+
+Decision:
+
+- Persist one HMAC-signed lineage per canonical repository/base/scope under the
+  installed review receipt authority.
+- Compare inherited behavior cells and providers before evidence execution.
+  Existing requirements are monotonic; new cells/providers may be added.
+- Preserve blocking finding IDs and behavior-cell bindings. A successor initial
+  review cannot supersede them; only the authoritative initial artifact may
+  enter scoped closure.
+- Bind lineage to Work Map acceptance when present, selected Rules, base,
+  candidate, scope, and manifest identities.
+- Reject an empty initial candidate before acquiring or writing authoritative
+  lineage state. For standalone reviews, bind lineage identity to normalized
+  changed paths as well as the collection scope. A repair keeps the original
+  path scope and must use its authoritative artifact for closure.
+- Preserve upgrade safety with signed legacy read-through: a broad-scope legacy
+  blocker migrates only when its artifact digest verifies the same changed-path
+  scope. An empty or unrelated legacy artifact remains stored but cannot pollute
+  a different candidate. If the artifact is unavailable, an exact signed
+  candidate-digest match still preserves the blocker; other candidates do not
+  inherit the unverifiable broad scope.
+- Treat non-empty changed-path overlap inside one standalone collection scope as
+  the same unresolved authority for admission purposes. A repair that adds or
+  removes paths cannot start a successor initial review while any original path
+  still overlaps; it must use the authoritative closure artifact.
+- Acquire deterministic sorted per-path locks before overlap discovery and hold
+  them through lineage finalization or release. Overlapping candidates therefore
+  serialize across scan and write, while disjoint candidates keep independent
+  concurrency.
+- Load minimum evidence requirements and waivers only from typed
+  `goldband.review-policy.json` in the base commit. Persist applied waiver IDs in
+  the signed lineage record.
+- Keep verdict dimensions separate. `no-new-findings` alone never grants Work
+  Map verification or completion authority.
+
+Why:
+
+Fresh candidate-bound evidence can still prove a caller-weakened contract. A
+runtime-owned predecessor is required to detect removal, semantic reversal,
+risk/disposition/evidence downgrade, provider replacement, or finding
+detachment before semantic review can wash away an earlier blocker.
+
+Consequences:
+
+- Concurrent equivalent reviews have one lock owner, dead owners are
+  recoverable, and signed records detect state tampering.
+- Legitimate weakening requires a reviewable base-committed waiver; additive
+  coverage remains valid without a waiver.
+- A failed Work Map readback keeps the signed lineage and named artifact, so a
+  later review cannot erase a blocker because a projection transition failed.
+- Block messages name the authoritative run, creation time, lineage update time,
+  changed-path scope, and unresolved finding IDs. They provide the exact
+  `--closure-artifact` instruction when the artifact still verifies; otherwise
+  they name the expected digest and the required restore-then-close recovery.
+
+## ADR: Same-host execution for provider-owned review evidence
+
+Status: Accepted
+
+Decision:
+
+- Keep host evidence inside the existing installed review pass. A trusted
+  runtime on macOS may execute the exact manifest-declared operation through
+  the existing candidate snapshot and one provider-owned Seatbelt boundary.
+- Require the installed private runtime configuration to authorize the named
+  `macos-review-contract-host` lane. Bind the execution identity to repository,
+  base, candidate, scope, manifest, provider, operation, runner context, runtime
+  images, projected dependencies, platform, and architecture.
+- When an outer evidence sandbox is active, the host or lane is unsupported, or
+  installed authority validation fails, emit typed `runtime-incomplete` before
+  dispatch. Never retry without Seatbelt and never consume caller-supplied
+  result JSON.
+- Reuse the existing review receipt, lineage, evidence records, semantic host,
+  and completion decision. Do not create a portable CI artifact or a second
+  handoff authority for this same-host requirement.
+
+Why:
+
+The execution-context preflight correctly prevented nested Seatbelt, but it
+also made semantic review unreachable for every applicable host-bound provider.
+The installed launcher already owns the exact review, candidate materialization,
+receipt, and lineage needed for a same-machine handoff.
+
+Assumptions:
+
+- The installed private runtime configuration and receipt key remain owned by
+  the current user and are not writable by the reviewed candidate.
+- macOS Seatbelt remains the supported local boundary for this lane.
+- Manifest operations remain deny-network and run only against the runtime-owned
+  read-only candidate snapshot plus isolated HOME/TMP roots.
+
+Consequences:
+
+- Supported installed macOS reviews can obtain fresh host-bound records and
+  continue to the single semantic host call.
+- Source runtimes, Linux, unsupported lanes, and outer sealed sandboxes remain
+  incomplete with zero completion authority.
+- Cross-machine CI transport, signing, freshness, and key management remain out
+  of scope until a demonstrated use case requires them.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Permit nested Seatbelt | The host rejects it and treating that failure as evidence would weaken the boundary. |
+| Run the candidate command unsandboxed | It would let a writable manifest expand host access beyond the review contract. |
+| Add a portable signed CI artifact now | Same-host execution closes the current requirement without transport, freshness, or cross-machine key management. |
+| Add a second handoff receipt | The installed review receipt and lineage already own authority; another receipt would create conflicting owners. |
+
+Failure signals:
+
+- A source runtime, wrong host, unsupported lane, or outer evidence sandbox
+  produces a fresh verified host record.
+- A host operation runs without Seatbelt, with network access, or against the
+  writable source worktree.
+- Changing repository, base, candidate, scope, manifest, provider, operation,
+  or runner context leaves the execution identity unchanged.
+- A host result can be edited or reused while its installed receipt still
+  validates.
+
+Revisit triggers:
+
+- A required review operation cannot execute on the same trusted macOS host.
+- Linux or Windows gains an equivalent tested provider-owned sandbox.
+- A demonstrated cross-machine review needs portable attestation, freshness,
+  transport, and key-rotation contracts.
+
+## ADR: Monotonic review contract resolution and local repository store
+
+Status: Accepted
+
+Decision:
+
+- Resolve `authoritative baseline + optional monotonic extension = effective
+  contract` before evidence execution, lineage admission, or semantic host
+  dispatch.
+- Prefer a repository `goldband.review-evidence.json`. Only when it is absent
+  may a runtime-owned per-repository entry become the baseline. A caller-supplied
+  explicit manifest cannot shadow either baseline and must retain every required
+  cell, provider, applicability, risk, disposition, and evidence level.
+- Permit an explicit persistent manifest to be the primary contract only when no
+  repository or stored baseline exists. Mark that source in artifact provenance.
+- Bind store entries to the canonical Git common-directory path and filesystem
+  instance plus a remote-identity snapshot. Worktrees share one entry; moves,
+  path reuse, clones, remote changes, and
+  ambiguous identity require explicit re-import.
+- Expose `review contract inspect`, `import --manifest`, and `remove`. Mutations
+  use private regular files, reject symlinks, write atomically, and never alter
+  the source manifest or repository working tree.
+- Bind baseline, explicit, and effective source identities and digests plus the
+  compatibility identity into the existing review artifact, receipt digest, and
+  lineage path. Do not introduce another acceptance or completion authority.
+
+Why:
+
+The previous explicit-manifest resolver could replace a stronger repository
+contract before a predecessor lineage existed. Repositories without committed
+manifests also had no persistent evidence-backed path. One deterministic resolver
+closes both gaps without inventing generic JSON merge semantics or runtime-guessed
+providers.
+
+Consequences:
+
+- A weaker explicit contract fails before provider execution or host dispatch,
+  including a first review for a new scope.
+- Repository requirements always shadow local convenience state, while `inspect`
+  still reports the shadowed entry.
+- The store remains local-only. It does not synchronize contracts, transport CI
+  authority, infer behavior matrices, or implement semantic-only review.
+- Existing repository manifests remain valid in place and are never migrated or
+  removed automatically.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Let explicit manifests replace the baseline | A new lineage could start with fewer required cells and appear complete. |
+| Automatically copy a missing manifest into the repository | It would mutate user worktrees and turn onboarding into hidden policy state. |
+| Merge arbitrary manifest fragments | It creates ambiguous conflict semantics and a second composition language. |
+| Key the store only by remote URL | Forks, URL reuse, and remote rename can bind the wrong repository. |
+
+Failure signals:
+
+- A weaker explicit manifest reaches an evidence operation or semantic host.
+- A central entry shadows a repository manifest or applies after identity drift.
+- Review creates, moves, edits, or deletes a repository manifest.
+- Artifacts omit any selected baseline, explicit, or effective digest.
