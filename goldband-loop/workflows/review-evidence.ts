@@ -44,6 +44,7 @@ import {
 } from '../lib/evidence-runtime-contract';
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import { stateRoot } from './evidence';
+import type { ReviewContractResolution } from './review-contract-resolution';
 
 const REVIEW_EVIDENCE_SCHEMA_VERSION = 1;
 const MAX_REVIEW_EVIDENCE_OUTPUT_BYTES = 64 * 1024;
@@ -283,6 +284,7 @@ export type ReviewEvidenceBundle = {
   records: ReviewEvidenceRecord[];
   completeness: EvidenceCompleteness;
   manifestSource: string;
+  contractResolution?: ReviewContractResolution;
 };
 
 export type InitialReviewArtifact = {
@@ -435,6 +437,8 @@ export async function executeEvidencePlan(
   manifest: ReviewEvidenceManifest,
   binding: CandidateBinding,
   onlyCellIds?: Set<string>,
+  contractResolution?: ReviewContractResolution,
+  manifestSource?: string,
 ): Promise<ReviewEvidenceBundle> {
   const tempParent = ctx.options.goldbandHome
     ? join(stateRoot(ctx.options), 'tmp')
@@ -523,7 +527,8 @@ export async function executeEvidencePlan(
       binding,
       records,
       completeness,
-      manifestSource: ctx.options.evidenceManifestFile ?? DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+      manifestSource: manifestSource ?? ctx.options.evidenceManifestFile ?? DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+      ...(contractResolution ? { contractResolution } : {}),
     };
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
@@ -677,6 +682,13 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
       stableJson(artifact.evidence.binding) !== stableJson(binding)) {
     throw new Error('initial review artifact evidence binding is mismatched');
   }
+  if (artifact.evidence.contractResolution) {
+    validatePersistedContractResolution(
+      artifact.evidence.contractResolution,
+      binding,
+      manifest,
+    );
+  }
   if (!Array.isArray(artifact.evidence.records)) {
     throw new Error('initial review artifact evidence records are invalid');
   }
@@ -703,6 +715,43 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
     throw new Error('initial review artifact.createdAt is invalid');
   }
   return artifact;
+}
+
+function validatePersistedContractResolution(
+  resolution: ReviewContractResolution,
+  binding: CandidateBinding,
+  manifest: ReviewEvidenceManifest,
+): void {
+  if (
+    resolution.schemaVersion !== 1 ||
+    resolution.compatibilityIdentity !== 'review-evidence-schema-v1/runtime-contract-v1' ||
+    resolution.repositoryIdentity?.kind !== 'git-common-directory' ||
+    typeof resolution.repositoryIdentity.commonDirectory !== 'string' ||
+    !resolution.repositoryIdentity.commonDirectory ||
+    typeof resolution.repositoryIdentity.commonDirectoryInstanceDigest !== 'string' ||
+    typeof resolution.repositoryIdentity.remoteIdentityDigest !== 'string'
+  ) {
+    throw new Error('initial review artifact contract resolution is invalid');
+  }
+  assertSha256(
+    resolution.repositoryIdentity.commonDirectoryInstanceDigest,
+    'initial review artifact contract resolution common directory instance',
+  );
+  assertSha256(
+    resolution.repositoryIdentity.remoteIdentityDigest,
+    'initial review artifact contract resolution remote identity',
+  );
+  assertSha256(resolution.baseline?.digest, 'initial review artifact contract resolution baseline');
+  if (resolution.explicit) {
+    assertSha256(resolution.explicit.digest, 'initial review artifact contract resolution explicit');
+  }
+  assertSha256(resolution.effectiveDigest, 'initial review artifact contract resolution effective');
+  if (
+    resolution.effectiveDigest !== binding.behaviorContractDigest ||
+    resolution.effectiveDigest !== sha256(stableJson(manifest))
+  ) {
+    throw new Error('initial review artifact effective contract digest is mismatched');
+  }
 }
 
 function validatePersistedEvidenceRecord(

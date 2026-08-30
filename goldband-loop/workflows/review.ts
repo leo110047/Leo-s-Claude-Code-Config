@@ -40,7 +40,6 @@ import {
   createCandidateBinding,
   createReviewArtifactPath,
   executeEvidencePlan,
-  loadReviewEvidenceManifest,
   readClosureArtifact,
   reviewLineageAuthority,
   removeInitialReviewRuntimeReceipt,
@@ -53,6 +52,11 @@ import {
   type ReviewEvidenceManifest,
 } from './review-evidence';
 import {
+  closureArtifactResolution,
+  resolveReviewContract,
+} from './review-contract-resolution';
+import {
+  assertReviewContractNotWeaker,
   finalizeClosureReviewLineage,
   finalizeInitialReviewLineage,
   prepareReviewLineage,
@@ -270,11 +274,33 @@ function planEvidence(ctx: WorkflowContext) {
     assertWorkMapClosureCausality(closureArtifact, workMapBinding);
   }
   const defaultManifestExists = existsSync(join(ctx.cwd, 'goldband.review-evidence.json'));
-  const loaded = ctx.options.evidenceManifestFile
-    ? loadReviewEvidenceManifest(ctx, input)
-    : closureArtifact && !defaultManifestExists
-      ? { manifest: closureArtifact.evidence.manifest, source: closureArtifact.evidence.manifestSource }
-      : loadReviewEvidenceManifest(ctx);
+  let loaded;
+  try {
+    loaded = resolveReviewContract(
+      closureArtifact && !defaultManifestExists && !ctx.options.evidenceManifestFile
+        ? { ...ctx, options: { ...ctx.options, mode: 'real' } }
+        : ctx,
+      input,
+    );
+  } catch (error) {
+    const missingContract = error instanceof Error &&
+      error.message.startsWith('review/code evidence contract is required before semantic review');
+    if (!closureArtifact || defaultManifestExists || ctx.options.evidenceManifestFile || !missingContract) {
+      throw error;
+    }
+    loaded = {
+      manifest: closureArtifact.evidence.manifest,
+      source: closureArtifact.evidence.manifestSource,
+      resolution: closureArtifact.evidence.contractResolution ?? closureArtifactResolution(
+        ctx.cwd,
+        closureArtifact.evidence.manifest,
+        closureArtifact.evidence.manifestSource,
+      ),
+    };
+  }
+  if (loaded.baselineManifest) {
+    assertReviewContractNotWeaker(loaded.baselineManifest, loaded.manifest);
+  }
   const binding = createCandidateBinding(ctx.cwd, input, loaded.manifest, ctx.options.base);
   const manifest = loaded.manifest.providers.some((provider) => provider.lifecycle === 'transition')
     ? validateTransitionReviewEvidenceManifest(loaded.manifest, binding)
@@ -320,6 +346,7 @@ function planEvidence(ctx: WorkflowContext) {
     candidateDigest: binding.candidateDigest,
     behaviorContractDigest: binding.behaviorContractDigest,
     manifest,
+    contractResolution: loaded.resolution,
     closureArtifact,
     runId: ctx.runId,
   });
@@ -351,6 +378,7 @@ function planEvidence(ctx: WorkflowContext) {
         runtimeIncompleteCellIds: [],
       },
       manifestSource: loaded.source,
+      contractResolution: loaded.resolution,
     },
     closure,
     hostCallCount: 0,
@@ -372,6 +400,8 @@ async function runEvidence(ctx: WorkflowContext) {
       state.manifest,
       state.evidence.binding,
       onlyCells,
+      state.evidence.contractResolution,
+      state.evidence.manifestSource,
     );
   } catch (error) {
     releaseReviewLineage(state.lineage);

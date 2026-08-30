@@ -214,6 +214,7 @@ export function installCodexReviewLauncher(
 
 	const launcherEntry = join(sourceRoot, "bin", "goldband.ts");
 	const runtimeEntry = join(sourceRoot, "workflows", "run.ts");
+	const reviewContractEntry = join(sourceRoot, "workflows", "review-contract-cli.ts");
 	const browserServerEntry = join(sourceRoot, "browse", "src", "server.ts");
 	const rulesResolverSource = join(
 		sourceRoot,
@@ -227,6 +228,7 @@ export function installCodexReviewLauncher(
 	for (const required of [
 		launcherEntry,
 		runtimeEntry,
+		reviewContractEntry,
 		browserServerEntry,
 		rulesResolverSource,
 		join(rulesSource, "manifest.json"),
@@ -243,6 +245,11 @@ export function installCodexReviewLauncher(
 	try {
 		bundle(bunPath, launcherEntry, join(stageRoot, "bin", "goldband.js"));
 		bundle(bunPath, runtimeEntry, join(stageRoot, "workflows", "run.ts"));
+		bundle(
+			bunPath,
+			reviewContractEntry,
+			join(stageRoot, "workflows", "review-contract-cli.ts"),
+		);
 		const stagedBrowserExecutable = join(stageRoot, "browse", "browse");
 		mkdirSync(dirname(stagedBrowserExecutable), { recursive: true });
 		copyFileSync(browserPath, stagedBrowserExecutable);

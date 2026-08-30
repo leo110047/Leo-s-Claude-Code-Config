@@ -18,6 +18,7 @@ import type {
   InitialReviewArtifact,
   ReviewEvidenceManifest,
 } from './review-evidence';
+import type { ReviewContractResolution } from './review-contract-resolution';
 import type { ReviewClosureResult, ReviewFinding } from './types';
 
 const LINEAGE_SCHEMA_VERSION = 1;
@@ -80,6 +81,7 @@ type ReviewLineagePayload = {
   policyDigest: string;
   policy: ReviewPolicy;
   requiredManifest: ReviewEvidenceManifest;
+  contractResolution?: ReviewContractResolution;
   unresolvedFindings: UnresolvedFinding[];
   authoritativeArtifact?: {
     file: string;
@@ -114,6 +116,7 @@ export type ReviewLineageHandle = {
   scopeLocks: Array<{ lockFile: string; ownerToken: string }>;
   predecessor?: ReviewLineagePayload;
   manifest: ReviewEvidenceManifest;
+  contractResolution: ReviewContractResolution;
   policy: ReviewPolicy;
   policyDigest: string;
   acceptanceDigest: string;
@@ -151,6 +154,7 @@ export function prepareReviewLineage(options: {
   candidateDigest: string;
   behaviorContractDigest: string;
   manifest: ReviewEvidenceManifest;
+  contractResolution: ReviewContractResolution;
   closureArtifact?: InitialReviewArtifact;
   runId: string;
 }): ReviewLineageHandle {
@@ -178,6 +182,14 @@ export function prepareReviewLineage(options: {
   try {
     let predecessor = readSignedLineage(file, options.key);
     let migratedLegacy = false;
+    if (predecessor && repositoryInstanceChanged(predecessor, options.contractResolution)) {
+      if (predecessor.unresolvedFindings.length > 0 || options.closureArtifact) {
+        throw new Error(
+          'review lineage repository identity changed while authoritative findings or closure remain',
+        );
+      }
+      predecessor = undefined;
+    }
     if (!predecessor && options.legacyScopeDigest && options.legacyScopeDigest !== options.scopeDigest) {
       const legacyId = lineageId(options.repository, options.baseDigest, options.legacyScopeDigest);
       const legacyFile = join(root, `${legacyId}.json`);
@@ -186,6 +198,11 @@ export function prepareReviewLineage(options: {
       try {
         const legacy = readSignedLineage(legacyFile, options.key);
         if (legacy?.unresolvedFindings.length) {
+          if (repositoryInstanceChanged(legacy, options.contractResolution)) {
+            throw new Error(
+              'review lineage repository identity changed while authoritative findings remain',
+            );
+          }
           const verifiedArtifact = legacy.scopeSummary && legacy.authoritativeArtifact?.createdAt
             ? undefined
             : closureArtifactScope(legacy, options.closureArtifact) ?? verifiedArtifactScope(legacy);
@@ -226,6 +243,7 @@ export function prepareReviewLineage(options: {
         baseDigest: options.baseDigest,
         collectionScopeDigest: options.legacyScopeDigest,
         scopeSummary: options.scopeSummary,
+        contractResolution: options.contractResolution,
       });
       inheritedOverlap = Boolean(predecessor);
     }
@@ -257,7 +275,7 @@ export function prepareReviewLineage(options: {
       enforceMinimumEvidenceLevels(options.manifest, policy);
       return {
         id, file, lockFile, ownerToken: options.runId, scopeLocks,
-        predecessor, manifest: options.manifest, policy,
+        predecessor, manifest: options.manifest, contractResolution: options.contractResolution, policy,
         policyDigest, acceptanceDigest: options.acceptanceDigest,
         scopeSummary: [...options.scopeSummary],
         collectionScopeDigest: options.legacyScopeDigest,
@@ -286,7 +304,7 @@ export function prepareReviewLineage(options: {
       enforceMinimumEvidenceLevels(options.manifest, policy);
       return {
         id, file, lockFile, ownerToken: options.runId, scopeLocks,
-        predecessor, manifest: options.manifest, policy,
+        predecessor, manifest: options.manifest, contractResolution: options.contractResolution, policy,
         policyDigest, acceptanceDigest: options.acceptanceDigest,
         scopeSummary: [...options.scopeSummary],
         collectionScopeDigest: options.legacyScopeDigest,
@@ -298,7 +316,7 @@ export function prepareReviewLineage(options: {
     enforceMinimumEvidenceLevels(options.manifest, policy);
     return {
       id, file, lockFile, ownerToken: options.runId, scopeLocks,
-      manifest: options.manifest, policy,
+      manifest: options.manifest, contractResolution: options.contractResolution, policy,
       policyDigest, acceptanceDigest: options.acceptanceDigest,
       scopeSummary: [...options.scopeSummary],
       collectionScopeDigest: options.legacyScopeDigest,
@@ -341,6 +359,9 @@ function bootstrapLineageFromArtifact(options: {
     policyDigest: options.policyDigest,
     policy: options.policy,
     requiredManifest: options.artifact.evidence.manifest,
+    ...(options.artifact.evidence.contractResolution
+      ? { contractResolution: options.artifact.evidence.contractResolution }
+      : {}),
     unresolvedFindings,
     authoritativeArtifact: {
       file: '<migrated-runtime-receipt>',
@@ -409,6 +430,7 @@ export function finalizeInitialReviewLineage(options: {
       options.handle.predecessor?.requiredManifest,
       options.handle.manifest,
     ),
+    contractResolution: options.handle.contractResolution,
     unresolvedFindings,
     ...(options.findings.length > 0 ? {
       authoritativeArtifact: {
@@ -457,6 +479,7 @@ export function finalizeClosureReviewLineage(options: {
     ...predecessor,
     revision: predecessor.revision + 1,
     requiredManifest: mergedRequiredManifest(predecessor.requiredManifest, options.handle.manifest),
+    contractResolution: options.handle.contractResolution,
     unresolvedFindings,
     ...(unresolvedFindings.length > 0 && predecessor.authoritativeArtifact
       ? { authoritativeArtifact: predecessor.authoritativeArtifact }
@@ -556,6 +579,13 @@ function assertMonotonicContract(
     }
   }
   return [...applied].sort();
+}
+
+export function assertReviewContractNotWeaker(
+  baseline: ReviewEvidenceManifest,
+  effective: ReviewEvidenceManifest,
+): void {
+  assertMonotonicContract(baseline, effective, [], emptyPolicy());
 }
 
 function authorizeOrThrow(
@@ -722,6 +752,7 @@ function findOverlappingScopedLineage(options: {
   baseDigest: string;
   collectionScopeDigest: string;
   scopeSummary: string[];
+  contractResolution: ReviewContractResolution;
 }): ReviewLineagePayload | undefined {
   const candidates = readdirSync(options.root)
     .filter((name) => name.endsWith('.json'))
@@ -737,9 +768,26 @@ function findOverlappingScopedLineage(options: {
         !lineage.scopeSummary || !scopesOverlap(lineage.scopeSummary, options.scopeSummary)) {
       continue;
     }
+    if (repositoryInstanceChanged(lineage, options.contractResolution)) {
+      throw new Error(
+        'review lineage repository identity changed while overlapping authoritative findings remain',
+      );
+    }
     return lineage;
   }
   return undefined;
+}
+
+function repositoryInstanceChanged(
+  lineage: ReviewLineagePayload,
+  current: ReviewContractResolution,
+): boolean {
+  const predecessorDigest =
+    lineage.contractResolution?.repositoryIdentity.commonDirectoryInstanceDigest;
+  return Boolean(
+    predecessorDigest &&
+    predecessorDigest !== current.repositoryIdentity.commonDirectoryInstanceDigest,
+  );
 }
 
 function closureArtifactScope(

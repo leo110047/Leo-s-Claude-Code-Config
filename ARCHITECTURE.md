@@ -102,9 +102,21 @@ directory symlink.
 Semantic findings are produced by independent review, not by PreToolUse, Stop,
 workspace leases, shell classification, or writer self-attestation.
 
-`review/code` is evidence-first. A project-owned
-`goldband.review-evidence.json` declares stable behavior cells and typed
-providers. The runtime validates every disposition and reciprocal provider/cell
+`review/code` is evidence-first. `workflows/review-contract-resolution.ts`
+selects one authoritative baseline before evidence or host dispatch. A repository
+`goldband.review-evidence.json` always wins; only its absence permits a
+runtime-owned per-repository store entry. An explicit manifest is either the
+primary contract when no baseline exists or a complete monotonic extension that
+cannot remove or weaken baseline cells, providers, applicability, risk,
+disposition, or evidence level. Resolution provenance records repository
+identity, source identities, baseline/explicit/effective digests, and schema/runtime
+compatibility. The store binds Git worktrees through their common directory path
+and filesystem instance, and also records remote identity; moves, path reuse,
+clones, remote changes, and ambiguity fail
+closed until explicit re-import. Review never mutates repository manifests.
+
+The resolved contract declares stable behavior cells and typed providers. The
+runtime validates every disposition and reciprocal provider/cell
 ownership, materializes a fresh read-only candidate snapshot per operation,
 executes declared argument arrays under a default-deny read/write/network OS
 sandbox with the platform's common process-runtime baseline plus only the snapshot,

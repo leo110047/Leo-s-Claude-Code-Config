@@ -122,7 +122,16 @@ git pull --ff-only
 目前支援的 capability/action 清單以
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
 
-`review/code` 會先讀取 project-owned `goldband.review-evidence.json`，在隔離、
+`review/code` 會先解析不可降級的 evidence contract。Repo 內的
+`goldband.review-evidence.json` 是 authoritative baseline；repo 沒有 manifest
+時，才會使用使用者明確以 `goldband review contract import --manifest <path>`
+註冊的 runtime-owned per-repository contract。`--evidence-manifest` 在已有
+baseline 時只能提供完整、monotonic 的 effective contract，不能取代或縮小
+baseline。`inspect` 可讀回 repository identity、baseline、shadowed central
+entry 與 digests，`remove` 只移除 central entry；review 本身不會建立、搬移或
+刪除 manifest。
+
+解析完成後，runtime 在隔離、
 預設以每個 operation 各自獨立、唯讀且 read/write/network default-deny 的 snapshot 執行 typed checks，
 並驗證執行前後 tree digest、provider/cell 雙向 ownership 與 exact RED exit，確認 evidence completeness 與
 candidate provenance 後，才啟動一次 semantic review。script launcher 必須在 manifest 明確寫出 interpreter；

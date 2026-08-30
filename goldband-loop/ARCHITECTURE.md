@@ -4,9 +4,20 @@ This document explains **why** goldband is built the way it is. For setup and co
 
 ## Evidence-first review runtime
 
-`workflows/review.ts` owns review orchestration and
+`workflows/review.ts` owns review orchestration,
+`workflows/review-contract-resolution.ts` owns baseline selection and provenance,
+`workflows/review-contract-store.ts` owns the local per-repository store, and
 `workflows/review-evidence.ts` owns deterministic behavior/evidence contracts.
-A project supplies `goldband.review-evidence.json`; code validates the behavior
+A repository manifest always owns the baseline when present. Without one, an
+explicitly imported store entry bound to the Git common-directory path,
+filesystem instance, and remote
+identity may supply it. Caller-provided manifests cannot replace an existing
+baseline: the runtime rejects contract downgrade before any provider or semantic
+host dispatch. The artifact binds baseline, explicit, and effective digests.
+Import/remove are explicit CLI mutations with private regular-file checks and
+atomic writes; review never mutates the repository or store.
+
+The resolved code validates the behavior
 matrix and provider registry, materializes isolated base/candidate snapshots,
 executes bounded argument arrays under a default-deny read/write/network OS
 sandbox with the platform common process baseline plus explicit candidate,

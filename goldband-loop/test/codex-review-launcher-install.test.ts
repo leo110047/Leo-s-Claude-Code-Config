@@ -145,6 +145,7 @@ describe("Codex trusted workflow launcher install", () => {
 				join(runtimeRoot, "bin", "goldband.js"),
 			]);
 			expect(existsSync(join(runtimeRoot, "workflows", "run.ts"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "workflows", "review-contract-cli.ts"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "browse", "browse"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "browse", "server", "server.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "shared-rubric.md"))).toBe(true);
@@ -250,11 +251,159 @@ describe("Codex trusted workflow launcher install", () => {
 				{ cwd: repo, encoding: "utf8" },
 			);
 			expect(initialCommit.status, initialCommit.stderr).toBe(0);
+
+			const centralRepo = join(fixture, "central-repo");
+			mkdirSync(centralRepo, { recursive: true });
+			expect(spawnSync("git", ["init"], { cwd: centralRepo }).status).toBe(0);
+			writeFileSync(join(centralRepo, "review-me.txt"), "baseline\n");
+			expect(spawnSync("git", ["add", "review-me.txt"], { cwd: centralRepo }).status).toBe(0);
+			expect(spawnSync("git", [
+				"-c", "user.name=Goldband Test",
+				"-c", "user.email=goldband@example.invalid",
+				"commit", "-m", "central fixture baseline",
+			], { cwd: centralRepo }).status).toBe(0);
+			writeFileSync(join(centralRepo, "review-me.txt"), "change\n");
+			const centralManifest = join(fixture, "central-contract.json");
+			writeFileSync(centralManifest, `${JSON.stringify(installedPrimaryContractManifest())}\n`);
+			const centralEnv = {
+				...process.env,
+				HOME: emptyHome,
+				GOLDBAND_HOME: stateRoot,
+				GOLDBAND_TEST_HOST_CALL_LOG: hostCallLog,
+				PATH: `${poisonBin}:${process.env.PATH ?? ""}`,
+			};
+			const centralStatusBefore = spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+				cwd: centralRepo,
+				encoding: "utf8",
+			}).stdout;
+			const missingCentral = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "code", "--host", "codex",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(missingCentral.status).not.toBe(0);
+			expect(missingCentral.stderr).toContain("review/code evidence contract is required");
+			expect(existsSync(join(centralRepo, "goldband.review-evidence.json"))).toBe(false);
+
+			const importedContract = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "import", "--manifest", centralManifest,
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(importedContract.status, importedContract.stderr).toBe(0);
+			const importedReadback = JSON.parse(importedContract.stdout);
+			expect(importedReadback.before.configured).toBe(false);
+			expect(importedReadback.after.baseline.kind).toBe("runtime-store");
+			const inspectedContract = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "inspect",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(inspectedContract.status, inspectedContract.stderr).toBe(0);
+			expect(JSON.parse(inspectedContract.stdout).runtimeStore).toMatchObject({
+				present: true,
+				shadowed: false,
+			});
+			const centralReview = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "code", "--host", "codex",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(centralReview.status, centralReview.stderr).toBe(0);
+			const centralArtifactPath = (JSON.parse(centralReview.stdout) as { artifacts: string[] })
+				.artifacts.find((file) => file.endsWith("-review-evidence.json"));
+			const centralArtifact = JSON.parse(readFileSync(centralArtifactPath!, "utf8"));
+			expect(centralArtifact.evidence.contractResolution.baseline.kind).toBe("runtime-store");
+			expect(centralArtifact.evidence.contractResolution.effectiveDigest)
+				.toBe(centralArtifact.binding.behaviorContractDigest);
+			const centralLineageRoot = join(dirname(runtimeRoot), "review-receipts", "review-lineages");
+			const centralLineageFiles = readdirSync(centralLineageRoot)
+				.filter((name) => name.endsWith(".json"));
+			expect(centralLineageFiles).toHaveLength(1);
+			const centralLineage = JSON.parse(readFileSync(
+				join(centralLineageRoot, centralLineageFiles[0]!),
+				"utf8",
+			));
+			expect(centralLineage.contractResolution).toEqual(
+				centralArtifact.evidence.contractResolution,
+			);
+			expect(spawnSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+				cwd: centralRepo,
+				encoding: "utf8",
+			}).stdout).toBe(centralStatusBefore);
+
+			const centralWorktree = join(fixture, "central-worktree");
+			const addWorktree = spawnSync("git", [
+				"worktree", "add", "-b", "central-contract-worktree", centralWorktree,
+			], { cwd: centralRepo, encoding: "utf8" });
+			expect(addWorktree.status, addWorktree.stderr).toBe(0);
+			const worktreeInspection = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "inspect",
+			], { cwd: centralWorktree, encoding: "utf8", env: centralEnv });
+			expect(worktreeInspection.status, worktreeInspection.stderr).toBe(0);
+			expect(JSON.parse(worktreeInspection.stdout).runtimeStore.present).toBe(true);
+
+			const centralClone = join(fixture, "central-clone");
+			const cloneCentral = spawnSync("git", ["clone", "-q", centralRepo, centralClone], {
+				encoding: "utf8",
+			});
+			expect(cloneCentral.status, cloneCentral.stderr).toBe(0);
+			const cloneInspection = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "inspect",
+			], { cwd: centralClone, encoding: "utf8", env: centralEnv });
+			expect(cloneInspection.status, cloneInspection.stderr).toBe(0);
+			expect(JSON.parse(cloneInspection.stdout).runtimeStore.present).toBe(false);
+
+			expect(spawnSync("git", [
+				"remote", "add", "origin", "https://example.invalid/central.git",
+			], { cwd: centralRepo }).status).toBe(0);
+			const driftInspection = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "inspect",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(driftInspection.status, driftInspection.stderr).toBe(0);
+			expect(JSON.parse(driftInspection.stdout).runtimeStore.invalidReason)
+				.toContain("remote identity changed");
+			const reboundContract = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "import", "--manifest", centralManifest,
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(reboundContract.status, reboundContract.stderr).toBe(0);
+
+			const displacedCentralRepo = join(fixture, "displaced-central-repo");
+			renameSync(centralRepo, displacedCentralRepo);
+			mkdirSync(centralRepo);
+			expect(spawnSync("git", ["init"], { cwd: centralRepo }).status).toBe(0);
+			expect(spawnSync("git", [
+				"remote", "add", "origin", "https://example.invalid/central.git",
+			], { cwd: centralRepo }).status).toBe(0);
+			const reusedPathInspection = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "inspect",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(reusedPathInspection.status, reusedPathInspection.stderr).toBe(0);
+			expect(JSON.parse(reusedPathInspection.stdout).runtimeStore.invalidReason)
+				.toContain("repository identity mismatch");
+			const reboundReplacement = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "import", "--manifest", centralManifest,
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(reboundReplacement.status, reboundReplacement.stderr).toBe(0);
+			const removedContract = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "remove",
+			], { cwd: centralRepo, encoding: "utf8", env: centralEnv });
+			expect(removedContract.status, removedContract.stderr).toBe(0);
+			expect(JSON.parse(removedContract.stdout).after.configured).toBe(false);
+
 			writeFileSync(join(repo, "review-me.txt"), "change\n");
 			writeFileSync(
 				join(repo, "goldband.review-evidence.json"),
 				`${JSON.stringify(installedReviewEvidenceManifest())}\n`,
 			);
+			const importedRepositoryManifest = spawnInstalledRuntime(marker.argvPrefix[0], [
+				marker.argvPrefix[1], "review", "contract", "import", "--manifest",
+				join(repo, "goldband.review-evidence.json"),
+			], { cwd: repo, encoding: "utf8", env: centralEnv });
+			expect(importedRepositoryManifest.status, importedRepositoryManifest.stderr).toBe(0);
+			expect(JSON.parse(importedRepositoryManifest.stdout).after.runtimeStore.shadowed).toBe(true);
+			expect(existsSync(join(repo, "goldband.review-evidence.json"))).toBe(true);
+			const weakManifest = join(fixture, "weak-contract.json");
+			writeFileSync(weakManifest, `${JSON.stringify(installedPrimaryContractManifest())}\n`);
+			const hostCallsBeforeDowngrade = lineCount(hostCallLog);
+			const downgraded = runInstalledReview(repo, [
+				"--host", "codex", "--evidence-manifest", weakManifest,
+			]);
+			expect(downgraded.status).not.toBe(0);
+			expect(downgraded.stderr).toContain("review contract laundering blocked");
+			expect(lineCount(hostCallLog)).toBe(hostCallsBeforeDowngrade);
 			const review = spawnInstalledRuntime(
 				marker.argvPrefix[0],
 				[
@@ -286,6 +435,7 @@ describe("Codex trusted workflow launcher install", () => {
 				].join("\n"),
 			).toBe(0);
 			expect(review.stdout).toContain("review/code runtime report");
+			expect(existsSync(join(repo, "goldband.review-evidence.json"))).toBe(true);
 			expect(review.stdout).toContain("Phase: initial.");
 			const reviewResult = JSON.parse(review.stdout) as { artifacts: string[] };
 			const initialArtifactPath = reviewResult.artifacts.find((file) =>
@@ -886,6 +1036,26 @@ function installedReviewEvidenceManifest() {
 				evidenceLevel: "fixture",
 			}],
 		}],
+		authorizations: [],
+	};
+}
+
+function installedPrimaryContractManifest() {
+	return {
+		schemaVersion: 1,
+		behaviorMatrix: [{
+			id: "installed-central-contract",
+			behavior: "The explicitly imported local repository contract resolves.",
+			kind: "boundary",
+			input: "A repository without a committed manifest.",
+			preconditions: "The user imported this contract.",
+			expected: "Resolution remains deterministic and candidate-bound.",
+			risk: "low",
+			disposition: "not-applicable",
+			providerIds: [],
+			reason: "Installed contract-store wiring fixture.",
+		}],
+		providers: [],
 		authorizations: [],
 	};
 }

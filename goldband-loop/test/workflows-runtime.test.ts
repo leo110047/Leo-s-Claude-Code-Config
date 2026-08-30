@@ -2532,6 +2532,7 @@ describe('workflow runtime', () => {
 
   test('metered budget failures retain safe policy and usage telemetry', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
       const fakeClaude = join(fakeBin, 'claude');
@@ -2560,10 +2561,10 @@ describe('workflow runtime', () => {
       await expect(runWorkflow(getWorkflow('review/code'), {
         mode: 'real',
         host: 'claude',
-        cwd: ROOT,
+        cwd: repo,
         goldbandHome: tmpHome,
-        diffFile: 'test/fixtures/workflows/review.diff',
-        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
+        diffFile: join(ROOT, 'test/fixtures/workflows/review.diff'),
+        evidenceManifestFile: join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
       })).rejects.toThrow('maximum budget reported at the metered $3.00 cap');
 
       const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
@@ -2586,11 +2587,13 @@ describe('workflow runtime', () => {
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 
   test('subscription review telemetry retains tokens without estimated dollars', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
       const fakeClaude = join(fakeBin, 'claude');
@@ -2616,10 +2619,10 @@ describe('workflow runtime', () => {
       const result = await runWorkflow(getWorkflow('review/code'), {
         mode: 'real',
         host: 'claude',
-        cwd: ROOT,
+        cwd: repo,
         goldbandHome: tmpHome,
-        diffFile: 'test/fixtures/workflows/review.diff',
-        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
+        diffFile: join(ROOT, 'test/fixtures/workflows/review.diff'),
+        evidenceManifestFile: join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
       });
       const telemetry = JSON.parse(readFileSync(join(
         tmpHome,
@@ -2635,6 +2638,7 @@ describe('workflow runtime', () => {
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 
@@ -2768,6 +2772,7 @@ describe('workflow runtime', () => {
 
   test('Claude workflow retains metered policy when structured stdout exceeds its bound', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
       const fakeClaude = join(fakeBin, 'claude');
@@ -2786,10 +2791,10 @@ describe('workflow runtime', () => {
       await expect(runWorkflow(getWorkflow('review/code'), {
         mode: 'real',
         host: 'claude',
-        cwd: ROOT,
+        cwd: repo,
         goldbandHome: tmpHome,
-        diffFile: 'test/fixtures/workflows/review.diff',
-        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
+        diffFile: join(ROOT, 'test/fixtures/workflows/review.diff'),
+        evidenceManifestFile: join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
       })).rejects.toThrow(
         `claude structured output exceeds ${MAX_HOST_STRUCTURED_OUTPUT_BYTES} byte limit`,
       );
@@ -2808,11 +2813,13 @@ describe('workflow runtime', () => {
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 
   test('Claude workflow retains metered policy and safe usage for malformed result JSON', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'goldband-review-hosts-'));
+    const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
       const fakeClaude = join(fakeBin, 'claude');
@@ -2835,10 +2842,10 @@ describe('workflow runtime', () => {
       await expect(runWorkflow(getWorkflow('review/code'), {
         mode: 'real',
         host: 'claude',
-        cwd: ROOT,
+        cwd: repo,
         goldbandHome: tmpHome,
-        diffFile: 'test/fixtures/workflows/review.diff',
-        evidenceManifestFile: 'test/fixtures/workflows/review-evidence-pass.json',
+        diffFile: join(ROOT, 'test/fixtures/workflows/review.diff'),
+        evidenceManifestFile: join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
       })).rejects.toThrow('Claude review returned invalid structured JSON');
       const telemetryDir = join(tmpHome, 'workflow-runs', 'telemetry');
       const usageFile = readdirSync(telemetryDir)
@@ -2858,6 +2865,7 @@ describe('workflow runtime', () => {
     } finally {
       process.env.PATH = previousPath;
       rmSync(fakeBin, { recursive: true, force: true });
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 
@@ -3094,6 +3102,15 @@ function commitAll(repo: string, message: string): void {
     message,
   ], { cwd: repo, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+}
+
+function reviewTargetRepository(): string {
+  const repo = mkdtempSync(join(tmpdir(), 'goldband-review-target-'));
+  const initialized = spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' });
+  if (initialized.status !== 0) throw new Error(initialized.stderr || initialized.stdout);
+  writeFileSync(join(repo, 'fixture.txt'), 'base\n');
+  commitAll(repo, 'base');
+  return repo;
 }
 
 function signalWorkflow(input: {

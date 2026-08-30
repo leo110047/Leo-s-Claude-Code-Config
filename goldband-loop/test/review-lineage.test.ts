@@ -19,6 +19,7 @@ import type {
   ReviewEvidenceManifest,
 } from '../workflows/review-evidence';
 import { createCandidateBinding } from '../workflows/review-evidence';
+import type { ReviewContractResolution } from '../workflows/review-contract-resolution';
 
 const roots: string[] = [];
 const key = Buffer.alloc(32, 7);
@@ -186,6 +187,110 @@ describe('authoritative review lineage', () => {
     const next = prepare(fixture, additive);
     expect(next.appliedWaiverIds).toEqual([]);
     releaseReviewLineage(next);
+  });
+
+  test('signed no-finding lineage records each current contract resolution', () => {
+    const fixture = repository();
+    const evidenceManifest = manifest();
+    const first = prepare(fixture, evidenceManifest);
+    const firstArtifact = initialArtifact(evidenceManifest, []);
+    finalizeInitialReviewLineage({
+      handle: first, key, repository: 'repo', baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64), artifact: firstArtifact,
+      artifactFile: join(fixture.state, 'first.json'), findings: [],
+      deterministicComplete: true, runtimeIncomplete: false,
+    });
+    releaseReviewLineage(first);
+    expect(readReviewLineageForTest(first.file, key)?.contractResolution)
+      .toEqual(first.contractResolution);
+
+    const effectiveDigest = first.contractResolution.effectiveDigest;
+    const runtimeResolution: ReviewContractResolution = {
+      ...first.contractResolution,
+      baseline: {
+        kind: 'runtime-store',
+        identity: join(fixture.state, 'review-contracts', 'fixture.json'),
+        digest: effectiveDigest,
+      },
+      explicit: {
+        kind: 'explicit-extension',
+        identity: join(fixture.repo, 'extended.json'),
+        digest: effectiveDigest,
+      },
+    };
+    const second = prepare(fixture, evidenceManifest, undefined, {
+      candidateDigest: 'f'.repeat(64),
+      contractResolution: runtimeResolution,
+    });
+    const secondArtifact = initialArtifact(evidenceManifest, []);
+    secondArtifact.binding.candidateDigest = 'f'.repeat(64);
+    finalizeInitialReviewLineage({
+      handle: second, key, repository: 'repo', baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64), artifact: secondArtifact,
+      artifactFile: join(fixture.state, 'second.json'), findings: [],
+      deterministicComplete: true, runtimeIncomplete: false,
+    });
+    const persisted = readReviewLineageForTest(second.file, key)!;
+    expect(persisted.revision).toBe(2);
+    expect(persisted.contractResolution).toEqual(runtimeResolution);
+    expect(persisted.lastBehaviorContractDigest).toBe(effectiveDigest);
+    releaseReviewLineage(second);
+  });
+
+  test('repository instance reuse resets clean lineage and rejects inherited findings', () => {
+    const cleanFixture = repository();
+    const evidenceManifest = manifest();
+    const clean = prepare(cleanFixture, evidenceManifest);
+    const cleanArtifact = initialArtifact(evidenceManifest, []);
+    finalizeInitialReviewLineage({
+      handle: clean, key, repository: 'repo', baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64), artifact: cleanArtifact,
+      artifactFile: join(cleanFixture.state, 'clean.json'), findings: [],
+      deterministicComplete: true, runtimeIncomplete: false,
+    });
+    releaseReviewLineage(clean);
+
+    const replacementResolution = structuredClone(clean.contractResolution);
+    replacementResolution.repositoryIdentity.commonDirectoryInstanceDigest = '1'.repeat(64);
+    const replacement = prepare(cleanFixture, evidenceManifest, undefined, {
+      candidateDigest: 'f'.repeat(64),
+      contractResolution: replacementResolution,
+    });
+    expect(replacement.predecessor).toBeUndefined();
+    const replacementArtifact = initialArtifact(evidenceManifest, []);
+    replacementArtifact.binding.candidateDigest = 'f'.repeat(64);
+    finalizeInitialReviewLineage({
+      handle: replacement, key, repository: 'repo', baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64), artifact: replacementArtifact,
+      artifactFile: join(cleanFixture.state, 'replacement.json'), findings: [],
+      deterministicComplete: true, runtimeIncomplete: false,
+    });
+    const replacementLineage = readReviewLineageForTest(replacement.file, key)!;
+    expect(replacementLineage.revision).toBe(1);
+    expect(replacementLineage.contractResolution).toEqual(replacementResolution);
+    releaseReviewLineage(replacement);
+
+    const blockedFixture = repository();
+    const blocked = prepare(blockedFixture, evidenceManifest);
+    const findingArtifact = initialArtifact(evidenceManifest, [{
+      id: 'S-identity', file: 'deploy.ts', severity: 'high',
+      summary: 'identity-bound blocker', blocking: true,
+      behaviorCellIds: ['deployment-safe'],
+    }]);
+    finalizeInitialReviewLineage({
+      handle: blocked, key, repository: 'repo', baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64), artifact: findingArtifact,
+      artifactFile: join(blockedFixture.state, 'blocked.json'),
+      findings: findingArtifact.findings,
+      deterministicComplete: true, runtimeIncomplete: false,
+    });
+    releaseReviewLineage(blocked);
+    const blockedReplacementResolution = structuredClone(blocked.contractResolution);
+    blockedReplacementResolution.repositoryIdentity.commonDirectoryInstanceDigest = '2'.repeat(64);
+    expect(() => prepare(blockedFixture, evidenceManifest, undefined, {
+      candidateDigest: 'f'.repeat(64),
+      contractResolution: blockedReplacementResolution,
+    })).toThrow('review lineage repository identity changed');
   });
 
   test('canonicalizes replaced diff-file paths and rejects an exact duplicate initial identity', () => {
@@ -633,6 +738,7 @@ function prepare(
     legacyScopeDigest?: string;
     scopeSummary?: string[];
     candidateDigest?: string;
+    contractResolution?: ReviewContractResolution;
   } = {},
 ) {
   return prepareReviewLineage({
@@ -650,6 +756,22 @@ function prepare(
     candidateDigest: overrides.candidateDigest ?? 'e'.repeat(64),
     behaviorContractDigest: createHash('sha256').update(JSON.stringify(evidenceManifest)).digest('hex'),
     manifest: evidenceManifest,
+    contractResolution: overrides.contractResolution ?? {
+      schemaVersion: 1,
+      repositoryIdentity: {
+        kind: 'git-common-directory',
+        commonDirectory: join(fixture.repo, '.git'),
+        commonDirectoryInstanceDigest: 'f'.repeat(64),
+        remoteIdentityDigest: '0'.repeat(64),
+      },
+      compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1',
+      baseline: {
+        kind: 'repository',
+        identity: join(fixture.repo, 'goldband.review-evidence.json'),
+        digest: createHash('sha256').update(JSON.stringify(evidenceManifest)).digest('hex'),
+      },
+      effectiveDigest: createHash('sha256').update(JSON.stringify(evidenceManifest)).digest('hex'),
+    },
     closureArtifact,
     runId: crypto.randomUUID(),
   });

@@ -2049,3 +2049,64 @@ Revisit triggers:
 - Linux or Windows gains an equivalent tested provider-owned sandbox.
 - A demonstrated cross-machine review needs portable attestation, freshness,
   transport, and key-rotation contracts.
+
+## ADR: Monotonic review contract resolution and local repository store
+
+Status: Accepted
+
+Decision:
+
+- Resolve `authoritative baseline + optional monotonic extension = effective
+  contract` before evidence execution, lineage admission, or semantic host
+  dispatch.
+- Prefer a repository `goldband.review-evidence.json`. Only when it is absent
+  may a runtime-owned per-repository entry become the baseline. A caller-supplied
+  explicit manifest cannot shadow either baseline and must retain every required
+  cell, provider, applicability, risk, disposition, and evidence level.
+- Permit an explicit persistent manifest to be the primary contract only when no
+  repository or stored baseline exists. Mark that source in artifact provenance.
+- Bind store entries to the canonical Git common-directory path and filesystem
+  instance plus a remote-identity snapshot. Worktrees share one entry; moves,
+  path reuse, clones, remote changes, and
+  ambiguous identity require explicit re-import.
+- Expose `review contract inspect`, `import --manifest`, and `remove`. Mutations
+  use private regular files, reject symlinks, write atomically, and never alter
+  the source manifest or repository working tree.
+- Bind baseline, explicit, and effective source identities and digests plus the
+  compatibility identity into the existing review artifact, receipt digest, and
+  lineage path. Do not introduce another acceptance or completion authority.
+
+Why:
+
+The previous explicit-manifest resolver could replace a stronger repository
+contract before a predecessor lineage existed. Repositories without committed
+manifests also had no persistent evidence-backed path. One deterministic resolver
+closes both gaps without inventing generic JSON merge semantics or runtime-guessed
+providers.
+
+Consequences:
+
+- A weaker explicit contract fails before provider execution or host dispatch,
+  including a first review for a new scope.
+- Repository requirements always shadow local convenience state, while `inspect`
+  still reports the shadowed entry.
+- The store remains local-only. It does not synchronize contracts, transport CI
+  authority, infer behavior matrices, or implement semantic-only review.
+- Existing repository manifests remain valid in place and are never migrated or
+  removed automatically.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Let explicit manifests replace the baseline | A new lineage could start with fewer required cells and appear complete. |
+| Automatically copy a missing manifest into the repository | It would mutate user worktrees and turn onboarding into hidden policy state. |
+| Merge arbitrary manifest fragments | It creates ambiguous conflict semantics and a second composition language. |
+| Key the store only by remote URL | Forks, URL reuse, and remote rename can bind the wrong repository. |
+
+Failure signals:
+
+- A weaker explicit manifest reaches an evidence operation or semantic host.
+- A central entry shadows a repository manifest or applies after identity drift.
+- Review creates, moves, edits, or deletes a repository manifest.
+- Artifacts omit any selected baseline, explicit, or effective digest.

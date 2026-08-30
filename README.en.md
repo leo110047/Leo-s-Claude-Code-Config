@@ -24,7 +24,16 @@ This repo has two layers:
 For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-`review/code` first loads the project-owned `goldband.review-evidence.json`,
+`review/code` first resolves a non-downgradable evidence contract. A repository
+`goldband.review-evidence.json` is the authoritative baseline. Only when it is
+absent may an explicitly imported runtime-owned per-repository contract become
+the baseline (`goldband review contract import --manifest <path>`). With an
+existing baseline, `--evidence-manifest` must be a complete monotonic effective
+contract rather than a replacement. `inspect` reports repository identity,
+sources, shadowing, and digests; `remove` deletes only the runtime-store entry.
+Review never creates, moves, or deletes a manifest.
+
+After resolution, the runtime
 runs every typed check in an independent read-only, default-deny read/write/network snapshot,
 validates pre/post tree digests, reciprocal provider/cell ownership, and exact RED exits, and validates
 evidence completeness and candidate provenance before one semantic review. If

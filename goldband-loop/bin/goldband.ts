@@ -108,6 +108,9 @@ function printUsage(stream: Pick<Console, "log">): void {
 		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--evidence-manifest <file>] [--closure-artifact <initial-review-artifact>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
 	);
 	stream.log(
+		"  goldband review contract <inspect|import|remove> [--manifest <path>]",
+	);
+	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",
 	);
 	stream.log("  goldband plan create --input <file> [--host <claude|codex>]");
@@ -406,6 +409,37 @@ function reviewCode(args: string[]): number {
 	} finally {
 		releaseReviewExecutionLease(lease);
 	}
+}
+
+function reviewContract(args: string[]): number {
+	const runtimeFile = join(dirname(resolveWorkflowRuntimeFile()), "review-contract-cli.ts");
+	if (!existsSync(runtimeFile) || !lstatSync(runtimeFile).isFile()) {
+		throw new Error(
+			"review contract runtime unavailable: rerun the Goldband workflow installer",
+		);
+	}
+	const runtimeEnvironment = prepareReviewProcessEnvironment(process.env);
+	if (runtimeEnvironment.durability !== "durable") {
+		throw new Error(
+			"review contract store requires a writable durable Goldband state root",
+		);
+	}
+	const result = spawnSync(
+		process.execPath,
+		[runtimeFile, ...args, "--goldband-home", runtimeEnvironment.evidenceRoot],
+		{
+			cwd: process.cwd(),
+			env: runtimeEnvironment.env,
+			stdio: "inherit",
+		},
+	);
+	if (result.error) throw result.error;
+	if (result.status === null) {
+		throw new Error(
+			`review contract runtime terminated without an exit status (${result.signal ?? "unknown signal"})`,
+		);
+	}
+	return result.status;
 }
 
 function browserSession(args: string[]): number {
@@ -1161,6 +1195,11 @@ export function main(args = process.argv.slice(2)): number {
 	);
 	if (trustedResult !== undefined) return trustedResult;
 	if (scope === "review") {
+		if (action === "contract") {
+			return reviewContract(
+				[name, ...rest].filter((value): value is string => value !== undefined),
+			);
+		}
 		usage();
 	}
 	if (scope === "browser") {
