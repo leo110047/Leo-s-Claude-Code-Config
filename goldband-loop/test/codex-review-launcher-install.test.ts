@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { evidenceChildProcessEnvironment } from "../lib/evidence-runtime-contract.ts";
+import { PROMPT_CONTRACT_ACTIONS } from "../lib/trusted-launcher-actions.generated.ts";
 import {
 	installCodexReviewLauncher,
 	renderCodexReviewRule,
@@ -220,6 +221,20 @@ describe("Codex trusted workflow launcher install", () => {
 			});
 			expect(help.status).toBe(0);
 			expect(help.stdout).toContain("goldband review code");
+			for (const promptAction of PROMPT_CONTRACT_ACTIONS) {
+				const [capability = "", action = ""] = promptAction.split("/");
+				const guidance = spawnSync(marker.argvPrefix[0], [
+					marker.argvPrefix[1],
+					capability,
+					action,
+					"--host",
+					"codex",
+				], { encoding: "utf8" });
+				expect(guidance.status).toBe(2);
+				expect(guidance.stderr).toContain(
+					`${promptAction} uses prompt-contract dispatch and is not a shell CLI action`,
+				);
+			}
 
 			const repo = join(fixture, "repo");
 			const stateRoot = join(fixture, "state");

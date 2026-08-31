@@ -7,6 +7,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { evidenceTemporaryDirectory } from '../lib/evidence-runtime-contract';
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import {
   formatClaudeReviewBudgetUsd,
@@ -191,7 +192,10 @@ class CodexHostAdapter implements HostAdapter {
     cwd: string,
     options: HostRunOptions,
   ): Promise<HostResult> {
-    const dir = mkdtempSync(join(tmpdir(), 'goldband-codex-'));
+    const dir = mkdtempSync(join(
+      evidenceTemporaryDirectory(process.env) ?? tmpdir(),
+      'goldband-codex-',
+    ));
     const schemaFile = join(dir, 'schema.json');
     const outputFile = join(dir, 'last-message.json');
     writeFileSync(schemaFile, JSON.stringify(schema));

@@ -27,6 +27,7 @@ import {
 	EVIDENCE_SANDBOX_ACTIVE_ENV,
 	EVIDENCE_TEMP_ROOT_ENV,
 } from "../lib/evidence-runtime-contract";
+import { PROMPT_CONTRACT_ACTIONS } from "../lib/trusted-launcher-actions.generated";
 
 function spawnReviewCli(
 	args: string[],
@@ -35,6 +36,33 @@ function spawnReviewCli(
 	const command = resolve(import.meta.dir, "../bin/goldband");
 	return spawnSync(command, args, options);
 }
+
+describe("goldband capability dispatch guidance", () => {
+	test("directs prompt-contract actions to the host selector", () => {
+		expect(PROMPT_CONTRACT_ACTIONS.length).toBeGreaterThan(0);
+		for (const promptAction of PROMPT_CONTRACT_ACTIONS) {
+			const [capability = "", action = ""] = promptAction.split("/");
+			expect(capability).toBeTruthy();
+			expect(action).toBeTruthy();
+			const invocation = `${capability} ${action}`;
+			const result = spawnReviewCli(
+				[capability, action, "--host", "codex"],
+				{
+					cwd: resolve(import.meta.dir, ".."),
+					encoding: "utf8",
+					env: process.env,
+				},
+			);
+
+			expect(result.status).toBe(2);
+			expect(result.stderr).toContain(
+				`${promptAction} uses prompt-contract dispatch and is not a shell CLI action`,
+			);
+			expect(result.stderr).toContain(`$goldband ${invocation}`);
+			expect(result.stderr).toContain(`/goldband ${invocation}`);
+		}
+	});
+});
 
 describe("goldband review code launcher", () => {
 	test("runs the real typed pipeline through the Codex host adapter", () => {

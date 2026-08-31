@@ -39,6 +39,41 @@ describe("trusted Codex workflow status", () => {
 		}
 	});
 
+	test("permits absent generated bundles but hashes them once built", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-generated-source-digest-"));
+		try {
+			const sourceRoot = join(fixture, "goldband-loop");
+			mkdirSync(sourceRoot);
+			const sourceInputs = ["goldband-loop/browse/dist"];
+			const before = workflowSourceInputManifest(sourceRoot, sourceInputs);
+			expect(before.inputs).toEqual([]);
+
+			const bundle = join(sourceRoot, "browse", "dist", "browse");
+			mkdirSync(join(sourceRoot, "browse", "dist"), { recursive: true });
+			writeFileSync(bundle, "compiled fixture\n");
+			const after = workflowSourceInputManifest(sourceRoot, sourceInputs);
+			expect(after.inputs.map((entry: { path: string }) => entry.path)).toEqual([
+				"goldband-loop/browse/dist/browse",
+			]);
+			expect(after.digest).not.toBe(before.digest);
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test("rejects an absent mandatory source input", () => {
+		const fixture = mkdtempSync(join(tmpdir(), "goldband-mandatory-source-digest-"));
+		try {
+			const sourceRoot = join(fixture, "goldband-loop");
+			mkdirSync(sourceRoot);
+			expect(() =>
+				workflowSourceInputManifest(sourceRoot, ["goldband-loop/runtime.ts"]),
+			).toThrow("distribution source input is missing: goldband-loop/runtime.ts");
+		} finally {
+			rmSync(fixture, { recursive: true, force: true });
+		}
+	});
+
 	test("probes the pinned Codex executable and rejects it when missing", () => {
 		const fixture = mkdtempSync(join(tmpdir(), "goldband-codex-status-"));
 		try {

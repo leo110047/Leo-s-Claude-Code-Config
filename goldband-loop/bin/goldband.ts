@@ -53,7 +53,10 @@ import {
 	type ReviewScopeFlag,
 } from "../lib/review-runtime-contract";
 import { resolveGoldbandStateRoot } from "../lib/state-root";
-import { TRUSTED_LAUNCHER_ACTIONS } from "../lib/trusted-launcher-actions.generated";
+import {
+	PROMPT_CONTRACT_ACTIONS,
+	TRUSTED_LAUNCHER_ACTIONS,
+} from "../lib/trusted-launcher-actions.generated";
 
 type ReviewHost = "claude" | "codex";
 const MAX_PLAN_INPUT_BYTES = 1024 * 1024;
@@ -94,6 +97,7 @@ const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV =
 	"GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG";
 
 const TRUSTED_LAUNCHER_ACTION_SET = new Set<string>(TRUSTED_LAUNCHER_ACTIONS);
+const PROMPT_CONTRACT_ACTION_SET = new Set<string>(PROMPT_CONTRACT_ACTIONS);
 
 type TrustedLauncherHandlers = {
 	"review/code": (args: string[]) => number;
@@ -130,6 +134,15 @@ function printUsage(stream: Pick<Console, "log">): void {
 function usage(): never {
 	printUsage({ log: (message) => console.error(message) });
 	process.exit(2);
+}
+
+function promptContractUsage(action: string): never {
+	const invocation = action.replace("/", " ");
+	console.error(
+		`${action} uses prompt-contract dispatch and is not a shell CLI action. ` +
+			`Use \`$goldband ${invocation}\` in Codex or \`/goldband ${invocation}\` in Claude Code.`,
+	);
+	usage();
 }
 
 function create(name: string | undefined, extra: string[]): number {
@@ -1194,6 +1207,9 @@ export function main(args = process.argv.slice(2)): number {
 		TRUSTED_LAUNCHER_HANDLERS,
 	);
 	if (trustedResult !== undefined) return trustedResult;
+	if (PROMPT_CONTRACT_ACTION_SET.has(trustedAction)) {
+		promptContractUsage(trustedAction);
+	}
 	if (scope === "review") {
 		if (action === "contract") {
 			return reviewContract(

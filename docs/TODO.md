@@ -68,12 +68,9 @@ action 不得宣告 owner，也不會出現在 router 或 activation hints。
 ### 優先順序
 
 1. 把 `qa/app` real mode 接到 typed browser evidence，完成 browser E2E。
-2. 將 4 個 compatibility actions 逐一替換成 action-specific typed schemas。
+2. 將 3 個 compatibility actions 逐一替換成 action-specific typed schemas。
 3. 依既有 safety gate contract 為 release setup/land 建立原生 approval、
    deployment readback 與 rollback owner。
-4. 依既有 safety gate contract 為 knowledge setup/sync 建立 secret-safe
-   interaction schema、sync checkpoint 與 round-trip readback owner；完成前保持
-   experimental。
 
 ### 驗收標準
 

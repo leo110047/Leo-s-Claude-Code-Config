@@ -398,6 +398,7 @@
           "goldband.review-evidence.json",
           "schemas/review-evidence-manifest.schema.json",
           "goldband-loop/bin/goldband.ts",
+          "goldband-loop/lib/evidence-runtime-contract.ts",
           "goldband-loop/review",
           "goldband-loop/scripts/install-codex-review-launcher.ts",
           "goldband-loop/setup",

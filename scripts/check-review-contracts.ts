@@ -31,6 +31,13 @@ try {
   );
   assert.deepEqual(
     selectedEvidenceProviderIds(rootManifest, [
+      'goldband-loop/lib/evidence-runtime-contract.ts',
+    ]),
+    ['installed-runtime-tests', 'workflow-typecheck'],
+    'evidence runtime contract change omitted installed runtime verification',
+  );
+  assert.deepEqual(
+    selectedEvidenceProviderIds(rootManifest, [
       'goldband-loop/test/work-map-review.test.ts',
     ]),
     ['work-map-review-tests', 'workflow-typecheck'],

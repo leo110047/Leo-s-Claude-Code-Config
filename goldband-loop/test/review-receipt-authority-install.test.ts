@@ -12,7 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evidenceChildProcessEnvironment } from "../lib/evidence-runtime-contract.ts";
+import {
+	evidenceChildProcessEnvironment,
+	evidenceTemporaryDirectory,
+} from "../lib/evidence-runtime-contract.ts";
 
 const roots: string[] = [];
 
@@ -21,6 +24,19 @@ afterEach(() => {
 });
 
 describe("review receipt authority provisioning", () => {
+	test("uses only the runtime-owned temp root inside an evidence sandbox", () => {
+		expect(evidenceTemporaryDirectory({
+			GOLDBAND_EVIDENCE_SANDBOX_ACTIVE: "1",
+			GOLDBAND_EVIDENCE_TEMP_ROOT: "/private/tmp/runtime-owned",
+			TMPDIR: "/tmp",
+		})).toBe("/private/tmp/runtime-owned");
+		expect(() => evidenceTemporaryDirectory({
+			GOLDBAND_EVIDENCE_SANDBOX_ACTIVE: "1",
+			TMPDIR: "/tmp",
+		})).toThrow("active evidence sandbox requires an absolute runtime-owned temp root");
+		expect(evidenceTemporaryDirectory({ TMPDIR: "/tmp" })).toBeUndefined();
+	});
+
 	test("provisions Claude-compatible authority and preserves its key across reinstall", () => {
 		const root = mkdtempSync(join(tmpdir(), "review-receipt-authority-"));
 		roots.push(root);
