@@ -1041,15 +1041,37 @@ function acquireDirectoryLock(
 			};
 		} catch (error) {
 			rmSync(candidate, { recursive: true, force: true });
-			if (!existsSync(lock)) throw error;
-			assertRealDirectory(lock);
-			if (recoverStaleLock(lock)) continue;
+			if (!existsSync(lock)) {
+				if (!isDirectoryLockContention(error)) throw error;
+			} else {
+				try {
+					assertRealDirectory(lock);
+					if (recoverStaleLock(lock)) continue;
+				} catch (inspectionError) {
+					if (
+						isDirectoryLockContention(error) &&
+						isNodeError(inspectionError) &&
+						inspectionError.code === "ENOENT"
+					) {
+						// The competing owner released the lock during inspection.
+					} else {
+						throw inspectionError;
+					}
+				}
+			}
 			if (timeoutMs === 0 || Date.now() >= deadline) {
 				throw new Error(busyMessage);
 			}
 			sleepSync(ACTIVE_POINTER_LOCK_RETRY_MS);
 		}
 	}
+}
+
+export function isDirectoryLockContention(error: unknown): boolean {
+	return (
+		isNodeError(error) &&
+		(error.code === "EEXIST" || error.code === "ENOTEMPTY")
+	);
 }
 
 function recoverStaleLock(lock: string): boolean {
@@ -1200,8 +1222,11 @@ function secureDirectory(path: string): string {
 }
 
 function assertRealDirectory(path: string): void {
-	if (!existsSync(path))
-		throw new Error(`required directory is missing: ${path}`);
+	if (!existsSync(path)) {
+		throw Object.assign(new Error(`required directory is missing: ${path}`), {
+			code: "ENOENT",
+		});
+	}
 	const metadata = lstatSync(path);
 	if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
 		throw new Error(`state path must be a real directory: ${path}`);
