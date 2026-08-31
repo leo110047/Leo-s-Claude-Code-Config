@@ -165,6 +165,11 @@ Fixture, local, sandboxed-service, live-provider,
 device-platform, and production-readback evidence remain distinct in records
 and reports. The local runner can attest only local levels; live, device, and
 production levels require an authorized external runner.
+The external-runner admission boundary is owned by the path-scoped review
+evidence test provider, so its fail-closed enforcement applies when that
+contract changes without turning the absence of a future external runner into
+a global gap for unrelated local candidates. Providerless `manual` and
+`unsupported` dispositions remain explicit global requirements.
 
 Repair closure is a separate conditional invocation. It consumes the initial
 artifact only after a canonical HMAC receipt is read back from the installed
