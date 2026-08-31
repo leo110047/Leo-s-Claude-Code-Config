@@ -258,13 +258,13 @@
       "id": "external-authorized-runner",
       "behavior": "Networked live, device, and production evidence executes only through an operation-specific authorized external runner.",
       "kind": "boundary",
-      "input": "network-authorized runtime integration operation",
-      "preconditions": "an external runner implementation and current authorization exist",
-      "expected": "local execution fails closed until the external runner is implemented",
+      "input": "review evidence manifest or runtime enforcement change",
+      "preconditions": "the review-evidence provider applies to the candidate",
+      "expected": "deterministic tests prove that authorized network operations fail closed in the local runner",
       "risk": "medium",
-      "disposition": "unsupported",
-      "providerIds": [],
-      "reason": "Issue #22 implements fail-closed admission but does not yet provide an external authorized runner."
+      "disposition": "automated",
+      "providerIds": ["review-evidence-tests"],
+      "reason": "Issue #22 completed local fail-closed admission; external runner availability remains an operation-specific roadmap concern, not a global candidate gap."
     }
   ],
   "providers": [
@@ -291,7 +291,8 @@
         "sealed-runtime-projection",
         "redacted-untracked-candidate-binding",
         "sandbox-error-signature",
-        "closure-git-path-decoding"
+        "closure-git-path-decoding",
+        "external-authorized-runner"
       ],
       "applicability": {
         "kind": "paths",

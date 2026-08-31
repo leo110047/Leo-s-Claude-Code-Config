@@ -2050,6 +2050,73 @@ Revisit triggers:
 - A demonstrated cross-machine review needs portable attestation, freshness,
   transport, and key-rotation contracts.
 
+## ADR: Scope external-runner enforcement through provider applicability
+
+Status: Accepted
+
+Decision:
+
+- Model `external-authorized-runner` as an automated boundary owned by the
+  existing path-scoped `review-evidence-tests` provider.
+- Keep providerless `manual` and `unsupported` dispositions global. Do not
+  change effective-cell selection or add caller-, prompt-, environment-, or
+  prose-driven applicability.
+- Keep external runner availability separate from admission enforcement. A
+  declared network, live-provider, device-platform, or production-readback
+  operation still requires current typed authorization and an
+  operation-specific external runner; the local runner remains deny-only.
+
+Why:
+
+The previous providerless `unsupported` cell represented both an implemented
+fail-closed boundary and a future external-runner roadmap item. Because
+providerless dispositions are intentionally global, unrelated local-only
+candidates received a permanent coverage gap even when they declared no
+external operation.
+
+Assumptions:
+
+- `review-evidence-tests` remains the authoritative deterministic owner of
+  local external-operation rejection.
+- Provider applicability continues to be derived only from the typed manifest
+  and candidate paths.
+- External runner implementation remains outside the current requirement.
+
+Consequences:
+
+- Unrelated local-only candidates no longer inherit an external-runner roadmap
+  gap and can obtain completion authority when all applicable evidence passes.
+- Changes to the evidence manifest, schema, runtime, or its tests still select
+  the enforcement cell and provider.
+- Existing artifacts bind a different behavior-contract digest and must be
+  revalidated rather than reused across this evolution.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Make every providerless disposition non-applicable | It would silently remove genuine global manual and unsupported requirements. |
+| Add operation-aware cell applicability to the schema | Existing provider applicability expresses the observed requirement without another state owner or selection mechanism. |
+| Mark the roadmap gap `not-applicable` | It would hide the boundary instead of assigning its implemented enforcement to an accountable provider. |
+| Use a prompt, environment marker, or caller declaration | Those inputs are outside the authoritative manifest/runtime contract and would create a bypass. |
+
+Failure signals:
+
+- A local-only dependency candidate emits an `external-authorized-runner`
+  record or coverage gap.
+- An authorized network or external-level operation executes in the local
+  runner, degrades to fixture/mock/local evidence, or obtains completion
+  authority without an external runner.
+- A providerless global manual or unsupported cell disappears from effective
+  completeness.
+
+Revisit triggers:
+
+- A real external runner is implemented and needs its own typed provider,
+  authorization, freshness, and readback contract.
+- Provider path applicability cannot represent an observed external-operation
+  requirement without over- or under-selecting candidates.
+
 ## ADR: Monotonic review contract resolution and local repository store
 
 Status: Accepted

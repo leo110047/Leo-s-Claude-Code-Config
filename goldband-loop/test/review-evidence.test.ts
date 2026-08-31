@@ -831,6 +831,50 @@ describe('review evidence contracts', () => {
     });
   });
 
+  test('providerless manual and unsupported dispositions remain globally effective', async () => {
+    const repo = gitFixture();
+    const value = manifest();
+    value.behaviorMatrix = [
+      {
+        ...value.behaviorMatrix[0]!,
+        id: 'global-manual',
+        risk: 'medium',
+        disposition: 'manual',
+        providerIds: [],
+        reason: 'Owner readback is required.',
+      },
+      {
+        ...value.behaviorMatrix[0]!,
+        id: 'global-unsupported',
+        disposition: 'unsupported',
+        providerIds: [],
+        reason: 'No approved device runner exists.',
+      },
+    ];
+    value.providers = [];
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = {
+      source: 'git diff',
+      diff: 'diff --git a/unrelated.ts b/unrelated.ts',
+      changedFiles: ['unrelated.ts'],
+    };
+    const evidence = await executeEvidencePlan(
+      context(repo),
+      input,
+      validated,
+      createCandidateBinding(repo, input, validated),
+    );
+
+    expect(evidence.records.map((record) => [record.id, record.status])).toEqual([
+      ['cell:global-manual:manual', 'coverage-gap'],
+      ['cell:global-unsupported:unsupported', 'coverage-gap'],
+    ]);
+    expect(evidence.completeness.coverageGapCellIds).toEqual([
+      'global-manual',
+      'global-unsupported',
+    ]);
+  });
+
   test('completeness rejects a record from a provider not authorized by the behavior cell', () => {
     const value = manifest();
     const forged = {
@@ -1399,6 +1443,69 @@ describe('review evidence contracts', () => {
       validated,
       createCandidateBinding(repo, input, validated),
     )).rejects.toThrow('requires an operation-specific external runner');
+  });
+
+  test('root external-runner enforcement does not apply to a local-only dependency candidate', async () => {
+    const repo = gitFixture();
+    const rootManifest = reviewEvidenceManifestSchema.validate(
+      JSON.parse(readFileSync(join(import.meta.dir, '../../goldband.review-evidence.json'), 'utf8')),
+    );
+    const input = {
+      source: 'git diff',
+      diff: [
+        'diff --git a/goldband-loop/bun.lock b/goldband-loop/bun.lock',
+        'diff --git a/goldband-loop/package.json b/goldband-loop/package.json',
+      ].join('\n'),
+      changedFiles: ['goldband-loop/bun.lock', 'goldband-loop/package.json'],
+    };
+    const evidence = await executeEvidencePlan(
+      context(repo),
+      input,
+      rootManifest,
+      createCandidateBinding(repo, input, rootManifest),
+      new Set(['external-authorized-runner']),
+    );
+
+    expect(evidence.records).toEqual([]);
+    expect(evidence.completeness).toEqual({
+      complete: true,
+      hostEligible: true,
+      blockingCellIds: [],
+      coverageGapCellIds: [],
+      runtimeIncompleteCellIds: [],
+    });
+  });
+
+  test('root external-runner enforcement remains fail closed when its provider applies', async () => {
+    const repo = gitFixture();
+    const rootManifest = reviewEvidenceManifestSchema.validate(
+      JSON.parse(readFileSync(join(import.meta.dir, '../../goldband.review-evidence.json'), 'utf8')),
+    );
+    const input = {
+      source: 'git diff',
+      diff: 'diff --git a/goldband-loop/workflows/review-evidence.ts b/goldband-loop/workflows/review-evidence.ts',
+      changedFiles: ['goldband-loop/workflows/review-evidence.ts'],
+    };
+    const evidence = await executeEvidencePlan(
+      context(repo),
+      input,
+      rootManifest,
+      createCandidateBinding(repo, input, rootManifest),
+      new Set(['external-authorized-runner']),
+    );
+
+    expect(evidence.records).toHaveLength(1);
+    expect(evidence.records[0]).toMatchObject({
+      id: 'review-evidence-tests:candidate-green',
+      cellIds: expect.arrayContaining(['external-authorized-runner']),
+      status: 'runtime-incomplete',
+      fresh: false,
+    });
+    expect(evidence.completeness).toMatchObject({
+      complete: false,
+      hostEligible: false,
+      runtimeIncompleteCellIds: ['external-authorized-runner'],
+    });
   });
 
   test('runtime integration evidence preserves its declared verification level', async () => {
