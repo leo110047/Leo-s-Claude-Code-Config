@@ -36,8 +36,6 @@ These actions are tracked for implementation, but are not discoverable or runnab
 | --- | --- | --- | --- | --- | --- | --- |
 | `release` | `land` | Merge, deploy, and verify. | — | `registered-only` | `registered-only` | `high` |
 | `release` | `setup` | Configure deployment. | — | `registered-only` | `registered-only` | `high` |
-| `knowledge` | `setup` | Configure GBrain integration. | — | `registered-only` | `registered-only` | `high` |
-| `knowledge` | `sync` | Synchronize GBrain knowledge. | — | `registered-only` | `registered-only` | `high` |
 
 ## High-risk safety gates
 
@@ -51,8 +49,6 @@ These operation IDs are internal safety inventory, not public action aliases. `b
 | `plan/sync-preview` | `plan/sync` | `preview` | `runtime-owner` | `not-required-read-only` | `tracker-runtime` |
 | `plan/sync` | `plan/sync` | `publish-step` | `runtime-owner` | `native-host-approval` | `tracker-runtime` |
 | `browser/cookies` | `browser/session` | `cookies` | `blocked-before-runtime` | `native-host-approval` | — |
-| `knowledge/setup` | `knowledge/setup` | `setup` | `blocked-before-runtime` | `native-host-approval` | — |
-| `knowledge/sync` | `knowledge/sync` | `sync` | `blocked-before-runtime` | `native-host-approval` | — |
 | `system/upgrade` | `system/upgrade` | `upgrade` | `runtime-owner` | `native-host-approval` | `goldband-setup-gate` |
 | `ios/qa` | `ios/qa` | `qa` | `runtime-owner` | `not-required-read-only` | `ios-qa-evidence` |
 | `ios/sync` | `ios/qa` | `sync` | `blocked-before-runtime` | `native-host-approval` | — |

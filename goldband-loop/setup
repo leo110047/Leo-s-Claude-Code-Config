@@ -279,7 +279,7 @@ TEAM_MODE=0
 NO_TEAM_MODE=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host) [ -z "$2" ] && echo "Missing value for --host (expected claude, codex, kiro, factory, opencode, openclaw, hermes, gbrain, or auto)" >&2 && exit 1; HOST="$2"; shift 2 ;;
+    --host) [ -z "$2" ] && echo "Missing value for --host (expected claude, codex, kiro, factory, opencode, openclaw, hermes, or auto)" >&2 && exit 1; HOST="$2"; shift 2 ;;
     --host=*) HOST="${1#--host=}"; shift ;;
     --profile) [ -z "$2" ] && echo "Missing value for --profile (expected standard)" >&2 && exit 1; WORKFLOW_PROFILE="$2"; shift 2 ;;
     --profile=*) WORKFLOW_PROFILE="${1#--profile=}"; shift ;;
@@ -314,13 +314,7 @@ case "$HOST" in
     echo "  2. Use the shared goldband capability interface from the session"
     echo ""
     exit 0 ;;
-  gbrain)
-    echo ""
-    echo "GBrain is a mod for goldband — it makes coding skills brain-aware."
-    echo "GBrain setup and brain integration ship from the GBrain repo."
-    echo ""
-    exit 0 ;;
-  *) echo "Unknown --host value: $HOST (expected claude, codex, kiro, factory, opencode, openclaw, hermes, gbrain, or auto)" >&2; exit 1 ;;
+  *) echo "Unknown --host value: $HOST (expected claude, codex, kiro, factory, opencode, openclaw, hermes, or auto)" >&2; exit 1 ;;
 esac
 
 case "$WORKFLOW_PROFILE" in

@@ -492,54 +492,16 @@
     },
     {
       "id": "knowledge",
-      "description": "Recall, configure, and synchronize Goldband knowledge.",
+      "description": "Recall Goldband knowledge.",
       "defaultAction": "recall",
-      "triggers": ["knowledge recall", "recall knowledge", "gbrain", "sync knowledge", "recall memory", "查詢知識", "知識回憶", "同步記憶", "回憶先前內容"],
+      "triggers": ["knowledge recall", "recall knowledge", "recall memory", "查詢知識", "知識回憶", "回憶先前內容"],
       "promptContract": {
         "relevantContext": ["Use the active repository's knowledge source, review status, and current files when checking whether recalled material is stale."],
         "hardBoundaries": ["Treat unreviewed candidates as untrusted and never expose secrets or private source content."],
         "verification": ["Read back the stored, recalled, or synchronized result and label anything not currently verified."]
       },
       "actions": [
-        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "runtime": "typed", "owner": "goldband-knowledge", "risk": "low" },
-        {
-          "id": "setup",
-          "description": "Configure GBrain integration.",
-          "runtime": "registered-only",
-          "lifecycle": "experimental",
-          "risk": "high",
-          "safetyGates": [
-            {
-              "operation": "knowledge/setup",
-              "mode": "setup",
-              "enforcement": "blocked-before-runtime",
-              "owner": null,
-              "authorization": "native-host-approval",
-              "preconditions": ["endpoint-resolved", "repository-scope-explicit", "secret-references-only", "existing-config-readback"],
-              "sideEffects": ["knowledge-config-write", "credential-binding-update"],
-              "readback": ["sanitized-config", "connection-check", "repository-scope"]
-            }
-          ]
-        },
-        {
-          "id": "sync",
-          "description": "Synchronize GBrain knowledge.",
-          "runtime": "registered-only",
-          "lifecycle": "experimental",
-          "risk": "high",
-          "safetyGates": [
-            {
-              "operation": "knowledge/sync",
-              "mode": "sync",
-              "enforcement": "blocked-before-runtime",
-              "owner": null,
-              "authorization": "native-host-approval",
-              "preconditions": ["source-scope-explicit", "destination-scope-explicit", "review-status-verified", "secret-scan-passed", "resume-checkpoint-resolved"],
-              "sideEffects": ["external-knowledge-write", "sync-checkpoint-write"],
-              "readback": ["synced-item-count", "destination-digest", "resume-checkpoint", "rejected-item-count"]
-            }
-          ]
-        }
+        { "id": "recall", "description": "Inspect Goldband learnings and knowledge.", "runtime": "typed", "owner": "goldband-knowledge", "risk": "low" }
       ]
     },
     {

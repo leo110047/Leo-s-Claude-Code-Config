@@ -17,5 +17,5 @@ fi
 
 echo "$INPUT" >> "$GOLDBAND_HOME/projects/$SLUG/$BRANCH-reviews.jsonl"
 
-# gbrain-sync: enqueue for cross-machine sync (no-op if sync is off).
+# Artifacts sync: enqueue for cross-machine sync (no-op if sync is off).
 "$SCRIPT_DIR/goldband-brain-enqueue" "projects/$SLUG/$BRANCH-reviews.jsonl" 2>/dev/null &

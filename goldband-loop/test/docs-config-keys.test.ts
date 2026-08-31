@@ -6,17 +6,6 @@ import * as path from 'path';
 const ROOT = path.resolve(import.meta.dir, '..');
 const CONFIG_BIN = path.join(ROOT, 'bin', 'goldband-config');
 
-// goldband-config accepts arbitrary keys (free-form YAML store), so we can't
-// build an authoritative set of "valid keys" from the script. Instead, defend
-// the specific invariant this wave introduces: deprecated keys must not
-// reappear in user-facing docs. Extend the denylist as future renames happen.
-const DEPRECATED_KEYS = new Set<string>([
-  // Renamed to artifacts_sync_mode in v1.27.0.0, doc references re-deprecated
-  // in v1.36.0.0 alongside the same rename of *_prompted.
-  'gbrain_sync_mode',
-  'gbrain_sync_mode_prompted',
-]);
-
 function scanDocsForConfigKeys(): { docPath: string; key: string; line: number }[] {
   const hits: { docPath: string; key: string; line: number }[] = [];
   const docsDir = path.join(ROOT, 'docs');
@@ -60,19 +49,8 @@ describe('docs ↔ goldband-config key drift guard', () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
-  test('no doc references a deprecated config key', () => {
-    const hits = scanDocsForConfigKeys();
-    const stale = hits.filter((h) => DEPRECATED_KEYS.has(h.key));
-    if (stale.length > 0) {
-      console.error('Deprecated config keys referenced in docs:', stale);
-    }
-    expect(stale).toEqual([]);
-  });
-
   // goldband-config is a bash script; Windows can't exec it via spawnSync
-  // without a Git Bash interpreter shim. Skip on Windows — the deprecated-key
-  // denylist test above already pins the v1.27.0.0 rename behavior at the
-  // doc layer, which is the actual invariant this wave defends.
+  // without a Git Bash interpreter shim.
   test.skipIf(process.platform === 'win32')('`explain_level` is exposed as a documented default', () => {
     const tmpHome = fs.mkdtempSync(path.join(require('os').tmpdir(), 'goldband-cfg-'));
     try {

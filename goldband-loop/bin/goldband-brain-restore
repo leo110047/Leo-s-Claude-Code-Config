@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# goldband-brain-restore — bootstrap a new machine from an existing brain repo.
+# goldband-brain-restore — bootstrap a new machine from an artifacts repo.
 #
 # Usage:
 #   goldband-brain-restore [<git-remote-url>]
 #
-# If no URL is given, reads from ~/.goldband-brain-remote.txt (written by
-# goldband-brain-init on the original machine). Copy that file to the new
+# If no URL is given, reads from ~/.goldband-artifacts-remote.txt (written by
+# goldband-artifacts-init on the original machine). Copy that file to the new
 # machine before running this command.
 #
 # Safety gates (refuses with clear message):
@@ -15,12 +15,10 @@
 #
 # What it does:
 #   1. Clone the remote to a staging directory
-#   2. Validate the repo is goldband-brain-shaped (.brain-allowlist, .gitattributes)
+#   2. Validate the repo is Goldband-artifacts-shaped (.brain-allowlist, .gitattributes)
 #   3. rsync-copy tracked files into ~/.goldband/ with skip-if-same-hash
 #   4. Move staging's .git into ~/.goldband/.git
 #   5. Register local git config merge drivers (they don't clone from remote)
-#   6. Wire the cloned brain into gbrain via goldband-gbrain-source-wireup
-#      (best-effort; restore continues even if gbrain wireup fails)
 #
 # Env:
 #   GOLDBAND_HOME — override ~/.goldband
@@ -30,13 +28,7 @@ set -euo pipefail
 GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_BIN="$SCRIPT_DIR/goldband-config"
-# v1.27.0.0+ canonical name; brain-remote is the legacy fallback during the
-# migration window. The migration script renames the file in place.
-if [ -f "$HOME/.goldband-artifacts-remote.txt" ]; then
-  REMOTE_FILE="$HOME/.goldband-artifacts-remote.txt"
-else
-  REMOTE_FILE="$HOME/.goldband-brain-remote.txt"
-fi
+REMOTE_FILE="$HOME/.goldband-artifacts-remote.txt"
 
 REMOTE_URL="${1:-}"
 if [ -z "$REMOTE_URL" ]; then
@@ -88,10 +80,10 @@ fi
 # ---- validate shape ----
 if [ ! -f "$STAGING/repo/.brain-allowlist" ] || [ ! -f "$STAGING/repo/.gitattributes" ]; then
   cat >&2 <<EOF
-goldband-brain-restore: $REMOTE_URL does not look like a goldband-brain repo.
+goldband-brain-restore: $REMOTE_URL does not look like a Goldband artifacts repo.
 Missing: .brain-allowlist and/or .gitattributes
 
-This command only works on repos created by goldband-brain-init.
+This command only works on repos created by goldband-artifacts-init.
 EOF
   exit 1
 fi
@@ -135,8 +127,8 @@ $CLOBBER_RISK
 
 Back these up first, or run this command on a machine with an empty
 ~/.goldband/. If these files are from an earlier goldband session on THIS
-machine, you probably want to run goldband-brain-init instead (to create a
-new brain repo with this machine's state).
+machine, you probably want to run goldband-artifacts-init instead (to create a
+new artifacts repo with this machine's state).
 EOF
     exit 1
   fi
@@ -208,12 +200,6 @@ if [ ! -f "$REMOTE_FILE" ]; then
   chmod 600 "$REMOTE_FILE"
   echo ""
   echo "Wrote $REMOTE_FILE for future skill-run auto-detection."
-fi
-
-# ---- wire the cloned brain into gbrain (best-effort) ----
-WIREUP_BIN="$SCRIPT_DIR/goldband-gbrain-source-wireup"
-if [ -x "$WIREUP_BIN" ]; then
-  "$WIREUP_BIN" || >&2 echo "WARNING: gbrain wireup failed; run $WIREUP_BIN manually after fixing prereqs"
 fi
 
 cat <<EOF

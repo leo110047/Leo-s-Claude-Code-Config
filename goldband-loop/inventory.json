@@ -400,7 +400,7 @@
     },
     {
       "id": "knowledge",
-      "description": "Recall, configure, and synchronize Goldband knowledge.",
+      "description": "Recall Goldband knowledge.",
       "defaultAction": "recall",
       "actions": [
         {
@@ -410,72 +410,6 @@
           "owner": "goldband-knowledge",
           "risk": "low",
           "dispatch": "host-runtime"
-        },
-        {
-          "id": "setup",
-          "description": "Configure GBrain integration.",
-          "runtime": "registered-only",
-          "lifecycle": "experimental",
-          "risk": "high",
-          "safetyGates": [
-            {
-              "operation": "knowledge/setup",
-              "mode": "setup",
-              "enforcement": "blocked-before-runtime",
-              "owner": null,
-              "authorization": "native-host-approval",
-              "preconditions": [
-                "endpoint-resolved",
-                "repository-scope-explicit",
-                "secret-references-only",
-                "existing-config-readback"
-              ],
-              "sideEffects": [
-                "knowledge-config-write",
-                "credential-binding-update"
-              ],
-              "readback": [
-                "sanitized-config",
-                "connection-check",
-                "repository-scope"
-              ]
-            }
-          ],
-          "dispatch": "registered-only"
-        },
-        {
-          "id": "sync",
-          "description": "Synchronize GBrain knowledge.",
-          "runtime": "registered-only",
-          "lifecycle": "experimental",
-          "risk": "high",
-          "safetyGates": [
-            {
-              "operation": "knowledge/sync",
-              "mode": "sync",
-              "enforcement": "blocked-before-runtime",
-              "owner": null,
-              "authorization": "native-host-approval",
-              "preconditions": [
-                "source-scope-explicit",
-                "destination-scope-explicit",
-                "review-status-verified",
-                "secret-scan-passed",
-                "resume-checkpoint-resolved"
-              ],
-              "sideEffects": [
-                "external-knowledge-write",
-                "sync-checkpoint-write"
-              ],
-              "readback": [
-                "synced-item-count",
-                "destination-digest",
-                "resume-checkpoint",
-                "rejected-item-count"
-              ]
-            }
-          ],
-          "dispatch": "registered-only"
         }
       ]
     },
@@ -685,9 +619,7 @@
     "goldband-analytics",
     "goldband-artifacts-init",
     "goldband-artifacts-url",
-    "goldband-brain-consumer",
     "goldband-brain-enqueue",
-    "goldband-brain-reader",
     "goldband-brain-restore",
     "goldband-brain-sync",
     "goldband-brain-uninstall",
@@ -700,13 +632,6 @@
     "goldband-diff-scope",
     "goldband-env",
     "goldband-extension",
-    "goldband-gbrain-detect",
-    "goldband-gbrain-install",
-    "goldband-gbrain-mcp-verify",
-    "goldband-gbrain-repo-policy",
-    "goldband-gbrain-source-wireup",
-    "goldband-gbrain-supabase-provision",
-    "goldband-gbrain-supabase-verify",
     "goldband-global-discover",
     "goldband-ios-qa-daemon",
     "goldband-ios-qa-mint",

@@ -207,7 +207,6 @@ bash scripts/verify-decision-guidance.sh
 | [BROWSER.md](BROWSER.md) | Browser command reference |
 | [docs/domain-skills.md](docs/domain-skills.md) | Domain skill packaging |
 | [docs/tutorial-document-generate.md](docs/tutorial-document-generate.md) | Documentation-generation tutorial |
-| [USING_GBRAIN_WITH_GOLDBAND.md](USING_GBRAIN_WITH_GOLDBAND.md) | GBrain integration |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Runtime development workflow |
 | [CHANGELOG.md](CHANGELOG.md) | Runtime history |
 

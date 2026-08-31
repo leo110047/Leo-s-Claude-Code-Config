@@ -32,7 +32,6 @@ const ALL_HOSTS = [
   'cursor',
   'openclaw',
   'hermes',
-  'gbrain',
 ];
 const CAPABILITY_INVOCATION_ROOTS = [
   'README.md',
@@ -151,6 +150,10 @@ const outputs = new Map([
   ],
   [
     'hooks/scripts/lib/skill-activation/capability-routing.generated.json',
+    json(activationRules(claudeCapabilities)),
+  ],
+  [
+    'plugin-assets/claude-code-plugin/hooks/scripts/lib/skill-activation/capability-routing.generated.json',
     json(activationRules(claudeCapabilities)),
   ],
   [

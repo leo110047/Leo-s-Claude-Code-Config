@@ -2177,3 +2177,82 @@ Failure signals:
 - A central entry shadows a repository manifest or applies after identity drift.
 - Review creates, moves, edits, or deletes a repository manifest.
 - Artifacts omit any selected baseline, explicit, or effective digest.
+
+## ADR: Retire the GBrain integration surface
+
+Status: Accepted
+
+Decision:
+
+- Retire GBrain as a public capability, supported host, installed runtime, and
+  setup or synchronization path. This supersedes earlier decisions that
+  described it as an active Goldband integration.
+- Keep `knowledge/recall` under the `goldband-knowledge` owner, along with
+  context checkpoints, project learnings, and provider-neutral artifact Git
+  synchronization.
+- Move shared Git remote normalization into a provider-neutral owner. Do not
+  create a replacement provider abstraction until a concrete integration has
+  verified requirements and runtime ownership.
+- Rebuild Goldband-managed Claude and Codex runtime roots during upgrade so
+  stale retired files disappear. Do not inspect, modify, or delete user-owned
+  provider configuration, databases, external resources, registrations, or
+  diagnostic residue.
+- Enforce the retirement through the existing manifest generation and runtime
+  inventory checks, including clean install, copy fallback, seeded-stale
+  upgrade, and controlled reintroduction fixtures.
+
+Why:
+
+The shipped surface advertised setup and synchronization actions without a
+runtime owner, while directly executable helpers could still perform provider
+installation, transcript ingestion, external provisioning, and registration.
+The repository also lacked an authoritative upstream and live compatibility
+lane. Removing that unowned surface is smaller and safer than preserving it
+behind a speculative provider framework.
+
+Assumptions:
+
+- Curated knowledge, context checkpoints, project learnings, and artifact Git
+  synchronization remain independently useful without a semantic-memory
+  provider.
+- Rebuilding only Goldband-managed runtime roots is sufficient to retire stale
+  installed files without identifying or touching user-owned assets.
+- A future provider can be evaluated from its actual contract without keeping
+  the retired integration or a generic provider framework alive.
+
+Consequences:
+
+- `knowledge` exposes only `recall`, and the supported host list no longer
+  includes GBrain.
+- Existing user-owned GBrain assets remain untouched but are no longer read,
+  written, installed, upgraded, health-checked, or uninstalled by Goldband.
+- Provider-neutral artifact queue, push, restore, and uninstall behavior
+  remains available without provider hookup commands or transcript staging.
+- Historical changelog, archived documents, and earlier decisions remain as
+  history; this ADR is the current authority.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Repair and re-enable the existing integration | There is no authoritative upstream, runtime owner, or live compatibility lane to support the advertised contract. |
+| Keep the helpers but hide the public workflow actions | Direct installed binaries would retain the same side-effect and data-boundary bypass. |
+| Introduce a provider abstraction before removal | No current replacement has verified requirements, so the abstraction would preserve speculative states and maintenance cost. |
+| Delete all memory and sync behavior | It would remove curated knowledge and provider-neutral artifacts that have independent owners and regression coverage. |
+
+Failure signals:
+
+- A generated or installed surface contains a retired host, action, binary,
+  route, or provider-specific instruction.
+- Install or upgrade changes a user-owned provider path, registration, remote
+  resource, or diagnostic residue.
+- Curated knowledge, context, project learnings, or provider-neutral artifact
+  synchronization loses its runtime owner or regression coverage.
+
+Revisit triggers:
+
+- A replacement provider has an authoritative upstream, license and security
+  review, explicit data boundaries, a runtime owner, and live compatibility
+  evidence.
+- Provider-neutral artifact synchronization itself no longer has demonstrated
+  users or cannot maintain its privacy and secret-scanning contract.

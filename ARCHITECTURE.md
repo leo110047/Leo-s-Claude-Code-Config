@@ -505,15 +505,13 @@ This layer does not replace existing storage:
 
 - `learnings.jsonl` remains append-only project memory for small operational
   discoveries and visible "Prior learning applied" readback.
-- GBrain remains optional semantic memory and is only queried where the host
-  supports that resolver.
 - context-save/context-restore remains working-session continuity.
 - auto-memory stores user identity and preferences; knowledge stores verified
   problem/solution, decision, and practice records.
 
 Recall adapters are deliberately shallow. `goldband-review` and `goldband-qa`
-use a single `Prior Knowledge` resolver that queries learnings, the curated
-index, and optional GBrain instead of stacking three near-identical sections.
+use a single `Prior Knowledge` resolver that queries learnings and the curated
+index instead of stacking near-identical sections.
 Claude `UserPromptSubmit` gets an advisory-only prompt hook that lists matching
 knowledge paths with summaries and rate-limits repeats per session. Codex does
 not currently have an equivalent prompt-time advisory adapter in this repo;

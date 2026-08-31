@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertGbrainRetirement } from './lib/gbrain-retirement-check.mjs';
+import { assertInstalledGbrainRetirement } from './lib/gbrain-retirement-install-check.mjs';
 import {
   discoverLegacyEntrypoints,
   discoverRuntimeBinaries,
@@ -71,6 +73,7 @@ function main() {
   assertLegacyConfigMigration();
   assertRetiredShipAssetsAbsent();
   assertRetiredShipReferencesAbsent();
+  assertGbrainRetirement(ROOT_DIR);
   assertCiWorkflowOwnership();
   assertSourceInventory(inventory);
   const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-loop-home.'));
@@ -80,6 +83,11 @@ function main() {
     assertInstalledStandardInventory(tmpHome, inventory, capabilityContract);
     assertInstalledManagedWorktreeSurface(tmpHome);
     assertInstalledWorkflowDistribution(tmpHome, LOOP_DIR);
+    assertInstalledGbrainRetirement({
+      home: tmpHome,
+      rootDir: ROOT_DIR,
+      reinstall: (target) => runInstall(tmpHome, target),
+    });
     console.log('[OK] Goldband Loop inventory matches clean install');
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true });
@@ -90,6 +98,13 @@ function main() {
   );
   try {
     runInstall(copyHome, 'workflow', { GOLDBAND_FORCE_COPY: '1' });
+    runInstall(copyHome, 'workflow-codex', { GOLDBAND_FORCE_COPY: '1' });
+    assertInstalledGbrainRetirement({
+      home: copyHome,
+      rootDir: ROOT_DIR,
+      reinstall: (target) =>
+        runInstall(copyHome, target, { GOLDBAND_FORCE_COPY: '1' }),
+    });
     assertInstalledKnowledgeCliRuns(copyHome);
     assertInstalledCrossReviewCliRuns(copyHome);
     assertInstalledTaskEmissionCliRuns(copyHome);

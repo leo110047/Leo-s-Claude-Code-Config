@@ -1,14 +1,9 @@
 /**
- * goldband-artifacts-init — provider-selection + brain-admin-hookup tests.
+ * goldband-artifacts-init — provider-selection and Git sync tests.
  *
- * Mirrors the goldband-brain-init-gh-mock.test.ts pattern: install fake gh /
- * glab / git binaries on PATH, drive the script's three host-pref branches,
- * assert it (a) creates the right repo name, (b) stores HTTPS canonical in
- * ~/.goldband-artifacts-remote.txt, (c) prints the "Send this to your brain
- * admin" block in the right form depending on --url-form-supported.
- *
- * Per codex Finding #3: the script always prints the hookup command, never
- * auto-executes (no MCP probe). Per Finding #10: stored URL is HTTPS.
+ * Installs fake gh / glab / git binaries on PATH, drives the script's three
+ * host-pref branches, and verifies the private Git artifact contract without
+ * any provider-specific knowledge-system hookup.
  */
 
 import { describe, test as _test, expect, beforeEach, afterEach } from 'bun:test';
@@ -257,45 +252,6 @@ describe('goldband-artifacts-init canonical URL storage (codex Finding #10)', ()
     expect(r.status).toBe(0);
     const remote = spawnSync('git', ['-C', tmpHome, 'remote', 'get-url', 'origin'], { encoding: 'utf-8' });
     expect(remote.stdout.trim()).toBe('git@github.com:testuser/goldband-artifacts-testuser.git');
-  });
-});
-
-describe('goldband-artifacts-init brain-admin hookup printout (codex Finding #3)', () => {
-  test('--url-form-supported false prints the two-line clone-then-path form', () => {
-    makeFakeGh({});
-    const r = run(['--host', 'github', '--url-form-supported', 'false']);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain('Send this to your brain admin');
-    expect(r.stdout).toContain('git clone');
-    expect(r.stdout).toContain('--path');
-    expect(r.stdout).toContain('--federated');
-    // The forward-compat hint should still appear.
-    expect(r.stdout).toContain('When gbrain ships --url support');
-  });
-
-  test('--url-form-supported true prints the one-liner with --url', () => {
-    makeFakeGh({});
-    const r = run(['--host', 'github', '--url-form-supported', 'true']);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain('Send this to your brain admin');
-    expect(r.stdout).toContain('gbrain sources add goldband-artifacts-testuser --url');
-    expect(r.stdout).not.toContain('git clone');
-  });
-
-  test('the gbrain command line uses canonical HTTPS, not SSH', () => {
-    makeFakeGh({ webUrl: 'https://github.com/testuser/goldband-artifacts-testuser' });
-    const r = run(['--host', 'github', '--url-form-supported', 'true']);
-    expect(r.status).toBe(0);
-    // Find the line with the gbrain command and check ITS URL is HTTPS.
-    const gbrainLine = r.stdout
-      .split('\n')
-      .find((l) => l.includes('gbrain sources add'));
-    expect(gbrainLine).toBeDefined();
-    expect(gbrainLine).toContain('https://github.com/testuser/goldband-artifacts-testuser');
-    expect(gbrainLine).not.toContain('git@github.com');
-    // Note: the SSH form does appear in the printout as informational
-    // (the "Push: ..." line), which is intentional — that's the URL git
-    // actually uses for push.
   });
 });
 
