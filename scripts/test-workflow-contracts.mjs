@@ -238,7 +238,7 @@ const actions = manifest.capabilities.flatMap((capability) =>
     owner: action.owner ?? null,
   })),
 );
-assert.equal(actionCount, 24);
+assert.equal(actionCount, 22);
 assert.equal(
   actions.filter((action) => action.lifecycle === 'public').length,
   20,
@@ -253,7 +253,7 @@ assert.deepEqual(
     .filter((action) => action.lifecycle === 'experimental')
     .map((action) => action.name)
     .sort(),
-  ['knowledge/setup', 'knowledge/sync', 'release/land', 'release/setup'],
+  ['release/land', 'release/setup'],
 );
 assert.equal(
   actions
@@ -290,8 +290,6 @@ assert.deepEqual(safetyGates.map((gate) => gate.operation).sort(), [
   'browser/cookies',
   'ios/qa',
   'ios/sync',
-  'knowledge/setup',
-  'knowledge/sync',
   'plan/sync',
   'plan/sync-preview',
   'release/canary',
@@ -309,7 +307,7 @@ assert.deepEqual(
 assert.equal(
   safetyGates.filter((gate) => gate.enforcement === 'blocked-before-runtime')
     .length,
-  7,
+  5,
 );
 
 const missingPrimaryGate = structuredClone(manifest.capabilities);
@@ -325,11 +323,11 @@ assert.throws(
 );
 
 const prematureOwner = structuredClone(manifest.capabilities);
-const knowledgeSetup = prematureOwner
-  .find((capability) => capability.id === 'knowledge')
+const releaseSetup = prematureOwner
+  .find((capability) => capability.id === 'release')
   .actions.find((action) => action.id === 'setup');
-knowledgeSetup.safetyGates[0].enforcement = 'runtime-owner';
-knowledgeSetup.safetyGates[0].owner = 'unproven-owner';
+releaseSetup.safetyGates[0].enforcement = 'runtime-owner';
+releaseSetup.safetyGates[0].owner = 'unproven-owner';
 assert.throws(
   () => validateSafetyGates(prematureOwner),
   /registered-only actions must remain blocked before runtime/,

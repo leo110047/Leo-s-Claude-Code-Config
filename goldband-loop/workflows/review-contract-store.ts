@@ -21,6 +21,10 @@ import {
   reviewEvidenceManifestSchema,
   type ReviewEvidenceManifest,
 } from './review-evidence';
+import {
+  resolveReviewWorkspace,
+  type ReviewWorkspaceCoordinates,
+} from './review-workspace';
 
 const STORE_SCHEMA_VERSION = 1;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
@@ -43,6 +47,7 @@ type ReviewContractStoreEntry = {
 
 export type ReviewContractStoreInspection = {
   repository: ReviewContractRepositoryIdentity;
+  workspace: ReviewWorkspaceCoordinates;
   entryFile: string;
   entry?: ReviewContractStoreEntry;
   invalidReason?: string;
@@ -52,20 +57,23 @@ export function inspectReviewContractStore(
   cwd: string,
   stateRoot: string,
 ): ReviewContractStoreInspection {
+  const workspace = resolveReviewWorkspace(cwd);
   const repository = resolveReviewContractRepositoryIdentity(cwd);
   const entryFile = reviewContractEntryFile(stateRoot, repository);
   const directory = reviewContractStoreDirectory(stateRoot);
   if (existsSync(directory)) assertPrivateStoreDirectory(directory);
-  if (!existsSync(entryFile)) return { repository, entryFile };
+  if (!existsSync(entryFile)) return { repository, workspace, entryFile };
   try {
     return {
       repository,
+      workspace,
       entryFile,
       entry: readAndValidateStoreEntry(entryFile, repository),
     };
   } catch (error) {
     return {
       repository,
+      workspace,
       entryFile,
       invalidReason: error instanceof Error ? error.message : String(error),
     };
@@ -77,10 +85,12 @@ export function importReviewContract(
   stateRoot: string,
   manifestFile: string,
 ): ReviewContractStoreInspection {
+  const workspace = resolveReviewWorkspace(cwd);
   const repository = resolveReviewContractRepositoryIdentity(cwd);
   const source = resolve(cwd, manifestFile);
-  const manifest = reviewEvidenceManifestSchema.validate(
+  const manifest = validateManifestSource(
     JSON.parse(readStableRegularFile(source).toString('utf8')),
+    source,
   );
   const directory = reviewContractStoreDirectory(stateRoot);
   ensurePrivateDirectory(directory);
@@ -97,7 +107,7 @@ export function importReviewContract(
     assertPrivateRegularFile(entryFile, 'review contract store entry');
   }
   writeAtomicPrivateJson(entryFile, entry);
-  return { repository, entryFile, entry: readAndValidateStoreEntry(entryFile, repository) };
+  return { repository, workspace, entryFile, entry: readAndValidateStoreEntry(entryFile, repository) };
 }
 
 export function removeReviewContract(
@@ -115,15 +125,14 @@ export function removeReviewContract(
 export function resolveReviewContractRepositoryIdentity(
   cwd: string,
 ): ReviewContractRepositoryIdentity {
-  let root = '';
+  const workspace = resolveReviewWorkspace(cwd);
   let common = '';
   try {
-    root = git(cwd, ['rev-parse', '--show-toplevel']);
     common = git(cwd, ['rev-parse', '--git-common-dir']);
   } catch {
     throw new Error('review contract store requires an unambiguous Git repository');
   }
-  if (!root || !common) {
+  if (!workspace.repositoryRoot || !common) {
     throw new Error('review contract store requires an unambiguous Git repository');
   }
   const commonDirectory = realpathSync(resolve(cwd, common));
@@ -193,7 +202,7 @@ function readAndValidateStoreEntry(
   if (value.repository.remoteIdentityDigest !== repository.remoteIdentityDigest) {
     throw new Error('review contract store remote identity changed; re-import explicitly');
   }
-  const manifest = reviewEvidenceManifestSchema.validate(value.manifest);
+  const manifest = validateManifestSource(value.manifest, file);
   const manifestDigest = digestManifest(manifest);
   if (value.manifestDigest !== manifestDigest) {
     throw new Error('review contract store manifest digest mismatch');
@@ -246,6 +255,14 @@ function readStableRegularFile(file: string): Buffer {
     return content;
   } finally {
     closeSync(descriptor);
+  }
+}
+
+function validateManifestSource(value: unknown, source: string): ReviewEvidenceManifest {
+  try {
+    return reviewEvidenceManifestSchema.validate(value);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; source: ${source}`);
   }
 }
 

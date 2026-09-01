@@ -166,6 +166,6 @@ fi
 
 echo "$VALIDATED" >> "$GOLDBAND_HOME/projects/$SLUG/question-log.jsonl"
 
-# NOTE: question-log.jsonl is deliberately NOT enqueued for gbrain-sync.
+# NOTE: question-log.jsonl is deliberately NOT enqueued for artifacts sync.
 # Per Codex v2 review, audit/derivation data stays local alongside the
 # question-preferences.json it annotates.

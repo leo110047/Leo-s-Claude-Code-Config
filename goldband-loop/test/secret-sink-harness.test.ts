@@ -4,9 +4,6 @@
  * Positive controls: deliberately leak a seed in every covered channel and
  * assert the harness catches it. A harness that silently under-reports is
  * worse than no harness — these tests are the quality gate.
- *
- * Negative controls: run real setup-gbrain bins with known secrets; no
- * leaks should appear.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -15,7 +12,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { runWithSecretSink } from './helpers/secret-sink-harness';
 
-const ROOT = path.resolve(import.meta.dir, '..');
 const LEAK_BIN_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'leak-bins-'));
 
 // Build a disposable bash script that leaks in a specific way. Returns
@@ -138,79 +134,4 @@ describe('secret-sink-harness — positive controls', () => {
     });
     expect(r.leaks).toEqual([]);
   });
-});
-
-describe('secret-sink-harness — real bins (negative controls)', () => {
-  test('supabase-verify does not leak a URL password on reject', async () => {
-    const bin = path.join(ROOT, 'bin', 'goldband-gbrain-supabase-verify');
-    const seedPassword = 'extremely-distinctive-password-abc-xyz-987';
-    // Use a URL that will be REJECTED (wrong scheme) so all error paths run
-    const leakyUrl = `mysql://user:${seedPassword}@host:6543/db`;
-    const r = await runWithSecretSink({
-      bin,
-      args: [leakyUrl],
-      seeds: [seedPassword],
-    });
-    // Status 2 — rejected as expected
-    expect(r.status).toBe(2);
-    // No leaks in any channel
-    expect(r.leaks).toEqual([]);
-  });
-
-  test('supabase-verify does not leak on direct-connection rejection path', async () => {
-    const bin = path.join(ROOT, 'bin', 'goldband-gbrain-supabase-verify');
-    const seedPassword = 'another-distinctive-secret-for-direct-conn';
-    const leakyUrl = `postgresql://postgres:${seedPassword}@db.abcdef.supabase.co:5432/postgres`;
-    const r = await runWithSecretSink({
-      bin,
-      args: [leakyUrl],
-      seeds: [seedPassword],
-    });
-    expect(r.status).toBe(3);
-    expect(r.leaks).toEqual([]);
-  });
-
-  test('lib.sh read_secret_to_env does not leak stdin via captured channels', async () => {
-    const seed = 'piped-secret-that-should-stay-invisible-zzz';
-    // Wrapper script: source lib.sh, read secret, echo only its length.
-    const lib = path.join(ROOT, 'bin', 'goldband-gbrain-lib.sh');
-    const bin = makeLeakyBin(
-      'read-secret-wrapper',
-      `. "${lib}"\nread_secret_to_env MY_SECRET "Prompt: "\necho "len=\${#MY_SECRET}"`
-    );
-    const r = await runWithSecretSink({
-      bin,
-      args: [],
-      seeds: [seed],
-      stdin: seed,
-    });
-    expect(r.status).toBe(0);
-    // The length is visible (43) but the value is not
-    expect(r.stdout).toContain(`len=${seed.length}`);
-    expect(r.leaks).toEqual([]);
-  });
-
-  test('supabase-provision does not leak a PAT on auth-failure path', async () => {
-    const bin = path.join(ROOT, 'bin', 'goldband-gbrain-supabase-provision');
-    const seedPat = 'sbp_very_distinctive_pat_seed_abc_xyz_1234567890';
-    // With no SUPABASE_API_BASE override, the bin tries the real API URL.
-    // We want to avoid real network calls — point at a bogus URL that
-    // immediately fails with curl. The bin should exit with an error
-    // WITHOUT leaking the PAT to any channel.
-    const r = await runWithSecretSink({
-      bin,
-      args: ['list-orgs'],
-      seeds: [seedPat],
-      env: {
-        SUPABASE_ACCESS_TOKEN: seedPat,
-        // Nonexistent port — curl fails fast.
-        SUPABASE_API_BASE: 'http://127.0.0.1:1',
-      },
-      timeoutMs: 30_000, // curl retries with backoff — give it room to exit
-    });
-    // Expect a non-zero exit (network failure, exit 8 per the bin's
-    // retry-exhausted path)
-    expect(r.status).not.toBe(0);
-    expect(r.leaks).toEqual([]);
-  }, 60_000);
 });

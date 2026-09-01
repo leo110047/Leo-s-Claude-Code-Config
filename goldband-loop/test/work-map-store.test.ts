@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
+	isDirectoryLockContention,
 	renderWorkMapMarkdown,
 	WorkMapStore,
 	type WorkMapTransactionStep,
@@ -30,6 +31,18 @@ afterEach(() => {
 });
 
 describe("WorkMapStore", () => {
+	test("classifies cross-platform directory rename contention", () => {
+		for (const code of ["EEXIST", "ENOTEMPTY"]) {
+			expect(
+				isDirectoryLockContention(Object.assign(new Error(code), { code })),
+			).toBe(true);
+		}
+		expect(
+			isDirectoryLockContention(Object.assign(new Error("denied"), { code: "EPERM" })),
+		).toBe(false);
+		expect(isDirectoryLockContention(new Error("unknown"))).toBe(false);
+	});
+
 	test("owns claim, implementation, review, and integration transitions", () => {
 		const { repo, home } = fixture();
 		const store = createStore(repo, home, "work-a");
@@ -482,6 +495,31 @@ describe("WorkMapStore", () => {
 		mkdirSync(join(store.workRoot, ".active-pointer-lock"));
 		expect(() => store.setActive(created.id)).not.toThrow();
 		expect(store.readActive()).toEqual(created);
+	});
+
+	test("preserves zero-timeout semantics for a live update lock", () => {
+		const { repo, home } = fixture();
+		const store = createStore(repo, home, "work-a");
+		const created = store.create(input(), "codex");
+		const lock = join(store.workRoot, created.id, ".update-lock");
+		mkdirSync(lock, { mode: 0o700 });
+		writeFileSync(
+			join(lock, "owner.json"),
+			JSON.stringify({
+				schemaVersion: 1,
+				pid: process.pid,
+				token: "test-owner",
+			}),
+		);
+
+		const startedAt = Date.now();
+		expect(() =>
+			store.update(created.id, created.revision, "block", "codex", (map) => ({
+				...map,
+				status: "blocked",
+			})),
+		).toThrow(`Work Map update is already in progress: ${created.id}`);
+		expect(Date.now() - startedAt).toBeLessThan(500);
 	});
 
 	test("rejects a symlink in the state path", () => {

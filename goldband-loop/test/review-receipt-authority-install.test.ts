@@ -12,7 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evidenceChildProcessEnvironment } from "../lib/evidence-runtime-contract.ts";
+import {
+	evidenceChildProcessEnvironment,
+	evidenceTemporaryDirectory,
+} from "../lib/evidence-runtime-contract.ts";
 
 const roots: string[] = [];
 
@@ -21,6 +24,19 @@ afterEach(() => {
 });
 
 describe("review receipt authority provisioning", () => {
+	test("uses only the runtime-owned temp root inside an evidence sandbox", () => {
+		expect(evidenceTemporaryDirectory({
+			GOLDBAND_EVIDENCE_SANDBOX_ACTIVE: "1",
+			GOLDBAND_EVIDENCE_TEMP_ROOT: "/private/tmp/runtime-owned",
+			TMPDIR: "/tmp",
+		})).toBe("/private/tmp/runtime-owned");
+		expect(() => evidenceTemporaryDirectory({
+			GOLDBAND_EVIDENCE_SANDBOX_ACTIVE: "1",
+			TMPDIR: "/tmp",
+		})).toThrow("active evidence sandbox requires an absolute runtime-owned temp root");
+		expect(evidenceTemporaryDirectory({ TMPDIR: "/tmp" })).toBeUndefined();
+	});
+
 	test("provisions Claude-compatible authority and preserves its key across reinstall", () => {
 		const root = mkdtempSync(join(tmpdir(), "review-receipt-authority-"));
 		roots.push(root);
@@ -72,8 +88,8 @@ describe("review receipt authority provisioning", () => {
 		const stateRoot = join(root, "workflow-state");
 		mkdirSync(repo);
 		expect(spawnSync("git", ["init"], { cwd: repo }).status).toBe(0);
-		writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify({
-			schemaVersion: 1,
+			writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify({
+			schemaVersion: 2,
 			behaviorMatrix: [{
 				id: "unsupported-runtime",
 				behavior: "The unavailable integration is disclosed.",
@@ -88,7 +104,12 @@ describe("review receipt authority provisioning", () => {
 			}],
 			providers: [],
 			authorizations: [],
-		})}\n`);
+			})}\n`);
+			expect(spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["config", "user.name", "Goldband Test"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["add", "goldband.review-evidence.json"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["commit", "-m", "add review contract"], { cwd: repo }).status).toBe(0);
+			writeFileSync(join(repo, "candidate.txt"), "review me\n");
 		const reviewArgs = [
 			join(runtimeRoot, "bin", "goldband.ts"),
 			"review", "code", "--host", "claude",

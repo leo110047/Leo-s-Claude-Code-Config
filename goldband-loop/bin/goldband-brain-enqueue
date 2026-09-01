@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# goldband-brain-enqueue — atomically append a path to the GBrain sync queue.
+# goldband-brain-enqueue — atomically append a path to the artifacts sync queue.
 #
 # Usage:
 #   goldband-brain-enqueue <file-path>

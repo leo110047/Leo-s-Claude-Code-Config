@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # goldband-artifacts-init — set up ~/.goldband/ as a git repo synced to a private
-# git host (GitHub or GitLab) so a remote gbrain can ingest your artifacts
-# (CEO plans, designs, /investigate reports) as a federated source.
+# git host (GitHub or GitLab) so reviewed Goldband artifacts can follow the user
+# across machines without coupling the repository to a knowledge provider.
 #
 # Replaces goldband-brain-init in v1.27.0.0 (per D4 hard-delete; no compat
 # shim). Existing users are migrated by goldband-upgrade/migrations/v1.27.0.0.sh.
 #
 # Usage:
 #   goldband-artifacts-init [--remote <url>] [--host github|gitlab|manual]
-#                         [--url-form-supported true|false]
 #
 # Interactive by default. Pass --remote to skip the host prompt.
 #
@@ -27,7 +26,6 @@
 #   8. Provider-aware repo create (gh / glab) OR manual URL paste
 #   9. Initial commit + push
 #   10. Write ~/.goldband-artifacts-remote.txt  (HTTPS URL — canonical form)
-#   11. Print "Send this to your brain admin" hookup command
 #
 # Env:
 #   GOLDBAND_HOME — override ~/.goldband
@@ -42,12 +40,10 @@ REMOTE_FILE="$HOME/.goldband-artifacts-remote.txt"
 
 REMOTE_URL=""
 HOST_PREF=""
-URL_FORM_SUPPORTED="false"
 while [ $# -gt 0 ]; do
   case "$1" in
     --remote) REMOTE_URL="$2"; shift 2 ;;
     --host) HOST_PREF="$2"; shift 2 ;;
-    --url-form-supported) URL_FORM_SUPPORTED="$2"; shift 2 ;;
     --help|-h) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
@@ -244,11 +240,6 @@ retros/*.md
 developer-profile.json
 builder-journey.md
 builder-profile.jsonl
-# Transcripts staged in remote-http MCP mode (per plan D11 split-engine).
-# goldband-memory-ingest persists per-run dirs here when local gbrain import
-# is skipped; brain admin pulls + indexes into the remote brain.
-transcripts/run-*/*.md
-transcripts/run-*/**/*.md
 # NOT synced (machine-local UX state):
 #   projects/*/question-preferences.json (per-machine UX preferences)
 #   projects/*/question-log.jsonl (audit/derivation log stays with preferences)
@@ -271,9 +262,7 @@ cat > "$GOLDBAND_HOME/.brain-privacy-map.json" <<'EOF'
   {"pattern": "builder-journey.md", "class": "artifact"},
   {"pattern": "projects/*/timeline.jsonl", "class": "behavioral"},
   {"pattern": "developer-profile.json", "class": "behavioral"},
-  {"pattern": "builder-profile.jsonl", "class": "behavioral"},
-  {"pattern": "transcripts/run-*/*.md", "class": "behavioral"},
-  {"pattern": "transcripts/run-*/**/*.md", "class": "behavioral"}
+  {"pattern": "builder-profile.jsonl", "class": "behavioral"}
 ]
 EOF
 
@@ -365,9 +354,6 @@ fi
 echo "$CANONICAL_HTTPS" > "$REMOTE_FILE"
 chmod 600 "$REMOTE_FILE"
 
-# ---- print brain-admin hookup command (always print, never auto-execute;
-#      codex Finding #3) ----
-SOURCE_ID="goldband-artifacts-${USER:-$(whoami)}"
 cat <<EOF
 
 goldband-artifacts-init complete.
@@ -375,39 +361,6 @@ Repo:    $GOLDBAND_HOME (git)
 Remote:  $CANONICAL_HTTPS  (canonical form, in ~/.goldband-artifacts-remote.txt)
 Push:    $PUSH_URL  (derived SSH form for git push)
 
-EOF
-
-cat <<EOF
-─────────────────────────────────────────────────────────────────────────
-  Send this to your brain admin (the person who runs your gbrain server)
-─────────────────────────────────────────────────────────────────────────
-EOF
-
-if [ "$URL_FORM_SUPPORTED" = "true" ]; then
-  cat <<EOF
-On the brain host, run:
-
-  gbrain sources add $SOURCE_ID --url $CANONICAL_HTTPS --federated
-
-EOF
-else
-  cat <<EOF
-On the brain host (gbrain v0.26.x doesn't accept URLs directly yet), run:
-
-  git clone $CANONICAL_HTTPS ~/$SOURCE_ID
-  gbrain sources add $SOURCE_ID --path ~/$SOURCE_ID --federated
-
-When gbrain ships --url support, this becomes a one-liner:
-  gbrain sources add $SOURCE_ID --url $CANONICAL_HTTPS --federated
-
-EOF
-fi
-
-cat <<EOF
-After that, your CEO plans / designs / reports become searchable via
-'gbrain search' from any machine pointing at this brain.
-─────────────────────────────────────────────────────────────────────────
-
 New machine? Put a copy of $REMOTE_FILE in that machine's home directory,
-then run: goldband-artifacts-init  (it'll detect the remote and re-init).
+then run goldband-brain-restore to restore the provider-neutral artifacts.
 EOF

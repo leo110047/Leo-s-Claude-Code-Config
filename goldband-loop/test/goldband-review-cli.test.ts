@@ -27,6 +27,7 @@ import {
 	EVIDENCE_SANDBOX_ACTIVE_ENV,
 	EVIDENCE_TEMP_ROOT_ENV,
 } from "../lib/evidence-runtime-contract";
+import { PROMPT_CONTRACT_ACTIONS } from "../lib/trusted-launcher-actions.generated";
 
 function spawnReviewCli(
 	args: string[],
@@ -35,6 +36,33 @@ function spawnReviewCli(
 	const command = resolve(import.meta.dir, "../bin/goldband");
 	return spawnSync(command, args, options);
 }
+
+describe("goldband capability dispatch guidance", () => {
+	test("directs prompt-contract actions to the host selector", () => {
+		expect(PROMPT_CONTRACT_ACTIONS.length).toBeGreaterThan(0);
+		for (const promptAction of PROMPT_CONTRACT_ACTIONS) {
+			const [capability = "", action = ""] = promptAction.split("/");
+			expect(capability).toBeTruthy();
+			expect(action).toBeTruthy();
+			const invocation = `${capability} ${action}`;
+			const result = spawnReviewCli(
+				[capability, action, "--host", "codex"],
+				{
+					cwd: resolve(import.meta.dir, ".."),
+					encoding: "utf8",
+					env: process.env,
+				},
+			);
+
+			expect(result.status).toBe(2);
+			expect(result.stderr).toContain(
+				`${promptAction} uses prompt-contract dispatch and is not a shell CLI action`,
+			);
+			expect(result.stderr).toContain(`$goldband ${invocation}`);
+			expect(result.stderr).toContain(`/goldband ${invocation}`);
+		}
+	});
+});
 
 describe("goldband review code launcher", () => {
 	test("runs the real typed pipeline through the Codex host adapter", () => {
@@ -78,7 +106,7 @@ describe("goldband review code launcher", () => {
 			writeFileSync(
 				join(repo, "goldband.review-evidence.json"),
 				JSON.stringify({
-					schemaVersion: 1,
+					schemaVersion: 2,
 					behaviorMatrix: [{
 						id: "fixture-contract",
 						behavior: "The fixture candidate passes its declared gate.",
@@ -87,31 +115,18 @@ describe("goldband review code launcher", () => {
 						preconditions: "the isolated runner is available",
 						expected: "the fixture command exits successfully",
 						risk: "low",
-						disposition: "static",
-						providerIds: ["fixture-gate"],
+						disposition: "not-applicable",
+						providerIds: [],
+						reason: "The launcher fixture exercises semantic provenance only.",
 					}],
-					providers: [{
-						id: "fixture-gate",
-						owner: "launcher-e2e-fixture",
-						kind: "static",
-						lifecycle: "persistent",
-						cellIds: ["fixture-contract"],
-						applicability: { kind: "global", reason: "Explicit launcher E2E fixture." },
-						executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
-						operations: [{
-							id: "pass",
-							target: "candidate",
-							argv: ["true"],
-							expectedExit: "zero",
-							timeoutMs: 1000,
-							maxOutputBytes: 1024,
-							network: "deny",
-							evidenceLevel: "fixture",
-						}],
-					}],
+					providers: [],
 					authorizations: [],
 				}),
 			);
+			spawnSync("git", ["-C", repo, "config", "user.email", "test@example.com"]);
+			spawnSync("git", ["-C", repo, "config", "user.name", "Goldband Test"]);
+			spawnSync("git", ["-C", repo, "add", "goldband.review-evidence.json"]);
+			spawnSync("git", ["-C", repo, "commit", "-m", "add review contract"]);
 			const provisionAuthority = spawnSync(process.execPath, [
 				join(import.meta.dir, "..", "scripts", "provision-review-receipt-authority.ts"),
 				"--runtime-root", trustedRuntimeRoot,

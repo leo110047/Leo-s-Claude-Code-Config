@@ -25,7 +25,6 @@
 #   .brain-skip.txt            — user-maintained skip list
 #   .brain-sync.lock.d/        — lock dir (if present)
 #   .brain-sync-status.json    — health status
-#   consumers.json             — consumer/reader registry
 #
 # What it clears (via goldband-config):
 #   artifacts_sync_mode            → off
@@ -33,8 +32,7 @@
 #
 # What it does NOT touch:
 #   Project data (projects/*, retros/*, developer-profile.json, etc.)
-#   Consumer tokens in goldband-config (<name>_token keys)
-#   ~/.goldband-brain-remote.txt in your home directory
+#   ~/.goldband-artifacts-remote.txt in your home directory
 #   The actual remote git repo (unless --delete-remote)
 
 set -euo pipefail
@@ -42,12 +40,7 @@ set -euo pipefail
 GOLDBAND_HOME="${GOLDBAND_HOME:-$HOME/.goldband}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_BIN="$SCRIPT_DIR/goldband-config"
-# v1.27.0.0+ canonical name; brain-remote is the legacy fallback during migration.
-if [ -f "$HOME/.goldband-artifacts-remote.txt" ]; then
-  REMOTE_FILE="$HOME/.goldband-artifacts-remote.txt"
-else
-  REMOTE_FILE="$HOME/.goldband-brain-remote.txt"
-fi
+REMOTE_FILE="$HOME/.goldband-artifacts-remote.txt"
 
 ASSUME_YES=0
 DELETE_REMOTE=0
@@ -126,17 +119,6 @@ rm -f "$GOLDBAND_HOME/.brain-skip.txt" 2>/dev/null || true
 rm -f "$GOLDBAND_HOME/.brain-sync-status.json" 2>/dev/null || true
 rm -rf "$GOLDBAND_HOME/.brain-sync.lock.d" 2>/dev/null || true
 
-# ---- unregister gbrain federated source + remove worktree (best-effort) ----
-# The wireup helper handles: gbrain sources remove, git worktree remove,
-# launchd plist (future). All best-effort; uninstall continues on failure.
-WIREUP_BIN="$SCRIPT_DIR/goldband-gbrain-source-wireup"
-if [ -x "$WIREUP_BIN" ]; then
-  "$WIREUP_BIN" --uninstall 2>/dev/null || true
-fi
-
-# ---- legacy consumers.json (no longer written by goldband-brain-init since v1.17.0.0) ----
-rm -f "$GOLDBAND_HOME/consumers.json" 2>/dev/null || true
-
 # ---- clear config keys ----
 "$CONFIG_BIN" set artifacts_sync_mode off >/dev/null 2>&1 || true
 "$CONFIG_BIN" set artifacts_sync_mode_prompted false >/dev/null 2>&1 || true
@@ -156,5 +138,5 @@ goldband-brain uninstall complete.
 Sync is off. ~/.goldband/ is a plain directory again.
 Your project data, learnings, and profile are untouched.
 
-To re-enable sync later: goldband-brain-init
+To re-enable sync later: goldband-artifacts-init
 EOF

@@ -1,3 +1,5 @@
+import { isAbsolute, resolve } from "node:path";
+
 export const EVIDENCE_SANDBOX_ACTIVE_ENV = "GOLDBAND_EVIDENCE_SANDBOX_ACTIVE";
 export const EVIDENCE_TEMP_ROOT_ENV = "GOLDBAND_EVIDENCE_TEMP_ROOT";
 
@@ -24,4 +26,17 @@ export function evidenceChildProcessEnvironment(
 		if (value !== undefined) forwarded[key] = value;
 	}
 	return forwarded;
+}
+
+export function evidenceTemporaryDirectory(
+	env: NodeJS.ProcessEnv,
+): string | undefined {
+	if (env[EVIDENCE_SANDBOX_ACTIVE_ENV] !== "1") return undefined;
+	const root = env[EVIDENCE_TEMP_ROOT_ENV];
+	if (!root || !isAbsolute(root) || resolve(root) !== root) {
+		throw new Error(
+			"active evidence sandbox requires an absolute runtime-owned temp root",
+		);
+	}
+	return root;
 }

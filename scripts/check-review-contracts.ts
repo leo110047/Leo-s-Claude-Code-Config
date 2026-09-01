@@ -31,6 +31,13 @@ try {
   );
   assert.deepEqual(
     selectedEvidenceProviderIds(rootManifest, [
+      'goldband-loop/lib/evidence-runtime-contract.ts',
+    ]),
+    ['installed-runtime-tests', 'workflow-typecheck'],
+    'evidence runtime contract change omitted installed runtime verification',
+  );
+  assert.deepEqual(
+    selectedEvidenceProviderIds(rootManifest, [
       'goldband-loop/test/work-map-review.test.ts',
     ]),
     ['work-map-review-tests', 'workflow-typecheck'],
@@ -54,7 +61,7 @@ try {
     'goldband-loop/bin/goldband.ts',
     'goldband-loop/bunfig.toml',
     'goldband-loop/design/dist/design',
-    'goldband-loop/goldband-upgrade/migrations/v1.37.0.0.sh',
+    'goldband-loop/goldband-upgrade/migrations/v1.27.0.0.sh',
     'goldband-loop/plan-devex-review/dx-hall-of-fame.md',
     'goldband-loop/qa/references/issue-taxonomy.md',
     'goldband-loop/qa/templates/qa-report-template.md',

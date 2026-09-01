@@ -93,67 +93,6 @@ voice (autoplan). Trigger: a 4th caller-owned teardown gate in this same
 
 ---
 
-## /sync-gbrain memory stage perf follow-up
-
-### P2: Investigate `gbrain import` perf on large staging dirs
-
-**What:** Cold-run time on a 5131-file staging dir is >10 min in `gbrain import`
-alone (after goldband's prepare phase, which is now <10s after dropping per-file
-gitleaks). On 501 files it took 10s. The scaling is worse than linear and the
-bottleneck is inside gbrain, not the goldband orchestrator.
-
-**Why:** With memory-ingest's prepare phase now fast, the remaining cold-run cost
-is entirely on the gbrain side. Users with large corpora (5K+ files) currently pay
-~15-30 min on first ingest. Likely culprits in `~/git/gbrain/src/core/import-file.ts`:
-
-- N+1 SQL queries: `engine.getPage(slug)` for each file's content_hash check
-  (line 242 + 478) — should be batched into a single query
-- Per-page auto-link reconciliation that fires even for unchanged content
-- FTS / vector index updates without batching transactions
-
-**Pros:** Lives in gbrain (cleaner separation). Fix in gbrain benefits other
-gbrain callers too (`gbrain sync`, MCP `put_page` workflows). Likely 10-50x
-speedup from batched queries alone.
-
-**Cons:** Cross-repo change, requires gbrain test coverage for the new batched
-path. Not on the goldband critical path; goldband's architecture is already correct.
-
-**Context:** Verified on real corpus 2026-05-10. goldband-side prepare with
-`--scan-secrets` off runs in <10s. The full gbrain import on the same staged
-dir consumes 100% CPU for >10 min. Both observations from
-`bin/goldband-memory-ingest.ts:ingestPass` reaching the `runGbrainImport` call
-quickly, then the child process taking the bulk of the wall time.
-
-**Depends on:** None — goldband's batch-ingest architecture (D1-D8 in
-`docs/designs/SYNC_GBRAIN_BATCH_INGEST.md`) is already shipped and correct.
-
----
-
-### P3: Cache "no changes since last import" at the prepare-batch level
-
-**What:** Even with the prepare phase fast (<10s for 5135 files), walking and
-mtime-stat'ing every file on a true no-op run adds a few seconds and creates
-spurious staging dirs. Cache the most-recent-source-mtime per-source in the
-state file; if no source dir has a newer mtime, skip the walk + stage + import
-entirely.
-
-**Why:** Most `/sync-gbrain` invocations have nothing new to ingest. The
-fastest path is "do nothing, fast." `gbrain doctor` should still report state,
-but the actual ingest pipeline can short-circuit when last_full_walk is recent
-and no source-tree mtime has moved.
-
-**Pros:** Trivial implementation (~20 lines in `ingestPass`). Makes the
-incremental fast-path actually live up to "<30s" in the original plan.
-
-**Cons:** Adds a cache invalidation surface. If a user edits a file but its
-parent dir's mtime doesn't update (rare on macOS APFS), changes get missed.
-Mitigation: only short-circuit when last_full_walk is recent (e.g. <1 min ago).
-
-**Context:** Filed during 2026-05-10 perf testing after `--scan-secrets` was
-made opt-in. Lower priority than the gbrain-side perf issue above.
-
----
-
 ## Browser skills
 
 Browser-skill runtime, fixture staleness, and OS sandbox follow-ups must be implemented in browser runtime code and deterministic tests. Workflow discovery stays behind the manifest capability interface; do not inject skill lists into a universal prompt.
@@ -166,67 +105,13 @@ Browser-skill runtime, fixture staleness, and OS sandbox follow-ups must be impl
 
 **Pros:** Atomic writes. Real schema. Fast indexed lookups by hostname/key/type. Crash-safe.
 
-**Cons:** Migration touches every consumer of `learnings.jsonl` — `/learn` scripts (`goldband-learnings-log`, `goldband-learnings-search`), domain-skills.ts read/write, gbrain-sync (which currently treats it as a flat file). Old `learnings.jsonl` files in the wild need a one-shot migration script.
+**Cons:** Migration touches every consumer of `learnings.jsonl` — `/learn` scripts (`goldband-learnings-log`, `goldband-learnings-search`), domain-skills.ts read/write, and provider-neutral artifact sync. Old `learnings.jsonl` files in the wild need a one-shot migration script.
 
 **Context:** The JSONL hardening in v1.8.0.0 was the right call for that release scope (preserve unification, not high-scope). But the failure modes are bounded, not eliminated. SQLite is the high-scope fix.
 
 **Effort:** M (human: ~1 week / CC: ~1 day)
 **Priority:** P2
 **Depends on:** v1.8.0.0 in production for ~1 month to measure JSONL pain (compactor frequency, partial-line drops, write contention).
-
----
-
- ### P2: Bump gbrain install-pin in lockstep with goldband memory-feature releases (#1305 part 2)
-
-**What:** `bin/goldband-gbrain-install` pins gbrain to commit `08b3698` (v0.18.2). When goldband ships features that depend on newer gbrain ops or schema (e.g. v1.26.0 manifests + `code-def`/`code-refs`/`reindex-code`), the pin doesn't move with it. Fresh `/setup-gbrain` installs an old gbrain that fails `gbrain doctor` schema_version checks (24 vs latest 32+) until the user manually upgrades.
-
-**Why:** Filed in #1305 alongside the `put_page` CLI bug. Out of scope for the v1.26.5.0 fix wave (separate release-coordination concern: which gbrain version we install vs. how we call it). The install-pin should either (a) auto-bump whenever goldband releases features that need newer gbrain, or (b) detect a stale pin during preamble and either auto-upgrade gbrain or print a one-line FIX hint.
-
-**Pros:** Closes the "fresh-install paper-cut" path. New users land on a healthy schema. Reduces support noise on `/setup-gbrain` flows. Makes the goldband/gbrain release contract visible.
-
-**Cons:** Adds release-cadence coupling between goldband and gbrain. Needs a policy: pin = "minimum version that still works" vs "latest known good." If gbrain ships a breaking change to `put` shape and goldband doesn't update the pin, fresh installs break in a new way.
-
-**Context:** Issue #1305 part 1 (the `put_page` CLI verb bug) was handled in v1.26.5.0. Part 2 (this TODO) is the install-pin staleness. Pin lives in `bin/goldband-gbrain-install` near the top as a constant. Easiest minimal fix: ship the pin as a tracked release artifact (e.g. write it from `package.json` at build time) and add a doctor-style preamble check.
-
-**Effort:** S (human: ~2 days / CC: ~3 hours)
-**Priority:** P2
-**Depends on:** Nothing.
-
----
-
-### P3: Source-id host-collision risk in `deriveCodeSourceId` (cross-host duplicate org/repo)
-
-**What:** v1.26.5.0's `deriveCodeSourceId` drops the host segment to fit gbrain's 32-char source-id budget. This means `github.com/acme/foo` and `gitlab.com/acme/foo` collapse to the same `goldband-code-acme-foo`. `ensureSourceRegisteredSync()` in `bin/goldband-gbrain-sync.ts:323` will silently re-register the source when `local_path` differs, evicting one side.
-
-**Why:** Vanishingly rare in practice — same `<org>/<repo>` shape across both github.com and gitlab.com on the same machine almost never happens. But the failure mode is silent (one repo evicts the other in the brain), and the user has no signal anything is wrong.
-
-**Pros:** Closes the silent-eviction edge. Two viable approaches: short host marker (`gh-` / `gl-` / `bb-`) eats 3 chars but keeps cross-host uniqueness; OR include a 3-char hash of the host alongside the org-repo.
-
-**Cons:** Source IDs change shape again — anyone with existing registrations on v1.26.5.0 gets a one-time re-register. Net break-even because the current scheme also changed from v1.26.4.0.
-
-**Context:** Filed in #1320 / #1322 / #1323 / #1331 (the underlying source-id validation bugs), addressed in v1.26.5.0 by dropping host segment + hash-truncating. Cross-host collision was a known accepted tradeoff in PR #1330's design ("vanishingly rare in practice"). Codex outside-voice plan review surfaced it as a long-tail concern; this TODO captures it for a future bump.
-
-**Effort:** XS (human: ~4 hours / CC: ~30 min)
-**Priority:** P3
-**Depends on:** Nothing.
-
----
-
-### P3: GBrain skillpack publishing for domain skills
-
-**What:** Domain skills are agent-authored notes per hostname. Right now they're per-machine or per-agent-repo. The natural compounding extension: publish curated skill packs to GBrain (`goldband-brain-sync`) so others can subscribe. "Louise's LinkedIn skills" or "the maintainer's GitHub skills" become packs anyone can pull.
-
-**Why:** v1.8.0.0 gets us per-machine compounding. Cross-user compounding is the network effect — every user contributes, every user benefits.
-
-**Pros:** Massive compounding potential. Hard part is trust/moderation (existing problem GBrain-sync has thought through).
-
-**Cons:** Publishing infra, signature/redaction model, moderation when packs go bad. Real plan needed.
-
-**Context:** GBrain-sync infra (v1.7.0.0) already does private cross-machine sync for the user's own data. Skillpack publishing is the public/shared layer on top of that.
-
-**Effort:** M (human: ~1 week / CC: ~1 day)
-**Priority:** P3
-**Depends on:** GBrain-sync stable in production. Some user demand signal first.
 
 ---
 

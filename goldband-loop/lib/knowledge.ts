@@ -13,7 +13,7 @@ import { homedir } from "os";
 import { execFileSync } from "child_process";
 import { createRequire } from "module";
 import { fileURLToPath } from "url";
-import { canonicalizeRemote } from "./goldband-memory-helpers";
+import { canonicalizeRemote } from "./remote-identity";
 
 export const KNOWLEDGE_TYPES = [
   "problem-solution",

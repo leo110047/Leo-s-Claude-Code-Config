@@ -103,7 +103,7 @@ do_migrate() {
   mv "$TMPOUT" "$PROFILE_FILE"
   trap - EXIT
 
-  # gbrain-sync: enqueue the migrated file for cross-machine sync (no-op if off).
+  # Artifacts sync: enqueue the migrated file for cross-machine sync (no-op if off).
   SCRIPT_DIR_E="$(cd "$(dirname "$0")" && pwd)"
   "$SCRIPT_DIR_E/goldband-brain-enqueue" "developer-profile.json" 2>/dev/null &
 

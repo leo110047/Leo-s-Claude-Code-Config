@@ -88,7 +88,7 @@ describe('authoritative review lineage', () => {
     await expect(runWorkflow(getWorkflow('review/code'), {
       mode: 'mock', host: 'mock', cwd: fixture.repo, goldbandHome: fixture.state,
       diffFile: 'candidate.diff', evidenceManifestFile: 'goldband.review-evidence.json',
-    })).rejects.toThrow('prior findings/blockers open');
+    })).rejects.toThrow('review contract laundering blocked: required behavior semantics changed');
     const telemetryRoot = join(fixture.state, 'workflow-runs', 'telemetry');
     const hostTelemetry = spawnSync('find', [telemetryRoot, '-name', '*-review-host-usage.json'], { encoding: 'utf8' });
     expect(hostTelemetry.stdout.trim().split('\n').filter(Boolean)).toHaveLength(1);
@@ -764,11 +764,20 @@ function prepare(
         commonDirectoryInstanceDigest: 'f'.repeat(64),
         remoteIdentityDigest: '0'.repeat(64),
       },
-      compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1',
+      workspace: {
+        repositoryRoot: fixture.repo,
+        invocationDirectory: fixture.repo,
+        invocationOffset: '',
+      },
+      compatibilityIdentity: 'review-evidence-schema-v2/runtime-contract-v2',
       baseline: {
         kind: 'repository',
         identity: join(fixture.repo, 'goldband.review-evidence.json'),
         digest: createHash('sha256').update(JSON.stringify(evidenceManifest)).digest('hex'),
+      },
+      candidateProvenance: {
+        identity: join(fixture.repo, 'goldband.review-evidence.json'),
+        trackingState: 'unchanged',
       },
       effectiveDigest: createHash('sha256').update(JSON.stringify(evidenceManifest)).digest('hex'),
     },
@@ -779,7 +788,7 @@ function prepare(
 
 function manifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'deployment-safe',
       behavior: 'deployment rejects an unsafe dependency graph',
@@ -807,7 +816,7 @@ function manifest(): ReviewEvidenceManifest {
 
 function dispositionManifest(expected: string): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'deployment-safe',
       behavior: 'deployment rejects an unsafe dependency graph',

@@ -32,7 +32,6 @@ const ALL_HOSTS = [
   'cursor',
   'openclaw',
   'hermes',
-  'gbrain',
 ];
 const CAPABILITY_INVOCATION_ROOTS = [
   'README.md',
@@ -151,6 +150,10 @@ const outputs = new Map([
   ],
   [
     'hooks/scripts/lib/skill-activation/capability-routing.generated.json',
+    json(activationRules(claudeCapabilities)),
+  ],
+  [
+    'plugin-assets/claude-code-plugin/hooks/scripts/lib/skill-activation/capability-routing.generated.json',
     json(activationRules(claudeCapabilities)),
   ],
   [
@@ -430,13 +433,18 @@ function generatedRegistry(entries) {
 }
 
 function generatedTrustedLauncherActions(entries) {
-  const actions = entries
+  const trustedActions = entries
     .filter((entry) => entry.dispatch === 'trusted-launcher')
+    .map((entry) => entry.name)
+    .sort();
+  const promptContractActions = entries
+    .filter((entry) => entry.dispatch === 'prompt-contract')
     .map((entry) => entry.name)
     .sort();
   return (
     '// AUTO-GENERATED from goldband.manifest.json. Do not edit.\n' +
-    `export const TRUSTED_LAUNCHER_ACTIONS = ${JSON.stringify(actions, null, 2)} as const;\n`
+    `export const TRUSTED_LAUNCHER_ACTIONS = ${JSON.stringify(trustedActions, null, 2)} as const;\n` +
+    `export const PROMPT_CONTRACT_ACTIONS = ${JSON.stringify(promptContractActions, null, 2)} as const;\n`
   );
 }
 

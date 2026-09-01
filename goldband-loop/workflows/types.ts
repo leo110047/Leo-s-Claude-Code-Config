@@ -3,7 +3,6 @@ export type HostName =
   | 'codex'
   | 'cursor'
   | 'factory'
-  | 'gbrain'
   | 'hermes'
   | 'kiro'
   | 'opencode'

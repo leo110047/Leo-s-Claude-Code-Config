@@ -1,8 +1,8 @@
 /**
- * gbrain-sync integration tests.
+ * Provider-neutral artifacts-sync integration tests.
  *
  * Covers the core cross-machine memory sync feature end-to-end:
- *   - bin/goldband-config gbrain keys (validation, isolation)
+ *   - bin/goldband-config artifacts keys (validation, isolation)
  *   - bin/goldband-brain-enqueue (atomicity, skip list, no-op gates)
  *   - bin/goldband-jsonl-merge (3-way, ts-sort, hash-fallback)
  *   - bin/goldband-brain-sync --once (drain, commit, push, secret-scan, skip-file)
@@ -11,7 +11,7 @@
  *   - env isolation (GOLDBAND_HOME never bleeds into real ~/.goldband/config.yaml)
  *
  * Runs each test against a temp GOLDBAND_HOME and a local bare git repo as
- * a fake remote. No live GitHub, no live GBrain.
+ * a fake remote. No live GitHub or external provider.
  */
 
 import { describe, test as _test, expect, beforeEach, afterEach } from 'bun:test';
@@ -34,7 +34,12 @@ function run(argv: string[], opts: { env?: Record<string, string>; input?: strin
   const bin = argv[0];
   const full = bin.startsWith('/') ? bin : path.join(BIN, bin);
   const res = spawnSync(full, argv.slice(1), {
-    env: { ...process.env, GOLDBAND_HOME: tmpHome, ...(opts.env || {}) },
+    env: {
+      ...process.env,
+      HOME: tmpHome,
+      GOLDBAND_HOME: tmpHome,
+      ...(opts.env || {}),
+    },
     encoding: 'utf-8',
     input: opts.input,
     cwd: ROOT,
@@ -56,19 +61,12 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(tmpHome, { recursive: true, force: true });
   fs.rmSync(bareRemote, { recursive: true, force: true });
-  // Clean up any remote-helper file init may have written.
-  const remoteFile = path.join(os.homedir(), '.goldband-brain-remote.txt');
-  // Only remove if it points at OUR bare remote (don't clobber a real user file).
-  try {
-    const contents = fs.readFileSync(remoteFile, 'utf-8').trim();
-    if (contents === bareRemote) fs.unlinkSync(remoteFile);
-  } catch {}
 });
 
 // ---------------------------------------------------------------
 // Config key validation + env isolation
 // ---------------------------------------------------------------
-describe('goldband-config gbrain keys', () => {
+describe('goldband-config artifacts keys', () => {
   test('default artifacts_sync_mode is off', () => {
     const r = run(['goldband-config', 'get', 'artifacts_sync_mode']);
     expect(r.status).toBe(0);
@@ -219,7 +217,7 @@ describe('goldband-jsonl-merge', () => {
 describe('init + sync + restore round-trip', () => {
   test('init creates canonical files + registers drivers', () => {
     const r = run(['goldband-artifacts-init', '--remote', bareRemote]);
-    expect(r.status).toBe(0);
+    expect(r.status, r.stderr).toBe(0);
     expect(fs.existsSync(path.join(tmpHome, '.git'))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, '.gitignore'))).toBe(true);
     expect(fs.existsSync(path.join(tmpHome, '.brain-allowlist'))).toBe(true);

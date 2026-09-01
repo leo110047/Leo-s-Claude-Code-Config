@@ -3,6 +3,10 @@
 import { spawnSync } from 'node:child_process';
 
 export const MACOS_REVIEW_HOST_TEST_NAMES = [
+  'review contract resolution and runtime store > subdirectory default scope materializes repo-root paths',
+  'review contract resolution and runtime store > subdirectory worktree scope materializes repo-root paths',
+  'review contract resolution and runtime store > subdirectory staged scope materializes repo-root paths',
+  'review contract resolution and runtime store > subdirectory base scope materializes repo-root paths',
   'review evidence contracts > attests Homebrew-style Mach-O rpath dependencies without widening directory reads',
   'review evidence contracts > preserves native LC_RPATH declaration and loader-chain precedence in projections',
   'review evidence contracts > rejects PATH script launchers and requires an explicit interpreter',

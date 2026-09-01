@@ -53,12 +53,12 @@ action 不得宣告 owner，也不會出現在 router 或 activation hints。
   `ios/qa` 接上 typed owner steps、JSONL evidence 與 fail-closed input validation。
 - [x] `context/retro` 接上 compatibility runtime；`document/generate` 已升級為
   typed audit owner，產生 coverage / PR-section artifacts，PR 更新停在原生核准邊界。
-- [x] `release/land`、`release/setup`、`knowledge/setup`、`knowledge/sync` 隱藏為
-  experimental，明確不可執行。
+- [x] `release/land`、`release/setup` 隱藏為 experimental，明確不可執行；
+  `knowledge/setup`、`knowledge/sync` 已退休，不保留 action。
 - [x] `system/upgrade` 只做 preflight/readback；`git pull` 與 setup 必須經過
   host 原生核准與工具執行，不藏在 workflow 子程序中。
-- [x] 收斂前的 9 個 high-risk operation 已有 manifest-owned safety gate：
-  7 個未有 owner 的 operation 維持 `blocked-before-runtime`；`system/upgrade`
+- [x] 收斂前仍保留的 7 個 high-risk operation 已有 manifest-owned safety gate：
+  5 個未有 owner 的 operation 維持 `blocked-before-runtime`；`system/upgrade`
   與唯讀 `ios/qa` 只有在 operation-specific verifier 驗證 owner output 與 trusted
   readback artifact 後才寫入 `verified`；mock 或尚待原生核准只會是 `pending`。
   已刪除的
@@ -68,12 +68,9 @@ action 不得宣告 owner，也不會出現在 router 或 activation hints。
 ### 優先順序
 
 1. 把 `qa/app` real mode 接到 typed browser evidence，完成 browser E2E。
-2. 將 4 個 compatibility actions 逐一替換成 action-specific typed schemas。
+2. 將 3 個 compatibility actions 逐一替換成 action-specific typed schemas。
 3. 依既有 safety gate contract 為 release setup/land 建立原生 approval、
    deployment readback 與 rollback owner。
-4. 依既有 safety gate contract 為 knowledge setup/sync 建立 secret-safe
-   interaction schema、sync checkpoint 與 round-trip readback owner；完成前保持
-   experimental。
 
 ### 驗收標準
 

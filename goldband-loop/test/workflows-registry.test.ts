@@ -71,16 +71,14 @@ describe('workflow registry', () => {
     }
     expect(publicWorkflows()).toHaveLength(20);
     expect(experimentalWorkflows().map((entry) => entry.name).sort()).toEqual([
-      'knowledge/setup',
-      'knowledge/sync',
       'release/land',
       'release/setup',
     ]);
-    expect(registeredOnlyWorkflows()).toHaveLength(4);
+    expect(registeredOnlyWorkflows()).toHaveLength(2);
     expect(registeredOnlyWorkflows().every((entry) => entry.lifecycle === 'experimental')).toBe(true);
   });
 
-  test('eleven high-risk operations have fail-closed safety contracts', () => {
+  test('nine high-risk operations have fail-closed safety contracts', () => {
     const gates = WORKFLOW_REGISTRY.flatMap((entry) =>
       entry.safetyGates.map((gate) => ({ ...gate, action: entry.name })),
     );
@@ -88,8 +86,6 @@ describe('workflow registry', () => {
       'browser/cookies',
       'ios/qa',
       'ios/sync',
-      'knowledge/setup',
-      'knowledge/sync',
       'plan/sync',
       'plan/sync-preview',
       'release/canary',
@@ -105,7 +101,7 @@ describe('workflow registry', () => {
 	).toEqual(['ios/qa', 'plan/sync', 'plan/sync-preview', 'system/upgrade']);
     expect(
       gates.filter((gate) => gate.enforcement === 'blocked-before-runtime'),
-    ).toHaveLength(7);
+    ).toHaveLength(5);
     for (const entry of WORKFLOW_REGISTRY.filter(
       (workflow) => workflow.riskLevel === 'high',
     )) {
@@ -185,7 +181,6 @@ describe('workflow registry', () => {
       'cursor',
       'openclaw',
       'hermes',
-      'gbrain',
     ];
     for (const host of hosts) {
       const menu = readFileSync(
@@ -241,7 +236,6 @@ describe('workflow registry', () => {
       'ETHOS.md',
       'AGENTS.md',
       'CLAUDE.md',
-      'USING_GBRAIN_WITH_GOLDBAND.md',
       ...activeDocumentationFiles('../docs'),
       ...activeDocumentationFiles('docs'),
     ];

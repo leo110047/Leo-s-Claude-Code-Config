@@ -105,14 +105,14 @@ CONFIG_HEADER='# goldband configuration — edit freely, changes take effect on 
 #                           #           (for power users who know the terms)
 #                           # Unknown values default to "default" with a warning.
 #
-# ─── Artifacts sync (renamed from gbrain_sync_mode in v1.27.0.0) ─────
+# ─── Provider-neutral artifacts sync ──────────────────────────
 # artifacts_sync_mode: off  # off | artifacts-only | full
 #                           #   off            — no sync (default)
 #                           #   artifacts-only — sync plans/designs/retros/learnings only
 #                           #                    (skip behavioral data: question-log,
 #                           #                    developer-profile, timeline)
 #                           #   full           — sync everything allowlisted
-#                           # Set by the first-run privacy stop-gate. See docs/gbrain-sync.md.
+#                           # Set by the first-run privacy stop-gate.
 #
 # artifacts_sync_mode_prompted: false
 #                           # Set to true once the privacy gate has asked the user.

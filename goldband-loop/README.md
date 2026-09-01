@@ -31,15 +31,21 @@ not aliases.
 The generated [capability catalog](../docs/generated/capabilities.md) is the
 authoritative list of supported capability/action pairs and runtime status.
 
-Real `review/code` runs require an explicitly resolvable evidence contract. A
-repository `goldband.review-evidence.json` is authoritative. If it is absent,
-use `goldband review contract import --manifest <path>` to register a
-runtime-owned contract for that Git common directory; `inspect` reads back the
-identity, selected source, shadowing, and digests, while `remove` deletes only
-that runtime-store entry. `--evidence-manifest` is a primary contract only when
-no repository or runtime-store baseline exists. Otherwise it must be a complete
-monotonic effective contract and cannot weaken the baseline. Review itself never
-creates, moves, or deletes manifests.
+Real `review/code` runs resolve one canonical Git workspace. The repo root owns
+diff, snapshot, scope, and default manifest coordinates; an invocation
+subdirectory is retained only as the operation execution offset. The reviewed
+base's repo-root `goldband.review-evidence.json` is authoritative. If the base
+has none, use `goldband review contract import --manifest <path>` to register a
+runtime-owned contract for that Git common directory. Working-tree, index, and
+`--evidence-manifest` inputs are complete monotonic candidate extensions, never
+primary authorities. `inspect` reads back repo root, invocation offset,
+base/candidate provenance, tracking state, sources, shadowing, and digests;
+`remove` deletes only the runtime-store entry. Manifest schema v2 is required.
+The only v1 transition is a committed v1 base paired with a v2 candidate, and
+it is accepted only when changing the base version marker alone passes the
+complete v2 validation. Every other v1 input is rejected with
+observed/supported versions, source, and remediation; safety fields are never
+inferred.
 
 The effective contract declares behavior cells and typed provider commands; the
 runtime executes each operation in its own read-only,
@@ -207,7 +213,6 @@ bash scripts/verify-decision-guidance.sh
 | [BROWSER.md](BROWSER.md) | Browser command reference |
 | [docs/domain-skills.md](docs/domain-skills.md) | Domain skill packaging |
 | [docs/tutorial-document-generate.md](docs/tutorial-document-generate.md) | Documentation-generation tutorial |
-| [USING_GBRAIN_WITH_GOLDBAND.md](USING_GBRAIN_WITH_GOLDBAND.md) | GBrain integration |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Runtime development workflow |
 | [CHANGELOG.md](CHANGELOG.md) | Runtime history |
 

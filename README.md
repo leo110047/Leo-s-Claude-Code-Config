@@ -123,13 +123,18 @@ git pull --ff-only
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
 
 `review/code` 會先解析不可降級的 evidence contract。Repo 內的
-`goldband.review-evidence.json` 是 authoritative baseline；repo 沒有 manifest
-時，才會使用使用者明確以 `goldband review contract import --manifest <path>`
-註冊的 runtime-owned per-repository contract。`--evidence-manifest` 在已有
-baseline 時只能提供完整、monotonic 的 effective contract，不能取代或縮小
-baseline。`inspect` 可讀回 repository identity、baseline、shadowed central
-entry 與 digests，`remove` 只移除 central entry；review 本身不會建立、搬移或
-刪除 manifest。
+review 以 canonical Git repo root 作為 diff、snapshot、scope 與 contract 的
+共同座標；從 tracked subdirectory 啟動只會留下 execution offset，不會改變
+baseline。reviewed base 的 repo-root `goldband.review-evidence.json` 是
+authoritative baseline；base 沒有 manifest 時，才會使用使用者明確以
+`goldband review contract import --manifest <path>` 註冊的 runtime-owned
+per-repository contract。working-tree、index 或 caller 傳入的 manifest 都只能是
+完整、monotonic 的 candidate extension，不能取代或縮小 baseline。`inspect`
+可讀回 repo root、invocation offset、base/candidate tracking state、sources 與
+digests；`remove` 只移除 central entry。manifest contract 使用 `schemaVersion:
+2`。唯一的 v1 過渡路徑是已提交的 v1 base 搭配 v2 candidate，而且該 base
+必須在只改版本號後就能通過完整 v2 驗證；其他 v1 輸入會 fail closed 並回報
+migration 指引，不會猜測安全欄位的預設值。
 
 解析完成後，runtime 在隔離、
 預設以每個 operation 各自獨立、唯讀且 read/write/network default-deny 的 snapshot 執行 typed checks，

@@ -103,17 +103,18 @@ Semantic findings are produced by independent review, not by PreToolUse, Stop,
 workspace leases, shell classification, or writer self-attestation.
 
 `review/code` is evidence-first. `workflows/review-contract-resolution.ts`
-selects one authoritative baseline before evidence or host dispatch. A repository
-`goldband.review-evidence.json` always wins; only its absence permits a
-runtime-owned per-repository store entry. An explicit manifest is either the
-primary contract when no baseline exists or a complete monotonic extension that
-cannot remove or weaken baseline cells, providers, applicability, risk,
-disposition, or evidence level. Resolution provenance records repository
-identity, source identities, baseline/explicit/effective digests, and schema/runtime
-compatibility. The store binds Git worktrees through their common directory path
-and filesystem instance, and also records remote identity; moves, path reuse,
-clones, remote changes, and ambiguity fail
-closed until explicit re-import. Review never mutates repository manifests.
+selects one authoritative baseline before evidence or host dispatch. The
+reviewed base's repo-root `goldband.review-evidence.json` wins; only its absence
+permits a runtime-owned per-repository store entry. Working-tree, index, HEAD,
+and explicit manifests are candidate extensions and cannot remove or weaken
+baseline cells, providers, applicability, risk, disposition, or evidence level.
+Resolution provenance records canonical workspace coordinates, candidate
+tracking and compatibility, repository/store/explicit source identities, import
+provenance, and baseline/candidate/effective digests. The store binds Git
+worktrees through their common directory path and filesystem instance, and also
+records remote identity; moves, path reuse, clones, remote changes, and
+ambiguity fail closed until explicit re-import. Review never mutates repository
+manifests.
 
 The resolved contract declares stable behavior cells and typed providers. The
 runtime validates every disposition and reciprocal provider/cell
@@ -505,15 +506,13 @@ This layer does not replace existing storage:
 
 - `learnings.jsonl` remains append-only project memory for small operational
   discoveries and visible "Prior learning applied" readback.
-- GBrain remains optional semantic memory and is only queried where the host
-  supports that resolver.
 - context-save/context-restore remains working-session continuity.
 - auto-memory stores user identity and preferences; knowledge stores verified
   problem/solution, decision, and practice records.
 
 Recall adapters are deliberately shallow. `goldband-review` and `goldband-qa`
-use a single `Prior Knowledge` resolver that queries learnings, the curated
-index, and optional GBrain instead of stacking three near-identical sections.
+use a single `Prior Knowledge` resolver that queries learnings and the curated
+index instead of stacking near-identical sections.
 Claude `UserPromptSubmit` gets an advisory-only prompt hook that lists matching
 knowledge paths with summaries and rate-limits repeats per session. Codex does
 not currently have an equivalent prompt-time advisory adapter in this repo;

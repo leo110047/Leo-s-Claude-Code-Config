@@ -9,7 +9,6 @@ import {
   mkdirSync,
   openSync,
   readSync,
-  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -18,6 +17,7 @@ import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } fr
 import { stateRoot } from './evidence';
 import type { ReviewTimeBudget } from './review-timeouts';
 import type { SchemaValidator, WorkflowContext } from './types';
+import { resolveReviewWorkspace } from './review-workspace';
 
 export type ReviewDiffInput = {
   source: string;
@@ -241,7 +241,7 @@ function buildImpactContext(
   changedFiles: string[],
   timeBudget: ReviewTimeBudget,
 ): ReviewImpactContext {
-  const realRoot = realpathSync(ctx.cwd);
+  const realRoot = resolveReviewWorkspace(ctx.cwd).repositoryRoot;
   const inventory = listRepositoryFiles(ctx, changedFiles, timeBudget);
   const indexableChanged = changedFiles.filter((file) => isParsedFile(file));
   if (indexableChanged.length === 0) {
@@ -340,7 +340,7 @@ function listRepositoryFiles(
     'git',
     ['--no-pager', '-c', 'core.fsmonitor=false', 'ls-files', '-z', '--cached'],
     {
-      cwd: ctx.cwd,
+      cwd: resolveReviewWorkspace(ctx.cwd).repositoryRoot,
       encoding: 'buffer',
       env: {
         ...process.env,

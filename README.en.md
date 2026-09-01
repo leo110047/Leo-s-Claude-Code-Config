@@ -25,13 +25,20 @@ For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
 `review/code` first resolves a non-downgradable evidence contract. A repository
-`goldband.review-evidence.json` is the authoritative baseline. Only when it is
-absent may an explicitly imported runtime-owned per-repository contract become
-the baseline (`goldband review contract import --manifest <path>`). With an
-existing baseline, `--evidence-manifest` must be a complete monotonic effective
-contract rather than a replacement. `inspect` reports repository identity,
-sources, shadowing, and digests; `remove` deletes only the runtime-store entry.
-Review never creates, moves, or deletes a manifest.
+Review uses the canonical Git repository root as the shared coordinate for
+diffs, snapshots, scopes, and contracts. Starting in a tracked subdirectory
+records only an execution offset and cannot change the baseline. The reviewed
+base's repo-root `goldband.review-evidence.json` is authoritative; only when the
+base has no manifest may an explicitly imported runtime-owned per-repository
+contract become the baseline (`goldband review contract import --manifest
+<path>`). Working-tree, index, and caller-supplied manifests are complete
+monotonic candidate extensions, never replacement authorities. `inspect`
+reports the repo root, invocation offset, base/candidate tracking state,
+sources, and digests. Manifest schema v2 is required. The only v1 transition is
+a committed v1 base paired with a v2 candidate, and it is accepted only when
+changing the base version marker alone passes the complete v2 validation. Every
+other v1 input fails closed with explicit migration guidance; safety fields are
+never inferred.
 
 After resolution, the runtime
 runs every typed check in an independent read-only, default-deny read/write/network snapshot,

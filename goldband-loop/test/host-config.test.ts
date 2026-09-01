@@ -26,7 +26,7 @@ function validConfig(): HostConfig {
 
 describe('host registry', () => {
   test('registry is internally consistent', () => {
-    expect(ALL_HOST_CONFIGS).toHaveLength(10);
+    expect(ALL_HOST_CONFIGS).toHaveLength(9);
     expect(ALL_HOST_NAMES).toEqual(ALL_HOST_CONFIGS.map((config) => config.name));
     expect(new Set(ALL_HOST_NAMES).size).toBe(ALL_HOST_NAMES.length);
     for (const config of ALL_HOST_CONFIGS) {

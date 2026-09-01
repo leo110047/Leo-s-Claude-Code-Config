@@ -40,8 +40,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -66,8 +65,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -92,8 +90,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -118,8 +115,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -185,8 +181,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -234,8 +229,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -372,8 +366,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -419,8 +412,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -445,8 +437,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -522,8 +513,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -548,8 +538,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -574,8 +563,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -600,108 +588,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "knowledge",
-    "action": "setup",
-    "name": "knowledge/setup",
-    "description": "Configure GBrain integration.",
-    "contractPath": "generated/workflow-contracts/knowledge/setup.workflow.md",
-    "runtime": "registered-only",
-    "dispatch": "registered-only",
-    "lifecycle": "experimental",
-    "runtimeOwner": null,
-    "runtimeContract": null,
-    "safetyGates": [
-      {
-        "operation": "knowledge/setup",
-        "mode": "setup",
-        "enforcement": "blocked-before-runtime",
-        "owner": null,
-        "authorization": "native-host-approval",
-        "preconditions": [
-          "endpoint-resolved",
-          "repository-scope-explicit",
-          "secret-references-only",
-          "existing-config-readback"
-        ],
-        "sideEffects": [
-          "knowledge-config-write",
-          "credential-binding-update"
-        ],
-        "readback": [
-          "sanitized-config",
-          "connection-check",
-          "repository-scope"
-        ]
-      }
-    ],
-    "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
-    ]
-  },
-  {
-    "capability": "knowledge",
-    "action": "sync",
-    "name": "knowledge/sync",
-    "description": "Synchronize GBrain knowledge.",
-    "contractPath": "generated/workflow-contracts/knowledge/sync.workflow.md",
-    "runtime": "registered-only",
-    "dispatch": "registered-only",
-    "lifecycle": "experimental",
-    "runtimeOwner": null,
-    "runtimeContract": null,
-    "safetyGates": [
-      {
-        "operation": "knowledge/sync",
-        "mode": "sync",
-        "enforcement": "blocked-before-runtime",
-        "owner": null,
-        "authorization": "native-host-approval",
-        "preconditions": [
-          "source-scope-explicit",
-          "destination-scope-explicit",
-          "review-status-verified",
-          "secret-scan-passed",
-          "resume-checkpoint-resolved"
-        ],
-        "sideEffects": [
-          "external-knowledge-write",
-          "sync-checkpoint-write"
-        ],
-        "readback": [
-          "synced-item-count",
-          "destination-digest",
-          "resume-checkpoint",
-          "rejected-item-count"
-        ]
-      }
-    ],
-    "riskLevel": "high",
-    "hostSupport": [
-      "claude",
-      "codex",
-      "factory",
-      "kiro",
-      "opencode",
-      "slate",
-      "cursor",
-      "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -726,8 +613,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -768,8 +654,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -794,8 +679,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -870,8 +754,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   },
   {
@@ -954,8 +837,7 @@ export const CAPABILITY_ACTIONS: CapabilityActionRecord[] = [
       "slate",
       "cursor",
       "openclaw",
-      "hermes",
-      "gbrain"
+      "hermes"
     ]
   }
 ];

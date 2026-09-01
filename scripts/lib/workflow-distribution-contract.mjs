@@ -4,6 +4,11 @@ import path from 'node:path';
 
 export const DISTRIBUTION_MANIFEST_FILE = 'distribution-manifest.json';
 const MAX_SIDE_ARTIFACT_BYTES = 1024 * 1024;
+const OPTIONAL_GENERATED_SOURCE_INPUTS = new Set([
+  'goldband-loop/browse/dist',
+  'goldband-loop/design/dist',
+  'goldband-loop/make-pdf/dist',
+]);
 
 export const SOURCE_INPUTS = [
   'goldband.manifest.json',
@@ -315,7 +320,14 @@ function collectEntries(root, relativeRoots, excluded = new Set()) {
   const entries = [];
   for (const relativeRoot of relativeRoots) {
     const absolute = path.resolve(root, relativeRoot);
-    if (!pathWithin(root, absolute) || !fs.existsSync(absolute)) {
+    if (!pathWithin(root, absolute)) {
+      throw new Error(`distribution source input is missing: ${relativeRoot}`);
+    }
+    if (!fs.existsSync(absolute)) {
+      // Build outputs are ignored by Git and therefore absent from an
+      // unbuilt candidate snapshot. Hash them whenever they exist so an
+      // installed build still becomes stale if its bundle changes or vanishes.
+      if (OPTIONAL_GENERATED_SOURCE_INPUTS.has(relativeRoot)) continue;
       throw new Error(`distribution source input is missing: ${relativeRoot}`);
     }
     visit(root, absolute, excluded, entries);

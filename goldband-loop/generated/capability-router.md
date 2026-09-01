@@ -7,7 +7,7 @@
 - `$goldband design consult` — Define, explore, and prototype product design.
 - `$goldband safety guard` — Apply or remove workflow safety boundaries.
 - `$goldband context restore` — Save, restore, and summarize working context.
-- `$goldband knowledge recall` — Recall, configure, and synchronize Goldband knowledge.
+- `$goldband knowledge recall` — Recall Goldband knowledge.
 - `$goldband benchmark workflow` — Measure workflow or model performance.
 - `$goldband document generate` — Create product documentation and publication artifacts.
 - `$goldband system health` — Inspect or maintain the Goldband installation.
