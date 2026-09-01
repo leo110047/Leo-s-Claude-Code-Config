@@ -304,9 +304,9 @@ describe('review contract resolution and runtime store', () => {
     const repo = gitRepository(root, 'repo');
     const state = join(root, 'state');
     const central = join(root, 'central.json');
-    writeJson(central, noOpManifest());
+    writeJson(central, providerManifest());
     const imported = importReviewContract(repo, state, central);
-    writeJson(join(repo, 'goldband.review-evidence.json'), providerManifest());
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
     git(repo, ['add', 'goldband.review-evidence.json']);
     git(repo, ['commit', '-m', 'add repository contract']);
     writeCandidateDiff(repo);

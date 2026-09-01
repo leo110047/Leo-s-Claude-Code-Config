@@ -48,7 +48,7 @@ import type { ReviewContractResolution } from './review-contract-resolution';
 import { resolveReviewWorkspace, workspacePath } from './review-workspace';
 
 const REVIEW_EVIDENCE_SCHEMA_VERSION = 1;
-export const REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION = 2;
+const REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION = 2;
 const MAX_REVIEW_EVIDENCE_OUTPUT_BYTES = 64 * 1024;
 const MAX_REVIEW_EVIDENCE_TOTAL_BYTES = 1024 * 1024;
 const MAX_REVIEW_EVIDENCE_OPERATIONS = 64;

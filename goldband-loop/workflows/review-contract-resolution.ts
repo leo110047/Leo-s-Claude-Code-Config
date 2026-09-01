@@ -44,7 +44,7 @@ type ReviewCandidateManifest = {
 	selection: "worktree" | "index" | "head";
 };
 
-export type ReviewManifestProvenance = {
+type ReviewManifestProvenance = {
 	identity: string;
 	trackingState:
 		| "absent"
