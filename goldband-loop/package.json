@@ -13,9 +13,11 @@
   "scripts": {
     "build": "bash scripts/build.sh",
     "lint:source": "biome lint --config-path biome.json bin browse/src browser-skills cross-review design hosts ios-qa/daemon/src ios-qa/scripts/gen-accessors.ts lib make-pdf/src scripts supabase/functions workflows extension/background.js extension/content.js extension/inspector.js extension/popup.js extension/sidepanel-terminal.js extension/sidepanel.js",
+    "lint:complexity": "bun run scripts/check-source-complexity.ts",
+    "lint:complexity:update": "bun run scripts/check-source-complexity.ts --update",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint:exports": "knip --config knip.json --include files,exports,nsExports,types,nsTypes,enumMembers,namespaceMembers,duplicates",
-    "check:source": "bun run lint:source && bun run typecheck && bun run lint:exports",
+    "check:source": "bun run lint:source && bun run lint:complexity && bun run typecheck && bun run lint:exports",
     "vendor:xterm": "mkdir -p extension/lib && cp node_modules/xterm/lib/xterm.js extension/lib/xterm.js && cp node_modules/xterm/css/xterm.css extension/lib/xterm.css && cp node_modules/xterm-addon-fit/lib/xterm-addon-fit.js extension/lib/xterm-addon-fit.js",
     "dev:make-pdf": "bun run make-pdf/src/cli.ts",
     "dev:design": "bun run design/src/cli.ts",

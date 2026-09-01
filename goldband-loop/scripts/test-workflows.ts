@@ -17,6 +17,7 @@ export const MACOS_REVIEW_HOST_TEST_NAMES = [
   'review evidence contracts > sealed runtime projection cannot read source images or mutate projected images',
   'review evidence contracts > sealed runtime projection identity is stable across separate evidence plans',
   'review evidence contracts > evidence sandbox denies the system log socket inherited from the macOS process baseline',
+  'review evidence contracts > evidence sandbox denies Mach service lookup inherited from the macOS process baseline',
   'review evidence contracts > applicability selects only scoped providers and excludes unrelated cells from completeness',
   'review evidence contracts > regression and property providers preserve RED/GREEN and replay metadata',
   'review evidence contracts > each operation receives an independent read-only snapshot',

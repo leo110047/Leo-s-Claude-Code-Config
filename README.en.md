@@ -24,6 +24,18 @@ This repo has two layers:
 For detailed ownership and runtime contracts, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+### `review/code` platform boundary
+
+| Platform | Goldband Loop installation | Executable sealed evidence | `review/code` result |
+| --- | --- | --- | --- |
+| macOS | Supported | Runs under Seatbelt | May start semantic review after evidence is complete |
+| Linux | Other workflow capabilities are supported | **Unsupported** | Emits typed `runtime-incomplete`, starts no semantic review, and grants no completion or closure authority |
+| Windows | Some capabilities install through Git Bash/WSL | **Unsupported** | Fails closed with the same incomplete result |
+
+Linux Bubblewrap currently owns only the managed-worktree boundary. It is not a
+sealed `review/code` evidence runner and does not imply review parity. Run a
+contract that requires executable evidence on a supported macOS Seatbelt host.
+
 `review/code` first resolves a non-downgradable evidence contract. A repository
 Review uses the canonical Git repository root as the shared coordinate for
 diffs, snapshots, scopes, and contracts. Starting in a tracked subdirectory

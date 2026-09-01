@@ -45,7 +45,14 @@ import {
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import { stateRoot } from './evidence';
 import type { ReviewContractResolution } from './review-contract-resolution';
+import {
+  evidenceSandboxCommand,
+  isEvidenceSandboxRuntimeFailure,
+  sealedEvidenceExecutionUnavailable,
+} from './review-evidence-sandbox';
 import { resolveReviewWorkspace, workspacePath } from './review-workspace';
+
+export { isEvidenceSandboxRuntimeFailure } from './review-evidence-sandbox';
 
 const REVIEW_EVIDENCE_SCHEMA_VERSION = 1;
 const REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION = 2;
@@ -61,31 +68,6 @@ const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV = 'GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFI
 const SUPPORTED_REVIEW_HOST_EVIDENCE_LANE = 'macos-review-contract-host';
 const executableDigestCache = new Map<string, string>();
 const mockReviewReceiptAuthorityKey = randomBytes(32);
-const SYSTEM_SANDBOX_MACH_SERVICES = [
-  'com.apple.analyticsd',
-  'com.apple.analyticsd.messagetracer',
-  'com.apple.appsleep',
-  'com.apple.bsd.dirhelper',
-  'com.apple.cfprefsd.agent',
-  'com.apple.cfprefsd.daemon',
-  'com.apple.diagnosticd',
-  'com.apple.dt.automationmode.reader',
-  'com.apple.espd',
-  'com.apple.logd',
-  'com.apple.logd.events',
-  'com.apple.internal.objc_trace',
-  'com.apple.osanalytics.osanalyticshelper',
-  'com.apple.runningboard',
-  'com.apple.secinitd',
-  'com.apple.system.DirectoryService.libinfo_v1',
-  'com.apple.system.logger',
-  'com.apple.system.notification_center',
-  'com.apple.system.opendirectoryd.libinfo',
-  'com.apple.system.opendirectoryd.membership',
-  'com.apple.trustd',
-  'com.apple.trustd.agent',
-  'com.apple.xpc.activity.unmanaged',
-] as const;
 
 const DISPOSITIONS = new Set<CellDisposition>([
   'automated',
@@ -469,6 +451,18 @@ export async function executeEvidencePlan(
           throw new Error(`review evidence operation limit exceeded: ${MAX_REVIEW_EVIDENCE_OPERATIONS}`);
         }
         validateOperationAuthorization(operation, manifest);
+        if (provider.executionContext.runner === 'sealed') {
+          const unavailable = sealedEvidenceExecutionUnavailable();
+          if (unavailable) {
+            records.push(executionContextIncompleteRecord(
+              provider,
+              operation,
+              binding,
+              unavailable,
+            ));
+            continue;
+          }
+        }
         if (provider.executionContext.runner === 'host-seatbelt') {
           const unavailable = hostEvidenceExecutionUnavailable(ctx, provider);
           if (unavailable) {
@@ -503,19 +497,19 @@ export async function executeEvidencePlan(
           projectDependencyDirectories(workspace.repositoryRoot, operationRoot, input.changedFiles);
         }
         const dependencyDigest = dependencyProjectionDigest(operationRoot, binding.changedFiles);
-        const record = await runEvidenceOperation(
+        const record = await runEvidenceOperation({
           provider,
           operation,
-          operationRoot,
-          workspacePath(operationRoot, workspace.invocationOffset),
+          snapshotRoot: operationRoot,
+          executionCwd: workspacePath(operationRoot, workspace.invocationOffset),
           binding,
           dependencyDigest,
-          input.changedFiles,
+          changedFiles: input.changedFiles,
           runnerRoot,
-          join(tempRoot, 'runtime-projections'),
+          runtimeProjectionRoot: join(tempRoot, 'runtime-projections'),
           preparedRuntimes,
-          workspace.invocationOffset,
-        );
+          executionOffset: workspace.invocationOffset,
+        });
         rmSync(operationRoot, { recursive: true, force: true });
         rmSync(runnerRoot, { recursive: true, force: true });
         outputBytes += Buffer.byteLength(record.outputSummary);
@@ -1633,65 +1627,141 @@ function runtimeProjectionIdentityDigest(
   }));
 }
 
+type RunEvidenceOperationOptions = {
+  provider: EvidenceProvider;
+  operation: EvidenceOperation;
+  snapshotRoot: string;
+  executionCwd: string;
+  binding: CandidateBinding;
+  dependencyDigest: string;
+  changedFiles: string[];
+  runnerRoot: string;
+  runtimeProjectionRoot: string;
+  preparedRuntimes: Map<string, PreparedEvidenceRuntime>;
+  executionOffset: string;
+};
+
+type PreparedChildRuntime = {
+  tool: string;
+  command: string;
+  sourceAccess: EvidenceRuntimeReadAccess;
+  prepared: PreparedEvidenceRuntime;
+};
+
+type PreparedOperationRuntime = {
+  replayCommand: string[];
+  command: string;
+  runtimeAccess: EvidenceRuntimeReadAccess;
+  systemToolAccess: EvidenceSystemToolAccess;
+  preparedRuntime: PreparedEvidenceRuntime;
+  preparedChildRuntimes: PreparedChildRuntime[];
+  sandboxRuntimeAccess: EvidenceRuntimeReadAccess;
+  executionIdentityDigest: string;
+  commandDigest: string;
+};
+
+type EvidenceCommandResult = {
+  reason: string;
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+};
+
+type EvidenceExecutionResult = {
+  startedAt: string;
+  finishedAt: string;
+  result: EvidenceCommandResult;
+  snapshotDigestBefore: string;
+  snapshotDigestAfter: string;
+  snapshotUnchanged: boolean;
+  runtimeUnchanged: boolean;
+  sandboxDenied: boolean;
+  outputDigest: string;
+  outputSummary: string;
+};
+
 async function runEvidenceOperation(
-  provider: EvidenceProvider,
-  operation: EvidenceOperation,
-  snapshotRoot: string,
-  executionCwd: string,
-  binding: CandidateBinding,
-  dependencyDigest: string,
-  changedFiles: string[],
-  runnerRoot: string,
-  runtimeProjectionRoot: string,
-  preparedRuntimes: Map<string, PreparedEvidenceRuntime>,
-  executionOffset: string,
+  options: RunEvidenceOperationOptions,
 ): Promise<ReviewEvidenceRecord> {
   const startedAt = new Date().toISOString();
-  const replayCommand = operation.argv.map((value) =>
-    value.replaceAll('{seed}', operation.seed ?? ''));
+  const runtime = prepareOperationRuntime(options);
+  const execution = await executePreparedOperation(options, runtime, startedAt);
+  return evidenceRecord(options, runtime, execution);
+}
+
+function prepareOperationRuntime(
+  options: RunEvidenceOperationOptions,
+): PreparedOperationRuntime {
+  const replayCommand = options.operation.argv.map((value) =>
+    value.replaceAll('{seed}', options.operation.seed ?? ''));
   const command = resolveExecutable(replayCommand[0]!);
   const runtimeAccess = evidenceRuntimeReadAccess(command);
-  const systemToolAccess = evidenceSystemToolAccess(operation.requiredSystemTools);
-  const preparedRuntimeKey = sha256(stableJson({
-    command,
-    sourceRuntimeDigest: runtimeAccess.identityDigest,
-    runnerPolicy: EVIDENCE_RUNNER_POLICY,
-  }));
-  let preparedRuntime = preparedRuntimes.get(preparedRuntimeKey);
-  if (!preparedRuntime) {
-    preparedRuntime = prepareEvidenceRuntime(
-      command,
-      join(runtimeProjectionRoot, preparedRuntimeKey),
-      runtimeAccess,
-    );
-    preparedRuntimes.set(preparedRuntimeKey, preparedRuntime);
-  }
-  const preparedChildRuntimes = operation.requiredSystemTools
+  const systemToolAccess = evidenceSystemToolAccess(options.operation.requiredSystemTools);
+  const preparedRuntime = cachedEvidenceRuntime(options, command, runtimeAccess);
+  const preparedChildRuntimes = options.operation.requiredSystemTools
     .filter((tool) => tool !== 'git')
-    .map((tool) => {
-      const childCommand = resolveExecutable(tool);
-      const childSourceAccess = evidenceRuntimeReadAccess(childCommand);
-      const key = sha256(stableJson({
-        command: childCommand,
-        sourceRuntimeDigest: childSourceAccess.identityDigest,
-        runnerPolicy: EVIDENCE_RUNNER_POLICY,
-      }));
-      let prepared = preparedRuntimes.get(key);
-      if (!prepared) {
-        prepared = prepareEvidenceRuntime(
-          childCommand,
-          join(runtimeProjectionRoot, key),
-          childSourceAccess,
-        );
-        preparedRuntimes.set(key, prepared);
-      }
-      return { tool, command: childCommand, sourceAccess: childSourceAccess, prepared };
-    });
+    .map((tool) => prepareChildRuntime(options, tool));
   const sandboxRuntimeAccess = mergeEvidenceRuntimeReadAccess([
     preparedRuntime.access,
     ...preparedChildRuntimes.map((entry) => entry.prepared.access),
   ]);
-  const executionIdentityDigest = sha256(stableJson({
+  return {
+    replayCommand,
+    command,
+    runtimeAccess,
+    systemToolAccess,
+    preparedRuntime,
+    preparedChildRuntimes,
+    sandboxRuntimeAccess,
+    executionIdentityDigest: operationExecutionIdentity(options, {
+      command, runtimeAccess, systemToolAccess, preparedRuntime, preparedChildRuntimes,
+    }),
+    commandDigest: operationCommandDigest(options),
+  };
+}
+
+function cachedEvidenceRuntime(
+  options: RunEvidenceOperationOptions,
+  command: string,
+  runtimeAccess: EvidenceRuntimeReadAccess,
+): PreparedEvidenceRuntime {
+  const key = sha256(stableJson({
+    command,
+    sourceRuntimeDigest: runtimeAccess.identityDigest,
+    runnerPolicy: EVIDENCE_RUNNER_POLICY,
+  }));
+  const cached = options.preparedRuntimes.get(key);
+  if (cached) return cached;
+  const prepared = prepareEvidenceRuntime(
+    command,
+    join(options.runtimeProjectionRoot, key),
+    runtimeAccess,
+  );
+  options.preparedRuntimes.set(key, prepared);
+  return prepared;
+}
+
+function prepareChildRuntime(
+  options: RunEvidenceOperationOptions,
+  tool: string,
+): PreparedChildRuntime {
+  const command = resolveExecutable(tool);
+  const sourceAccess = evidenceRuntimeReadAccess(command);
+  return {
+    tool,
+    command,
+    sourceAccess,
+    prepared: cachedEvidenceRuntime(options, command, sourceAccess),
+  };
+}
+
+function operationExecutionIdentity(
+  options: RunEvidenceOperationOptions,
+  runtime: Pick<PreparedOperationRuntime,
+    'command' | 'runtimeAccess' | 'systemToolAccess' | 'preparedRuntime' | 'preparedChildRuntimes'>,
+): string {
+  const { binding, provider, operation } = options;
+  return sha256(stableJson({
     repository: binding.repository,
     baseDigest: binding.baseDigest,
     candidateDigest: binding.candidateDigest,
@@ -1700,23 +1770,27 @@ async function runEvidenceOperation(
     providerId: provider.id,
     operationId: operation.id,
     executionContext: provider.executionContext,
-    executableDigest: executableContentDigest(command),
-    sourceRuntimeDigest: runtimeAccess.identityDigest,
-    executionRuntimeDigest: preparedRuntime.identityDigest,
-    childRuntimeDigests: preparedChildRuntimes.map((entry) => ({
+    executableDigest: executableContentDigest(runtime.command),
+    sourceRuntimeDigest: runtime.runtimeAccess.identityDigest,
+    executionRuntimeDigest: runtime.preparedRuntime.identityDigest,
+    childRuntimeDigests: runtime.preparedChildRuntimes.map((entry) => ({
       tool: entry.tool,
       source: entry.sourceAccess.identityDigest,
       execution: entry.prepared.identityDigest,
     })),
-    dependencyProjectionDigest: dependencyDigest,
-    systemToolDigest: systemToolAccess.identityDigest,
+    dependencyProjectionDigest: options.dependencyDigest,
+    systemToolDigest: runtime.systemToolAccess.identityDigest,
     runnerPolicy: EVIDENCE_RUNNER_POLICY,
     platform: process.platform,
     architecture: process.arch,
   }));
-  const commandDigest = sha256(stableJson({
+}
+
+function operationCommandDigest(options: RunEvidenceOperationOptions): string {
+  const { operation } = options;
+  return sha256(stableJson({
     argv: operation.argv,
-    cwd: executionOffset || '.',
+    cwd: options.executionOffset || '.',
     network: operation.network,
     target: operation.target,
     expectedExit: operation.expectedExit,
@@ -1725,18 +1799,21 @@ async function runEvidenceOperation(
     seed: operation.seed,
     iterations: operation.iterations,
   }));
-  const runnerTmpPath = join(runnerRoot, 'tmp');
-  const runnerHomePath = join(runnerRoot, 'home');
+}
+
+function operationRunner(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+): { sandbox: ReturnType<typeof evidenceSandboxCommand>; env: Record<string, string> } {
+  const runnerTmpPath = join(options.runnerRoot, 'tmp');
+  const runnerHomePath = join(options.runnerRoot, 'home');
   mkdirSync(runnerTmpPath, { recursive: true });
   mkdirSync(runnerHomePath, { recursive: true });
   const runnerTmp = realpathSync(runnerTmpPath);
   const runnerHome = realpathSync(runnerHomePath);
+  const operation = options.operation;
   const env = {
-    PATH: uniqueSorted([
-      ...systemToolAccess.executableDirectories,
-      dirname(preparedRuntime.command),
-      ...preparedChildRuntimes.map((entry) => dirname(entry.prepared.command)),
-    ]).join(':') + ':/usr/bin:/bin',
+    PATH: operationPath(runtime),
     HOME: runnerHome,
     TMPDIR: runnerTmp,
     TMP: runnerTmp,
@@ -1749,91 +1826,162 @@ async function runEvidenceOperation(
     [EVIDENCE_SANDBOX_ACTIVE_ENV]: '1',
     [EVIDENCE_TEMP_ROOT_ENV]: runnerTmp,
     CI: '1',
-    OPENSSL_CONF: preparedRuntime.environment.OPENSSL_CONF ?? '/dev/null',
+    OPENSSL_CONF: runtime.preparedRuntime.environment.OPENSSL_CONF ?? '/dev/null',
   };
-  const sandbox = evidenceSandboxCommand(
-    snapshotRoot,
-    [runnerTmp, runnerHome],
-    [preparedRuntime.command, ...replayCommand.slice(1)],
-    sandboxRuntimeAccess,
-    systemToolAccess.roots,
-    systemToolAccess.literals,
-    systemToolAccess.mapExecutableLiterals,
+  const sandbox = evidenceSandboxCommand({
+    cwd: options.snapshotRoot,
+    writableRoots: [runnerTmp, runnerHome],
+    argv: [runtime.preparedRuntime.command, ...runtime.replayCommand.slice(1)],
+    runtimeAccess: runtime.sandboxRuntimeAccess,
+    systemToolRoots: runtime.systemToolAccess.roots,
+    systemToolLiterals: runtime.systemToolAccess.literals,
+    systemToolMapExecutableLiterals: runtime.systemToolAccess.mapExecutableLiterals,
+  });
+  return { sandbox, env };
+}
+
+function operationPath(runtime: PreparedOperationRuntime): string {
+  return uniqueSorted([
+    ...runtime.systemToolAccess.executableDirectories,
+    dirname(runtime.preparedRuntime.command),
+    ...runtime.preparedChildRuntimes.map((entry) => dirname(entry.prepared.command)),
+  ]).join(':') + ':/usr/bin:/bin';
+}
+
+async function executePreparedOperation(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+  startedAt: string,
+): Promise<EvidenceExecutionResult> {
+  const ignored = dependencyRelativePaths(options.changedFiles);
+  const snapshotDigestBefore = snapshotContentDigest(options.snapshotRoot, ignored);
+  const runner = operationRunner(options, runtime);
+  const capture = await captureEvidenceCommand(options, runner);
+  const finishedAt = new Date().toISOString();
+  const snapshotDigestAfter = snapshotContentDigest(options.snapshotRoot, ignored);
+  const snapshotUnchanged = snapshotDigestBefore === snapshotDigestAfter;
+  const runtimeUnchanged = operationRuntimeUnchanged(runtime);
+  const sandboxDenied = isEvidenceSandboxRuntimeFailure(
+    runner.sandbox.command,
+    {
+      reason: capture.result.reason,
+      exitCode: capture.result.exitCode,
+      stderr: capture.stderrDiagnosticHead,
+    },
+    runner.sandbox.brokered,
   );
-  const ignoredDependencies = dependencyRelativePaths(changedFiles);
-  const snapshotDigestBefore = snapshotContentDigest(snapshotRoot, ignoredDependencies);
+  const outputSummary = summarizeEvidenceExecution(
+    options.operation,
+    capture.result,
+    { snapshotUnchanged, runtimeUnchanged, sandboxDenied },
+  );
+  return {
+    startedAt,
+    finishedAt,
+    result: capture.result,
+    snapshotDigestBefore,
+    snapshotDigestAfter,
+    snapshotUnchanged,
+    runtimeUnchanged,
+    sandboxDenied,
+    outputDigest: capture.outputDigest,
+    outputSummary,
+  };
+}
+
+async function captureEvidenceCommand(
+  options: RunEvidenceOperationOptions,
+  runner: ReturnType<typeof operationRunner>,
+): Promise<{
+  result: EvidenceCommandResult;
+  outputDigest: string;
+  stderrDiagnosticHead: string;
+}> {
   const stdoutHash = createHash('sha256');
   const stderrHash = createHash('sha256');
   let stderrDiagnosticHead = '';
-  let result: {
-    reason: string;
-    exitCode: number;
-    stdout?: string;
-    stderr?: string;
-  };
-  result = await superviseCommand(sandbox.command, sandbox.args, {
-      cwd: executionCwd,
-      env,
-      timeoutMs: operation.timeoutMs,
-      killGraceMs: 1000,
-      killConfirmMs: 2000,
-      captureOutput: {
-        stdoutMaxBytes: operation.maxOutputBytes,
-        stderrMaxBytes: operation.maxOutputBytes,
+  const result = await superviseCommand(runner.sandbox.command, runner.sandbox.args, {
+    cwd: options.executionCwd,
+    env: runner.env,
+    timeoutMs: options.operation.timeoutMs,
+    killGraceMs: 1000,
+    killConfirmMs: 2000,
+    captureOutput: {
+      stdoutMaxBytes: options.operation.maxOutputBytes,
+      stderrMaxBytes: options.operation.maxOutputBytes,
+    },
+    label: `review evidence ${options.provider.id}:${options.operation.id}`,
+    stdout: { write(chunk: string) { stdoutHash.update(chunk); } },
+    stderr: {
+      write(chunk: string) {
+        stderrHash.update(chunk);
+        const remaining = MAX_EVIDENCE_RUNTIME_DIAGNOSTIC_CHARS - stderrDiagnosticHead.length;
+        if (remaining > 0) stderrDiagnosticHead += chunk.slice(0, remaining);
       },
-      label: `review evidence ${provider.id}:${operation.id}`,
-      stdout: { write(chunk: string) { stdoutHash.update(chunk); } },
-      stderr: {
-        write(chunk: string) {
-          stderrHash.update(chunk);
-          const remaining = MAX_EVIDENCE_RUNTIME_DIAGNOSTIC_CHARS - stderrDiagnosticHead.length;
-          if (remaining > 0) stderrDiagnosticHead += chunk.slice(0, remaining);
-        },
-      },
+    },
   });
-  const finishedAt = new Date().toISOString();
-  const snapshotDigestAfter = snapshotContentDigest(snapshotRoot, ignoredDependencies);
-  const snapshotUnchanged = snapshotDigestBefore === snapshotDigestAfter;
-  let runtimeUnchanged = false;
+  return {
+    result,
+    outputDigest: sha256(`${stdoutHash.digest('hex')}:${stderrHash.digest('hex')}`),
+    stderrDiagnosticHead,
+  };
+}
+
+function operationRuntimeUnchanged(runtime: PreparedOperationRuntime): boolean {
   try {
-    runtimeUnchanged = evidenceRuntimeReadAccess(command).identityDigest === runtimeAccess.identityDigest &&
-      systemToolAccess.verifyUnchanged() &&
-      preparedRuntime.verifyUnchanged() &&
-      preparedChildRuntimes.every((entry) =>
+    return evidenceRuntimeReadAccess(runtime.command).identityDigest === runtime.runtimeAccess.identityDigest &&
+      runtime.systemToolAccess.verifyUnchanged() &&
+      runtime.preparedRuntime.verifyUnchanged() &&
+      runtime.preparedChildRuntimes.every((entry) =>
         evidenceRuntimeReadAccess(entry.command).identityDigest === entry.sourceAccess.identityDigest &&
         entry.prepared.verifyUnchanged());
   } catch {
-    runtimeUnchanged = false;
+    return false;
   }
-  const combined = [result.stdout ?? '', result.stderr ?? ''].filter(Boolean).join('\n');
-  const outputSummary = boundText(combined, operation.maxOutputBytes);
-  const sandboxDenied = isEvidenceSandboxRuntimeFailure(sandbox.command, {
-    reason: result.reason,
-    exitCode: result.exitCode,
-    stderr: stderrDiagnosticHead,
-  }, sandbox.brokered);
-  let status: EvidenceRecordStatus;
-  const exitStatus = result.reason === 'exit' ? result.exitCode : undefined;
-  if (result.reason !== 'exit') {
-    status = 'runtime-incomplete';
-  } else if (!snapshotUnchanged || !runtimeUnchanged || sandboxDenied) {
-    status = 'runtime-incomplete';
-  } else {
-    const matched = operation.expectedExit === 'zero'
-      ? result.exitCode === 0
-      : result.exitCode === operation.expectedExitCode;
-    status = matched ? 'verified-pass' : 'verified-failure';
+}
+
+function evidenceStatus(
+  operation: EvidenceOperation,
+  execution: EvidenceExecutionResult,
+): EvidenceRecordStatus {
+  if (execution.result.reason !== 'exit' ||
+      !execution.snapshotUnchanged || !execution.runtimeUnchanged || execution.sandboxDenied) {
+    return 'runtime-incomplete';
   }
-  const errorText = result.reason !== 'exit'
-    ? `runner incomplete: ${result.reason}`
-    : !snapshotUnchanged
-      ? 'runner incomplete: evidence operation mutated its isolated candidate snapshot'
-      : !runtimeUnchanged
-        ? 'runner incomplete: executable runtime libraries changed during evidence execution'
-      : sandboxDenied
-        ? 'runner incomplete: sandbox-exec denied or could not initialize the operation'
-        : '';
-  const summary = boundText([outputSummary, errorText].filter(Boolean).join('\n'), operation.maxOutputBytes);
+  const matched = operation.expectedExit === 'zero'
+    ? execution.result.exitCode === 0
+    : execution.result.exitCode === operation.expectedExitCode;
+  return matched ? 'verified-pass' : 'verified-failure';
+}
+
+function summarizeEvidenceExecution(
+  operation: EvidenceOperation,
+  result: EvidenceCommandResult,
+  integrity: Pick<EvidenceExecutionResult, 'snapshotUnchanged' | 'runtimeUnchanged' | 'sandboxDenied'>,
+): string {
+  const output = boundText(
+    [result.stdout ?? '', result.stderr ?? ''].filter(Boolean).join('\n'),
+    operation.maxOutputBytes,
+  );
+  let error = '';
+  if (result.reason !== 'exit') error = `runner incomplete: ${result.reason}`;
+  else if (!integrity.snapshotUnchanged) {
+    error = 'runner incomplete: evidence operation mutated its isolated candidate snapshot';
+  } else if (!integrity.runtimeUnchanged) {
+    error = 'runner incomplete: executable runtime libraries changed during evidence execution';
+  } else if (integrity.sandboxDenied) {
+    error = 'runner incomplete: sandbox-exec denied or could not initialize the operation';
+  }
+  return boundText([output, error].filter(Boolean).join('\n'), operation.maxOutputBytes);
+}
+
+function evidenceRecord(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+  execution: EvidenceExecutionResult,
+): ReviewEvidenceRecord {
+  const { provider, operation, binding } = options;
+  const status = evidenceStatus(operation, execution);
   return {
     id: `${provider.id}:${operation.id}`,
     providerId: provider.id,
@@ -1846,119 +1994,23 @@ async function runEvidenceOperation(
     environment: provider.executionContext.runner === 'host-seatbelt'
       ? `${provider.executionContext.lane}/host-seatbelt-${process.platform}-snapshot`
       : `isolated-${process.platform}-snapshot`,
-    commandDigest,
-    executionIdentityDigest,
-    snapshotDigestBefore,
-    snapshotDigestAfter,
-    replayCommand,
+    commandDigest: runtime.commandDigest,
+    executionIdentityDigest: runtime.executionIdentityDigest,
+    snapshotDigestBefore: execution.snapshotDigestBefore,
+    snapshotDigestAfter: execution.snapshotDigestAfter,
+    replayCommand: runtime.replayCommand,
     seed: operation.seed,
     iterations: operation.iterations,
-    startedAt,
-    finishedAt,
-    exitStatus,
-    outputDigest: sha256(`${stdoutHash.digest('hex')}:${stderrHash.digest('hex')}`),
-    outputSummary: summary,
+    startedAt: execution.startedAt,
+    finishedAt: execution.finishedAt,
+    exitStatus: execution.result.reason === 'exit' ? execution.result.exitCode : undefined,
+    outputDigest: execution.outputDigest,
+    outputSummary: execution.outputSummary,
     candidateDigest: binding.candidateDigest,
     baseDigest: binding.baseDigest,
     scopeDigest: binding.scopeDigest,
-    fresh: snapshotUnchanged && runtimeUnchanged && status !== 'runtime-incomplete',
+    fresh: execution.snapshotUnchanged && execution.runtimeUnchanged && status !== 'runtime-incomplete',
   };
-}
-
-function evidenceSandboxCommand(
-  cwd: string,
-  writableRoots: string[],
-  argv: string[],
-  runtimeAccess: EvidenceRuntimeReadAccess,
-  systemToolRoots: string[] = [],
-  systemToolLiterals: string[] = [],
-  systemToolMapExecutableLiterals: string[] = [],
-): { command: string; args: string[]; brokered: boolean } {
-  if (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')) {
-    const readableCwd = realpathSync(cwd);
-    const realWritableRoots = writableRoots.map((root) => realpathSync(root));
-    const allowedWrites = realWritableRoots.map((root) =>
-      `(allow file-write* (subpath ${JSON.stringify(root)}))`);
-    const allowedWritableRootLiterals = realWritableRoots.flatMap((root) => [
-      `(allow file-read* (literal ${JSON.stringify(root)}))`,
-      `(allow file-read-metadata file-test-existence (literal ${JSON.stringify(root)}))`,
-    ]);
-    const allowedReads = uniqueSorted([
-      readableCwd,
-      ...realWritableRoots,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).map((root) => `(allow file-read* (subpath ${JSON.stringify(root)}))`);
-    const allowedReadMetadata = uniqueSorted([
-      readableCwd,
-      ...realWritableRoots,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).map((root) =>
-      `(allow file-read-metadata file-test-existence (path-ancestors ${JSON.stringify(root)}))`);
-    // Bun and script launchers open ancestor directories while changing from
-    // the operation cwd into an authorized runtime root. Permit traversal of
-    // those directories without granting reads of sibling file contents.
-    const allowedAncestorDirectories = uniqueSorted([
-      readableCwd,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).flatMap((root) => [
-      `(allow file-read-data (literal ${JSON.stringify(root)}))`,
-      `(allow file-read-data (path-ancestors ${JSON.stringify(root)}))`,
-    ]);
-    const runtimeLiteralReads = uniqueSorted([...runtimeAccess.literals, ...systemToolLiterals])
-      .map((file) => `(allow file-read* (literal ${JSON.stringify(file)}))`);
-    const runtimeExecutableMaps = uniqueSorted([
-      ...runtimeAccess.mapExecutableLiterals,
-      ...systemToolMapExecutableLiterals,
-    ])
-      .map((file) => `(allow file-map-executable (literal ${JSON.stringify(file)}))`);
-    const runtimeExecutableMapRoots = uniqueSorted(runtimeAccess.mapExecutableRoots)
-      .map((root) => `(allow file-map-executable (subpath ${JSON.stringify(root)}))`);
-    const systemToolExecutableMapRoots = uniqueSorted(systemToolRoots)
-      .map((root) => `(allow file-map-executable (subpath ${JSON.stringify(root)}))`);
-    const runtimeLiteralMetadata = uniqueSorted([...runtimeAccess.literals, ...systemToolLiterals])
-      .map((file) =>
-        `(allow file-read-metadata file-test-existence (path-ancestors ${JSON.stringify(file)}))`);
-    const deniedSystemMachServices = SYSTEM_SANDBOX_MACH_SERVICES
-      .map((name) => `(global-name ${JSON.stringify(name)})`);
-    const profile = [
-      '(version 1)',
-      '(deny default)',
-      '(import "system.sb")',
-      '(deny network*)',
-      '(deny network-outbound (literal "/private/var/run/syslog"))',
-      '(deny mach-lookup)',
-      `(deny mach-lookup ${deniedSystemMachServices.join(' ')} (local-name "com.apple.cfprefsd.agent"))`,
-      `(if (defined? 'system-socket) (deny system-socket))`,
-      '(deny ipc-posix-shm-read* (ipc-posix-name "apple.shm.notification_center") (ipc-posix-name-prefix "apple.cfprefs."))',
-      '(allow process-exec)',
-      '(allow process-fork)',
-      '(allow signal (target self))',
-      '(allow signal (target children))',
-      '(allow sysctl-read)',
-      '(allow file-read* (literal "/dev/null"))',
-      '(allow file-write* (literal "/dev/null"))',
-      `(allow file-read* (literal ${JSON.stringify(argv[0])}))`,
-      ...runtimeLiteralMetadata,
-      ...runtimeLiteralReads,
-      ...runtimeExecutableMaps,
-      ...runtimeExecutableMapRoots,
-      ...systemToolExecutableMapRoots,
-      ...allowedAncestorDirectories,
-      ...allowedReadMetadata,
-      ...allowedReads,
-      ...allowedWritableRootLiterals,
-      ...allowedWrites,
-    ].join(' ');
-    return {
-      command: '/usr/bin/sandbox-exec',
-      args: ['-p', profile, '--', ...argv],
-      brokered: false,
-    };
-  }
-  throw new Error('review evidence runner requires a supported OS network/filesystem sandbox');
 }
 
 export type EvidenceRuntimeReadAccess = {
@@ -2102,22 +2154,6 @@ export function evidenceRuntimeReadAccess(executable: string): EvidenceRuntimeRe
       missingWeakLinks,
     })),
   };
-}
-
-export function isEvidenceSandboxRuntimeFailure(
-  sandboxCommand: string,
-  result: { reason: string; exitCode: number; stderr?: string },
-  brokered = false,
-): boolean {
-  if ((!brokered && sandboxCommand !== '/usr/bin/sandbox-exec') || result.reason !== 'exit') return false;
-  const stderr = result.stderr ?? '';
-  const brokerFailed = brokered && result.exitCode === 71 &&
-    /^evidence sandbox broker (?:rejected request|timed out|response)/im.test(stderr);
-  const sandboxInitializationFailed = result.exitCode === 71 &&
-    /^(?:sandbox-exec:|sandbox_init:)/im.test(stderr);
-  const dynamicLoaderFailedBeforeMain = result.exitCode !== 0 &&
-    /^dyld\[\d+\]:/m.test(stderr);
-  return brokerFailed || sandboxInitializationFailed || dynamicLoaderFailedBeforeMain;
 }
 
 export function runtimeLibraryLiteralPaths(
@@ -2608,6 +2644,9 @@ function executionContextIncompleteRecord(
   const expected = `${provider.executionContext.runner}/${provider.executionContext.sandboxOwner}`;
   const actual = unavailable.actual;
   const lane = provider.executionContext.runner === 'host-seatbelt' ? provider.executionContext.lane : 'none';
+  const remediation = provider.executionContext.runner === 'host-seatbelt'
+    ? `run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`
+    : 'run review/code on a supported macOS Seatbelt host; Linux and Windows do not currently execute sealed review evidence';
   const outputSummary = [
     `contract owner=${provider.owner}`,
     `actual=${actual}`,
@@ -2615,7 +2654,7 @@ function executionContextIncompleteRecord(
     `scope=${binding.scopeDigest}`,
     `executionContext=${stableJson(provider.executionContext)}`,
     `detail=${unavailable.detail}`,
-    `fix=run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`,
+    `fix=${remediation}`,
   ].join('; ');
   return {
     id: `${provider.id}:${operation.id}`,

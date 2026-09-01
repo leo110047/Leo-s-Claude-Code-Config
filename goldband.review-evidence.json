@@ -148,9 +148,9 @@
       "id": "evidence-system-log-deny",
       "behavior": "The macOS process startup baseline cannot reopen network, system socket, or Mach service output channels for evidence commands.",
       "kind": "boundary",
-      "input": "an evidence command attempts to connect to the local system log socket",
+      "input": "an evidence command attempts to connect to the local system log socket or look up a baseline Mach service",
       "preconditions": "the common system process baseline is imported before Goldband-specific denies",
-      "expected": "the connection fails with an authorization error and no candidate bytes leave through the system log",
+      "expected": "the socket connection and global-name Mach lookup are denied, every imported common Mach allow clause has an exact deny contract including registration and XPC prefixes, and no candidate bytes leave through the live-probed channels",
       "risk": "high",
       "disposition": "automated",
       "providerIds": ["review-evidence-tests"]
@@ -300,7 +300,9 @@
           "goldband.review-evidence.json",
           "schemas/review-evidence-manifest.schema.json",
           "goldband-loop/workflows/review-evidence.ts",
-          "goldband-loop/test/review-evidence.test.ts"
+          "goldband-loop/workflows/review-evidence-sandbox.ts",
+          "goldband-loop/test/review-evidence.test.ts",
+          "goldband-loop/test/review-evidence-platform.test.ts"
         ]
       },
       "executionContext": {
@@ -312,7 +314,7 @@
         {
           "id": "candidate-green",
           "target": "candidate",
-          "argv": ["bun", "test", "--cwd", "goldband-loop", "test/review-evidence.test.ts"],
+          "argv": ["bun", "test", "--cwd", "goldband-loop", "test/review-evidence.test.ts", "test/review-evidence-platform.test.ts"],
           "requiredSystemTools": ["codesign", "false", "git", "install_name_tool", "node", "otool", "ruby", "sandbox-exec", "tar", "true", "which", "xcrun"],
           "expectedExit": "zero",
           "timeoutMs": 120000,

@@ -1383,6 +1383,52 @@ describe('review evidence contracts', () => {
     }
   });
 
+  test('evidence sandbox denies Mach service lookup inherited from the macOS process baseline', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const clang = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' });
+    if (!hostBoundaryPrerequisite(clang.status === 0, 'xcrun clang')) return;
+    const probeRoot = mkdtempSync(join(tmpdir(), 'review-mach-lookup-'));
+    roots.push(probeRoot);
+    const probeSource = join(probeRoot, 'mach-lookup.c');
+    const probe = join(probeRoot, 'mach-lookup');
+    writeFileSync(
+      probeSource,
+      [
+        '#include <mach/mach.h>',
+        '#include <servers/bootstrap.h>',
+        'int main(void) {',
+        '  mach_port_t service = MACH_PORT_NULL;',
+        '  kern_return_t result = bootstrap_look_up(bootstrap_port, "com.apple.logd", &service);',
+        '  if (result != KERN_SUCCESS) return 0;',
+        '  mach_port_deallocate(mach_task_self(), service);',
+        '  return 9;',
+        '}',
+      ].join('\n'),
+    );
+    compileMachO([probeSource, '-o', probe]);
+    const nativeLookup = spawnSync(probe, [], { encoding: 'utf8' });
+    if (!hostBoundaryPrerequisite(
+      nativeLookup.status === 9,
+      'native com.apple.logd Mach lookup',
+    )) return;
+    const repo = gitFixture();
+    const value = manifest();
+    value.providers[0]!.operations[0]!.argv = [basename(probe)];
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${probeRoot}:${previousPath ?? '/usr/bin:/bin'}`;
+    try {
+      const evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      expect(evidence.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
+
   test('regression RED requires the declared exact exit code', async () => {
     const repo = gitFixture();
     const value = manifest();

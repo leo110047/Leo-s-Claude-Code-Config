@@ -1727,7 +1727,18 @@ Implementation contract:
   re-denies the baseline's exact syslog, Mach service, and shared-memory channels in
   addition to broad network, system-socket, and Mach lookup denial,
   so commands cannot use the local system log as an output side channel. The baseline
-  does not grant arbitrary HOME, workspace, or temporary-directory reads. The runtime
+  common Mach allow-clause set is parsed from the current `system.sb` and must
+  exactly match the reviewed contract. Global/local names, registration prefix,
+  XPC lookup prefix, and bootstrap operations receive matching explicit denies;
+  an added or removed Apple clause fails before execution. Live macOS probes prove
+  the syslog socket and one global-name Mach lookup remain blocked; prefix and
+  registration clauses currently have deterministic profile assertions, not live probes.
+  Executable sealed evidence has one supported adapter: macOS Seatbelt. Linux and
+  Windows stop before operation materialization with typed `runtime-incomplete`
+  evidence, no semantic conclusion, and no completion authority. Linux Bubblewrap
+  continues to isolate managed worktrees and is not treated as review-evidence parity.
+  The baseline does not grant arbitrary HOME, workspace, or temporary-directory
+  reads. The runtime
   compares pre/post snapshot digests, gives it
   unique HOME/TMP state that is removed after execution,
   bounds time and output, and persists fresh
@@ -2334,3 +2345,45 @@ Revisit triggers:
 - A real nested-project contract requires an explicit scope identity and
   repo-root monotonic composition rule.
 - Git is no longer the authoritative candidate/base transport for review.
+
+## ADR: Goldband Loop complexity debt is monotonic
+
+Status: Accepted
+
+Decision:
+
+- Enforce the shared source thresholds for Goldband Loop: at most 50 nonblank
+  lines per function, cognitive complexity 12, and four parameters.
+- Keep normal source lint focused on correctness. A dedicated Biome-backed gate
+  owns these quantitative rules and compares normalized per-file violation
+  vectors with a checked-in baseline.
+- Reject a worsened sorted magnitude vector for each file and rule. Require an
+  explicit baseline update when aggregate debt decreases, so line movement alone
+  cannot hide the vector change and the baseline can only shrink. Compare
+  candidate baseline values with the GitHub
+  push-before SHA, GitHub merge-base, GitLab diff base, or parent of the local
+  baseline-changing commit. CI fetches full history, and an unavailable required
+  predecessor is an error rather than an implicit pass.
+- Refactor the executable evidence runner first because it crossed all three
+  limits. Do not attempt an unrelated repository-wide rewrite in the same change.
+
+Why:
+
+Goldband Loop had no local quantitative gate and already contains substantial
+legacy debt. Enabling the thresholds as immediate zero-tolerance lint would make
+the source gate unusable; leaving them unenforced would allow the debt to grow.
+The normalized monotonic baseline makes current debt visible without weakening
+the shared thresholds or claiming the existing source already complies.
+
+The baseline intentionally has no function identity. A repair that removes a
+larger violation can therefore offset a different function becoming worse while
+the ranked vector still improves. Baseline reductions require diff review; this
+gate does not claim per-function regression identity.
+
+Revisit triggers:
+
+- The baseline reaches zero and the rules can move into ordinary source lint.
+- Biome changes diagnostic identities or metrics so normalized vectors no longer
+  represent the intended thresholds.
+- A stable AST-backed function identity is available and per-function monotonicity
+  is worth the additional migration and rename contract.

@@ -81,6 +81,17 @@ Advisory-only checks for now:
   `${XDG_CONFIG_HOME:-$HOME/.config}/goldband/git-hooks`; `core.hooksPath`
   never points at the Goldband source checkout.
 - Manual and CI checks scan first-party tracked code.
+- `goldband-loop` runs the same 50-line, complexity-12, and four-parameter
+  rules through `lint:complexity`. Its existing debt is a checked-in vector by
+  file and rule: a change may not worsen that sorted magnitude vector, and any reduction must
+  update the baseline in the same review. The gate compares the candidate vector
+  with the authoritative push-before SHA, merge-base, or parent of the most recent
+  baseline-changing commit; missing Git history fails closed outside the one-time
+  baseline bootstrap. The `off` level in its Biome config
+  prevents duplicate diagnostics during `lint:source`; the dedicated gate
+  explicitly activates and enforces all three rules. The vector is identity-free:
+  simultaneous repairs can offset another function's regression, so reviewers
+  must inspect baseline reductions until stable function identity is available.
 - Claude and Codex PostToolUse checks are advisory; they do not block edits.
 - `.goldband-no-style-gate` is a visible repository opt-out.
   `GOLDBAND_STYLE_GATE=0` is a logged temporary bypass.
