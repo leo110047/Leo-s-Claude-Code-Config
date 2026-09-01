@@ -58,6 +58,8 @@ try {
     source.inputs.map((entry: { path?: string }) => entry.path),
   );
   for (const required of [
+    'docs/review-evidence-manifest.md',
+    'examples/review-evidence/minimal-local-gate.json',
     'goldband-loop/bin/goldband.ts',
     'goldband-loop/bunfig.toml',
     'goldband-loop/design/dist/design',
@@ -72,6 +74,8 @@ try {
     'goldband-loop/review/shared-rubric.md',
     'hooks/scripts/lib/rules-resolver.js',
     'rules/manifest.json',
+    'schemas/review-behavior-matrix.schema.json',
+    'schemas/review-evidence-manifest.schema.json',
   ]) {
     assert.ok(
       sourcePaths.has(required),

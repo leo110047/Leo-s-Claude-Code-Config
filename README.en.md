@@ -26,6 +26,16 @@ For detailed ownership and runtime contracts, see
 
 ### `review/code` platform boundary
 
+When adding an evidence contract to another project, run
+`goldband review contract help` to locate the installed guide, public example,
+and JSON Schema. `review contract init` creates a non-overwriting, fail-closed
+scaffold at the canonical repository root. After declaring project-owned
+behaviors and providers, use `review contract validate --manifest <path>` to
+invoke the production runtime validator without executing evidence, changing
+the contract store, or claiming review/deployment completion. See the
+[manifest authoring guide](docs/review-evidence-manifest.md) for the complete
+field and safety contract.
+
 | Platform | Goldband Loop installation | Executable sealed evidence | `review/code` result |
 | --- | --- | --- | --- |
 | macOS | Supported | Runs under Seatbelt | May start semantic review after evidence is complete |

@@ -28,6 +28,13 @@ const REVIEW_ASSETS = [
 	"TODOS-format.md",
 ] as const;
 
+const REVIEW_AUTHORING_ASSETS = [
+	{ source: "../docs/review-evidence-manifest.md", target: "review/review-evidence-manifest.md" },
+	{ source: "../examples/review-evidence/minimal-local-gate.json", target: "review/examples/minimal-local-gate.json" },
+	{ source: "../schemas/review-evidence-manifest.schema.json", target: "review/schemas/review-evidence-manifest.schema.json" },
+	{ source: "../schemas/review-behavior-matrix.schema.json", target: "review/schemas/review-behavior-matrix.schema.json" },
+] as const;
+
 export interface CodexReviewLauncherInstallOptions {
 	sourceRoot: string;
 	runtimeRoot: string;
@@ -176,6 +183,21 @@ function bundleBrowserServer(
 	}
 }
 
+function assertRequiredSources(paths: string[]): void {
+	for (const path of paths) {
+		if (!existsSync(path)) throw new Error(`required source missing: ${path}`);
+	}
+}
+
+function copyReviewAuthoringAssets(sourceRoot: string, stageRoot: string): void {
+	for (const asset of REVIEW_AUTHORING_ASSETS) {
+		const source = join(sourceRoot, asset.source);
+		const target = join(stageRoot, asset.target);
+		mkdirSync(dirname(target), { recursive: true });
+		copyFileSync(source, target);
+	}
+}
+
 export function installCodexReviewLauncher(
 	options: CodexReviewLauncherInstallOptions,
 ): CodexReviewLauncherMarker {
@@ -214,7 +236,6 @@ export function installCodexReviewLauncher(
 
 	const launcherEntry = join(sourceRoot, "bin", "goldband.ts");
 	const runtimeEntry = join(sourceRoot, "workflows", "run.ts");
-	const reviewContractEntry = join(sourceRoot, "workflows", "review-contract-cli.ts");
 	const browserServerEntry = join(sourceRoot, "browse", "src", "server.ts");
 	const rulesResolverSource = join(
 		sourceRoot,
@@ -225,16 +246,15 @@ export function installCodexReviewLauncher(
 		"rules-resolver.js",
 	);
 	const rulesSource = join(sourceRoot, "..", "rules");
-	for (const required of [
+	assertRequiredSources([
 		launcherEntry,
 		runtimeEntry,
-		reviewContractEntry,
+		join(sourceRoot, "workflows", "review-contract-cli.ts"),
 		browserServerEntry,
 		rulesResolverSource,
 		join(rulesSource, "manifest.json"),
-	]) {
-		if (!existsSync(required)) throw new Error(`required source missing: ${required}`);
-	}
+		...REVIEW_AUTHORING_ASSETS.map((asset) => join(sourceRoot, asset.source)),
+	]);
 
 	const stageRoot = `${runtimeRoot}.tmp-${process.pid}`;
 	const backupRoot = `${runtimeRoot}.backup`;
@@ -247,7 +267,7 @@ export function installCodexReviewLauncher(
 		bundle(bunPath, runtimeEntry, join(stageRoot, "workflows", "run.ts"));
 		bundle(
 			bunPath,
-			reviewContractEntry,
+			join(sourceRoot, "workflows", "review-contract-cli.ts"),
 			join(stageRoot, "workflows", "review-contract-cli.ts"),
 		);
 		const stagedBrowserExecutable = join(stageRoot, "browse", "browse");
@@ -266,6 +286,7 @@ export function installCodexReviewLauncher(
 			if (!existsSync(source)) throw new Error(`review asset missing: ${source}`);
 			copyFileSync(source, join(stageRoot, "review", asset));
 		}
+		copyReviewAuthoringAssets(sourceRoot, stageRoot);
 		const stagedRulesResolver = join(
 			stageRoot,
 			"review",

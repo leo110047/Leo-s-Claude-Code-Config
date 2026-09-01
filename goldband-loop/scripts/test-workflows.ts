@@ -52,6 +52,7 @@ export const WORKFLOW_TESTS = [
   'test/workflows-runtime.test.ts',
   'test/review-evidence.test.ts',
   'test/review-evidence-platform.test.ts',
+  'test/review-contract-authoring.test.ts',
   'test/review-lineage.test.ts',
   'test/work-map.test.ts',
   'test/work-map-store.test.ts',
@@ -69,6 +70,7 @@ export const WORKFLOW_TESTS = [
   'test/tracker-import.test.ts',
   'test/review-impact.test.ts',
   'test/goldband-review-cli.test.ts',
+  'test/codex-review-contract-authoring-install.test.ts',
   'test/codex-review-launcher-install.test.ts',
   'test/codex-workflow-status.test.ts',
 ] as const;

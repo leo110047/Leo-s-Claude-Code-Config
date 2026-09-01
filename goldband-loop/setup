@@ -862,6 +862,44 @@ create_internal_workflow_docs() {
   fi
 }
 
+install_review_authoring_assets() {
+  local goldband_dir="$1"
+  local runtime_root="$2"
+  local repo_root
+  repo_root="$(cd "$goldband_dir/.." && pwd -P)"
+
+  [ -f "$repo_root/docs/review-evidence-manifest.md" ] || {
+    echo "goldband setup failed: missing review manifest authoring guide" >&2
+    exit 1
+  }
+  [ -f "$repo_root/examples/review-evidence/minimal-local-gate.json" ] || {
+    echo "goldband setup failed: missing review manifest example" >&2
+    exit 1
+  }
+  [ -f "$repo_root/schemas/review-evidence-manifest.schema.json" ] || {
+    echo "goldband setup failed: missing review manifest schema" >&2
+    exit 1
+  }
+  [ -f "$repo_root/schemas/review-behavior-matrix.schema.json" ] || {
+    echo "goldband setup failed: missing review behavior schema" >&2
+    exit 1
+  }
+
+  mkdir -p "$runtime_root/review/examples" "$runtime_root/review/schemas"
+  _link_or_copy \
+    "$repo_root/docs/review-evidence-manifest.md" \
+    "$runtime_root/review/review-evidence-manifest.md"
+  _link_or_copy \
+    "$repo_root/examples/review-evidence/minimal-local-gate.json" \
+    "$runtime_root/review/examples/minimal-local-gate.json"
+  _link_or_copy \
+    "$repo_root/schemas/review-evidence-manifest.schema.json" \
+    "$runtime_root/review/schemas/review-evidence-manifest.schema.json"
+  _link_or_copy \
+    "$repo_root/schemas/review-behavior-matrix.schema.json" \
+    "$runtime_root/review/schemas/review-behavior-matrix.schema.json"
+}
+
 # ─── Helper: create a minimal ~/.codex/skills/goldband runtime root ───────────
 # Codex scans ~/.codex/skills recursively. Exposing the whole repo here causes
 # duplicate skills when old per-workflow entries remain discoverable. Keep this
@@ -907,6 +945,7 @@ create_codex_runtime_root() {
       _link_or_copy "$goldband_dir/review/$f" "$codex_goldband/review/$f"
     fi
   done
+  install_review_authoring_assets "$goldband_dir" "$codex_goldband"
   # ETHOS.md — referenced by "Search Before Building" in all skill preambles
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$codex_goldband/ETHOS.md"
@@ -1001,6 +1040,7 @@ create_claude_runtime_root() {
       _link_or_copy "$goldband_dir/review/$f" "$claude_goldband/review/$f"
     fi
   done
+  install_review_authoring_assets "$goldband_dir" "$claude_goldband"
   if [ -f "$goldband_dir/ETHOS.md" ]; then
     _link_or_copy "$goldband_dir/ETHOS.md" "$claude_goldband/ETHOS.md"
   fi

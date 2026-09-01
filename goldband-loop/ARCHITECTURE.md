@@ -18,6 +18,14 @@ provenance, tracking state, and baseline/candidate/explicit/effective digests.
 Import/remove are explicit CLI mutations with private regular-file checks and
 atomic writes; review never mutates the repository or store.
 
+`workflows/review-contract-cli.ts` owns the authoring surface. `validate` reads
+through the same stable manifest source and production validator as import but
+does not resolve or mutate store state. `init` exclusively creates a repo-bounded
+high-risk unsupported scaffold, so onboarding cannot fabricate host eligibility.
+The installed guide, public example, and JSON Schemas are discoverable assets;
+JSON Schema assists structural editing while runtime validation retains graph,
+candidate, lineage, and runner authority.
+
 The resolved code validates the behavior
 matrix and provider registry, materializes isolated base/candidate snapshots,
 executes bounded argument arrays under a default-deny read/write/network OS

@@ -8,6 +8,22 @@
     "type": "object",
     "additionalProperties": false,
     "required": ["id", "behavior", "kind", "input", "preconditions", "expected", "risk", "disposition", "providerIds"],
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "disposition": { "enum": ["manual", "not-applicable", "unsupported"] }
+          },
+          "required": ["disposition"]
+        },
+        "then": { "required": ["reason"] },
+        "else": {
+          "properties": {
+            "providerIds": { "minItems": 1 }
+          }
+        }
+      }
+    ],
     "properties": {
       "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
       "behavior": { "type": "string", "minLength": 1 },

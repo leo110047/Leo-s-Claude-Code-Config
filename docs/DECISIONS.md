@@ -2387,3 +2387,55 @@ Revisit triggers:
   represent the intended thresholds.
 - A stable AST-backed function identity is available and per-function monotonicity
   is worth the additional migration and rename contract.
+
+## ADR: Review contract authoring uses one fail-closed runtime authority
+
+Status: Accepted
+
+Decision:
+
+- Keep `reviewEvidenceManifestSchema.validate()` as the final manifest authority.
+  JSON Schema remains a distributed structural/editor aid and explicitly does
+  not own graph, candidate, lineage, or runner semantics.
+- Expose `review contract validate --manifest <path>` as a side-effect-free
+  authoring check. It reads through the same stable regular-file and runtime
+  validator path as import, but does not resolve or mutate the runtime store,
+  execute providers, create lineage, or invoke a semantic host.
+- Expose `review contract init [--output <path>]` as an exclusive-create,
+  repo-bounded scaffold operation. The scaffold is valid schema v2 but contains
+  one high-risk unsupported cell, so it remains ineligible for semantic review
+  until a project owner replaces it with real behavior and evidence providers.
+- Distribute the canonical guide, one public local-gate example, and both JSON
+  Schemas with Claude and Codex authoring surfaces. Installed help reports their
+  exact paths.
+- Do not infer frameworks, commands, risk, applicability, evidence level, or
+  authorization. Do not add a preset catalog or another manifest validator.
+
+Why:
+
+`review/code` correctly fails closed without a resolvable contract, but an
+installed user in another repository previously had no supported path to learn,
+create, or dry-run validate the first manifest. Internal fixtures and repository
+manifests were not public examples, and the source-only JSON Schema could accept
+some inputs that the runtime rejected. A blocking scaffold plus the production
+validator closes the onboarding gap without fabricating project knowledge or
+weakening completion authority.
+
+Consequences:
+
+- A successful authoring validation proves only contract validity. Its output
+  states that no evidence ran and no completion authority exists.
+- `init` may create one new repository file but cannot overwrite, escape the
+  canonical Git repository, import state, or start review.
+- Safety-critical local conditions shared by JSON Schema and runtime are kept in
+  a representative conformance corpus. Runtime-only graph rules remain
+  explicitly documented rather than represented by a second incomplete
+  implementation.
+- Installed-distribution drift now includes the guide, example, and Schemas.
+
+Revisit triggers:
+
+- Multiple real projects demonstrate repeated, identical provider contracts
+  that justify a curated preset with a named owner and compatibility policy.
+- The manifest model moves to a declarative source capable of generating both
+  the runtime validator and JSON Schema without losing graph semantics.

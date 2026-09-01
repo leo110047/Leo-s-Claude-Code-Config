@@ -87,11 +87,7 @@ export function importReviewContract(
 ): ReviewContractStoreInspection {
   const workspace = resolveReviewWorkspace(cwd);
   const repository = resolveReviewContractRepositoryIdentity(cwd);
-  const source = resolve(cwd, manifestFile);
-  const manifest = validateManifestSource(
-    JSON.parse(readStableRegularFile(source).toString('utf8')),
-    source,
-  );
+  const { source, manifest } = readReviewContractManifest(manifestFile, cwd);
   const directory = reviewContractStoreDirectory(stateRoot);
   ensurePrivateDirectory(directory);
   const entryFile = reviewContractEntryFile(stateRoot, repository);
@@ -108,6 +104,20 @@ export function importReviewContract(
   }
   writeAtomicPrivateJson(entryFile, entry);
   return { repository, workspace, entryFile, entry: readAndValidateStoreEntry(entryFile, repository) };
+}
+
+export function readReviewContractManifest(
+  manifestFile: string,
+  cwd = process.cwd(),
+): { source: string; manifest: ReviewEvidenceManifest } {
+  const source = resolve(cwd, manifestFile);
+  let value: unknown;
+  try {
+    value = JSON.parse(readStableRegularFile(source).toString('utf8'));
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}; source: ${source}`);
+  }
+  return { source: realpathSync(source), manifest: validateManifestSource(value, source) };
 }
 
 export function removeReviewContract(
@@ -224,16 +234,16 @@ function readAndValidateStoreEntry(
 function readStableRegularFile(file: string): Buffer {
   const pathBefore = lstatSync(file);
   if (pathBefore.isSymbolicLink() || !pathBefore.isFile()) {
-    throw new Error('review contract import manifest must be a regular file, not a symlink');
+    throw new Error('review contract manifest must be a regular file, not a symlink');
   }
   if (pathBefore.size > MAX_MANIFEST_BYTES) {
-    throw new Error(`review contract import manifest exceeds ${MAX_MANIFEST_BYTES} bytes`);
+    throw new Error(`review contract manifest exceeds ${MAX_MANIFEST_BYTES} bytes`);
   }
   const descriptor = openSync(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const before = fstatSync(descriptor, { bigint: true });
     if (!before.isFile() || before.ino !== BigInt(pathBefore.ino) || before.dev !== BigInt(pathBefore.dev)) {
-      throw new Error('review contract import manifest changed while being opened');
+      throw new Error('review contract manifest changed while being opened');
     }
     const content = Buffer.alloc(Number(before.size));
     let offset = 0;
@@ -250,7 +260,7 @@ function readStableRegularFile(file: string): Buffer {
       pathAfter.isSymbolicLink() || !pathAfter.isFile() || BigInt(pathAfter.ino) !== before.ino ||
       BigInt(pathAfter.dev) !== before.dev
     ) {
-      throw new Error('review contract import manifest changed while being read');
+      throw new Error('review contract manifest changed while being read');
     }
     return content;
   } finally {

@@ -1106,6 +1106,7 @@ function validateReviewEvidenceManifest(
   binding?: CandidateBinding,
 ): ReviewEvidenceManifest {
   const item = asObject(value, 'review evidence manifest');
+  assertAllowedKeys(item, ['schemaVersion', 'behaviorMatrix', 'providers', 'authorizations'], 'review evidence manifest');
   if (item.schemaVersion !== REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION) {
     throw new Error(
       `review evidence manifest schema incompatibility: observed ${String(item.schemaVersion)}, supported ${REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION}; migrate the source manifest explicitly and supply lifecycle, applicability, and executionContext without guessed defaults`,
@@ -1118,22 +1119,13 @@ function validateReviewEvidenceManifest(
   if (!Array.isArray(item.authorizations)) throw new Error('review evidence manifest.authorizations must be an array');
   const behaviorMatrix = item.behaviorMatrix.map(validateBehaviorCell);
   const providers = item.providers.map(validateEvidenceProvider);
-  const authorizations = item.authorizations.map((value) => {
-    const auth = asObject(value, 'evidence authorization');
-    return {
-      id: requiredId(auth.id, 'authorization.id'),
-      operation: requiredString(auth.operation, 'authorization.operation'),
-      scope: requiredString(auth.scope, 'authorization.scope'),
-      approvedBy: requiredString(auth.approvedBy, 'authorization.approvedBy'),
-      approvedAt: validDate(auth.approvedAt, 'authorization.approvedAt'),
-      expiresAt: validDate(auth.expiresAt, 'authorization.expiresAt'),
-    };
-  });
+  const authorizations = item.authorizations.map(validateEvidenceAuthorization);
   assertUnique(behaviorMatrix.map((cell) => cell.id), 'behavior cell');
   assertUnique(providers.map((provider) => provider.id), 'evidence provider');
   assertUnique(authorizations.map((authorization) => authorization.id), 'evidence authorization');
   const cellIds = new Set(behaviorMatrix.map((cell) => cell.id));
   const providerIds = new Set(providers.map((provider) => provider.id));
+  assertAuthorizationReferences(authorizations, providers);
   for (const cell of behaviorMatrix) {
     for (const providerId of cell.providerIds) {
       if (!providerIds.has(providerId)) throw new Error(`behavior cell ${cell.id} references unknown provider ${providerId}`);
@@ -1168,8 +1160,49 @@ function validateReviewEvidenceManifest(
   return { schemaVersion: 2, behaviorMatrix, providers, authorizations };
 }
 
+function validateEvidenceAuthorization(value: unknown): ReviewEvidenceManifest['authorizations'][number] {
+  const item = asObject(value, 'evidence authorization');
+  assertAllowedKeys(item, ['id', 'operation', 'scope', 'approvedBy', 'approvedAt', 'expiresAt'], 'evidence authorization');
+  const authorization = {
+    id: requiredId(item.id, 'authorization.id'),
+    operation: requiredString(item.operation, 'authorization.operation'),
+    scope: requiredString(item.scope, 'authorization.scope'),
+    approvedBy: requiredString(item.approvedBy, 'authorization.approvedBy'),
+    approvedAt: validDate(item.approvedAt, 'authorization.approvedAt'),
+    expiresAt: validDate(item.expiresAt, 'authorization.expiresAt'),
+  };
+  if (Date.parse(authorization.expiresAt) <= Date.parse(authorization.approvedAt)) {
+    throw new Error(`evidence authorization ${authorization.id} must expire after approval`);
+  }
+  return authorization;
+}
+
+function assertAuthorizationReferences(
+  authorizations: ReviewEvidenceManifest['authorizations'],
+  providers: EvidenceProvider[],
+): void {
+  const operations = providers.flatMap((provider) => provider.operations);
+  for (const operation of operations.filter((entry) => entry.authorizationId)) {
+    const matches = authorizations.filter((authorization) =>
+      authorization.id === operation.authorizationId && authorization.operation === operation.id
+    );
+    if (matches.length !== 1) {
+      throw new Error(`network operation ${operation.id} authorization is missing or mismatched`);
+    }
+  }
+  for (const authorization of authorizations) {
+    const matches = operations.filter((operation) =>
+      operation.id === authorization.operation && operation.authorizationId === authorization.id
+    );
+    if (matches.length !== 1) {
+      throw new Error(`evidence authorization ${authorization.id} must be referenced by exactly one operation ${authorization.operation}`);
+    }
+  }
+}
+
 function validateBehaviorCell(value: unknown): BehaviorCell {
   const item = asObject(value, 'behavior cell');
+  assertAllowedKeys(item, ['id', 'behavior', 'kind', 'input', 'preconditions', 'expected', 'risk', 'disposition', 'providerIds', 'reason'], 'behavior cell');
   const kind = requiredString(item.kind, 'behavior cell.kind');
   if (!['normal', 'branch', 'exception', 'boundary'].includes(kind)) {
     throw new Error(`invalid behavior cell kind: ${kind}`);
@@ -1178,7 +1211,8 @@ function validateBehaviorCell(value: unknown): BehaviorCell {
   if (!RISKS.has(risk)) throw new Error(`invalid behavior cell risk: ${risk}`);
   const disposition = requiredString(item.disposition, 'behavior cell.disposition') as CellDisposition;
   if (!DISPOSITIONS.has(disposition)) throw new Error(`invalid behavior cell disposition: ${disposition}`);
-  const providerIds = optionalIdArray(item.providerIds, 'behavior cell.providerIds') ?? [];
+  const providerIds = requiredIdList(item.providerIds, 'behavior cell.providerIds');
+  assertUnique(providerIds, 'behavior cell provider');
   const reason = optionalString(item.reason);
   if (['not-applicable', 'unsupported', 'manual'].includes(disposition) && !reason) {
     throw new Error(`behavior cell ${String(item.id)} disposition ${disposition} requires a reason`);
@@ -1202,6 +1236,7 @@ function validateBehaviorCell(value: unknown): BehaviorCell {
 
 function validateEvidenceProvider(value: unknown): EvidenceProvider {
   const item = asObject(value, 'evidence provider');
+  assertAllowedKeys(item, ['id', 'owner', 'kind', 'lifecycle', 'cellIds', 'applicability', 'executionContext', 'transitionBinding', 'operations'], 'evidence provider');
   const kind = requiredString(item.kind, 'evidence provider.kind') as EvidenceProviderKind;
   if (!KINDS.has(kind)) throw new Error(`invalid evidence provider kind: ${kind}`);
   if (!Array.isArray(item.operations) || item.operations.length === 0) {
@@ -1214,6 +1249,7 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
   const applicability = validateEvidenceApplicability(item.applicability);
   const executionContext = validateEvidenceExecutionContext(item.executionContext);
   const operations = item.operations.map(validateEvidenceOperation);
+  const cellIds = requiredUniqueIdArray(item.cellIds, 'evidence provider.cellIds');
   const transitionBinding =
     item.transitionBinding === undefined ? undefined : validateTransitionEvidenceBinding(item.transitionBinding);
   if (lifecycle === 'persistent' && transitionBinding) {
@@ -1227,7 +1263,7 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
     owner: requiredString(item.owner, 'evidence provider.owner'),
     kind,
     lifecycle,
-    cellIds: requiredIdArray(item.cellIds, 'evidence provider.cellIds'),
+    cellIds,
     applicability,
     executionContext,
     transitionBinding,
@@ -1237,9 +1273,14 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
 
 function validateEvidenceApplicability(value: unknown): EvidenceApplicability {
   const item = asObject(value, 'evidence provider.applicability');
+  assertAllowedKeys(item, ['kind', 'pathPrefixes', 'reason'], 'evidence provider.applicability');
   const kind = requiredString(item.kind, 'evidence provider.applicability.kind');
   if (kind === 'paths') {
-    const pathPrefixes = requiredStringArray(item.pathPrefixes, 'evidence provider.applicability.pathPrefixes');
+    if (!Array.isArray(item.pathPrefixes) || item.pathPrefixes.length === 0) {
+      throw new Error('evidence provider.applicability.pathPrefixes must be a non-empty string array');
+    }
+    const pathPrefixes = item.pathPrefixes.map(validateApplicabilityPathPrefix);
+    assertUniqueValues(pathPrefixes, 'evidence applicability path prefixes');
     if (item.reason !== undefined) {
       throw new Error('path-scoped evidence provider applicability cannot declare a global reason');
     }
@@ -1257,8 +1298,20 @@ function validateEvidenceApplicability(value: unknown): EvidenceApplicability {
   throw new Error(`invalid evidence provider applicability kind: ${kind}`);
 }
 
+function validateApplicabilityPathPrefix(value: unknown): string {
+  if (typeof value !== 'string' || value.trim() !== value || value === '') {
+    throw new Error('evidence applicability path prefix must be a normalized repo-relative path');
+  }
+  const segments = value.split('/');
+  if (value.startsWith('/') || /^[A-Za-z]:\//.test(value) || value.includes('\\') || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    throw new Error(`invalid evidence applicability path prefix: ${value}`);
+  }
+  return value;
+}
+
 function validateEvidenceExecutionContext(value: unknown): EvidenceExecutionContext {
   const item = asObject(value, 'evidence provider.executionContext');
+  assertAllowedKeys(item, ['sandboxOwner', 'runner', 'lane'], 'evidence provider.executionContext');
   const sandboxOwner = requiredString(item.sandboxOwner, 'evidence provider.executionContext.sandboxOwner');
   const runner = requiredString(item.runner, 'evidence provider.executionContext.runner');
   if (sandboxOwner === 'review-runtime' && runner === 'sealed') {
@@ -1279,6 +1332,7 @@ function validateEvidenceExecutionContext(value: unknown): EvidenceExecutionCont
 
 function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBinding {
   const item = asObject(value, 'evidence provider.transitionBinding');
+  assertAllowedKeys(item, ['repository', 'baseDigest', 'candidateDigest', 'scopeDigest', 'operationContractDigest'], 'evidence provider.transitionBinding');
   const result = {
     repository: requiredString(item.repository, 'transitionBinding.repository'),
     baseDigest: requiredString(item.baseDigest, 'transitionBinding.baseDigest'),
@@ -1295,14 +1349,14 @@ function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBi
 
 function validateEvidenceOperation(value: unknown): EvidenceOperation {
   const item = asObject(value, 'evidence operation');
+  assertAllowedKeys(item, ['id', 'target', 'argv', 'expectedExit', 'expectedExitCode', 'timeoutMs', 'maxOutputBytes', 'network', 'authorizationId', 'evidenceLevel', 'requiredSystemTools', 'seed', 'iterations'], 'evidence operation');
   const target = requiredString(item.target, 'evidence operation.target');
   if (target !== 'base' && target !== 'candidate') throw new Error(`invalid evidence operation target: ${target}`);
   const expectedExit = requiredString(item.expectedExit, 'evidence operation.expectedExit');
   if (expectedExit !== 'zero' && expectedExit !== 'nonzero') {
     throw new Error(`invalid evidence operation.expectedExit: ${expectedExit}`);
   }
-  const network = requiredString(item.network, 'evidence operation.network');
-  if (network !== 'deny' && network !== 'authorized') throw new Error(`invalid evidence operation.network: ${network}`);
+  const { network, authorizationId } = validateOperationNetwork(item);
   const evidenceLevel = requiredString(item.evidenceLevel, 'evidence operation.evidenceLevel') as EvidenceLevel;
   if (!LEVELS.has(evidenceLevel)) throw new Error(`invalid evidence level: ${evidenceLevel}`);
   if (
@@ -1317,15 +1371,7 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
   if (argv[0]!.includes('/') || argv[0]!.includes('\\')) {
     throw new Error('evidence operation executable must be a PATH-resolved command name');
   }
-  const requiredSystemTools = optionalStringArray(
-    item.requiredSystemTools,
-    'evidence operation.requiredSystemTools',
-  );
-  for (const tool of requiredSystemTools) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(tool)) {
-      throw new Error(`invalid evidence system tool name: ${tool}`);
-    }
-  }
+  const requiredSystemTools = validateRequiredSystemTools(item.requiredSystemTools);
   const timeoutMs = boundedInteger(item.timeoutMs, 'evidence operation.timeoutMs', 100, 15 * 60 * 1000);
   const maxOutputBytes = boundedInteger(
     item.maxOutputBytes,
@@ -1350,8 +1396,8 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
     expectedExitCode,
     timeoutMs,
     maxOutputBytes,
-    network: network as EvidenceOperation['network'],
-    authorizationId: optionalString(item.authorizationId),
+    network,
+    authorizationId,
     evidenceLevel,
     requiredSystemTools: uniqueSorted(requiredSystemTools),
     seed: optionalString(item.seed),
@@ -1359,6 +1405,30 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
       ? undefined
       : boundedInteger(item.iterations, 'evidence operation.iterations', 1, 1_000_000),
   };
+}
+
+function validateOperationNetwork(item: Record<string, unknown>): Pick<EvidenceOperation, 'network' | 'authorizationId'> {
+  const network = requiredString(item.network, 'evidence operation.network');
+  if (network !== 'deny' && network !== 'authorized') throw new Error(`invalid evidence operation.network: ${network}`);
+  const authorizationId = optionalString(item.authorizationId);
+  if (network === 'authorized' && !authorizationId) {
+    throw new Error(`network operation ${String(item.id)} requires typed authorization`);
+  }
+  if (network === 'deny' && authorizationId) {
+    throw new Error(`network-denied operation ${String(item.id)} cannot carry authorization`);
+  }
+  return { network, authorizationId };
+}
+
+function validateRequiredSystemTools(value: unknown): string[] {
+  const tools = optionalStringArray(value, 'evidence operation.requiredSystemTools');
+  assertUniqueValues(tools, 'evidence operation requiredSystemTools');
+  for (const tool of tools) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(tool)) {
+      throw new Error(`invalid evidence system tool name: ${tool}`);
+    }
+  }
+  return tools;
 }
 
 function validateProviderContract(provider: EvidenceProvider): void {
@@ -3173,6 +3243,12 @@ function asObject(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function assertAllowedKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  const allowedKeys = new Set(allowed);
+  const unknown = Object.keys(value).filter((key) => !allowedKeys.has(key)).sort();
+  if (unknown.length > 0) throw new Error(`${label} contains unknown fields: ${unknown.join(', ')}`);
+}
+
 function requiredString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') throw new Error(`${label} must be a non-empty string`);
   return value.trim();
@@ -3205,6 +3281,17 @@ function requiredIdArray(value: unknown, label: string): string[] {
   return requiredStringArray(value, label).map((entry) => requiredId(entry, label));
 }
 
+function requiredUniqueIdArray(value: unknown, label: string): string[] {
+  const ids = requiredIdArray(value, label);
+  assertUnique(ids, label);
+  return ids;
+}
+
+function requiredIdList(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an ID array`);
+  return value.map((entry) => requiredId(entry, label));
+}
+
 function optionalIdArray(value: unknown, label: string): string[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) throw new Error(`${label} must be an ID array`);
@@ -3226,6 +3313,10 @@ function validDate(value: unknown, label: string): string {
 
 function assertUnique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) throw new Error(`${label} IDs must be unique`);
+}
+
+function assertUniqueValues(values: string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`${label} must be unique`);
 }
 
 function assertSha256(value: unknown, label: string): void {

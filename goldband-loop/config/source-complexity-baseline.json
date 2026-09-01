@@ -580,7 +580,7 @@
     },
     "scripts/install-codex-review-launcher.ts": {
       "lint/complexity/noExcessiveCognitiveComplexity": [
-        19
+        16
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
         134
@@ -666,8 +666,7 @@
     },
     "workflows/review-contract-cli.ts": {
       "lint/complexity/noExcessiveCognitiveComplexity": [
-        23,
-        19
+        23
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
         63
@@ -697,10 +696,10 @@
         23,
         22,
         20,
-        20,
         18,
         16,
         16,
+        15,
         15,
         15,
         15,
@@ -715,9 +714,9 @@
         72,
         63,
         61,
-        57,
         56,
-        52
+        52,
+        51
       ],
       "lint/complexity/useMaxParams": [
         7,

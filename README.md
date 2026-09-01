@@ -124,6 +124,14 @@ git pull --ff-only
 
 ### `review/code` 平台邊界
 
+第一次在其他專案建立 evidence contract 時，先執行
+`goldband review contract help` 找到 installed guide、public example 與 JSON
+Schema。`review contract init` 會在 canonical repo root 建立不覆寫既有檔案的
+fail-closed scaffold；完成 project-owned behavior/provider 後，以
+`review contract validate --manifest <path>` 呼叫正式 runtime validator。Validate
+不執行 evidence、不寫入 contract store，也不代表 review 或 deploy 已完成。完整欄位與
+安全邊界見 [manifest authoring guide](docs/review-evidence-manifest.md)。
+
 | 平台 | Goldband Loop 安裝 | executable sealed evidence | `review/code` 結果 |
 | --- | --- | --- | --- |
 | macOS | 支援 | 由 Seatbelt 執行 | evidence complete 後才可啟動 semantic review |

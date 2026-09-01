@@ -19,6 +19,16 @@
             "if": { "properties": { "lifecycle": { "const": "transition" } }, "required": ["lifecycle"] },
             "then": { "required": ["transitionBinding"] },
             "else": { "not": { "required": ["transitionBinding"] } }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "property-fuzz" } }, "required": ["kind"] },
+            "then": {
+              "properties": {
+                "operations": {
+                  "items": { "required": ["seed", "iterations"] }
+                }
+              }
+            }
           }
         ],
         "properties": {
@@ -26,7 +36,12 @@
           "owner": { "type": "string", "minLength": 1 },
           "kind": { "enum": ["regression", "static", "project-gate", "property-fuzz", "runtime-integration"] },
           "lifecycle": { "enum": ["persistent", "transition"] },
-          "cellIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+          "cellIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }
+          },
           "applicability": {
             "oneOf": [
               {
@@ -35,7 +50,16 @@
                 "required": ["kind", "pathPrefixes"],
                 "properties": {
                   "kind": { "const": "paths" },
-                  "pathPrefixes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+                  "pathPrefixes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))(?=\\S(?:.*\\S)?$)[^/]+(?:/[^/]+)*$"
+                    }
+                  }
                 }
               },
               {
@@ -116,7 +140,7 @@
                 }
               ],
               "properties": {
-                "id": { "type": "string" },
+                "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
                 "target": { "enum": ["base", "candidate"] },
                 "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
                 "expectedExit": { "enum": ["zero", "nonzero"] },
@@ -124,7 +148,7 @@
                 "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 900000 },
                 "maxOutputBytes": { "type": "integer", "minimum": 1, "maximum": 65536 },
                 "network": { "enum": ["deny", "authorized"] },
-                "authorizationId": { "type": "string" },
+                "authorizationId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
                 "evidenceLevel": { "enum": ["fixture", "local", "sandboxed-service", "live-provider", "device-platform", "production-readback"] },
                 "requiredSystemTools": {
                   "type": "array",
@@ -146,10 +170,10 @@
         "additionalProperties": false,
         "required": ["id", "operation", "scope", "approvedBy", "approvedAt", "expiresAt"],
         "properties": {
-          "id": { "type": "string" },
-          "operation": { "type": "string" },
-          "scope": { "type": "string" },
-          "approvedBy": { "type": "string" },
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+          "operation": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+          "scope": { "type": "string", "minLength": 1 },
+          "approvedBy": { "type": "string", "minLength": 1 },
           "approvedAt": { "type": "string", "format": "date-time" },
           "expiresAt": { "type": "string", "format": "date-time" }
         }
