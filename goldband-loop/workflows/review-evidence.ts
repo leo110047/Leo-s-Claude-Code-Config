@@ -45,8 +45,10 @@ import {
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import { stateRoot } from './evidence';
 import type { ReviewContractResolution } from './review-contract-resolution';
+import { resolveReviewWorkspace, workspacePath } from './review-workspace';
 
 const REVIEW_EVIDENCE_SCHEMA_VERSION = 1;
+export const REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION = 2;
 const MAX_REVIEW_EVIDENCE_OUTPUT_BYTES = 64 * 1024;
 const MAX_REVIEW_EVIDENCE_TOTAL_BYTES = 1024 * 1024;
 const MAX_REVIEW_EVIDENCE_OPERATIONS = 64;
@@ -206,7 +208,7 @@ type EvidenceProvider = {
 };
 
 export type ReviewEvidenceManifest = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   behaviorMatrix: BehaviorCell[];
   providers: EvidenceProvider[];
   authorizations: Array<{
@@ -383,7 +385,7 @@ export function loadReviewEvidenceManifest(ctx: WorkflowContext, input?: ReviewD
   const value = JSON.parse(readFileSync(source, 'utf8'));
   if (configured && input) {
     const provisionalBinding = createCandidateBinding(
-      ctx.cwd,
+      resolveReviewWorkspace(ctx.cwd).repositoryRoot,
       input,
       value as ReviewEvidenceManifest,
       ctx.options.base,
@@ -447,6 +449,7 @@ export async function executeEvidencePlan(
   const tempRoot = mkdtempSync(join(tempParent, 'review-evidence-'));
   const records: ReviewEvidenceRecord[] = [];
   const preparedRuntimes = new Map<string, PreparedEvidenceRuntime>();
+  const workspace = resolveReviewWorkspace(ctx.cwd);
   let outputBytes = 0;
   try {
     const selectedCells = effectiveEvidenceCells(manifest, binding.changedFiles, onlyCellIds);
@@ -486,10 +489,10 @@ export async function executeEvidencePlan(
         );
         const runnerRoot = join(tempRoot, 'runners', operationKey);
         if (operation.target === 'base') {
-          materializeBase(ctx.cwd, operationRoot, input.changedFiles, binding.baseRef);
+          materializeBase(workspace.repositoryRoot, operationRoot, input.changedFiles, binding.baseRef);
         } else {
           materializeExactCandidate(
-            ctx,
+            { ...ctx, cwd: workspace.repositoryRoot },
             input,
             operationRoot,
             binding.baseRef,
@@ -497,19 +500,21 @@ export async function executeEvidencePlan(
           );
         }
         if (operationNeedsDependencies(operation)) {
-          projectDependencyDirectories(ctx.cwd, operationRoot, input.changedFiles);
+          projectDependencyDirectories(workspace.repositoryRoot, operationRoot, input.changedFiles);
         }
         const dependencyDigest = dependencyProjectionDigest(operationRoot, binding.changedFiles);
         const record = await runEvidenceOperation(
           provider,
           operation,
           operationRoot,
+          workspacePath(operationRoot, workspace.invocationOffset),
           binding,
           dependencyDigest,
           input.changedFiles,
           runnerRoot,
           join(tempRoot, 'runtime-projections'),
           preparedRuntimes,
+          workspace.invocationOffset,
         );
         rmSync(operationRoot, { recursive: true, force: true });
         rmSync(runnerRoot, { recursive: true, force: true });
@@ -724,12 +729,21 @@ function validatePersistedContractResolution(
 ): void {
   if (
     resolution.schemaVersion !== 1 ||
-    resolution.compatibilityIdentity !== 'review-evidence-schema-v1/runtime-contract-v1' ||
+    resolution.compatibilityIdentity !== 'review-evidence-schema-v2/runtime-contract-v2' ||
     resolution.repositoryIdentity?.kind !== 'git-common-directory' ||
     typeof resolution.repositoryIdentity.commonDirectory !== 'string' ||
     !resolution.repositoryIdentity.commonDirectory ||
     typeof resolution.repositoryIdentity.commonDirectoryInstanceDigest !== 'string' ||
-    typeof resolution.repositoryIdentity.remoteIdentityDigest !== 'string'
+    typeof resolution.repositoryIdentity.remoteIdentityDigest !== 'string' ||
+    typeof resolution.workspace?.repositoryRoot !== 'string' ||
+    !resolution.workspace.repositoryRoot ||
+    typeof resolution.workspace.invocationDirectory !== 'string' ||
+    !resolution.workspace.invocationDirectory ||
+    typeof resolution.workspace.invocationOffset !== 'string' ||
+    typeof resolution.candidateProvenance?.identity !== 'string' ||
+    !resolution.candidateProvenance.identity ||
+    !['absent', 'unchanged', 'modified', 'staged-modified', 'staged-new', 'untracked', 'head']
+      .includes(resolution.candidateProvenance.trackingState)
   ) {
     throw new Error('initial review artifact contract resolution is invalid');
   }
@@ -742,6 +756,58 @@ function validatePersistedContractResolution(
     'initial review artifact contract resolution remote identity',
   );
   assertSha256(resolution.baseline?.digest, 'initial review artifact contract resolution baseline');
+  if (resolution.baseline?.kind === 'runtime-store' && (
+    typeof resolution.baseline.importedFrom !== 'string' ||
+    !resolution.baseline.importedFrom ||
+    typeof resolution.baseline.importedAt !== 'string' ||
+    !Number.isFinite(Date.parse(resolution.baseline.importedAt))
+  )) {
+    throw new Error('initial review artifact runtime-store baseline provenance is invalid');
+  }
+  if (resolution.candidate) {
+    assertSha256(resolution.candidate.digest, 'initial review artifact contract resolution candidate');
+  }
+  if (resolution.candidateProvenance.digest) {
+    assertSha256(resolution.candidateProvenance.digest, 'initial review artifact contract resolution candidate provenance');
+  }
+  if (resolution.candidateProvenance.baseDigest) {
+    assertSha256(resolution.candidateProvenance.baseDigest, 'initial review artifact contract resolution candidate base provenance');
+  }
+  if (resolution.schemaMigration && (
+    resolution.schemaMigration.observedVersion !== 1 ||
+    resolution.schemaMigration.supportedVersion !== 2 ||
+    typeof resolution.schemaMigration.source !== 'string' ||
+    !resolution.schemaMigration.source
+  )) {
+    throw new Error('initial review artifact contract schema migration is invalid');
+  }
+  if (resolution.shadowedRuntimeStore?.present) {
+    if (
+      typeof resolution.shadowedRuntimeStore.identity !== 'string' ||
+      !resolution.shadowedRuntimeStore.identity
+    ) {
+      throw new Error('initial review artifact shadowed runtime store identity is invalid');
+    }
+    if (resolution.shadowedRuntimeStore.digest) {
+      assertSha256(
+        resolution.shadowedRuntimeStore.digest,
+        'initial review artifact shadowed runtime store',
+      );
+      if (
+        typeof resolution.shadowedRuntimeStore.importedFrom !== 'string' ||
+        !resolution.shadowedRuntimeStore.importedFrom ||
+        typeof resolution.shadowedRuntimeStore.importedAt !== 'string' ||
+        !Number.isFinite(Date.parse(resolution.shadowedRuntimeStore.importedAt))
+      ) {
+        throw new Error('initial review artifact shadowed runtime store provenance is invalid');
+      }
+    } else if (
+      typeof resolution.shadowedRuntimeStore.invalidReason !== 'string' ||
+      !resolution.shadowedRuntimeStore.invalidReason
+    ) {
+      throw new Error('initial review artifact shadowed runtime store state is invalid');
+    }
+  }
   if (resolution.explicit) {
     assertSha256(resolution.explicit.digest, 'initial review artifact contract resolution explicit');
   }
@@ -995,7 +1061,8 @@ function sameEvidenceOperationContract(
   rerunManifest: ReviewEvidenceManifest,
 ): boolean {
   if (!original.providerId || !original.operationId ||
-      original.providerId !== rerun.providerId || original.operationId !== rerun.operationId) return false;
+      original.providerId !== rerun.providerId || original.operationId !== rerun.operationId ||
+      !original.commandDigest || original.commandDigest !== rerun.commandDigest) return false;
   const contract = (manifest: ReviewEvidenceManifest, record: ReviewEvidenceRecord) => {
     const provider = manifest.providers.find((entry) => entry.id === record.providerId);
     const operation = provider?.operations.find((entry) => entry.id === record.operationId);
@@ -1045,8 +1112,10 @@ function validateReviewEvidenceManifest(
   binding?: CandidateBinding,
 ): ReviewEvidenceManifest {
   const item = asObject(value, 'review evidence manifest');
-  if (item.schemaVersion !== REVIEW_EVIDENCE_SCHEMA_VERSION) {
-    throw new Error(`review evidence manifest.schemaVersion must be ${REVIEW_EVIDENCE_SCHEMA_VERSION}`);
+  if (item.schemaVersion !== REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION) {
+    throw new Error(
+      `review evidence manifest schema incompatibility: observed ${String(item.schemaVersion)}, supported ${REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION}; migrate the source manifest explicitly and supply lifecycle, applicability, and executionContext without guessed defaults`,
+    );
   }
   if (!Array.isArray(item.behaviorMatrix) || item.behaviorMatrix.length === 0) {
     throw new Error('review evidence manifest.behaviorMatrix must be non-empty');
@@ -1102,7 +1171,7 @@ function validateReviewEvidenceManifest(
       validateTransitionProviderBinding(provider, binding);
     }
   }
-  return { schemaVersion: 1, behaviorMatrix, providers, authorizations };
+  return { schemaVersion: 2, behaviorMatrix, providers, authorizations };
 }
 
 function validateBehaviorCell(value: unknown): BehaviorCell {
@@ -1567,13 +1636,15 @@ function runtimeProjectionIdentityDigest(
 async function runEvidenceOperation(
   provider: EvidenceProvider,
   operation: EvidenceOperation,
-  cwd: string,
+  snapshotRoot: string,
+  executionCwd: string,
   binding: CandidateBinding,
   dependencyDigest: string,
   changedFiles: string[],
   runnerRoot: string,
   runtimeProjectionRoot: string,
   preparedRuntimes: Map<string, PreparedEvidenceRuntime>,
+  executionOffset: string,
 ): Promise<ReviewEvidenceRecord> {
   const startedAt = new Date().toISOString();
   const replayCommand = operation.argv.map((value) =>
@@ -1645,7 +1716,7 @@ async function runEvidenceOperation(
   }));
   const commandDigest = sha256(stableJson({
     argv: operation.argv,
-    cwd: '.',
+    cwd: executionOffset || '.',
     network: operation.network,
     target: operation.target,
     expectedExit: operation.expectedExit,
@@ -1681,7 +1752,7 @@ async function runEvidenceOperation(
     OPENSSL_CONF: preparedRuntime.environment.OPENSSL_CONF ?? '/dev/null',
   };
   const sandbox = evidenceSandboxCommand(
-    cwd,
+    snapshotRoot,
     [runnerTmp, runnerHome],
     [preparedRuntime.command, ...replayCommand.slice(1)],
     sandboxRuntimeAccess,
@@ -1690,7 +1761,7 @@ async function runEvidenceOperation(
     systemToolAccess.mapExecutableLiterals,
   );
   const ignoredDependencies = dependencyRelativePaths(changedFiles);
-  const snapshotDigestBefore = snapshotContentDigest(cwd, ignoredDependencies);
+  const snapshotDigestBefore = snapshotContentDigest(snapshotRoot, ignoredDependencies);
   const stdoutHash = createHash('sha256');
   const stderrHash = createHash('sha256');
   let stderrDiagnosticHead = '';
@@ -1701,7 +1772,7 @@ async function runEvidenceOperation(
     stderr?: string;
   };
   result = await superviseCommand(sandbox.command, sandbox.args, {
-      cwd,
+      cwd: executionCwd,
       env,
       timeoutMs: operation.timeoutMs,
       killGraceMs: 1000,
@@ -1721,7 +1792,7 @@ async function runEvidenceOperation(
       },
   });
   const finishedAt = new Date().toISOString();
-  const snapshotDigestAfter = snapshotContentDigest(cwd, ignoredDependencies);
+  const snapshotDigestAfter = snapshotContentDigest(snapshotRoot, ignoredDependencies);
   const snapshotUnchanged = snapshotDigestBefore === snapshotDigestAfter;
   let runtimeUnchanged = false;
   try {
@@ -2420,11 +2491,10 @@ function resetSnapshotToRef(
   rmSync(snapshotRoot, { recursive: true, force: true });
   mkdirSync(snapshotRoot, { recursive: true });
   const repositoryRoot = gitOutput(repo, ['rev-parse', '--show-toplevel']);
-  const repositorySubdirectory = relative(repositoryRoot, realpathSync(repo)).replaceAll('\\', '/');
   if (!gitOutput(repositoryRoot, ['rev-parse', '--verify', baseRef], true)) return;
   const archive = spawnSync(
     'git',
-    ['archive', '--format=tar', baseRef, ...(repositorySubdirectory ? [repositorySubdirectory] : [])],
+    ['archive', '--format=tar', baseRef],
     {
     cwd: repositoryRoot,
     maxBuffer: 256 * 1024 * 1024,
@@ -2433,12 +2503,9 @@ function resetSnapshotToRef(
   if (archive.status !== 0 || !archive.stdout) {
     throw new Error(`review evidence could not materialize base snapshot: ${String(archive.stderr)}`);
   }
-  const stripComponents = repositorySubdirectory
-    ? repositorySubdirectory.split('/').filter(Boolean).length
-    : 0;
   const tar = spawnSync(
     'tar',
-    ['-xf', '-', '-C', snapshotRoot, ...(stripComponents ? [`--strip-components=${stripComponents}`] : [])],
+    ['-xf', '-', '-C', snapshotRoot],
     {
     input: archive.stdout,
     maxBuffer: 16 * 1024 * 1024,
@@ -3023,7 +3090,7 @@ function collectDependencyMetadata(
 
 function mockEvidenceManifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'mock-review-contract',
       behavior: 'The mock candidate is exercised by the deterministic fixture gate.',

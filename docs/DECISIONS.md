@@ -2256,3 +2256,81 @@ Revisit triggers:
   evidence.
 - Provider-neutral artifact synchronization itself no longer has demonstrated
   users or cannot maintain its privacy and secret-scanning contract.
+
+## ADR: Canonical review workspace and base-owned manifest authority
+
+Status: Accepted
+
+Decision:
+
+- Resolve the canonical Git repository root and invocation-relative execution
+  offset once. Diff paths, changed files, candidate binding, scope digest,
+  snapshots, dependency projection, and default manifest lookup use repo-root
+  coordinates. Provider operations execute at the validated offset inside the
+  isolated repo-root snapshot.
+- Read the authoritative repository manifest from the reviewed base at the repo
+  root. A runtime-store contract is authoritative only when that base has no
+  manifest. Working-tree, index, and explicit manifests are candidate extensions
+  and must pass the existing monotonic comparison before any evidence operation
+  or semantic host dispatch.
+- Persist workspace coordinates plus base, candidate, store, and explicit source
+  identities, digests, and candidate tracking state in the existing artifact and
+  lineage contract. Do not create a second completion authority or a nested
+  manifest hierarchy.
+- Use review evidence manifest schema v2 for the required `lifecycle`,
+  `applicability`, and `executionContext` safety fields. Permit v1 only as the
+  committed-base side of a one-version transition to a v2 candidate, and only
+  when changing the base version marker alone passes the complete v2 contract.
+  Reject every other v1 input with observed and supported versions, source
+  identity, and explicit migration guidance; never infer safety defaults.
+
+Why:
+
+Subdirectory invocation previously mixed repo-root Git patch paths with a
+stripped subdirectory snapshot, and selected default manifests from ambient
+`cwd` even though runtime-store identity used the Git common directory. A
+candidate-controlled untracked or modified manifest could therefore appear to
+be repository authority. The old schema label also concealed a breaking safety
+contract change.
+
+Assumptions:
+
+- Git repo-root paths are the stable coordinate for all default review scopes.
+- A provider that intentionally runs from the invocation subdirectory can do so
+  safely only inside the materialized canonical snapshot.
+- Nested project contracts are out of scope until they have an explicit,
+  persistent scope identity and monotonic relationship to the repo-root base.
+
+Consequences:
+
+- Root and tracked-subdirectory invocations share repository identity, baseline,
+  and digest while exposing different execution offsets.
+- Default, worktree, staged, and base diffs include one consistently materialized
+  repo-root scope, including changes outside the invocation subdirectory.
+- Untracked, staged-new, and modified manifests remain reviewable changes but
+  cannot shadow or downgrade base/store authority.
+- Repositories and imported stores must migrate manifests to schema v2 before
+  the new runtime can execute review, apart from the narrowly validated
+  committed-v1-base to v2-candidate transition.
+
+Alternatives considered:
+
+| Alternative | Why rejected |
+|-------------|--------------|
+| Strip patch paths for subdirectory snapshots | It fixes one apply failure but leaves diff scope, manifest authority, dependencies, and lineage on conflicting coordinates. |
+| Walk parent directories for the nearest manifest | Ambient directory names remain implicit authority and enable an undefined nested hierarchy. |
+| Trust any Git-indexed manifest | Staged-new and candidate-modified files are still candidate-controlled rather than reviewed-base authority. |
+| Guess defaults for legacy v1 safety fields | Global/path applicability and runner ownership are safety decisions, not compatible defaults. |
+
+Failure signals:
+
+- Root and subdirectory inspect return different baseline identities or digests.
+- A repo-root patch cannot materialize from a tracked subdirectory.
+- Candidate manifest content reaches an operation without monotonic comparison.
+- An artifact omits workspace offset or base/candidate source provenance.
+
+Revisit triggers:
+
+- A real nested-project contract requires an explicit scope identity and
+  repo-root monotonic composition rule.
+- Git is no longer the authoritative candidate/base transport for review.

@@ -8,12 +8,13 @@ This document explains **why** goldband is built the way it is. For setup and co
 `workflows/review-contract-resolution.ts` owns baseline selection and provenance,
 `workflows/review-contract-store.ts` owns the local per-repository store, and
 `workflows/review-evidence.ts` owns deterministic behavior/evidence contracts.
-A repository manifest always owns the baseline when present. Without one, an
+The reviewed base's repo-root manifest owns the baseline. Without one, an
 explicitly imported store entry bound to the Git common-directory path,
-filesystem instance, and remote
-identity may supply it. Caller-provided manifests cannot replace an existing
-baseline: the runtime rejects contract downgrade before any provider or semantic
-host dispatch. The artifact binds baseline, explicit, and effective digests.
+filesystem instance, and remote identity may supply it. Working-tree, index,
+HEAD, and caller-provided manifests are candidate extensions: the runtime
+rejects deletion or contract downgrade before any provider or semantic host
+dispatch. The artifact binds canonical workspace coordinates, source and import
+provenance, tracking state, and baseline/candidate/explicit/effective digests.
 Import/remove are explicit CLI mutations with private regular-file checks and
 atomic writes; review never mutates the repository or store.
 

@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -29,6 +30,176 @@ afterEach(() => {
 });
 
 describe('review contract resolution and runtime store', () => {
+  test('root and tracked subdirectory share authority while preserving invocation offset', () => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    const nested = join(repo, 'packages', 'app');
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(nested, 'marker.txt'), 'tracked\n');
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
+    git(repo, ['add', 'goldband.review-evidence.json', 'packages/app/marker.txt']);
+    git(repo, ['commit', '-m', 'add repository contract and nested project']);
+
+    const rootInspection = goldband(repo, state, ['review', 'contract', 'inspect']);
+    const nestedInspection = goldband(nested, state, ['review', 'contract', 'inspect']);
+
+    expect(nestedInspection.repositoryIdentity).toEqual(rootInspection.repositoryIdentity);
+    expect(nestedInspection.baseline).toEqual(rootInspection.baseline);
+    expect(nestedInspection.effectiveDigest).toBe(rootInspection.effectiveDigest);
+    expect(rootInspection.invocationOffset).toBe('');
+    expect(nestedInspection.invocationOffset).toBe('packages/app');
+  });
+
+  test.each([
+    ['default', {}],
+    ['worktree', { worktree: true }],
+    ['staged', { staged: true }],
+    ['base', { base: 'BASE_REF' }],
+  ] as const)('subdirectory %s scope materializes repo-root paths', async (_name, scope) => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    const nested = join(repo, 'packages', 'app');
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(nested, 'marker.txt'), 'tracked\n');
+    writeJson(join(repo, 'goldband.review-evidence.json'), subdirectoryProviderManifest());
+    git(repo, ['add', 'goldband.review-evidence.json', 'packages/app/marker.txt']);
+    git(repo, ['commit', '-m', 'add review fixture']);
+    const baseRef = git(repo, ['rev-parse', 'HEAD']).trim();
+    writeFileSync(join(repo, 'a.ts'), 'changed();\n');
+    if ('staged' in scope) git(repo, ['add', 'a.ts']);
+    if ('base' in scope) {
+      git(repo, ['add', 'a.ts']);
+      git(repo, ['commit', '-m', 'commit candidate']);
+    }
+
+    const result = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: nested, goldbandHome: state,
+      ...('base' in scope ? { base: baseRef } : scope),
+    });
+    const artifactFile = result.artifacts.find((file) => file.endsWith('-review-evidence.json'))!;
+    const artifact = JSON.parse(readFileSync(artifactFile, 'utf8'));
+    expect(artifact.binding.changedFiles).toContain('a.ts');
+    expect(artifact.evidence.contractResolution.workspace).toMatchObject({
+      repositoryRoot: realpathSync(repo),
+      invocationOffset: 'packages/app',
+    });
+    const provenance = artifact.evidence.contractResolution.candidateProvenance;
+    if (_name === 'staged') {
+      expect(provenance.identity).toContain('@index:goldband.review-evidence.json');
+      expect(provenance.trackingState).toBe('unchanged');
+    } else if (_name === 'base') {
+      expect(provenance.identity).toContain('@HEAD:goldband.review-evidence.json');
+      expect(provenance.trackingState).toBe('head');
+    } else {
+      expect(provenance.identity).toBe(join(realpathSync(repo), 'goldband.review-evidence.json'));
+      expect(provenance.trackingState).toBe('unchanged');
+    }
+    const record = artifact.evidence.records[0];
+    expect(['verified-pass', 'runtime-incomplete']).toContain(record.status);
+    if (record.status === 'runtime-incomplete') {
+      expect(record.outputSummary).toContain('sandbox-exec: sandbox_apply: Operation not permitted');
+    }
+  });
+
+  test.each([
+    ['worktree', {}],
+    ['staged', { staged: true }],
+    ['base', { base: 'BASE_REF' }],
+  ] as const)('a %s candidate cannot delete the authoritative manifest', async (_name, scope) => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'add authoritative contract']);
+    const baseRef = git(repo, ['rev-parse', 'HEAD']).trim();
+    rmSync(join(repo, 'goldband.review-evidence.json'));
+    if (_name !== 'worktree') git(repo, ['add', '-u', 'goldband.review-evidence.json']);
+    if (_name === 'base') git(repo, ['commit', '-m', 'delete contract candidate']);
+
+    await expect(runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state,
+      ...(_name === 'base' ? { base: baseRef } : scope),
+    })).rejects.toThrow('review contract laundering blocked: candidate');
+  });
+
+  test('subdirectory fresh-check keeps repo-root redacted untracked coordinates', async () => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    const nested = join(repo, 'packages', 'app');
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(join(nested, 'marker.txt'), 'tracked\n');
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
+    git(repo, ['add', 'goldband.review-evidence.json', 'packages/app/marker.txt']);
+    git(repo, ['commit', '-m', 'add nested review fixture']);
+    const secret = ['ghp', '1234567890abcdefghijklmnopqrstuv'].join('_');
+    writeFileSync(join(repo, 'secret-check.mjs'), `export const fixture=${JSON.stringify(secret)};\n`);
+
+    const result = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: nested,
+      goldbandHome: state,
+      worktree: true,
+      includeUntracked: true,
+    });
+
+    const artifactFile = result.artifacts.find((file) => file.endsWith('-review-evidence.json'))!;
+    const artifact = JSON.parse(readFileSync(artifactFile, 'utf8'));
+    expect(artifact.binding.changedFiles).toContain('secret-check.mjs');
+    expect(artifact.diff).not.toContain(secret);
+  });
+
+  test('an untracked weaker candidate cannot downgrade an imported baseline', async () => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    const central = join(root, 'central.json');
+    writeJson(central, providerManifest());
+    importReviewContract(repo, state, central);
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
+    writeCandidateDiff(repo);
+
+    await expect(runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state, diffFile: 'candidate.diff',
+    })).rejects.toThrow('review contract laundering blocked: required behavior cell was removed');
+  });
+
+  test('legacy schema rejection names versions, source, and remediation', () => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    const legacy = { ...noOpManifest(), schemaVersion: 1 };
+    writeJson(join(repo, 'goldband.review-evidence.json'), legacy);
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'legacy contract']);
+
+    const result = spawnSync(process.execPath, [
+      join(import.meta.dir, '..', 'workflows', 'review-contract-cli.ts'), 'inspect', '--goldband-home', state,
+    ], { cwd: repo, encoding: 'utf8' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('observed 1, supported 2');
+    expect(result.stderr).toContain('migrate the source manifest explicitly');
+  });
+
+  test('an explicit v2 candidate exposes the one-version migration boundary', () => {
+    const root = temporaryRoot();
+    const repo = gitRepository(root, 'repo');
+    const state = join(root, 'state');
+    writeJson(join(repo, 'goldband.review-evidence.json'), { ...noOpManifest(), schemaVersion: 1 });
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'legacy contract']);
+    writeJson(join(repo, 'goldband.review-evidence.json'), noOpManifest());
+
+    const inspection = goldband(repo, state, ['review', 'contract', 'inspect']);
+    expect(inspection.schemaMigration).toMatchObject({ observedVersion: 1, supportedVersion: 2 });
+    expect(inspection.candidate).toMatchObject({ trackingState: 'modified' });
+    expect(inspection.candidateCompatibility).toEqual({ valid: true });
+  });
+
   test('repository baseline rejects a weaker explicit manifest before evidence execution', async () => {
     const root = temporaryRoot();
     const repo = gitRepository(root, 'repo');
@@ -53,7 +224,7 @@ describe('review contract resolution and runtime store', () => {
     const state = join(root, 'state');
     const manifestFile = join(root, 'central.json');
     writeJson(manifestFile, noOpManifest());
-    importReviewContract(repo, state, manifestFile);
+    const imported = importReviewContract(repo, state, manifestFile);
     writeCandidateDiff(repo);
     const before = git(repo, ['status', '--porcelain=v1', '--untracked-files=all']);
 
@@ -69,9 +240,14 @@ describe('review contract resolution and runtime store', () => {
     const artifactFile = result.artifacts.find((file) => file.endsWith('-review-evidence.json'))!;
     const artifact = JSON.parse(readFileSync(artifactFile, 'utf8'));
     expect(artifact.evidence.contractResolution).toMatchObject({
-      compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1',
-      baseline: { kind: 'runtime-store' },
+      compatibilityIdentity: 'review-evidence-schema-v2/runtime-contract-v2',
+      baseline: {
+        kind: 'runtime-store',
+        identity: imported.entryFile,
+        importedFrom: realpathSync(manifestFile),
+      },
     });
+    expect(Date.parse(artifact.evidence.contractResolution.baseline.importedAt)).not.toBeNaN();
     expect(artifact.evidence.contractResolution.effectiveDigest).toBe(
       artifact.binding.behaviorContractDigest,
     );
@@ -96,6 +272,8 @@ describe('review contract resolution and runtime store', () => {
       reason: 'Additive resolution fixture.',
     });
     writeJson(join(repo, 'goldband.review-evidence.json'), baseline);
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'add review contract']);
     writeJson(join(repo, 'effective.json'), effective);
     writeCandidateDiff(repo);
 
@@ -121,20 +299,41 @@ describe('review contract resolution and runtime store', () => {
     );
   });
 
-  test('repository manifest shadows an existing runtime-store entry', () => {
+  test('repository manifest shadows an existing runtime-store entry with persisted provenance', async () => {
     const root = temporaryRoot();
     const repo = gitRepository(root, 'repo');
     const state = join(root, 'state');
     const central = join(root, 'central.json');
     writeJson(central, noOpManifest());
-    importReviewContract(repo, state, central);
+    const imported = importReviewContract(repo, state, central);
     writeJson(join(repo, 'goldband.review-evidence.json'), providerManifest());
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'add repository contract']);
+    writeCandidateDiff(repo);
 
     const inspection = inspectReviewContractStore(repo, state);
     expect(inspection.entry?.manifestDigest).toBeDefined();
     expect(inspection.entry?.manifestDigest).not.toBe(
       hashFromManifestFile(join(repo, 'goldband.review-evidence.json')),
     );
+    const result = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+    });
+    const artifactFile = result.artifacts.find((file) => file.endsWith('-review-evidence.json'))!;
+    const artifact = JSON.parse(readFileSync(artifactFile, 'utf8'));
+    expect(artifact.evidence.contractResolution.shadowedRuntimeStore).toMatchObject({
+      present: true,
+      identity: imported.entryFile,
+      digest: imported.entry?.manifestDigest,
+      importedFrom: realpathSync(central),
+    });
+    expect(Date.parse(
+      artifact.evidence.contractResolution.shadowedRuntimeStore.importedAt,
+    )).not.toBeNaN();
   });
 
   test('worktrees share one entry while unrelated repositories do not', () => {
@@ -247,9 +446,16 @@ describe('review contract resolution and runtime store', () => {
 
     writeJson(join(repo, 'goldband.review-evidence.json'), providerManifest());
     const shadowed = goldband(repo, state, ['review', 'contract', 'inspect']);
-    expect(shadowed.baseline.kind).toBe('repository');
-    expect(shadowed.runtimeStore).toMatchObject({ present: true, shadowed: true });
-    rmSync(join(repo, 'goldband.review-evidence.json'));
+    expect(shadowed.baseline.kind).toBe('runtime-store');
+    expect(shadowed.candidate).toMatchObject({ trackingState: 'untracked' });
+    expect(shadowed.runtimeStore).toMatchObject({ present: true, shadowed: false });
+    git(repo, ['add', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'add repository contract']);
+    const committed = goldband(repo, state, ['review', 'contract', 'inspect']);
+    expect(committed.baseline.kind).toBe('repository');
+    expect(committed.runtimeStore).toMatchObject({ present: true, shadowed: true });
+    git(repo, ['rm', 'goldband.review-evidence.json']);
+    git(repo, ['commit', '-m', 'remove repository contract']);
 
     const removed = goldband(repo, state, ['review', 'contract', 'remove']);
     expect(removed.before.configured).toBe(true);
@@ -290,7 +496,7 @@ function writeCandidateDiff(repo: string): void {
 
 function noOpManifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'contract-present',
       behavior: 'The explicit repository contract is present.',
@@ -310,7 +516,7 @@ function noOpManifest(): ReviewEvidenceManifest {
 
 function providerManifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'required-provider',
       behavior: 'A required provider executes.',
@@ -344,6 +550,15 @@ function providerManifest(): ReviewEvidenceManifest {
     }],
     authorizations: [],
   };
+}
+
+function subdirectoryProviderManifest(): ReviewEvidenceManifest {
+  const value = providerManifest();
+  value.providers[0]!.operations[0]!.argv = [
+    'bun', '-e',
+    "const fs=require('node:fs');if(!process.cwd().replaceAll('\\\\','/').endsWith('/packages/app')||fs.readFileSync('../../a.ts','utf8')!=='changed();\\n')process.exit(9)",
+  ];
+  return value;
 }
 
 function writeJson(file: string, value: unknown): void {

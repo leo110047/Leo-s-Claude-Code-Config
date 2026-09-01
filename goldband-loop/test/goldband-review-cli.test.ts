@@ -106,7 +106,7 @@ describe("goldband review code launcher", () => {
 			writeFileSync(
 				join(repo, "goldband.review-evidence.json"),
 				JSON.stringify({
-					schemaVersion: 1,
+					schemaVersion: 2,
 					behaviorMatrix: [{
 						id: "fixture-contract",
 						behavior: "The fixture candidate passes its declared gate.",
@@ -115,31 +115,18 @@ describe("goldband review code launcher", () => {
 						preconditions: "the isolated runner is available",
 						expected: "the fixture command exits successfully",
 						risk: "low",
-						disposition: "static",
-						providerIds: ["fixture-gate"],
+						disposition: "not-applicable",
+						providerIds: [],
+						reason: "The launcher fixture exercises semantic provenance only.",
 					}],
-					providers: [{
-						id: "fixture-gate",
-						owner: "launcher-e2e-fixture",
-						kind: "static",
-						lifecycle: "persistent",
-						cellIds: ["fixture-contract"],
-						applicability: { kind: "global", reason: "Explicit launcher E2E fixture." },
-						executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
-						operations: [{
-							id: "pass",
-							target: "candidate",
-							argv: ["true"],
-							expectedExit: "zero",
-							timeoutMs: 1000,
-							maxOutputBytes: 1024,
-							network: "deny",
-							evidenceLevel: "fixture",
-						}],
-					}],
+					providers: [],
 					authorizations: [],
 				}),
 			);
+			spawnSync("git", ["-C", repo, "config", "user.email", "test@example.com"]);
+			spawnSync("git", ["-C", repo, "config", "user.name", "Goldband Test"]);
+			spawnSync("git", ["-C", repo, "add", "goldband.review-evidence.json"]);
+			spawnSync("git", ["-C", repo, "commit", "-m", "add review contract"]);
 			const provisionAuthority = spawnSync(process.execPath, [
 				join(import.meta.dir, "..", "scripts", "provision-review-receipt-authority.ts"),
 				"--runtime-root", trustedRuntimeRoot,

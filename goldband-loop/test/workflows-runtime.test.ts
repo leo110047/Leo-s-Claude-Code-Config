@@ -68,6 +68,7 @@ import {
   DEFAULT_METERED_CLAUDE_REVIEW_MAX_BUDGET_USD,
   resolveClaudeReviewBudgetPolicy,
 } from '../workflows/review-budgets';
+import { importReviewContract } from '../workflows/review-contract-store';
 
 const ROOT = resolve(import.meta.dir, '..');
 const PROJECT_ROOT = resolve(ROOT, '..');
@@ -1886,7 +1887,10 @@ describe('workflow runtime', () => {
     const previousPath = process.env.PATH;
     try {
       const fakeGit = join(fakeBin, 'git');
-      writeFileSync(fakeGit, '#!/usr/bin/env bash\nsleep 1\n');
+      writeFileSync(
+        fakeGit,
+        `#!/usr/bin/env bash\nif [ "\${1:-}" = "rev-parse" ] && [ "\${2:-}" = "--show-toplevel" ]; then printf '%s\\n' ${JSON.stringify(ROOT)}; exit 0; fi\nsleep 1\n`,
+      );
       chmodSync(fakeGit, 0o755);
       process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
       const step = reviewSteps.find((item) => item.name === 'collect-diff');
@@ -1918,7 +1922,7 @@ describe('workflow runtime', () => {
       const fakeGit = join(fakeBin, 'git');
       writeFileSync(
         fakeGit,
-        `#!/usr/bin/env bash\nprintf '%s' "\${GIT_NO_LAZY_FETCH:-}" > ${JSON.stringify(sentinel)}\n`,
+        `#!/usr/bin/env bash\nif [ "\${1:-}" = "rev-parse" ] && [ "\${2:-}" = "--show-toplevel" ]; then printf '%s\\n' ${JSON.stringify(ROOT)}; exit 0; fi\nprintf '%s' "\${GIT_NO_LAZY_FETCH:-}" > ${JSON.stringify(sentinel)}\n`,
       );
       chmodSync(fakeGit, 0o755);
       process.env.PATH = `${fakeBin}:${previousPath ?? ''}`;
@@ -2535,6 +2539,11 @@ describe('workflow runtime', () => {
     const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
+      importReviewContract(
+        repo,
+        tmpHome,
+        join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
+      );
       const fakeClaude = join(fakeBin, 'claude');
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env node',
@@ -2596,6 +2605,11 @@ describe('workflow runtime', () => {
     const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
+      importReviewContract(
+        repo,
+        tmpHome,
+        join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
+      );
       const fakeClaude = join(fakeBin, 'claude');
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env node',
@@ -2775,6 +2789,11 @@ describe('workflow runtime', () => {
     const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
+      importReviewContract(
+        repo,
+        tmpHome,
+        join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
+      );
       const fakeClaude = join(fakeBin, 'claude');
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env node',
@@ -2822,6 +2841,11 @@ describe('workflow runtime', () => {
     const repo = reviewTargetRepository();
     const previousPath = process.env.PATH;
     try {
+      importReviewContract(
+        repo,
+        tmpHome,
+        join(ROOT, 'test/fixtures/workflows/review-evidence-pass.json'),
+      );
       const fakeClaude = join(fakeBin, 'claude');
       writeFileSync(fakeClaude, [
         '#!/usr/bin/env node',

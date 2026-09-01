@@ -66,6 +66,23 @@ afterEach(() => {
 });
 
 describe('review evidence contracts', () => {
+  test('manifest schema, repository manifests, and runtime validator share version 2', () => {
+    const jsonSchema = JSON.parse(readFileSync(
+      join(import.meta.dir, '../../schemas/review-evidence-manifest.schema.json'),
+      'utf8',
+    ));
+    expect(jsonSchema.properties.schemaVersion.const).toBe(2);
+    for (const file of [
+      join(import.meta.dir, '../../goldband.review-evidence.json'),
+      join(import.meta.dir, '../goldband.review-evidence.json'),
+      join(import.meta.dir, 'fixtures/workflows/review-evidence-pass.json'),
+    ]) {
+      const value = JSON.parse(readFileSync(file, 'utf8'));
+      expect(value.schemaVersion).toBe(2);
+      expect(reviewEvidenceManifestSchema.validate(value).schemaVersion).toBe(2);
+    }
+  });
+
   test('attests Homebrew-style Mach-O rpath dependencies without widening directory reads', () => {
     if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const node = spawnSync('/usr/bin/which', ['node'], { encoding: 'utf8' }).stdout.trim();
@@ -2264,6 +2281,39 @@ describe('review evidence contracts', () => {
     }], closure, rerun)[0]).toMatchObject({ status: 'closed' });
   });
 
+  test('verified-failure closure cannot change the invocation offset of the failed operation', () => {
+    const original = initialArtifact();
+    original.findings[0] = {
+      ...original.findings[0]!,
+      classification: 'verified-failure',
+      evidenceIds: ['gate:pass'],
+    };
+    original.evidence.records[0] = {
+      ...original.evidence.records[0]!,
+      status: 'verified-failure',
+      commandDigest: '1'.repeat(64),
+    };
+    const closure = buildClosureInput(
+      original,
+      { ...original.binding, candidateDigest: 'd'.repeat(64) },
+      'diff --git a/a.ts b/a.ts\n+fixed();',
+      original.evidence.manifest,
+    );
+    const rerun = bundle([{
+      ...original.evidence.records[0]!,
+      status: 'verified-pass',
+      commandDigest: '2'.repeat(64),
+      candidateDigest: 'd'.repeat(64),
+    }]);
+
+    expect(() => validateClosureResults([{
+      findingId: 'F-001',
+      status: 'closed',
+      summary: 'same argv passed from a different invocation directory',
+      evidenceIds: ['gate:pass'],
+    }], closure, rerun)).toThrow('unchanged original failed operation');
+  });
+
   test('closure is forbidden after an initial zero-finding review', () => {
     const artifact = { ...initialArtifact(), findings: [] };
     expect(() => validateInitialReviewArtifact(artifact))
@@ -2443,7 +2493,7 @@ function compileMachO(args: string[]): void {
 
 function manifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'behavior-a',
       behavior: 'The candidate passes the fixture gate.',

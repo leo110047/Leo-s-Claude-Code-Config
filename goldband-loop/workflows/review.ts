@@ -104,6 +104,7 @@ import type {
   WorkflowContext,
   WorkflowStep,
 } from './types';
+import { resolveReviewWorkspace } from './review-workspace';
 
 export type UntrackedDiffState = {
   includedBytes: number;
@@ -273,7 +274,8 @@ function planEvidence(ctx: WorkflowContext) {
   if (closureArtifact && workMapBinding) {
     assertWorkMapClosureCausality(closureArtifact, workMapBinding);
   }
-  const defaultManifestExists = existsSync(join(ctx.cwd, 'goldband.review-evidence.json'));
+  const workspace = resolveReviewWorkspace(ctx.cwd);
+  const defaultManifestExists = existsSync(join(workspace.repositoryRoot, 'goldband.review-evidence.json'));
   let loaded;
   try {
     loaded = resolveReviewContract(
@@ -298,16 +300,16 @@ function planEvidence(ctx: WorkflowContext) {
       ),
     };
   }
-  if (loaded.baselineManifest) {
-    assertReviewContractNotWeaker(loaded.baselineManifest, loaded.manifest);
+  for (const extension of loaded.monotonicExtensions ?? []) {
+    assertReviewContractNotWeaker(extension.baseline, extension.effective);
   }
-  const binding = createCandidateBinding(ctx.cwd, input, loaded.manifest, ctx.options.base);
+  const binding = createCandidateBinding(workspace.repositoryRoot, input, loaded.manifest, ctx.options.base);
   const manifest = loaded.manifest.providers.some((provider) => provider.lifecycle === 'transition')
     ? validateTransitionReviewEvidenceManifest(loaded.manifest, binding)
     : loaded.manifest;
-  const rulesSnapshot = createReviewRulesSnapshot(ctx.cwd);
+  const rulesSnapshot = createReviewRulesSnapshot(workspace.repositoryRoot);
   const rules = coreReviewRules(
-    ctx.cwd,
+    workspace.repositoryRoot,
     input.diff,
     rulesSnapshot,
     input.impact.changedFiles,
@@ -332,7 +334,7 @@ function planEvidence(ctx: WorkflowContext) {
   }));
   const authority = reviewLineageAuthority(ctx);
   const lineage = prepareReviewLineage({
-    cwd: ctx.cwd,
+    cwd: workspace.repositoryRoot,
     storeRoot: authority.receiptRoot,
     key: authority.key,
     repository: binding.repository,
@@ -491,7 +493,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     result = await adapter.runJson(
       prompt,
       evidenceState.closure ? closureEnvelopeJsonSchema : findingsEnvelopeJsonSchema,
-      ctx.cwd,
+      resolveReviewWorkspace(ctx.cwd).repositoryRoot,
       {
         timeoutMs: timeBudget.nextHostTimeoutMs(),
         claudeMaxBudgetUsd: ctx.options.reviewClaudeMaxBudgetUsd,
@@ -1049,12 +1051,13 @@ function collectUntrackedDiff(
   );
   if (result.status !== 0) throw new Error(result.stderr || 'git ls-files failed');
   const state: UntrackedDiffState = { includedBytes: 0 };
-  const realRoot = realpathSync(ctx.cwd);
+  const repositoryRoot = resolveReviewWorkspace(ctx.cwd).repositoryRoot;
+  const realRoot = realpathSync(repositoryRoot);
   const chunks: string[] = [];
   const files: string[] = [];
   for (const file of result.stdout.split('\0').filter(Boolean)) {
     timeBudget.assertWithinDeadline();
-    const output = untrackedFileDiff(ctx.cwd, realRoot, file, state);
+    const output = untrackedFileDiff(repositoryRoot, realRoot, file, state);
     if (!output) continue;
     chunks.push(output);
     // Redacted content stays out of the semantic diff, but its path and digest
@@ -1077,7 +1080,7 @@ function runReviewGit(
     'git',
     ['--no-pager', '-c', 'core.fsmonitor=false', ...args],
     {
-      cwd: ctx.cwd,
+      cwd: resolveReviewWorkspace(ctx.cwd).repositoryRoot,
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -1542,7 +1545,12 @@ function assertCandidateFresh(
   state: ReviewEvidenceRunState,
 ): void {
   const current = collectDiff(ctx);
-  const binding = createCandidateBinding(ctx.cwd, current, state.manifest, ctx.options.base);
+  const binding = createCandidateBinding(
+    resolveReviewWorkspace(ctx.cwd).repositoryRoot,
+    current,
+    state.manifest,
+    ctx.options.base,
+  );
   if (
     binding.repository !== state.evidence.binding.repository ||
     binding.baseDigest !== state.evidence.binding.baseDigest ||

@@ -88,8 +88,8 @@ describe("review receipt authority provisioning", () => {
 		const stateRoot = join(root, "workflow-state");
 		mkdirSync(repo);
 		expect(spawnSync("git", ["init"], { cwd: repo }).status).toBe(0);
-		writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify({
-			schemaVersion: 1,
+			writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify({
+			schemaVersion: 2,
 			behaviorMatrix: [{
 				id: "unsupported-runtime",
 				behavior: "The unavailable integration is disclosed.",
@@ -104,7 +104,12 @@ describe("review receipt authority provisioning", () => {
 			}],
 			providers: [],
 			authorizations: [],
-		})}\n`);
+			})}\n`);
+			expect(spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["config", "user.name", "Goldband Test"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["add", "goldband.review-evidence.json"], { cwd: repo }).status).toBe(0);
+			expect(spawnSync("git", ["commit", "-m", "add review contract"], { cwd: repo }).status).toBe(0);
+			writeFileSync(join(repo, "candidate.txt"), "review me\n");
 		const reviewArgs = [
 			join(runtimeRoot, "bin", "goldband.ts"),
 			"review", "code", "--host", "claude",

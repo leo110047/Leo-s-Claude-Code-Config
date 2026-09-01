@@ -231,7 +231,7 @@ describe("Work Map review readback", () => {
 		});
 		const evidenceManifest = path.join(state, "unsupported-evidence.json");
 		fs.writeFileSync(evidenceManifest, `${JSON.stringify({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			behaviorMatrix: [{
 				id: "device-proof",
 				behavior: "Device proof is required.",
@@ -281,7 +281,7 @@ describe("Work Map review readback", () => {
 		});
 		const evidenceManifest = path.join(state, "failing-evidence.json");
 		fs.writeFileSync(evidenceManifest, `${JSON.stringify({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			behaviorMatrix: [{
 				id: "candidate-gate",
 				behavior: "Candidate gate must pass.",
@@ -651,7 +651,7 @@ function writeNoopEvidenceManifest(
 	const file = path.join(state, "noop-evidence.json");
 	fs.mkdirSync(state, { recursive: true });
 	fs.writeFileSync(file, `${JSON.stringify({
-		schemaVersion: 1,
+		schemaVersion: 2,
 		behaviorMatrix: [{
 			id: "candidate-behavior",
 			behavior: "The candidate behavior is reviewed.",

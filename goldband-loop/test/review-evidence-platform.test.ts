@@ -67,7 +67,7 @@ function git(cwd: string, args: string[]): string {
 
 function manifest(): ReviewEvidenceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     behaviorMatrix: [{
       id: 'platform-contract',
       behavior: 'Only the installed macOS review host may execute provider evidence.',

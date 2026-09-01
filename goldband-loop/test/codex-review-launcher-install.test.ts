@@ -408,7 +408,7 @@ describe("Codex trusted workflow launcher install", () => {
 				join(repo, "goldband.review-evidence.json"),
 			], { cwd: repo, encoding: "utf8", env: centralEnv });
 			expect(importedRepositoryManifest.status, importedRepositoryManifest.stderr).toBe(0);
-			expect(JSON.parse(importedRepositoryManifest.stdout).after.runtimeStore.shadowed).toBe(true);
+			expect(JSON.parse(importedRepositoryManifest.stdout).after.runtimeStore.shadowed).toBe(false);
 			expect(existsSync(join(repo, "goldband.review-evidence.json"))).toBe(true);
 			const weakManifest = join(fixture, "weak-contract.json");
 			writeFileSync(weakManifest, `${JSON.stringify(installedPrimaryContractManifest())}\n`);
@@ -1016,7 +1016,7 @@ describe("Codex trusted workflow launcher install", () => {
 
 function installedReviewEvidenceManifest() {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		behaviorMatrix: [{
 			id: "installed-review",
 			behavior: "The installed runtime executes declared evidence before review.",
@@ -1057,7 +1057,7 @@ function installedReviewEvidenceManifest() {
 
 function installedPrimaryContractManifest() {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		behaviorMatrix: [{
 			id: "installed-central-contract",
 			behavior: "The explicitly imported local repository contract resolves.",
@@ -1118,7 +1118,7 @@ function installedReviewCoverageSummary(
 
 function installedNoOperationManifest() {
 	return {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		behaviorMatrix: [{
 			id: "installed-clean-review",
 			behavior: "The fixture has no applicable external evidence operation.",

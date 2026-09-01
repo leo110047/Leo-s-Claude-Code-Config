@@ -112,7 +112,9 @@ function printUsage(stream: Pick<Console, "log">): void {
 		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--evidence-manifest <file>] [--closure-artifact <initial-review-artifact>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
 	);
 	stream.log(
-		"  goldband review contract <inspect|import|remove> [--manifest <path>]",
+		"  goldband review contract inspect",
+		"  goldband review contract import --manifest <path>",
+		"  goldband review contract remove",
 	);
 	stream.log(
 		"  goldband browser session --host <claude|codex> [command] [args...]",

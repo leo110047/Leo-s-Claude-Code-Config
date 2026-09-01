@@ -1,162 +1,467 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { stateRoot } from './evidence';
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { stateRoot } from "./evidence";
 import {
-  loadReviewEvidenceManifest,
-  reviewEvidenceManifestSchema,
-  type ReviewEvidenceManifest,
-} from './review-evidence';
+	digestManifest,
+	inspectReviewContractStore,
+	type ReviewContractStoreInspection,
+	resolveReviewContractRepositoryIdentity,
+} from "./review-contract-store";
 import {
-  digestManifest,
-  inspectReviewContractStore,
-  resolveReviewContractRepositoryIdentity,
-} from './review-contract-store';
-import type { ReviewDiffInput } from './review-impact';
-import type { WorkflowContext } from './types';
+	loadReviewEvidenceManifest,
+	type ReviewEvidenceManifest,
+	reviewEvidenceManifestSchema,
+} from "./review-evidence";
+import type { ReviewDiffInput } from "./review-impact";
+import {
+	type ReviewWorkspaceCoordinates,
+	resolveReviewWorkspace,
+} from "./review-workspace";
+import type { WorkflowContext } from "./types";
 
-const DEFAULT_REVIEW_EVIDENCE_MANIFEST = 'goldband.review-evidence.json';
+const DEFAULT_REVIEW_EVIDENCE_MANIFEST = "goldband.review-evidence.json";
+const COMPATIBILITY_IDENTITY =
+	"review-evidence-schema-v2/runtime-contract-v2" as const;
 
 type ReviewContractSource = {
-  kind: 'repository' | 'runtime-store' | 'explicit-primary' | 'explicit-extension' | 'closure-artifact';
-  identity: string;
-  digest: string;
+	kind:
+		| "repository"
+		| "runtime-store"
+		| "candidate-extension"
+		| "explicit-primary"
+		| "explicit-extension"
+		| "closure-artifact";
+	identity: string;
+	digest: string;
+	importedFrom?: string;
+	importedAt?: string;
+};
+
+type ReviewCandidateManifest = {
+	value?: unknown;
+	identity: string;
+	selection: "worktree" | "index" | "head";
+};
+
+export type ReviewManifestProvenance = {
+	identity: string;
+	trackingState:
+		| "absent"
+		| "unchanged"
+		| "modified"
+		| "staged-modified"
+		| "staged-new"
+		| "untracked"
+		| "head";
+	digest?: string;
+	baseDigest?: string;
 };
 
 export type ReviewContractResolution = {
-  schemaVersion: 1;
-  repositoryIdentity: ReturnType<typeof resolveReviewContractRepositoryIdentity>;
-  compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1';
-  baseline: ReviewContractSource;
-  explicit?: ReviewContractSource;
-  effectiveDigest: string;
-  shadowedRuntimeStore?: {
-    present: boolean;
-    digest?: string;
-    invalidReason?: string;
-  };
+	schemaVersion: 1;
+	repositoryIdentity: ReturnType<
+		typeof resolveReviewContractRepositoryIdentity
+	>;
+	workspace: ReviewWorkspaceCoordinates;
+	compatibilityIdentity: typeof COMPATIBILITY_IDENTITY;
+	baseline: ReviewContractSource;
+	candidate?: ReviewContractSource;
+	candidateProvenance: ReviewManifestProvenance;
+	explicit?: ReviewContractSource;
+	effectiveDigest: string;
+	shadowedRuntimeStore?: {
+		present: boolean;
+		identity?: string;
+		digest?: string;
+		importedFrom?: string;
+		importedAt?: string;
+		invalidReason?: string;
+	};
+	schemaMigration?: {
+		observedVersion: 1;
+		supportedVersion: 2;
+		source: string;
+	};
 };
 
 export type ResolvedReviewContract = {
-  manifest: ReviewEvidenceManifest;
-  source: string;
-  baselineManifest?: ReviewEvidenceManifest;
-  resolution: ReviewContractResolution;
+	manifest: ReviewEvidenceManifest;
+	source: string;
+	monotonicExtensions: Array<{
+		baseline: ReviewEvidenceManifest;
+		effective: ReviewEvidenceManifest;
+	}>;
+	resolution: ReviewContractResolution;
 };
 
 export function resolveReviewContract(
-  ctx: WorkflowContext,
-  input: ReviewDiffInput,
+	ctx: WorkflowContext,
+	input: ReviewDiffInput,
 ): ResolvedReviewContract {
-  const repositoryIdentity = resolveReviewContractRepositoryIdentity(ctx.cwd);
-  const repositoryFile = join(ctx.cwd, DEFAULT_REVIEW_EVIDENCE_MANIFEST);
-  const explicitFile = ctx.options.evidenceManifestFile
-    ? resolve(ctx.cwd, ctx.options.evidenceManifestFile)
-    : undefined;
-  const store = readStoreInspection(ctx);
+	const workspace = resolveReviewWorkspace(ctx.cwd);
+	const repositoryIdentity = resolveReviewContractRepositoryIdentity(
+		workspace.repositoryRoot,
+	);
+	const explicitFile = ctx.options.evidenceManifestFile
+		? resolve(ctx.cwd, ctx.options.evidenceManifestFile)
+		: undefined;
+	const store = readStoreInspection(ctx);
+	const baseRef = resolveBaseRef(workspace.repositoryRoot, ctx.options.base);
+	const baseValue = readGitJson(
+		workspace.repositoryRoot,
+		baseRef,
+		DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+	);
+	const candidateRead = readCandidateManifest(workspace.repositoryRoot, ctx);
+	const candidateValue = candidateRead.value;
 
-  let baselineManifest: ReviewEvidenceManifest | undefined;
-  let baseline: ReviewContractSource | undefined;
-  let shadowedRuntimeStore: ReviewContractResolution['shadowedRuntimeStore'];
-  if (existsSync(repositoryFile)) {
-    baselineManifest = reviewEvidenceManifestSchema.validate(
-      JSON.parse(readFileSync(repositoryFile, 'utf8')),
-    );
-    baseline = source('repository', realpathSync(repositoryFile), baselineManifest);
-    shadowedRuntimeStore = store.entry
-      ? { present: true, digest: store.entry.manifestDigest }
-      : store.invalidReason
-        ? { present: true, invalidReason: store.invalidReason }
-        : { present: false };
-  } else if (store.entry) {
-    baselineManifest = store.entry.manifest;
-    baseline = source('runtime-store', store.entryFile, baselineManifest);
-  } else if (store.invalidReason) {
-    throw new Error(store.invalidReason);
-  }
+	let baselineManifest: ReviewEvidenceManifest | undefined;
+	let baseline: ReviewContractSource | undefined;
+	let schemaMigration: ReviewContractResolution["schemaMigration"];
+	let shadowedRuntimeStore: ReviewContractResolution["shadowedRuntimeStore"];
+	if (baseValue !== undefined) {
+		const identity = `git:${workspace.repositoryRoot}@${baseRef}:${DEFAULT_REVIEW_EVIDENCE_MANIFEST}`;
+		const validatedBase = validateBaseManifest(baseValue, candidateValue, identity);
+		baselineManifest = validatedBase.manifest;
+		if (validatedBase.migrated) {
+			schemaMigration = { observedVersion: 1, supportedVersion: 2, source: identity };
+		}
+		baseline = source("repository", identity, baselineManifest);
+		shadowedRuntimeStore = store.entry
+			? {
+					present: true,
+					identity: store.entryFile,
+					digest: store.entry.manifestDigest,
+					importedFrom: store.entry.importedFrom,
+					importedAt: store.entry.importedAt,
+				}
+			: store.invalidReason
+				? {
+						present: true,
+						identity: store.entryFile,
+						invalidReason: store.invalidReason,
+					}
+				: { present: false };
+	} else if (store.entry) {
+		baselineManifest = store.entry.manifest;
+		baseline = {
+			...source("runtime-store", store.entryFile, store.entry.manifest),
+			importedFrom: store.entry.importedFrom,
+			importedAt: store.entry.importedAt,
+		};
+	} else if (store.invalidReason) {
+		throw new Error(store.invalidReason);
+	}
+	if (baseValue !== undefined && candidateValue === undefined) {
+		throw new Error(
+			`review contract laundering blocked: candidate ${candidateRead.identity} removes the authoritative repository manifest from ${baseRef}`,
+		);
+	}
+	const candidateProvenance = inspectCandidateProvenance(
+		workspace.repositoryRoot,
+		baseRef,
+		candidateRead,
+		baselineManifest,
+	);
 
-  if (!baselineManifest && !explicitFile && ctx.options.mode === 'mock') {
-    const loaded = loadReviewEvidenceManifest(ctx);
-    baselineManifest = loaded.manifest;
-    baseline = source('explicit-primary', loaded.source, loaded.manifest);
-  }
+	const monotonicExtensions: ResolvedReviewContract["monotonicExtensions"] = [];
+	let manifest = baselineManifest;
+	let candidate: ReviewContractSource | undefined;
+	if (candidateValue !== undefined) {
+		const identity = candidateRead.identity;
+		const candidateManifest = validateManifest(candidateValue, identity);
+		if (!baselineManifest && ctx.options.mode !== "mock") {
+			throw new Error(
+				"review/code evidence contract has no authoritative base; import the candidate manifest with review contract import --manifest <path> before semantic review",
+			);
+		}
+		if (
+			baselineManifest &&
+			digestManifest(candidateManifest) !== digestManifest(baselineManifest)
+		) {
+			monotonicExtensions.push({
+				baseline: baselineManifest,
+				effective: candidateManifest,
+			});
+			manifest = candidateManifest;
+			candidate = source("candidate-extension", identity, candidateManifest);
+		} else if (!baselineManifest) {
+			manifest = candidateManifest;
+			baseline = source("explicit-primary", identity, candidateManifest);
+		}
+	}
 
-  if (!baselineManifest && !explicitFile) {
-    throw new Error(
-      'review/code evidence contract is required before semantic review; add goldband.review-evidence.json, run review contract import --manifest <path>, or explicitly pass --evidence-manifest <path>',
-    );
-  }
+	if (!manifest && !explicitFile && ctx.options.mode === "mock") {
+		const loaded = loadReviewEvidenceManifest(ctx);
+		manifest = loaded.manifest;
+		baseline = source("explicit-primary", loaded.source, loaded.manifest);
+	}
+	if (!manifest && !explicitFile) {
+		throw new Error(
+			"review/code evidence contract is required before semantic review; commit a repo-root goldband.review-evidence.json or run review contract import --manifest <path>",
+		);
+	}
 
-  let manifest = baselineManifest;
-  let explicit: ReviewContractSource | undefined;
-  if (explicitFile) {
-    const loaded = baselineManifest
-      ? loadReviewEvidenceManifest(ctx, input)
-      : {
-        manifest: reviewEvidenceManifestSchema.validate(
-          JSON.parse(readFileSync(explicitFile, 'utf8')),
-        ),
-        source: explicitFile,
-      };
-    manifest = loaded.manifest;
-    explicit = source(
-      baselineManifest ? 'explicit-extension' : 'explicit-primary',
-      realpathSync(explicitFile),
-      manifest,
-    );
-    if (!baseline) baseline = explicit;
-  }
+	let explicit: ReviewContractSource | undefined;
+	if (explicitFile) {
+		const loaded = manifest
+			? loadReviewEvidenceManifest(ctx, input)
+			: {
+					manifest: validateManifest(
+						JSON.parse(readFileSync(explicitFile, "utf8")),
+						explicitFile,
+					),
+					source: explicitFile,
+				};
+		if (!manifest && ctx.options.mode !== "mock") {
+			throw new Error(
+				"review/code explicit manifest is an extension, not an authority; import it before semantic review when no repository base exists",
+			);
+		}
+		if (manifest)
+			monotonicExtensions.push({
+				baseline: manifest,
+				effective: loaded.manifest,
+			});
+		manifest = loaded.manifest;
+		explicit = source(
+			baseline ? "explicit-extension" : "explicit-primary",
+			realpathSync(explicitFile),
+			manifest,
+		);
+		if (!baseline) baseline = explicit;
+	}
 
-  const effective = manifest!;
-  return {
-    manifest: effective,
-    source: explicit?.identity ?? baseline!.identity,
-    ...(baselineManifest && explicit ? { baselineManifest } : {}),
-    resolution: {
-      schemaVersion: 1,
-      repositoryIdentity,
-      compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1',
-      baseline: baseline!,
-      ...(explicit ? { explicit } : {}),
-      effectiveDigest: digestManifest(effective),
-      ...(shadowedRuntimeStore ? { shadowedRuntimeStore } : {}),
-    },
-  };
+	const effective = manifest!;
+	return {
+		manifest: effective,
+		source: explicit?.identity ?? candidate?.identity ?? baseline!.identity,
+		monotonicExtensions,
+		resolution: {
+			schemaVersion: 1,
+			repositoryIdentity,
+			workspace,
+			compatibilityIdentity: COMPATIBILITY_IDENTITY,
+			baseline: baseline!,
+			...(candidate ? { candidate } : {}),
+			candidateProvenance,
+			...(explicit ? { explicit } : {}),
+			effectiveDigest: digestManifest(effective),
+			...(shadowedRuntimeStore ? { shadowedRuntimeStore } : {}),
+			...(schemaMigration ? { schemaMigration } : {}),
+		},
+	};
 }
 
 export function closureArtifactResolution(
-  cwd: string,
-  manifest: ReviewEvidenceManifest,
-  sourceIdentity: string,
+	cwd: string,
+	manifest: ReviewEvidenceManifest,
+	sourceIdentity: string,
 ): ReviewContractResolution {
-  const digest = digestManifest(manifest);
-  return {
-    schemaVersion: 1,
-    repositoryIdentity: resolveReviewContractRepositoryIdentity(cwd),
-    compatibilityIdentity: 'review-evidence-schema-v1/runtime-contract-v1',
-    baseline: { kind: 'closure-artifact', identity: sourceIdentity, digest },
-    effectiveDigest: digest,
-  };
+	const workspace = resolveReviewWorkspace(cwd);
+	const digest = digestManifest(manifest);
+	return {
+		schemaVersion: 1,
+		repositoryIdentity: resolveReviewContractRepositoryIdentity(
+			workspace.repositoryRoot,
+		),
+		workspace,
+		compatibilityIdentity: COMPATIBILITY_IDENTITY,
+		baseline: { kind: "closure-artifact", identity: sourceIdentity, digest },
+		candidateProvenance: {
+			identity: join(
+				workspace.repositoryRoot,
+				DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+			),
+			trackingState: "absent",
+		},
+		effectiveDigest: digest,
+	};
+}
+
+function validateManifest(
+	value: unknown,
+	identity: string,
+): ReviewEvidenceManifest {
+	try {
+		return reviewEvidenceManifestSchema.validate(value);
+	} catch (error) {
+		throw new Error(
+			`${error instanceof Error ? error.message : String(error)}; source: ${identity}`,
+		);
+	}
+}
+
+function validateBaseManifest(
+	value: unknown,
+	candidateValue: unknown | undefined,
+	identity: string,
+): { manifest: ReviewEvidenceManifest; migrated: boolean } {
+	const item = value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+	const candidate = candidateValue && typeof candidateValue === "object"
+		? candidateValue as Record<string, unknown>
+		: undefined;
+	if (item?.schemaVersion === 1 && candidate?.schemaVersion === 2) {
+		try {
+			return {
+				manifest: reviewEvidenceManifestSchema.validate({ ...item, schemaVersion: 2 }),
+				migrated: true,
+			};
+		} catch {
+			// Fall through to the explicit incompatibility diagnostic. Safety fields
+			// are never inferred during the one-version migration boundary.
+		}
+	}
+	return { manifest: validateManifest(value, identity), migrated: false };
 }
 
 function source(
-  kind: ReviewContractSource['kind'],
-  identity: string,
-  manifest: ReviewEvidenceManifest,
+	kind: ReviewContractSource["kind"],
+	identity: string,
+	manifest: ReviewEvidenceManifest,
 ): ReviewContractSource {
-  return { kind, identity, digest: digestManifest(manifest) };
+	return { kind, identity, digest: digestManifest(manifest) };
 }
 
-function readStoreInspection(ctx: WorkflowContext): {
-  entryFile: string;
-  entry?: ReturnType<typeof inspectReviewContractStore>['entry'];
-  invalidReason?: string;
-} {
-  try {
-    return inspectReviewContractStore(ctx.cwd, stateRoot(ctx.options));
-  } catch (error) {
-    return {
-      entryFile: '',
-      invalidReason: error instanceof Error ? error.message : String(error),
-    };
-  }
+function resolveBaseRef(
+	repositoryRoot: string,
+	requestedBase?: string,
+): string {
+	if (!requestedBase) return "HEAD";
+	return (
+		git(repositoryRoot, ["merge-base", requestedBase, "HEAD"]) || requestedBase
+	);
+}
+
+function readCandidateManifest(
+	repositoryRoot: string,
+	ctx: WorkflowContext,
+): ReviewCandidateManifest {
+	if (ctx.options.staged)
+		return {
+			value: readGitJson(repositoryRoot, ":", DEFAULT_REVIEW_EVIDENCE_MANIFEST),
+			identity: `git:${repositoryRoot}@index:${DEFAULT_REVIEW_EVIDENCE_MANIFEST}`,
+			selection: "index",
+		};
+	if (ctx.options.base && !ctx.options.worktree) {
+		return {
+			value: readGitJson(repositoryRoot, "HEAD", DEFAULT_REVIEW_EVIDENCE_MANIFEST),
+			identity: `git:${repositoryRoot}@HEAD:${DEFAULT_REVIEW_EVIDENCE_MANIFEST}`,
+			selection: "head",
+		};
+	}
+	const file = join(repositoryRoot, DEFAULT_REVIEW_EVIDENCE_MANIFEST);
+	return {
+		value: existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined,
+		identity: file,
+		selection: "worktree",
+	};
+}
+
+function inspectCandidateProvenance(
+	repositoryRoot: string,
+	baseRef: string,
+	candidate: ReviewCandidateManifest,
+	resolvedBaseManifest?: ReviewEvidenceManifest,
+): ReviewManifestProvenance {
+	const identity = candidate.identity;
+	const baseValue = readGitJson(
+		repositoryRoot,
+		baseRef,
+		DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+	);
+	const baseManifest = resolvedBaseManifest ?? (baseValue === undefined
+		? undefined
+		: validateManifest(baseValue, `git:${baseRef}:${DEFAULT_REVIEW_EVIDENCE_MANIFEST}`));
+	const baseDigest = baseManifest ? digestManifest(baseManifest) : undefined;
+	if (candidate.value === undefined)
+		return {
+			identity,
+			trackingState: "absent",
+			...(baseDigest ? { baseDigest } : {}),
+		};
+	const candidateManifest = validateManifest(candidate.value, identity);
+	const digest = digestManifest(candidateManifest);
+	const trackedInHead = gitStatus(repositoryRoot, [
+		"cat-file",
+		"-e",
+		`HEAD:${DEFAULT_REVIEW_EVIDENCE_MANIFEST}`,
+	]);
+	const trackedInIndex = gitStatus(repositoryRoot, [
+		"ls-files",
+		"--error-unmatch",
+		"--",
+		DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+	]);
+	const stagedChanged = !gitStatus(repositoryRoot, [
+		"diff",
+		"--cached",
+		"--quiet",
+		"--",
+		DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+	]);
+	const worktreeChanged = !gitStatus(repositoryRoot, [
+		"diff",
+		"--quiet",
+		"--",
+		DEFAULT_REVIEW_EVIDENCE_MANIFEST,
+	]);
+	const trackingState = candidate.selection === "head"
+		? baseRef === "HEAD" ? "unchanged" : "head"
+		: candidate.selection === "index"
+			? !trackedInHead
+				? "staged-new"
+				: stagedChanged
+					? "staged-modified"
+					: "unchanged"
+			: !trackedInIndex
+				? "untracked"
+				: !trackedInHead
+					? "staged-new"
+					: stagedChanged
+						? "staged-modified"
+						: worktreeChanged
+							? "modified"
+							: baseRef === "HEAD"
+								? "unchanged"
+								: "head";
+	return {
+		identity,
+		trackingState,
+		digest,
+		...(baseDigest ? { baseDigest } : {}),
+	};
+}
+
+function readGitJson(
+	repositoryRoot: string,
+	revision: string,
+	path: string,
+): unknown | undefined {
+	const spec = revision === ":" ? `:${path}` : `${revision}:${path}`;
+	const result = spawnSync("git", ["show", spec], {
+		cwd: repositoryRoot,
+		encoding: "utf8",
+	});
+	if (result.status !== 0) return undefined;
+	return JSON.parse(result.stdout);
+}
+
+function git(cwd: string, args: string[]): string {
+	const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+	return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function gitStatus(cwd: string, args: string[]): boolean {
+	return spawnSync("git", args, { cwd, stdio: "ignore" }).status === 0;
+}
+
+function readStoreInspection(
+	ctx: WorkflowContext,
+): Pick<
+	ReviewContractStoreInspection,
+	"entryFile" | "entry" | "invalidReason"
+> {
+	return inspectReviewContractStore(ctx.cwd, stateRoot(ctx.options));
 }

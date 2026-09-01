@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "behaviorMatrix", "providers", "authorizations"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "behaviorMatrix": { "$ref": "review-behavior-matrix.schema.json" },
     "providers": {
       "type": "array",
