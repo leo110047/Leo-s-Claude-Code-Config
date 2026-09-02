@@ -17,11 +17,12 @@
 
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Locator, type Cookie } from 'playwright';
 import type { ChildProcess } from 'node:child_process';
+import { probeProcessLiveness, readProcessStartTime } from './error-handling';
 import { writeSecureFile, mkdirSecure } from './file-permissions';
 import { addConsoleEntry, addNetworkEntry, addDialogEntry, networkBuffer, type DialogEntry } from './buffers';
 import { validateNavigationUrl } from './url-validation';
 import { TabSession, type RefEntry } from './tab-session';
-import { resolveChromiumProfile, cleanSingletonLocks } from './config';
+import { resolveChromiumProfile } from './config';
 
 /**
  * Detect whether GOLDBAND_CHROMIUM_PATH points at a custom Chromium build that
@@ -102,6 +103,48 @@ export async function resolveDisconnectCause(browser: Browser | null): Promise<'
     });
   }
   return proc?.exitCode === 0 && proc?.signalCode == null ? 'clean' : 'crash';
+}
+
+function browserProcess(browser: Browser | null): ChildProcess | null {
+  return (
+    browser as (Browser & { process?: () => ChildProcess | null }) | null
+  )?.process?.() ?? null;
+}
+
+async function waitForBrowserClose(operation: Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Chromium close did not complete within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function assertBrowserProcessStopped(proc: ChildProcess | null, recordedStartTime: string): void {
+  const pid = proc?.pid;
+  if (!proc || !pid) {
+    throw new Error('Chromium child process identity is unavailable after close');
+  }
+  if (proc.exitCode !== null || proc.signalCode !== null) return;
+  const liveness = probeProcessLiveness(pid);
+  if (liveness === 'dead') return;
+  if (liveness === 'alive' && recordedStartTime) {
+    const currentStartTime = readProcessStartTime(pid);
+    if (currentStartTime && currentStartTime !== recordedStartTime) return;
+  }
+  throw new Error(
+    liveness === 'unknown'
+      ? `Chromium process ${pid} liveness could not be confirmed after close`
+      : `Chromium process ${pid} is still alive after close`,
+  );
 }
 
 /**
@@ -433,14 +476,6 @@ export class BrowserManager {
     const userDataDir = resolveChromiumProfile();
     fs.mkdirSync(userDataDir, { recursive: true });
 
-    // Pre-launch cleanup of stale SingletonLock/Socket/Cookie. Chromium's
-    // ProcessSingleton refuses to start when these exist from a prior crash
-    // (SIGKILL, hard crash) — the lockfiles point at a PID that may no longer
-    // exist. Shutdown cleanup doesn't run on hard crashes, so we clean here
-    // too. Safe under external coordination: gbd.lock for gbrowser,
-    // single-instance CLI check for goldband.
-    cleanSingletonLocks(userDataDir);
-
     // Support custom Chromium binary via GOLDBAND_CHROMIUM_PATH env var.
     // Used by Goldband Loop Browser.app to point at the bundled Chromium.
     const executablePath = process.env.GOLDBAND_CHROMIUM_PATH || undefined;
@@ -688,27 +723,48 @@ export class BrowserManager {
     this.consecutiveFailures = 0;
   }
 
-  async close() {
+  async close(timeoutMs: number = 5000): Promise<void> {
     const browser = this.browser;
     if (browser || (this.connectionMode === 'headed' && this.context)) {
-      if (this.connectionMode === 'headed') {
-        // Headed/persistent context mode: close the context (which closes the browser)
-        this.intentionalDisconnect = true;
-        if (browser) browser.removeAllListeners('disconnected');
-        await Promise.race([
-          this.context ? this.context.close() : Promise.resolve(),
-          new Promise(resolve => setTimeout(resolve, 5000)),
-        ]).catch(() => {});
-      } else if (browser) {
-        // Launched mode: close the browser we spawned
-        browser.removeAllListeners('disconnected');
-        await Promise.race([
-          browser.close(),
-          new Promise(resolve => setTimeout(resolve, 5000)),
-        ]).catch(() => {});
+      this.intentionalDisconnect = true;
+      browser?.removeAllListeners('disconnected');
+      const closeOperation = this.connectionMode === 'headed'
+        ? (this.context ? this.context.close() : Promise.resolve())
+        : (browser ? browser.close() : Promise.resolve());
+      await waitForBrowserClose(closeOperation, timeoutMs);
+      if (browser?.isConnected()) {
+        throw new Error('Chromium remained connected after close');
       }
       this.browser = null;
+      this.context = null;
     }
+  }
+
+  /**
+   * Startup rollback is allowed to release controller ownership only after the
+   * acquired Chromium resource is proven closed. In addition to close()'s
+   * timeout/rejection/connectivity checks, startup rollback requires a child
+   * process identity and confirmed stop before releasing the reservation.
+   */
+  async closeForStartupRollback(timeoutMs: number = 5000): Promise<void> {
+    const browser = this.browser;
+    const context = this.context;
+    if (!browser && !(this.connectionMode === 'headed' && context)) return;
+
+    const proc = browserProcess(browser);
+    const processStartTime = proc?.pid ? readProcessStartTime(proc.pid) : '';
+    this.intentionalDisconnect = true;
+    browser?.removeAllListeners('disconnected');
+    const closeOperation = this.connectionMode === 'headed'
+      ? (context ? context.close() : Promise.resolve())
+      : (browser ? browser.close() : Promise.resolve());
+    await waitForBrowserClose(closeOperation, timeoutMs);
+    if (browser?.isConnected()) {
+      throw new Error('Chromium remained connected after startup rollback close');
+    }
+    assertBrowserProcessStopped(proc, processStartTime);
+    this.browser = null;
+    this.context = null;
   }
 
   /** Health check — verifies Chromium is connected AND responsive */

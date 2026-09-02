@@ -14,16 +14,22 @@
 
 import { describe, test, expect } from 'bun:test';
 import { spawn } from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as http from 'http';
 
-async function startFakeHealthServer(token: string): Promise<{ port: number; close: () => Promise<void> }> {
+async function startFakeHealthServer(token: string): Promise<{
+  port: number;
+  instanceId: string;
+  close: () => Promise<void>;
+}> {
+  const instanceId = `fake-${crypto.randomUUID()}`;
   const server = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'healthy', token }));
+      res.end(JSON.stringify({ status: 'healthy', token, instanceId }));
       return;
     }
     res.writeHead(404);
@@ -37,6 +43,7 @@ async function startFakeHealthServer(token: string): Promise<{ port: number; clo
   if (!addr || typeof addr === 'string') throw new Error('fake server: bad address');
   return {
     port: addr.port,
+    instanceId,
     close: () => new Promise((r) => server.close(() => r())),
   };
 }
@@ -68,6 +75,8 @@ describe('D2 daemon-mismatch refuse (CLI integration)', () => {
       token: 'fake-token',
       startedAt: new Date().toISOString(),
       serverPath: '',
+      instanceId: fakeServer.instanceId,
+      phase: 'ready',
       mode: 'launched',
       configHash: 'aaaaaaaaaaaaaaaa', // 16-char hex; won't match new --proxy hash
     }, null, 2));
@@ -104,6 +113,8 @@ describe('D2 daemon-mismatch refuse (CLI integration)', () => {
       token: 'fake-token',
       startedAt: new Date().toISOString(),
       serverPath: '',
+      instanceId: fakeServer.instanceId,
+      phase: 'ready',
       mode: 'launched',
     }, null, 2));
 
@@ -146,6 +157,8 @@ describe('D2 daemon-mismatch refuse (CLI integration)', () => {
       token: 'fake-token',
       startedAt: new Date().toISOString(),
       serverPath: '',
+      instanceId: fakeServer.instanceId,
+      phase: 'ready',
       mode: 'launched',
       configHash: matchingHash,
     }, null, 2));

@@ -5,9 +5,13 @@ import {
   readPidStartTime,
   readPidCmdline,
   cleanupXvfb,
+  cleanupXvfbStrict,
   pickFreeDisplay,
   isDisplayFree,
   hasXvfbProbeTools,
+  requireXvfbStartIdentity,
+  waitForSpawnedXvfbReadiness,
+  XvfbStartupCleanupError,
 } from '../src/xvfb';
 
 const HAS_XVFB_TOOLS = process.platform === 'linux' && hasXvfbProbeTools();
@@ -111,6 +115,151 @@ describe('readPidCmdline', () => {
   });
 });
 
+describe('requireXvfbStartIdentity', () => {
+  test('returns a complete identity without signalling the new child', async () => {
+    let signalled = false;
+    const proc = {
+      pid: 4242,
+      kill: () => { signalled = true; },
+      exited: Promise.resolve(0),
+    };
+
+    expect(await requireXvfbStartIdentity(proc, ':99', () => 'stable-start')).toBe('stable-start');
+    expect(signalled).toBe(false);
+  });
+
+  test('stops the newly spawned child before rejecting an empty identity', async () => {
+    let signalled = false;
+    let confirmExit: (code: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => { confirmExit = resolve; });
+    const proc = {
+      pid: 4242,
+      kill: () => {
+        signalled = true;
+        confirmExit(0);
+      },
+      exited,
+    };
+
+    await expect(requireXvfbStartIdentity(proc, ':99', () => '')).rejects.toThrow('child stopped before state publish');
+    expect(signalled).toBe(true);
+  });
+
+  test('stops the newly spawned child when identity lookup throws', async () => {
+    let signalled = false;
+    let confirmExit: (code: number) => void = () => {};
+    const proc = {
+      pid: 4242,
+      kill: () => {
+        signalled = true;
+        confirmExit(0);
+      },
+      exited: new Promise<number>((resolve) => { confirmExit = resolve; }),
+    };
+
+    await expect(requireXvfbStartIdentity(
+      proc,
+      ':99',
+      () => { throw new Error('ps denied'); },
+    )).rejects.toThrow('ps denied');
+    expect(signalled).toBe(true);
+  });
+});
+
+describe('waitForSpawnedXvfbReadiness', () => {
+  test('confirms the spawned child exited when the display probe throws', async () => {
+    const signals: Array<NodeJS.Signals | number | undefined> = [];
+    let confirmExit: (code: number) => void = () => {};
+    const proc = {
+      pid: 4242,
+      exitCode: null,
+      kill: (signal?: NodeJS.Signals | number) => {
+        signals.push(signal);
+        confirmExit(0);
+      },
+      exited: new Promise<number>((resolve) => { confirmExit = resolve; }),
+    };
+
+    await expect(waitForSpawnedXvfbReadiness(proc, 99, {
+      sleep: async () => {},
+      probeDisplay: () => { throw new Error('xdpyinfo sandbox denial'); },
+      readStartTime: () => 'stable-start',
+    })).rejects.toThrow('xdpyinfo sandbox denial');
+    expect(signals).toEqual(['SIGKILL']);
+  });
+
+  test('confirms the spawned child exited after readiness timeout', async () => {
+    let now = 0;
+    let signalled = false;
+    let confirmExit: (code: number) => void = () => {};
+    const proc = {
+      pid: 4242,
+      exitCode: null,
+      kill: () => {
+        signalled = true;
+        confirmExit(0);
+      },
+      exited: new Promise<number>((resolve) => { confirmExit = resolve; }),
+    };
+
+    await expect(waitForSpawnedXvfbReadiness(proc, 99, {
+      sleep: async (milliseconds) => { now += milliseconds; },
+      now: () => now,
+      readinessTimeoutMs: 200,
+      probeDisplay: () => true,
+      readStartTime: () => 'stable-start',
+    })).rejects.toThrow('never became reachable');
+    expect(signalled).toBe(true);
+  });
+
+  test('reports an authoritative identity when child exit cannot be confirmed', async () => {
+    const proc = {
+      pid: 4242,
+      exitCode: null,
+      kill: () => {},
+      exited: new Promise<number>(() => {}),
+    };
+
+    try {
+      await waitForSpawnedXvfbReadiness(proc, 99, {
+        sleep: async () => {},
+        probeDisplay: () => { throw new Error('xdpyinfo sandbox denial'); },
+        readStartTime: () => 'stable-start',
+        confirmExit: async () => false,
+      });
+      throw new Error('expected readiness failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(XvfbStartupCleanupError);
+      expect((error as XvfbStartupCleanupError).record).toEqual({
+        pid: 4242,
+        display: ':99',
+        startTime: 'stable-start',
+      });
+    }
+  });
+
+  test('still stops the child when recovery identity lookup throws', async () => {
+    let signalled = false;
+    let confirmExit: (code: number) => void = () => {};
+    const proc = {
+      pid: 4242,
+      exitCode: null,
+      kill: () => {
+        signalled = true;
+        confirmExit(0);
+      },
+      exited: new Promise<number>((resolve) => { confirmExit = resolve; }),
+    };
+
+    await expect(waitForSpawnedXvfbReadiness(proc, 99, {
+      sleep: async () => {},
+      probeDisplay: () => { throw new Error('xdpyinfo sandbox denial'); },
+      readStartTime: () => { throw new Error('ps denied'); },
+    })).rejects.toThrow('xdpyinfo sandbox denial');
+    expect(signalled).toBe(true);
+  });
+});
+
 describe('cleanupXvfb', () => {
   test('no-op when pid is 0', () => {
     expect(() => cleanupXvfb({ pid: 0, startTime: '', display: ':99' })).not.toThrow();
@@ -126,6 +275,42 @@ describe('cleanupXvfb', () => {
     })).not.toThrow();
     // The current process is still alive after the no-op cleanup attempt.
     expect(process.kill(process.pid, 0)).toBe(true);
+  });
+});
+
+describe('cleanupXvfbStrict', () => {
+  const state = { pid: 4242, startTime: 'recorded-start', display: ':99' };
+
+  test('returns only after the recorded Xvfb is confirmed dead', async () => {
+    const statuses = ['owned', 'dead'] as const;
+    const signals: Array<NodeJS.Signals | number> = [];
+    await cleanupXvfbStrict(state, {
+      probeOwnership: () => statuses.shift() ?? 'dead',
+      kill: (_pid, signal) => { signals.push(signal); },
+      sleep: async () => {},
+      timeoutMs: 10,
+    });
+    expect(signals).toEqual(['SIGTERM']);
+  });
+
+  test('rejects unknown ownership without signalling', async () => {
+    let signalled = false;
+    await expect(cleanupXvfbStrict(state, {
+      probeOwnership: () => 'unknown',
+      kill: () => { signalled = true; },
+    })).rejects.toThrow('Cannot confirm ownership');
+    expect(signalled).toBe(false);
+  });
+
+  test('rejects when the process remains alive after SIGKILL', async () => {
+    const signals: Array<NodeJS.Signals | number> = [];
+    await expect(cleanupXvfbStrict(state, {
+      probeOwnership: () => 'owned',
+      kill: (_pid, signal) => { signals.push(signal); },
+      sleep: async () => {},
+      timeoutMs: 0,
+    })).rejects.toThrow('still alive');
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
   });
 });
 

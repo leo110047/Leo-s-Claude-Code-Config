@@ -716,6 +716,9 @@ describe('CLI lifecycle', () => {
       port: 1,
       token: 'fake',
       pid: 999999,
+      startedAt: '2026-09-02T00:00:00.000Z',
+      serverPath: '/test/dead-server.ts',
+      mode: 'launched',
     }));
 
     const cliPath = path.resolve(__dirname, '../src/cli.ts');

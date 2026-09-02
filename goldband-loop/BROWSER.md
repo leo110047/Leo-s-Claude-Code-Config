@@ -168,18 +168,34 @@ for the full design + decision trail.
 
 ### Daemon lifecycle
 
-1. **First call.** CLI checks `<project>/.goldband/browse.json` for a running
-   server. None found — it spawns `bun run browse/src/server.ts` in the
-   background. Daemon launches headless Chromium via Playwright, picks a
-   random port (10000–60000), generates a bearer token, writes the state
-   file (chmod 600), starts accepting requests. ~3 seconds.
+1. **First call.** CLI takes the project-scoped startup lock and checks
+   `<project>/.goldband/browse.json`. None found — it spawns
+   `bun run browse/src/server.ts` in the background and atomically hands the
+   exact on-disk lock lease to that child. A direct server invocation must take
+   the same lock itself. Before launching Chromium,
+   the daemon compare-and-swaps a `starting` reservation containing its
+   `instanceId`, PID, process start identity, port, and token. It promotes only
+   that owner to `ready` after the localhost listener and browser are ready.
+   Parallel callers wait and reuse the same owner. If later startup work fails,
+   the reservation is removed only after Chromium and Xvfb are confirmed stopped;
+   Xvfb PID/display are recorded immediately after spawn, readiness failures wait
+   for child exit, and an unconfirmed rollback preserves the record to block a
+   second controller. ~3 seconds.
 2. **Subsequent calls.** CLI reads the state file, sends an HTTP POST with
    the bearer token, prints the response. ~100-200ms round trip.
 3. **Idle shutdown.** After 30 minutes of no commands, daemon shuts down and
-   cleans up the state file. Next call restarts it.
-4. **Crash recovery.** If Chromium crashes, the daemon exits immediately —
-   no self-healing, don't hide failure. CLI detects the dead daemon on the
-   next call and starts a fresh one.
+   compare-and-deletes the state file only if it still owns the recorded
+   `instanceId` and browser/Xvfb shutdown is confirmed. Close timeout/rejection
+   or a live/unverifiable Chromium profile lock preserves state and singleton
+   files so a replacement cannot start against the same profile.
+4. **Crash recovery.** If Chromium crashes, the daemon exits immediately. The
+   next CLI call replaces it only after health/liveness/identity checks confirm
+   that the recorded owner is dead or stale. If localhost or PID access is
+   denied, the CLI fails closed and preserves the pointer; retry from a host
+   lane with both capabilities. `connect`, normal autostart, crash retry, and
+   supervisor respawn share the same project startup lock, owner contract, and
+   strict old-resource preparation. Partial Xvfb records are preserved rather
+   than overwritten; direct `server.ts` startup cannot bypass these checks.
 
 ### Multi-workspace isolation
 
@@ -597,7 +613,12 @@ artifacts and the Permissions API patch are still cleaned up.
 display range (`:99`, `:100`, ...) until `xdpyinfo` reports a free slot,
 then spawns Xvfb. Cleanup-on-disconnect validates the recorded PID's
 `/proc/<pid>/cmdline` matches `Xvfb` AND start-time matches before sending
-any signal — no PID-reuse footguns. Skips spawn entirely when
+any signal — no PID-reuse footguns. Startup rollback and owned-Xvfb shutdown
+additionally require a confirmed-dead readback after TERM/KILL before releasing
+controller ownership. Post-spawn probe errors and readiness timeouts signal the
+authoritative child handle and await exit; an unconfirmed exit leaves a partial
+or complete Xvfb recovery record so stale startup cannot treat it as absent.
+Skips spawn entirely when
 `WAYLAND_DISPLAY` is set (Chromium uses Wayland natively). Standard
 Debian/Ubuntu containers work out of the box; minimal images (alpine,
 distroless) may need fonts/dbus/gtk libs for headed Chromium to render.

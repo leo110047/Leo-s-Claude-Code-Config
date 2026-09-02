@@ -30,12 +30,15 @@ describe('CLI outer supervisor (v1.44+)', () => {
 
   test('2. SIGINT and SIGTERM trigger clean teardown', () => {
     const src = fs.readFileSync(CLI_TS, 'utf-8');
+    const block = sliceBetween(src, 'Supervisor mode:', '// ─── Headed Disconnect');
     // Both signals must hit the teardown path or the user's Ctrl-C leaves
     // an orphaned server (worse than no supervisor).
     expect(src).toMatch(/process\.on\('SIGINT'.*teardownAndExit/);
     expect(src).toMatch(/process\.on\('SIGTERM'.*teardownAndExit/);
-    // Teardown must signal the supervised server before exiting itself.
-    expect(src).toContain("safeKill(state.pid, 'SIGTERM')");
+    // Teardown must validate the recorded owner before routing through the
+    // identity-aware termination helper.
+    expect(block).toContain('sameControllerOwner(state, supervisedOwner)');
+    expect(block).toContain('await killServer(state)');
   });
 
   test('3. crash-loop guard with 5-in-5min rolling window', () => {
@@ -69,6 +72,40 @@ describe('CLI outer supervisor (v1.44+)', () => {
     // broken even though the server is back up.
     const block = sliceBetween(src, 'Supervisor mode:', '// ─── Headed Disconnect');
     expect(block).toContain('spawnTerminalAgent({');
+  });
+
+  test('7. unknown ownership fails closed and respawn shares the startup lock', () => {
+    const src = fs.readFileSync(CLI_TS, 'utf-8');
+    const block = sliceBetween(src, 'Supervisor mode:', '// ─── Headed Disconnect');
+    expect(block).toContain("decideControllerTransition(inspection) === 'refuse'");
+    expect(block).toContain('state preserved, no respawn');
+    expect(block).toContain('const respawnLock = acquireServerLock()');
+    expect(block).toContain('startServer(serverEnv, respawnLock)');
+    expect(block).toContain('await prepareReplaceableController(latest)');
+    expect(block.indexOf('await prepareReplaceableController(latest)')).toBeLessThan(
+      block.indexOf('const respawned = await startServer(serverEnv, respawnLock)'),
+    );
+    expect(block).toContain('respawnLock.release()');
+  });
+
+  test('8. startup readiness requires the reserved instance and typed healthy response', () => {
+    const src = fs.readFileSync(CLI_TS, 'utf-8');
+    const block = sliceBetween(src, '// Wait for server to become healthy.', '/**\n * Acquire an exclusive lockfile');
+    expect(block).toContain('state?.instanceId === instanceId');
+    expect(block).toContain("state.phase === 'ready'");
+    expect(block).toContain("await probeControllerHealth(state) === 'healthy'");
+  });
+
+  test('9. disconnect rechecks the owner under lock before destructive cleanup', () => {
+    const src = fs.readFileSync(CLI_TS, 'utf-8');
+    const block = sliceBetween(src, 'async function handleDisconnect()', '// ─── Main');
+    expect(block.indexOf('const release = acquireServerLock()')).toBeLessThan(
+      block.indexOf('const current = readLockedDisconnectOwner(existing)'),
+    );
+    expect(src).toContain('sameControllerOwner(current, controllerOwner(expected))');
+    expect(block.indexOf('readLockedDisconnectOwner(existing)')).toBeLessThan(
+      block.indexOf('cleanSharedChromiumProfileLocks()'),
+    );
   });
 });
 

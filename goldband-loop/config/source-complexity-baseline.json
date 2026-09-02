@@ -65,7 +65,7 @@
         13
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
-        151,
+        150,
         59,
         59
       ]
@@ -107,20 +107,18 @@
     },
     "browse/src/cli.ts": {
       "lint/complexity/noExcessiveCognitiveComplexity": [
-        120,
-        42,
-        36,
+        77,
         34,
+        31,
+        27,
         15,
         14,
         14,
-        13,
         13
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
-        187,
-        92,
-        51
+        137,
+        92
       ]
     },
     "browse/src/config.ts": {
@@ -229,18 +227,17 @@
       "lint/complexity/noExcessiveCognitiveComplexity": [
         255,
         99,
-        90,
-        24,
+        77,
         23,
-        16,
+        21,
         14
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
-        755,
-        661,
-        661,
+        739,
+        660,
+        660,
         192,
-        165
+        150
       ]
     },
     "browse/src/snapshot.ts": {

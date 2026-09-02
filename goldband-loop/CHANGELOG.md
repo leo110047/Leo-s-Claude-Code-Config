@@ -3,6 +3,21 @@
 This changelog records user-visible changes only. Implementation details and engineering
 evidence remain in pull requests and Git history.
 
+## Unreleased
+
+- Browser commands now preserve an existing controller when sandbox permissions
+  prevent localhost or PID verification. Controller startup, restart, and cleanup
+  use one owner identity, so a hidden replacement cannot overwrite the visible,
+  logged-in browser session. Failed startup also keeps its reservation unless
+  Chromium and Xvfb shutdown are confirmed. Normal stop, disconnect, and fatal
+  cleanup now preserve state and profile locks whenever browser or Xvfb teardown
+  cannot be verified. Supervisor respawn uses the same replacement gate, and an
+  an incomplete Xvfb identity can no longer be treated as absent or replaced.
+  Xvfb readiness failures now wait for the spawned child to exit; an
+  unconfirmed exit keeps its recovery record and controller reservation.
+  CLI-spawned servers now atomically adopt the startup lock, while direct server
+  launches must acquire that lock and pass the same old-resource checks.
+
 ## [1.46.0.0] - 2026-07-06
 
 - Goldband Loop now has one workflow discovery profile.

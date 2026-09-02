@@ -7,7 +7,29 @@
 
 import * as fs from 'fs';
 
-const IS_WINDOWS = process.platform === 'win32';
+export type ProcessLiveness = 'alive' | 'dead' | 'unknown';
+
+interface ProcessProbeOptions {
+  platform?: NodeJS.Platform;
+  kill?: (pid: number, signal: number) => void;
+  spawnSync?: typeof Bun.spawnSync;
+}
+
+function probeWindowsProcess(
+  pid: number,
+  spawnSync: typeof Bun.spawnSync,
+): ProcessLiveness {
+  try {
+    const result = spawnSync(
+      ['tasklist', '/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
+      { stdout: 'pipe', stderr: 'pipe', timeout: 3000 },
+    );
+    if (result.exitCode !== 0) return 'unknown';
+    return result.stdout.toString().includes(`"${pid}"`) ? 'alive' : 'dead';
+  } catch {
+    return 'unknown';
+  }
+}
 
 // ─── Filesystem ────────────────────────────────────────────────
 
@@ -36,23 +58,66 @@ export function safeKill(pid: number, signal: NodeJS.Signals | number): void {
   }
 }
 
-/** Check if a PID is alive. Pure boolean probe — returns false for ALL errors. */
-export function isProcessAlive(pid: number): boolean {
-  if (IS_WINDOWS) {
-    try {
-      const result = Bun.spawnSync(
-        ['tasklist', '/FI', `PID eq ${pid}`, '/NH', '/FO', 'CSV'],
-        { stdout: 'pipe', stderr: 'pipe', timeout: 3000 }
-      );
-      return result.stdout.toString().includes(`"${pid}"`);
-    } catch {
-      return false;
-    }
+/**
+ * Probe whether a PID exists without flattening permission/runtime failures into
+ * "dead". Destructive callers must only recover automatically from `dead`.
+ */
+export function probeProcessLiveness(
+  pid: number,
+  options: ProcessProbeOptions = {},
+): ProcessLiveness {
+  if (!Number.isInteger(pid) || pid <= 0) return 'dead';
+  const platform = options.platform ?? process.platform;
+  if (platform === 'win32') {
+    return probeWindowsProcess(pid, options.spawnSync ?? Bun.spawnSync);
   }
   try {
-    process.kill(pid, 0);
-    return true;
+    (options.kill ?? process.kill)(pid, 0);
+    return 'alive';
+  } catch (err: any) {
+    if (err?.code === 'ESRCH') return 'dead';
+    return 'unknown';
+  }
+}
+
+/**
+ * Compatibility predicate for non-destructive polling. `unknown` is treated as
+ * possibly alive so callers never erase state merely because a sandbox denied
+ * the probe (for example POSIX `EPERM`).
+ */
+export function isProcessAlive(pid: number): boolean {
+  return probeProcessLiveness(pid) !== 'dead';
+}
+
+/**
+ * Stable OS process identity used to defend against PID reuse. Empty means the
+ * runtime could not prove identity and callers must fail closed before signal.
+ */
+export function readProcessStartTime(
+  pid: number,
+  options: ProcessProbeOptions = {},
+): string {
+  if (probeProcessLiveness(pid, options) === 'dead') return '';
+  const platform = options.platform ?? process.platform;
+  const spawnSync = options.spawnSync ?? Bun.spawnSync;
+  try {
+    const command = platform === 'win32'
+      ? [
+          'powershell.exe',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().Ticks`,
+        ]
+      : ['ps', '-p', String(pid), '-o', 'lstart='];
+    const result = spawnSync(command, {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 3000,
+    });
+    if (result.exitCode !== 0) return '';
+    return result.stdout?.toString().trim() ?? '';
   } catch {
-    return false;
+    return '';
   }
 }

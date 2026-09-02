@@ -1,110 +1,201 @@
-/**
- * Regression: state-file temp path uniqueness.
- *
- * The daemon writes `.goldband/browse.json` via the standard atomic-rename
- * pattern: `writeFileSync(tmp, …) → renameSync(tmp, stateFile)`. The
- * pattern is correct for a single writer. It breaks for *concurrent*
- * writers when they share a single temp filename:
- *
- *   t0  Writer A: writeFileSync(stateFile + '.tmp', payloadA)
- *   t1  Writer B: writeFileSync(stateFile + '.tmp', payloadB)   // overwrites A
- *   t2  Writer A: renameSync(stateFile + '.tmp', stateFile)    // moves B's payload
- *   t3  Writer B: renameSync(stateFile + '.tmp', stateFile)    // ENOENT — file gone
- *
- * A 15-CLI cold-start race against a fresh repo reproduces this in the
- * wild — one of the spawned daemons dies with:
- *
- *   [browse] Failed to start: ENOENT: no such file or directory,
- *   rename '…/.goldband/browse.json.tmp' -> '…/.goldband/browse.json'
- *
- * Fix: per-process temp path via `tmpStatePath()` (pid + 4 random bytes
- * of suffix). Each concurrent writer gets a unique path; the atomic
- * rename still gives last-writer-wins semantics on the final state file
- * content, but writers no longer kill each other on the rename step.
- *
- * This source-level guard locks two invariants:
- *   1. No remaining `stateFile + '.tmp'` literals in server.ts (regression
- *      catch — a future copy-paste or revert would re-introduce the bug)
- *   2. The 4 known state-write call sites all use `tmpStatePath()`
- *      (positive coverage)
- *
- * Same pattern as terminal-agent.test.ts and dual-listener.test.ts:
- * read source as text, assert invariant, no daemon required.
- */
-
-import { describe, test, expect } from 'bun:test';
-import { readFileSync } from 'fs';
+import { afterEach, describe, expect, test } from 'bun:test';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import {
+  acceptControllerStartupLockHandoff,
+  acquireControllerStartupLock,
+  claimControllerState,
+  controllerOwner,
+  probeControllerHealth,
+  readControllerState,
+  removeOwnedControllerState,
+  replaceControllerState,
+  updateOwnedControllerState,
+  type ControllerState,
+} from '../src/controller-state';
 
-const SERVER_TS = readFileSync(
-  path.resolve(import.meta.dir, '../src/server.ts'),
-  'utf-8',
-);
+const tempDirs: string[] = [];
 
-describe('server.ts — state-file temp-path uniqueness', () => {
-  test('no remaining `stateFile + \'.tmp\'` literals (regression catch)', () => {
-    // The shared-temp-filename pattern that caused the cold-start ENOENT
-    // race. A future contributor that copy-pastes the old pattern (or a
-    // revert) will fail this test.
-    const sharedTempLiterals = [
-      ...SERVER_TS.matchAll(/stateFile\s*\+\s*['"`]\.tmp['"`]/g),
-    ];
-    expect(
-      sharedTempLiterals.length,
-      `Found ${sharedTempLiterals.length} reference(s) to the shared ` +
-        `\`stateFile + '.tmp'\` pattern. Use \`tmpStatePath()\` instead — ` +
-        `the shared pattern races on rename when two daemons spawn ` +
-        `concurrently (cold-start race + parallel /tunnel/start).`,
-    ).toBe(0);
+function tempStateFile(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'browse-owner-state-'));
+  tempDirs.push(dir);
+  return path.join(dir, 'browse.json');
+}
+
+function state(instanceId: string, overrides: Partial<ControllerState> = {}): ControllerState {
+  return {
+    pid: process.pid,
+    port: 30_000,
+    token: `token-${instanceId}-0123456789`,
+    startedAt: '2026-09-02T00:00:00.000Z',
+    serverPath: '/test/server.ts',
+    instanceId,
+    processStartTime: 'start-a',
+    phase: 'ready',
+    mode: 'headed',
+    ...overrides,
+  };
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+describe('controller state compare-and-swap', () => {
+  test('startup lock handoff requires the exact live lock and transfers release ownership', () => {
+    const stateFile = tempStateFile();
+    const parentLock = acquireControllerStartupLock(stateFile);
+    expect(parentLock).not.toBeNull();
+
+    const adoptedLock = acceptControllerStartupLockHandoff(stateFile, parentLock!.handoff);
+    expect(adoptedLock).not.toBeNull();
+    expect(acceptControllerStartupLockHandoff(stateFile, parentLock!.handoff)).toBeNull();
+
+    parentLock!.release();
+    expect(fs.existsSync(`${stateFile}.lock`)).toBe(true);
+    adoptedLock!.release();
+    expect(fs.existsSync(`${stateFile}.lock`)).toBe(false);
   });
 
-  test('every state-file writeFileSync call uses tmpStatePath()', () => {
-    // Find every `writeFileSync(X, JSON.stringify(stateContent...` or
-    // `…(state, …)` call and verify X is `tmpStatePath()` or a variable
-    // assigned from `tmpStatePath()`.
-    const writeCalls = [
-      ...SERVER_TS.matchAll(
-        /fs\.writeFileSync\s*\(\s*(\w+)\s*,\s*JSON\.stringify\(\s*(state|stateContent)/g,
-      ),
-    ];
-    expect(
-      writeCalls.length,
-      'expected at least one state-file write site',
-    ).toBeGreaterThan(0);
+  test('startup lock handoff rejects environment data that does not match the lockfile', () => {
+    const stateFile = tempStateFile();
+    const startupLock = acquireControllerStartupLock(stateFile);
+    expect(startupLock).not.toBeNull();
+    const forged = JSON.stringify({ pid: process.pid, nonce: 'forged' });
 
-    for (const m of writeCalls) {
-      const varName = m[1]!;
-      // Walk back to the assignment of varName — must come from tmpStatePath()
-      const assignRe = new RegExp(
-        `(?:const|let)\\s+${varName}\\s*=\\s*tmpStatePath\\(\\)`,
-      );
-      expect(
-        assignRe.test(SERVER_TS),
-        `state-file writeFileSync uses \`${varName}\` but no \`const ${varName} = tmpStatePath()\` ` +
-          `assignment was found upstream. Either assign from tmpStatePath() ` +
-          `or pass tmpStatePath() inline — the shared \`stateFile + '.tmp'\` ` +
-          `pattern races under concurrent daemon startup`,
-      ).toBe(true);
-    }
+    expect(acceptControllerStartupLockHandoff(stateFile, forged)).toBeNull();
+    expect(fs.existsSync(`${stateFile}.lock`)).toBe(true);
+    startupLock!.release();
   });
 
-  test('tmpStatePath() declaration includes a per-process unique suffix', () => {
-    // Lock the suffix shape so a future contributor doesn't accidentally
-    // strip the uniqueness back out by simplifying the helper.
-    const declMatch = SERVER_TS.match(
-      /function tmpStatePath\(\)[^{]*\{([\s\S]*?)\n\}/,
-    );
-    expect(declMatch, 'tmpStatePath() declaration not found').not.toBeNull();
-    const body = declMatch![1]!;
+  test('only the first owner can claim an empty canonical state file', () => {
+    const stateFile = tempStateFile();
+    const ownerA = state('owner-a');
+    const ownerB = state('owner-b', { port: 30_001 });
 
-    // Must reference both process.pid and crypto.randomBytes — two
-    // independent sources of uniqueness.
-    expect(body, 'tmpStatePath() must include process.pid in the suffix').toContain(
-      'process.pid',
-    );
-    expect(
-      body,
-      'tmpStatePath() must include a random suffix via crypto.randomBytes',
-    ).toContain('crypto.randomBytes');
+    expect(replaceControllerState(stateFile, null, ownerA)).toBe(true);
+    expect(replaceControllerState(stateFile, null, ownerB)).toBe(false);
+    expect(readControllerState(stateFile)).toEqual(ownerA);
+  });
+
+  test('malformed canonical state is preserved instead of treated as missing', async () => {
+    const stateFile = tempStateFile();
+    fs.writeFileSync(stateFile, '{not-json');
+    const before = fs.readFileSync(stateFile, 'utf-8');
+
+    const result = await claimControllerState(stateFile, state('owner-b'));
+
+    expect(result).toEqual({ outcome: 'refused', reason: 'malformed' });
+    expect(fs.readFileSync(stateFile, 'utf-8')).toBe(before);
+  });
+
+  test('stale owner cannot update or delete a newer owner pointer', () => {
+    const stateFile = tempStateFile();
+    const ownerA = state('owner-a');
+    const ownerB = state('owner-b', { port: 30_001 });
+    expect(replaceControllerState(stateFile, null, ownerA)).toBe(true);
+    expect(replaceControllerState(stateFile, controllerOwner(ownerA), ownerB)).toBe(true);
+
+    expect(updateOwnedControllerState(
+      stateFile,
+      controllerOwner(ownerA),
+      (current) => ({ ...current, tunnelLocalPort: 44_444 }),
+    )).toBe(false);
+    expect(removeOwnedControllerState(stateFile, controllerOwner(ownerA))).toBe(false);
+    expect(readControllerState(stateFile)).toEqual(ownerB);
+  });
+
+  test('health-unreachable plus EPERM-style unknown liveness preserves the owner', async () => {
+    const stateFile = tempStateFile();
+    const ownerA = state('owner-a');
+    const ownerB = state('owner-b', { pid: process.pid + 1, port: 30_001 });
+    expect(replaceControllerState(stateFile, null, ownerA)).toBe(true);
+    const before = fs.readFileSync(stateFile, 'utf-8');
+
+    const sandboxAttempt = await claimControllerState(stateFile, ownerB, {
+      healthProbe: async () => 'unreachable',
+      livenessProbe: () => 'unknown',
+      startTimeReader: () => '',
+    });
+
+    expect(sandboxAttempt.outcome).toBe('refused');
+    expect(sandboxAttempt).toMatchObject({
+      reason: 'owner-present',
+      inspection: { status: 'unknown', liveness: 'unknown' },
+    });
+    expect(fs.readFileSync(stateFile, 'utf-8')).toBe(before);
+
+    const hostRetry = await claimControllerState(stateFile, ownerB, {
+      healthProbe: async () => 'healthy',
+      livenessProbe: () => 'alive',
+      startTimeReader: () => ownerA.processStartTime || '',
+    });
+    expect(hostRetry.outcome).toBe('refused');
+    expect(hostRetry).toMatchObject({
+      reason: 'owner-present',
+      inspection: { status: 'healthy' },
+    });
+    expect(readControllerState(stateFile)).toEqual(ownerA);
+  });
+
+  test('confirmed dead owner can be replaced without pre-unlinking the pointer', async () => {
+    const stateFile = tempStateFile();
+    const ownerA = state('owner-a');
+    const ownerB = state('owner-b', { pid: process.pid + 1, port: 30_001 });
+    expect(replaceControllerState(stateFile, null, ownerA)).toBe(true);
+
+    const result = await claimControllerState(stateFile, ownerB, {
+      healthProbe: async () => 'unreachable',
+      livenessProbe: () => 'dead',
+    });
+
+    expect(result).toEqual({ outcome: 'claimed' });
+    expect(readControllerState(stateFile)).toEqual(ownerB);
+  });
+
+  test('PID reuse is stale state and never authorizes deleting the unrelated process state', async () => {
+    const stateFile = tempStateFile();
+    const ownerA = state('owner-a', { processStartTime: 'old-process-start' });
+    const ownerB = state('owner-b', { pid: process.pid + 1, port: 30_001 });
+    expect(replaceControllerState(stateFile, null, ownerA)).toBe(true);
+
+    const result = await claimControllerState(stateFile, ownerB, {
+      healthProbe: async () => 'unreachable',
+      livenessProbe: () => 'alive',
+      startTimeReader: () => 'reused-process-start',
+    });
+
+    expect(result).toEqual({ outcome: 'claimed' });
+    expect(readControllerState(stateFile)).toEqual(ownerB);
+  });
+
+  test('health from a different instance is not accepted as the recorded owner', async () => {
+    const ownerA = state('owner-a');
+    const fakeFetch = (async () => Response.json({
+      status: 'healthy',
+      instanceId: 'owner-b',
+    })) as typeof fetch;
+
+    expect(await probeControllerHealth(ownerA, fakeFetch)).toBe('foreign');
+  });
+
+  test('health without an exact instance identity is foreign', async () => {
+    const owner = state('legacy-owner', { instanceId: undefined });
+    const fakeFetch = (async () => Response.json({ status: 'healthy' })) as typeof fetch;
+
+    expect(await probeControllerHealth(owner, fakeFetch)).toBe('foreign');
+  });
+
+  test('a matching instance is not reusable until its ready phase is published', async () => {
+    const owner = state('starting-owner', { phase: 'starting' });
+    const fakeFetch = (async () => Response.json({
+      status: 'healthy',
+      instanceId: owner.instanceId,
+    })) as typeof fetch;
+
+    expect(await probeControllerHealth(owner, fakeFetch)).toBe('unhealthy');
   });
 });

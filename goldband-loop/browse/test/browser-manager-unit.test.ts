@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, it, expect } from 'bun:test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // ─── BrowserManager basic unit tests ─────────────────────────────
 
@@ -14,6 +16,139 @@ describe('BrowserManager defaults', () => {
     const { BrowserManager } = await import('../src/browser-manager');
     const bm = new BrowserManager();
     expect(bm.getRefMap()).toEqual([]);
+  });
+
+  it('launchHeaded never deletes profile locks outside the controller transition guard', () => {
+    const sourcePath = path.resolve(import.meta.dir, '../src/browser-manager.ts');
+    const source = fs.readFileSync(sourcePath, 'utf-8');
+    const launchHeaded = source.slice(
+      source.indexOf('async launchHeaded('),
+      source.indexOf('async connectOverCDP('),
+    );
+    expect(launchHeaded).not.toContain('cleanSingletonLocks');
+  });
+});
+
+describe('BrowserManager startup rollback close', () => {
+  function installFakeBrowser(
+    manager: any,
+    close: () => Promise<void>,
+    isConnected: () => boolean,
+    proc?: { pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null },
+  ) {
+    const browser = new EventEmitter() as EventEmitter & {
+      close: () => Promise<void>;
+      isConnected: () => boolean;
+      process?: () => typeof proc;
+    };
+    browser.close = close;
+    browser.isConnected = isConnected;
+    if (proc) browser.process = () => proc;
+    manager.browser = browser;
+    manager.connectionMode = 'launched';
+    return browser;
+  }
+
+  it('rejects a close timeout and retains the browser reference', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    const browser = installFakeBrowser(bm, () => new Promise(() => {}), () => true);
+
+    await expect(bm.closeForStartupRollback(5)).rejects.toThrow('did not complete');
+    expect(bm.browser).toBe(browser);
+  });
+
+  it('rejects when the Chromium child is still alive after disconnect', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    let connected = true;
+    const browser = installFakeBrowser(
+      bm,
+      async () => { connected = false; },
+      () => connected,
+      { pid: process.pid, exitCode: null, signalCode: null },
+    );
+
+    await expect(bm.closeForStartupRollback(50)).rejects.toThrow('still alive');
+    expect(bm.browser).toBe(browser);
+  });
+
+  it('fails closed when production Playwright exposes no child process handle', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    let connected = true;
+    const browser = installFakeBrowser(
+      bm,
+      async () => { connected = false; },
+      () => connected,
+    );
+
+    await expect(bm.closeForStartupRollback(50)).rejects.toThrow('identity is unavailable');
+    expect(bm.browser).toBe(browser);
+  });
+
+  it('clears references only after browser and child process are stopped', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    let connected = true;
+    installFakeBrowser(
+      bm,
+      async () => { connected = false; },
+      () => connected,
+      { pid: 4242, exitCode: 0, signalCode: null },
+    );
+
+    await bm.closeForStartupRollback(50);
+    expect(bm.browser).toBeNull();
+    expect(bm.context).toBeNull();
+  });
+});
+
+describe('BrowserManager controller shutdown close', () => {
+  function installFakeBrowser(
+    manager: any,
+    close: () => Promise<void>,
+    isConnected: () => boolean,
+  ) {
+    const browser = new EventEmitter() as EventEmitter & {
+      close: () => Promise<void>;
+      isConnected: () => boolean;
+    };
+    browser.close = close;
+    browser.isConnected = isConnected;
+    manager.browser = browser;
+    manager.connectionMode = 'launched';
+    return browser;
+  }
+
+  it('propagates a close rejection and retains the browser reference', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    const browser = installFakeBrowser(bm, async () => { throw new Error('close rejected'); }, () => true);
+
+    await expect(bm.close(50)).rejects.toThrow('close rejected');
+    expect(bm.browser).toBe(browser);
+  });
+
+  it('propagates a close timeout and retains the browser reference', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    const browser = installFakeBrowser(bm, () => new Promise(() => {}), () => true);
+
+    await expect(bm.close(5)).rejects.toThrow('did not complete');
+    expect(bm.browser).toBe(browser);
+  });
+
+  it('clears browser and context only after a confirmed disconnect', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    let connected = true;
+    installFakeBrowser(bm, async () => { connected = false; }, () => connected);
+    bm.context = { marker: 'context' };
+
+    await bm.close(50);
+    expect(bm.browser).toBeNull();
+    expect(bm.context).toBeNull();
   });
 });
 

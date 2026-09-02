@@ -20,7 +20,7 @@
  */
 
 import * as fs from 'fs';
-import { safeKill, isProcessAlive } from './error-handling';
+import { safeKill, isProcessAlive, probeProcessLiveness } from './error-handling';
 
 export interface XvfbHandle {
   pid: number;
@@ -28,6 +28,53 @@ export interface XvfbHandle {
   display: string; // e.g. ":99"
   /** Best-effort cleanup. Validates ownership before kill. */
   close: () => void;
+  /** Startup rollback cleanup. Rejects unless the acquired Xvfb is proven gone. */
+  closeStrict: () => Promise<void>;
+}
+
+type XvfbOwnership = 'owned' | 'dead' | 'replaced' | 'unknown';
+
+interface StrictCleanupOptions {
+  probeOwnership?: () => XvfbOwnership;
+  kill?: (pid: number, signal: NodeJS.Signals | number) => void;
+  sleep?: (milliseconds: number) => Promise<void>;
+  timeoutMs?: number;
+}
+
+export interface SpawnedXvfbProcess {
+  pid: number;
+  kill: (signal?: NodeJS.Signals | number) => unknown;
+  exited: Promise<number>;
+  exitCode?: number | null;
+}
+
+export interface XvfbOwnershipRecord {
+  pid: number;
+  display: string;
+  startTime?: string;
+}
+
+interface XvfbStartupOptions {
+  probeDisplay?: (displayNum: number) => boolean;
+  sleep?: (milliseconds: number) => Promise<void>;
+  now?: () => number;
+  readinessTimeoutMs?: number;
+  cleanupTimeoutMs?: number;
+  confirmExit?: (proc: SpawnedXvfbProcess, timeoutMs: number) => Promise<boolean>;
+  readStartTime?: (pid: number) => string;
+}
+
+export class XvfbStartupCleanupError extends Error {
+  readonly record: XvfbOwnershipRecord;
+
+  constructor(record: XvfbOwnershipRecord, startupError: unknown, cleanupError: unknown) {
+    super(
+      `Xvfb on ${record.display} startup failed and child exit could not be confirmed`,
+      { cause: new AggregateError([startupError, cleanupError]) },
+    );
+    this.name = 'XvfbStartupCleanupError';
+    this.record = record;
+  }
 }
 
 export interface ShouldSpawnDecision {
@@ -139,6 +186,125 @@ export function isOurXvfb(pid: number, recordedStartTime: string): boolean {
   return currentStart === recordedStartTime;
 }
 
+export async function requireXvfbStartIdentity(
+  proc: SpawnedXvfbProcess,
+  display: string,
+  readStartTime: (pid: number) => string = readPidStartTime,
+  confirmExit: (proc: SpawnedXvfbProcess, timeoutMs: number) => Promise<boolean> = confirmSpawnedXvfbExit,
+): Promise<string> {
+  let startTime = '';
+  try {
+    startTime = readStartTime(proc.pid);
+  } catch (error) {
+    return stopSpawnedXvfbAfterFailure(proc, display, error, { readStartTime, confirmExit });
+  }
+  if (startTime) return startTime;
+  // The freshly spawned child handle is authoritative even when OS identity
+  // lookup is unavailable. Do not return an incomplete handle that could be
+  // published and later mistaken for an ownerless Xvfb.
+  return stopSpawnedXvfbAfterFailure(
+    proc,
+    display,
+    new Error(`Xvfb on ${display} start identity is unavailable; child stopped before state publish.`),
+    { readStartTime, confirmExit },
+  );
+}
+
+async function confirmSpawnedXvfbExit(
+  proc: SpawnedXvfbProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    proc.exited.then(() => finish(true), () => finish(false));
+  });
+}
+
+function spawnedXvfbRecord(
+  proc: SpawnedXvfbProcess,
+  display: string,
+  readStartTime: (pid: number) => string,
+): { record: XvfbOwnershipRecord; identityError: unknown } {
+  try {
+    const startTime = readStartTime(proc.pid);
+    return {
+      record: { pid: proc.pid, display, ...(startTime ? { startTime } : {}) },
+      identityError: null,
+    };
+  } catch (identityError) {
+    return { record: { pid: proc.pid, display }, identityError };
+  }
+}
+
+function combineXvfbCleanupErrors(identityError: unknown, cleanupError: unknown): unknown {
+  return identityError ? new AggregateError([identityError, cleanupError]) : cleanupError;
+}
+
+async function stopSpawnedXvfbAfterFailure(
+  proc: SpawnedXvfbProcess,
+  display: string,
+  startupError: unknown,
+  options: Pick<XvfbStartupOptions, 'cleanupTimeoutMs' | 'confirmExit' | 'readStartTime'> = {},
+): Promise<never> {
+  const readStartTime = options.readStartTime ?? readPidStartTime;
+  const { record, identityError } = spawnedXvfbRecord(proc, display, readStartTime);
+  let signalError: unknown = null;
+  try {
+    proc.kill('SIGKILL');
+  } catch (error) {
+    signalError = error;
+  }
+  const confirmExit = options.confirmExit ?? confirmSpawnedXvfbExit;
+  let stopped = false;
+  try {
+    stopped = await confirmExit(proc, options.cleanupTimeoutMs ?? 1000);
+  } catch (error) {
+    signalError = signalError
+      ? new AggregateError([signalError, error])
+      : error;
+  }
+  if (!stopped) {
+    const cleanupError = signalError ?? new Error(`Xvfb child ${proc.pid} did not exit before cleanup timeout`);
+    throw new XvfbStartupCleanupError(
+      record,
+      startupError,
+      combineXvfbCleanupErrors(identityError, cleanupError),
+    );
+  }
+  throw startupError;
+}
+
+export async function waitForSpawnedXvfbReadiness(
+  proc: SpawnedXvfbProcess,
+  displayNum: number,
+  options: XvfbStartupOptions = {},
+): Promise<void> {
+  const display = `:${displayNum}`;
+  const probeDisplay = options.probeDisplay ?? isDisplayFree;
+  const sleep = options.sleep ?? Bun.sleep;
+  const now = options.now ?? Date.now;
+  const deadline = now() + (options.readinessTimeoutMs ?? 3000);
+  try {
+    while (now() < deadline) {
+      await sleep(100);
+      if (!probeDisplay(displayNum)) return;
+      if (proc.exitCode != null) {
+        throw new Error(`Xvfb on ${display} exited during startup (code ${proc.exitCode}). Hint: install xvfb (apt-get install xvfb / yum install xorg-x11-server-Xvfb).`);
+      }
+    }
+    throw new Error(`Xvfb on ${display} never became reachable within 3s timeout`);
+  } catch (error) {
+    return stopSpawnedXvfbAfterFailure(proc, display, error, options);
+  }
+}
+
 /**
  * Spawn Xvfb on the given display. Returns a handle including the validated
  * start-time so future cleanup can confirm ownership.
@@ -146,7 +312,10 @@ export function isOurXvfb(pid: number, recordedStartTime: string): boolean {
  * Throws if Xvfb isn't installed (caller should print a platform-specific
  * install hint).
  */
-export async function spawnXvfb(displayNum: number): Promise<XvfbHandle> {
+export async function spawnXvfb(
+  displayNum: number,
+  recordOwnership: (record: XvfbOwnershipRecord) => void = () => {},
+): Promise<XvfbHandle> {
   if (!hasXvfbBinary('Xvfb')) {
     throw new Error('Xvfb not installed.');
   }
@@ -161,32 +330,101 @@ export async function spawnXvfb(displayNum: number): Promise<XvfbHandle> {
   const proc = Bun.spawn(['Xvfb', display, '-screen', '0', '1920x1080x24', '-ac'], {
     stdio: ['ignore', 'ignore', 'ignore'],
   });
-  proc.unref();
+
+  try {
+    proc.unref();
+    // Publish an intentionally incomplete identity immediately. If this
+    // process dies before start-time validation, stale recovery must refuse
+    // replacement instead of assuming no Xvfb resource exists.
+    recordOwnership({ pid: proc.pid, display });
+  } catch (error) {
+    return stopSpawnedXvfbAfterFailure(proc, display, error);
+  }
 
   // Wait for the X server to become reachable — Xvfb takes a few hundred ms
   // to bind. Probe via xdpyinfo with retries.
-  const deadline = Date.now() + 3000;
-  let ready = false;
-  while (Date.now() < deadline) {
-    await Bun.sleep(100);
-    if (!isDisplayFree(displayNum)) { ready = true; break; }
-    // If Xvfb crashed during startup, fail fast.
-    if (proc.exitCode != null) {
-      throw new Error(`Xvfb on ${display} exited during startup (code ${proc.exitCode}). Hint: install xvfb (apt-get install xvfb / yum install xorg-x11-server-Xvfb).`);
-    }
-  }
-  if (!ready) {
-    try { proc.kill('SIGKILL'); } catch { /* ignore */ }
-    throw new Error(`Xvfb on ${display} never became reachable within 3s timeout`);
-  }
+  await waitForSpawnedXvfbReadiness(proc, displayNum);
 
-  const startTime = readPidStartTime(proc.pid);
+  const startTime = await requireXvfbStartIdentity(proc, display);
+  try {
+    recordOwnership({ pid: proc.pid, display, startTime });
+  } catch (error) {
+    return stopSpawnedXvfbAfterFailure(proc, display, error);
+  }
   return {
     pid: proc.pid,
     startTime,
     display,
     close: () => cleanupXvfb({ pid: proc.pid, startTime, display }),
+    closeStrict: () => cleanupXvfbStrict({ pid: proc.pid, startTime, display }),
   };
+}
+
+function probeXvfbOwnership(state: { pid: number; startTime: string }): XvfbOwnership {
+  const liveness = probeProcessLiveness(state.pid);
+  if (liveness === 'dead') return 'dead';
+  if (liveness === 'unknown') return 'unknown';
+  const currentStartTime = readPidStartTime(state.pid);
+  if (!currentStartTime) return 'unknown';
+  if (currentStartTime !== state.startTime) return 'replaced';
+  const cmdline = readPidCmdline(state.pid);
+  if (!cmdline) return 'unknown';
+  return cmdline.toLowerCase().includes('xvfb') ? 'owned' : 'replaced';
+}
+
+async function waitForXvfbStop(
+  probe: () => XvfbOwnership,
+  sleep: (milliseconds: number) => Promise<void>,
+  timeoutMs: number,
+): Promise<XvfbOwnership> {
+  const deadline = Date.now() + timeoutMs;
+  let status = probe();
+  while (status === 'owned' && Date.now() < deadline) {
+    await sleep(25);
+    status = probe();
+  }
+  return status;
+}
+
+function rollbackStopComplete(status: XvfbOwnership, unknownMessage: string): boolean {
+  if (status === 'dead' || status === 'replaced') return true;
+  if (status === 'unknown') throw new Error(unknownMessage);
+  return false;
+}
+
+/**
+ * Strict rollback cleanup. `dead` and `replaced` both prove the recorded Xvfb
+ * resource is gone; `unknown` never authorizes state/profile deletion.
+ */
+export async function cleanupXvfbStrict(
+  state: { pid: number; startTime: string; display: string },
+  options: StrictCleanupOptions = {},
+): Promise<void> {
+  if (!state.pid) return;
+  const probe = options.probeOwnership ?? (() => probeXvfbOwnership(state));
+  const kill = options.kill ?? safeKill;
+  const sleep = options.sleep ?? Bun.sleep;
+  const timeoutMs = options.timeoutMs ?? 1000;
+  let status = probe();
+  if (rollbackStopComplete(
+    status,
+    `Cannot confirm ownership of Xvfb ${state.pid} during startup rollback`,
+  )) return;
+
+  kill(state.pid, 'SIGTERM');
+  status = await waitForXvfbStop(probe, sleep, timeoutMs);
+  if (rollbackStopComplete(
+    status,
+    `Cannot confirm Xvfb ${state.pid} stopped after SIGTERM`,
+  )) return;
+
+  kill(state.pid, 'SIGKILL');
+  status = await waitForXvfbStop(probe, sleep, timeoutMs);
+  if (rollbackStopComplete(
+    status,
+    `Cannot confirm Xvfb ${state.pid} stopped after SIGKILL`,
+  )) return;
+  throw new Error(`Xvfb ${state.pid} is still alive after SIGKILL`);
 }
 
 /**
