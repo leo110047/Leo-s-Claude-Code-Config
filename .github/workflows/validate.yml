@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Validate JSON files
         run: |
           echo "=== Validating JSON files ==="
@@ -66,6 +68,8 @@ jobs:
       - name: Verify decision guidance parity
         run: bash scripts/verify-decision-guidance.sh
       - name: Check Goldband Loop source quality
+        env:
+          GOLDBAND_COMPLEXITY_BASE_REF: ${{ github.event.before }}
         run: cd goldband-loop && bun run check:source
 
   config-runtime-integrations:

@@ -17,6 +17,7 @@ export const MACOS_REVIEW_HOST_TEST_NAMES = [
   'review evidence contracts > sealed runtime projection cannot read source images or mutate projected images',
   'review evidence contracts > sealed runtime projection identity is stable across separate evidence plans',
   'review evidence contracts > evidence sandbox denies the system log socket inherited from the macOS process baseline',
+  'review evidence contracts > evidence sandbox denies Mach service lookup inherited from the macOS process baseline',
   'review evidence contracts > applicability selects only scoped providers and excludes unrelated cells from completeness',
   'review evidence contracts > regression and property providers preserve RED/GREEN and replay metadata',
   'review evidence contracts > each operation receives an independent read-only snapshot',
@@ -51,6 +52,7 @@ export const WORKFLOW_TESTS = [
   'test/workflows-runtime.test.ts',
   'test/review-evidence.test.ts',
   'test/review-evidence-platform.test.ts',
+  'test/review-contract-authoring.test.ts',
   'test/review-lineage.test.ts',
   'test/work-map.test.ts',
   'test/work-map-store.test.ts',
@@ -68,6 +70,7 @@ export const WORKFLOW_TESTS = [
   'test/tracker-import.test.ts',
   'test/review-impact.test.ts',
   'test/goldband-review-cli.test.ts',
+  'test/codex-review-contract-authoring-install.test.ts',
   'test/codex-review-launcher-install.test.ts',
   'test/codex-workflow-status.test.ts',
 ] as const;

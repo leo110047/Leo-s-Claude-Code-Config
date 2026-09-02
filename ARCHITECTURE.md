@@ -132,6 +132,12 @@ preserve seed, iteration budget, and replay command. Unsupported high-risk
 cells, missing runners, malformed evidence, candidate drift, and provenance
 mismatch fail closed before model dispatch.
 
+Executable sealed evidence currently has one supported local adapter: macOS
+Seatbelt. Linux and Windows return typed `runtime-incomplete` records before
+operation materialization, semantic dispatch, or completion authority. Linux
+Bubblewrap belongs to the separate managed-worktree boundary and is not a
+`review/code` adapter.
+
 The repository-owned provider store is persistent-only. Exact base-to-candidate
 RED/GREEN transitions carry repository, base, candidate, scope, and operation
 contract digests in the one review artifact and fail validation on a successor

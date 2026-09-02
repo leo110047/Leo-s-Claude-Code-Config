@@ -45,7 +45,14 @@ import {
 import { superviseCommand } from '../scripts/process-supervisor.mjs';
 import { stateRoot } from './evidence';
 import type { ReviewContractResolution } from './review-contract-resolution';
+import {
+  evidenceSandboxCommand,
+  isEvidenceSandboxRuntimeFailure,
+  sealedEvidenceExecutionUnavailable,
+} from './review-evidence-sandbox';
 import { resolveReviewWorkspace, workspacePath } from './review-workspace';
+
+export { isEvidenceSandboxRuntimeFailure } from './review-evidence-sandbox';
 
 const REVIEW_EVIDENCE_SCHEMA_VERSION = 1;
 const REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION = 2;
@@ -61,31 +68,6 @@ const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV = 'GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFI
 const SUPPORTED_REVIEW_HOST_EVIDENCE_LANE = 'macos-review-contract-host';
 const executableDigestCache = new Map<string, string>();
 const mockReviewReceiptAuthorityKey = randomBytes(32);
-const SYSTEM_SANDBOX_MACH_SERVICES = [
-  'com.apple.analyticsd',
-  'com.apple.analyticsd.messagetracer',
-  'com.apple.appsleep',
-  'com.apple.bsd.dirhelper',
-  'com.apple.cfprefsd.agent',
-  'com.apple.cfprefsd.daemon',
-  'com.apple.diagnosticd',
-  'com.apple.dt.automationmode.reader',
-  'com.apple.espd',
-  'com.apple.logd',
-  'com.apple.logd.events',
-  'com.apple.internal.objc_trace',
-  'com.apple.osanalytics.osanalyticshelper',
-  'com.apple.runningboard',
-  'com.apple.secinitd',
-  'com.apple.system.DirectoryService.libinfo_v1',
-  'com.apple.system.logger',
-  'com.apple.system.notification_center',
-  'com.apple.system.opendirectoryd.libinfo',
-  'com.apple.system.opendirectoryd.membership',
-  'com.apple.trustd',
-  'com.apple.trustd.agent',
-  'com.apple.xpc.activity.unmanaged',
-] as const;
 
 const DISPOSITIONS = new Set<CellDisposition>([
   'automated',
@@ -449,7 +431,7 @@ export async function executeEvidencePlan(
   const tempRoot = mkdtempSync(join(tempParent, 'review-evidence-'));
   const records: ReviewEvidenceRecord[] = [];
   const preparedRuntimes = new Map<string, PreparedEvidenceRuntime>();
-  const workspace = resolveReviewWorkspace(ctx.cwd);
+  const workspace = verifiedReviewWorkspace(ctx.cwd, input.diff, binding.redactedUntrackedFiles);
   let outputBytes = 0;
   try {
     const selectedCells = effectiveEvidenceCells(manifest, binding.changedFiles, onlyCellIds);
@@ -469,6 +451,18 @@ export async function executeEvidencePlan(
           throw new Error(`review evidence operation limit exceeded: ${MAX_REVIEW_EVIDENCE_OPERATIONS}`);
         }
         validateOperationAuthorization(operation, manifest);
+        if (provider.executionContext.runner === 'sealed') {
+          const unavailable = sealedEvidenceExecutionUnavailable();
+          if (unavailable) {
+            records.push(executionContextIncompleteRecord(
+              provider,
+              operation,
+              binding,
+              unavailable,
+            ));
+            continue;
+          }
+        }
         if (provider.executionContext.runner === 'host-seatbelt') {
           const unavailable = hostEvidenceExecutionUnavailable(ctx, provider);
           if (unavailable) {
@@ -503,19 +497,19 @@ export async function executeEvidencePlan(
           projectDependencyDirectories(workspace.repositoryRoot, operationRoot, input.changedFiles);
         }
         const dependencyDigest = dependencyProjectionDigest(operationRoot, binding.changedFiles);
-        const record = await runEvidenceOperation(
+        const record = await runEvidenceOperation({
           provider,
           operation,
-          operationRoot,
-          workspacePath(operationRoot, workspace.invocationOffset),
+          snapshotRoot: operationRoot,
+          executionCwd: workspacePath(operationRoot, workspace.invocationOffset),
           binding,
           dependencyDigest,
-          input.changedFiles,
+          changedFiles: input.changedFiles,
           runnerRoot,
-          join(tempRoot, 'runtime-projections'),
+          runtimeProjectionRoot: join(tempRoot, 'runtime-projections'),
           preparedRuntimes,
-          workspace.invocationOffset,
-        );
+          executionOffset: workspace.invocationOffset,
+        });
         rmSync(operationRoot, { recursive: true, force: true });
         rmSync(runnerRoot, { recursive: true, force: true });
         outputBytes += Buffer.byteLength(record.outputSummary);
@@ -1112,6 +1106,7 @@ function validateReviewEvidenceManifest(
   binding?: CandidateBinding,
 ): ReviewEvidenceManifest {
   const item = asObject(value, 'review evidence manifest');
+  assertAllowedKeys(item, ['schemaVersion', 'behaviorMatrix', 'providers', 'authorizations'], 'review evidence manifest');
   if (item.schemaVersion !== REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION) {
     throw new Error(
       `review evidence manifest schema incompatibility: observed ${String(item.schemaVersion)}, supported ${REVIEW_EVIDENCE_MANIFEST_SCHEMA_VERSION}; migrate the source manifest explicitly and supply lifecycle, applicability, and executionContext without guessed defaults`,
@@ -1124,22 +1119,13 @@ function validateReviewEvidenceManifest(
   if (!Array.isArray(item.authorizations)) throw new Error('review evidence manifest.authorizations must be an array');
   const behaviorMatrix = item.behaviorMatrix.map(validateBehaviorCell);
   const providers = item.providers.map(validateEvidenceProvider);
-  const authorizations = item.authorizations.map((value) => {
-    const auth = asObject(value, 'evidence authorization');
-    return {
-      id: requiredId(auth.id, 'authorization.id'),
-      operation: requiredString(auth.operation, 'authorization.operation'),
-      scope: requiredString(auth.scope, 'authorization.scope'),
-      approvedBy: requiredString(auth.approvedBy, 'authorization.approvedBy'),
-      approvedAt: validDate(auth.approvedAt, 'authorization.approvedAt'),
-      expiresAt: validDate(auth.expiresAt, 'authorization.expiresAt'),
-    };
-  });
+  const authorizations = item.authorizations.map(validateEvidenceAuthorization);
   assertUnique(behaviorMatrix.map((cell) => cell.id), 'behavior cell');
   assertUnique(providers.map((provider) => provider.id), 'evidence provider');
   assertUnique(authorizations.map((authorization) => authorization.id), 'evidence authorization');
   const cellIds = new Set(behaviorMatrix.map((cell) => cell.id));
   const providerIds = new Set(providers.map((provider) => provider.id));
+  assertAuthorizationReferences(authorizations, providers);
   for (const cell of behaviorMatrix) {
     for (const providerId of cell.providerIds) {
       if (!providerIds.has(providerId)) throw new Error(`behavior cell ${cell.id} references unknown provider ${providerId}`);
@@ -1174,8 +1160,49 @@ function validateReviewEvidenceManifest(
   return { schemaVersion: 2, behaviorMatrix, providers, authorizations };
 }
 
+function validateEvidenceAuthorization(value: unknown): ReviewEvidenceManifest['authorizations'][number] {
+  const item = asObject(value, 'evidence authorization');
+  assertAllowedKeys(item, ['id', 'operation', 'scope', 'approvedBy', 'approvedAt', 'expiresAt'], 'evidence authorization');
+  const authorization = {
+    id: requiredId(item.id, 'authorization.id'),
+    operation: requiredString(item.operation, 'authorization.operation'),
+    scope: requiredString(item.scope, 'authorization.scope'),
+    approvedBy: requiredString(item.approvedBy, 'authorization.approvedBy'),
+    approvedAt: validDate(item.approvedAt, 'authorization.approvedAt'),
+    expiresAt: validDate(item.expiresAt, 'authorization.expiresAt'),
+  };
+  if (Date.parse(authorization.expiresAt) <= Date.parse(authorization.approvedAt)) {
+    throw new Error(`evidence authorization ${authorization.id} must expire after approval`);
+  }
+  return authorization;
+}
+
+function assertAuthorizationReferences(
+  authorizations: ReviewEvidenceManifest['authorizations'],
+  providers: EvidenceProvider[],
+): void {
+  const operations = providers.flatMap((provider) => provider.operations);
+  for (const operation of operations.filter((entry) => entry.authorizationId)) {
+    const matches = authorizations.filter((authorization) =>
+      authorization.id === operation.authorizationId && authorization.operation === operation.id
+    );
+    if (matches.length !== 1) {
+      throw new Error(`network operation ${operation.id} authorization is missing or mismatched`);
+    }
+  }
+  for (const authorization of authorizations) {
+    const matches = operations.filter((operation) =>
+      operation.id === authorization.operation && operation.authorizationId === authorization.id
+    );
+    if (matches.length !== 1) {
+      throw new Error(`evidence authorization ${authorization.id} must be referenced by exactly one operation ${authorization.operation}`);
+    }
+  }
+}
+
 function validateBehaviorCell(value: unknown): BehaviorCell {
   const item = asObject(value, 'behavior cell');
+  assertAllowedKeys(item, ['id', 'behavior', 'kind', 'input', 'preconditions', 'expected', 'risk', 'disposition', 'providerIds', 'reason'], 'behavior cell');
   const kind = requiredString(item.kind, 'behavior cell.kind');
   if (!['normal', 'branch', 'exception', 'boundary'].includes(kind)) {
     throw new Error(`invalid behavior cell kind: ${kind}`);
@@ -1184,7 +1211,8 @@ function validateBehaviorCell(value: unknown): BehaviorCell {
   if (!RISKS.has(risk)) throw new Error(`invalid behavior cell risk: ${risk}`);
   const disposition = requiredString(item.disposition, 'behavior cell.disposition') as CellDisposition;
   if (!DISPOSITIONS.has(disposition)) throw new Error(`invalid behavior cell disposition: ${disposition}`);
-  const providerIds = optionalIdArray(item.providerIds, 'behavior cell.providerIds') ?? [];
+  const providerIds = requiredIdList(item.providerIds, 'behavior cell.providerIds');
+  assertUnique(providerIds, 'behavior cell provider');
   const reason = optionalString(item.reason);
   if (['not-applicable', 'unsupported', 'manual'].includes(disposition) && !reason) {
     throw new Error(`behavior cell ${String(item.id)} disposition ${disposition} requires a reason`);
@@ -1208,6 +1236,7 @@ function validateBehaviorCell(value: unknown): BehaviorCell {
 
 function validateEvidenceProvider(value: unknown): EvidenceProvider {
   const item = asObject(value, 'evidence provider');
+  assertAllowedKeys(item, ['id', 'owner', 'kind', 'lifecycle', 'cellIds', 'applicability', 'executionContext', 'transitionBinding', 'operations'], 'evidence provider');
   const kind = requiredString(item.kind, 'evidence provider.kind') as EvidenceProviderKind;
   if (!KINDS.has(kind)) throw new Error(`invalid evidence provider kind: ${kind}`);
   if (!Array.isArray(item.operations) || item.operations.length === 0) {
@@ -1220,6 +1249,7 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
   const applicability = validateEvidenceApplicability(item.applicability);
   const executionContext = validateEvidenceExecutionContext(item.executionContext);
   const operations = item.operations.map(validateEvidenceOperation);
+  const cellIds = requiredUniqueIdArray(item.cellIds, 'evidence provider.cellIds');
   const transitionBinding =
     item.transitionBinding === undefined ? undefined : validateTransitionEvidenceBinding(item.transitionBinding);
   if (lifecycle === 'persistent' && transitionBinding) {
@@ -1233,7 +1263,7 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
     owner: requiredString(item.owner, 'evidence provider.owner'),
     kind,
     lifecycle,
-    cellIds: requiredIdArray(item.cellIds, 'evidence provider.cellIds'),
+    cellIds,
     applicability,
     executionContext,
     transitionBinding,
@@ -1243,9 +1273,14 @@ function validateEvidenceProvider(value: unknown): EvidenceProvider {
 
 function validateEvidenceApplicability(value: unknown): EvidenceApplicability {
   const item = asObject(value, 'evidence provider.applicability');
+  assertAllowedKeys(item, ['kind', 'pathPrefixes', 'reason'], 'evidence provider.applicability');
   const kind = requiredString(item.kind, 'evidence provider.applicability.kind');
   if (kind === 'paths') {
-    const pathPrefixes = requiredStringArray(item.pathPrefixes, 'evidence provider.applicability.pathPrefixes');
+    if (!Array.isArray(item.pathPrefixes) || item.pathPrefixes.length === 0) {
+      throw new Error('evidence provider.applicability.pathPrefixes must be a non-empty string array');
+    }
+    const pathPrefixes = item.pathPrefixes.map(validateApplicabilityPathPrefix);
+    assertUniqueValues(pathPrefixes, 'evidence applicability path prefixes');
     if (item.reason !== undefined) {
       throw new Error('path-scoped evidence provider applicability cannot declare a global reason');
     }
@@ -1263,8 +1298,20 @@ function validateEvidenceApplicability(value: unknown): EvidenceApplicability {
   throw new Error(`invalid evidence provider applicability kind: ${kind}`);
 }
 
+function validateApplicabilityPathPrefix(value: unknown): string {
+  if (typeof value !== 'string' || value.trim() !== value || value === '') {
+    throw new Error('evidence applicability path prefix must be a normalized repo-relative path');
+  }
+  const segments = value.split('/');
+  if (value.startsWith('/') || /^[A-Za-z]:\//.test(value) || value.includes('\\') || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    throw new Error(`invalid evidence applicability path prefix: ${value}`);
+  }
+  return value;
+}
+
 function validateEvidenceExecutionContext(value: unknown): EvidenceExecutionContext {
   const item = asObject(value, 'evidence provider.executionContext');
+  assertAllowedKeys(item, ['sandboxOwner', 'runner', 'lane'], 'evidence provider.executionContext');
   const sandboxOwner = requiredString(item.sandboxOwner, 'evidence provider.executionContext.sandboxOwner');
   const runner = requiredString(item.runner, 'evidence provider.executionContext.runner');
   if (sandboxOwner === 'review-runtime' && runner === 'sealed') {
@@ -1285,6 +1332,7 @@ function validateEvidenceExecutionContext(value: unknown): EvidenceExecutionCont
 
 function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBinding {
   const item = asObject(value, 'evidence provider.transitionBinding');
+  assertAllowedKeys(item, ['repository', 'baseDigest', 'candidateDigest', 'scopeDigest', 'operationContractDigest'], 'evidence provider.transitionBinding');
   const result = {
     repository: requiredString(item.repository, 'transitionBinding.repository'),
     baseDigest: requiredString(item.baseDigest, 'transitionBinding.baseDigest'),
@@ -1301,14 +1349,14 @@ function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBi
 
 function validateEvidenceOperation(value: unknown): EvidenceOperation {
   const item = asObject(value, 'evidence operation');
+  assertAllowedKeys(item, ['id', 'target', 'argv', 'expectedExit', 'expectedExitCode', 'timeoutMs', 'maxOutputBytes', 'network', 'authorizationId', 'evidenceLevel', 'requiredSystemTools', 'seed', 'iterations'], 'evidence operation');
   const target = requiredString(item.target, 'evidence operation.target');
   if (target !== 'base' && target !== 'candidate') throw new Error(`invalid evidence operation target: ${target}`);
   const expectedExit = requiredString(item.expectedExit, 'evidence operation.expectedExit');
   if (expectedExit !== 'zero' && expectedExit !== 'nonzero') {
     throw new Error(`invalid evidence operation.expectedExit: ${expectedExit}`);
   }
-  const network = requiredString(item.network, 'evidence operation.network');
-  if (network !== 'deny' && network !== 'authorized') throw new Error(`invalid evidence operation.network: ${network}`);
+  const { network, authorizationId } = validateOperationNetwork(item);
   const evidenceLevel = requiredString(item.evidenceLevel, 'evidence operation.evidenceLevel') as EvidenceLevel;
   if (!LEVELS.has(evidenceLevel)) throw new Error(`invalid evidence level: ${evidenceLevel}`);
   if (
@@ -1323,15 +1371,7 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
   if (argv[0]!.includes('/') || argv[0]!.includes('\\')) {
     throw new Error('evidence operation executable must be a PATH-resolved command name');
   }
-  const requiredSystemTools = optionalStringArray(
-    item.requiredSystemTools,
-    'evidence operation.requiredSystemTools',
-  );
-  for (const tool of requiredSystemTools) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(tool)) {
-      throw new Error(`invalid evidence system tool name: ${tool}`);
-    }
-  }
+  const requiredSystemTools = validateRequiredSystemTools(item.requiredSystemTools);
   const timeoutMs = boundedInteger(item.timeoutMs, 'evidence operation.timeoutMs', 100, 15 * 60 * 1000);
   const maxOutputBytes = boundedInteger(
     item.maxOutputBytes,
@@ -1356,8 +1396,8 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
     expectedExitCode,
     timeoutMs,
     maxOutputBytes,
-    network: network as EvidenceOperation['network'],
-    authorizationId: optionalString(item.authorizationId),
+    network,
+    authorizationId,
     evidenceLevel,
     requiredSystemTools: uniqueSorted(requiredSystemTools),
     seed: optionalString(item.seed),
@@ -1365,6 +1405,30 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
       ? undefined
       : boundedInteger(item.iterations, 'evidence operation.iterations', 1, 1_000_000),
   };
+}
+
+function validateOperationNetwork(item: Record<string, unknown>): Pick<EvidenceOperation, 'network' | 'authorizationId'> {
+  const network = requiredString(item.network, 'evidence operation.network');
+  if (network !== 'deny' && network !== 'authorized') throw new Error(`invalid evidence operation.network: ${network}`);
+  const authorizationId = optionalString(item.authorizationId);
+  if (network === 'authorized' && !authorizationId) {
+    throw new Error(`network operation ${String(item.id)} requires typed authorization`);
+  }
+  if (network === 'deny' && authorizationId) {
+    throw new Error(`network-denied operation ${String(item.id)} cannot carry authorization`);
+  }
+  return { network, authorizationId };
+}
+
+function validateRequiredSystemTools(value: unknown): string[] {
+  const tools = optionalStringArray(value, 'evidence operation.requiredSystemTools');
+  assertUniqueValues(tools, 'evidence operation requiredSystemTools');
+  for (const tool of tools) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(tool)) {
+      throw new Error(`invalid evidence system tool name: ${tool}`);
+    }
+  }
+  return tools;
 }
 
 function validateProviderContract(provider: EvidenceProvider): void {
@@ -1633,65 +1697,141 @@ function runtimeProjectionIdentityDigest(
   }));
 }
 
+type RunEvidenceOperationOptions = {
+  provider: EvidenceProvider;
+  operation: EvidenceOperation;
+  snapshotRoot: string;
+  executionCwd: string;
+  binding: CandidateBinding;
+  dependencyDigest: string;
+  changedFiles: string[];
+  runnerRoot: string;
+  runtimeProjectionRoot: string;
+  preparedRuntimes: Map<string, PreparedEvidenceRuntime>;
+  executionOffset: string;
+};
+
+type PreparedChildRuntime = {
+  tool: string;
+  command: string;
+  sourceAccess: EvidenceRuntimeReadAccess;
+  prepared: PreparedEvidenceRuntime;
+};
+
+type PreparedOperationRuntime = {
+  replayCommand: string[];
+  command: string;
+  runtimeAccess: EvidenceRuntimeReadAccess;
+  systemToolAccess: EvidenceSystemToolAccess;
+  preparedRuntime: PreparedEvidenceRuntime;
+  preparedChildRuntimes: PreparedChildRuntime[];
+  sandboxRuntimeAccess: EvidenceRuntimeReadAccess;
+  executionIdentityDigest: string;
+  commandDigest: string;
+};
+
+type EvidenceCommandResult = {
+  reason: string;
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+};
+
+type EvidenceExecutionResult = {
+  startedAt: string;
+  finishedAt: string;
+  result: EvidenceCommandResult;
+  snapshotDigestBefore: string;
+  snapshotDigestAfter: string;
+  snapshotUnchanged: boolean;
+  runtimeUnchanged: boolean;
+  sandboxDenied: boolean;
+  outputDigest: string;
+  outputSummary: string;
+};
+
 async function runEvidenceOperation(
-  provider: EvidenceProvider,
-  operation: EvidenceOperation,
-  snapshotRoot: string,
-  executionCwd: string,
-  binding: CandidateBinding,
-  dependencyDigest: string,
-  changedFiles: string[],
-  runnerRoot: string,
-  runtimeProjectionRoot: string,
-  preparedRuntimes: Map<string, PreparedEvidenceRuntime>,
-  executionOffset: string,
+  options: RunEvidenceOperationOptions,
 ): Promise<ReviewEvidenceRecord> {
   const startedAt = new Date().toISOString();
-  const replayCommand = operation.argv.map((value) =>
-    value.replaceAll('{seed}', operation.seed ?? ''));
+  const runtime = prepareOperationRuntime(options);
+  const execution = await executePreparedOperation(options, runtime, startedAt);
+  return evidenceRecord(options, runtime, execution);
+}
+
+function prepareOperationRuntime(
+  options: RunEvidenceOperationOptions,
+): PreparedOperationRuntime {
+  const replayCommand = options.operation.argv.map((value) =>
+    value.replaceAll('{seed}', options.operation.seed ?? ''));
   const command = resolveExecutable(replayCommand[0]!);
   const runtimeAccess = evidenceRuntimeReadAccess(command);
-  const systemToolAccess = evidenceSystemToolAccess(operation.requiredSystemTools);
-  const preparedRuntimeKey = sha256(stableJson({
-    command,
-    sourceRuntimeDigest: runtimeAccess.identityDigest,
-    runnerPolicy: EVIDENCE_RUNNER_POLICY,
-  }));
-  let preparedRuntime = preparedRuntimes.get(preparedRuntimeKey);
-  if (!preparedRuntime) {
-    preparedRuntime = prepareEvidenceRuntime(
-      command,
-      join(runtimeProjectionRoot, preparedRuntimeKey),
-      runtimeAccess,
-    );
-    preparedRuntimes.set(preparedRuntimeKey, preparedRuntime);
-  }
-  const preparedChildRuntimes = operation.requiredSystemTools
+  const systemToolAccess = evidenceSystemToolAccess(options.operation.requiredSystemTools);
+  const preparedRuntime = cachedEvidenceRuntime(options, command, runtimeAccess);
+  const preparedChildRuntimes = options.operation.requiredSystemTools
     .filter((tool) => tool !== 'git')
-    .map((tool) => {
-      const childCommand = resolveExecutable(tool);
-      const childSourceAccess = evidenceRuntimeReadAccess(childCommand);
-      const key = sha256(stableJson({
-        command: childCommand,
-        sourceRuntimeDigest: childSourceAccess.identityDigest,
-        runnerPolicy: EVIDENCE_RUNNER_POLICY,
-      }));
-      let prepared = preparedRuntimes.get(key);
-      if (!prepared) {
-        prepared = prepareEvidenceRuntime(
-          childCommand,
-          join(runtimeProjectionRoot, key),
-          childSourceAccess,
-        );
-        preparedRuntimes.set(key, prepared);
-      }
-      return { tool, command: childCommand, sourceAccess: childSourceAccess, prepared };
-    });
+    .map((tool) => prepareChildRuntime(options, tool));
   const sandboxRuntimeAccess = mergeEvidenceRuntimeReadAccess([
     preparedRuntime.access,
     ...preparedChildRuntimes.map((entry) => entry.prepared.access),
   ]);
-  const executionIdentityDigest = sha256(stableJson({
+  return {
+    replayCommand,
+    command,
+    runtimeAccess,
+    systemToolAccess,
+    preparedRuntime,
+    preparedChildRuntimes,
+    sandboxRuntimeAccess,
+    executionIdentityDigest: operationExecutionIdentity(options, {
+      command, runtimeAccess, systemToolAccess, preparedRuntime, preparedChildRuntimes,
+    }),
+    commandDigest: operationCommandDigest(options),
+  };
+}
+
+function cachedEvidenceRuntime(
+  options: RunEvidenceOperationOptions,
+  command: string,
+  runtimeAccess: EvidenceRuntimeReadAccess,
+): PreparedEvidenceRuntime {
+  const key = sha256(stableJson({
+    command,
+    sourceRuntimeDigest: runtimeAccess.identityDigest,
+    runnerPolicy: EVIDENCE_RUNNER_POLICY,
+  }));
+  const cached = options.preparedRuntimes.get(key);
+  if (cached) return cached;
+  const prepared = prepareEvidenceRuntime(
+    command,
+    join(options.runtimeProjectionRoot, key),
+    runtimeAccess,
+  );
+  options.preparedRuntimes.set(key, prepared);
+  return prepared;
+}
+
+function prepareChildRuntime(
+  options: RunEvidenceOperationOptions,
+  tool: string,
+): PreparedChildRuntime {
+  const command = resolveExecutable(tool);
+  const sourceAccess = evidenceRuntimeReadAccess(command);
+  return {
+    tool,
+    command,
+    sourceAccess,
+    prepared: cachedEvidenceRuntime(options, command, sourceAccess),
+  };
+}
+
+function operationExecutionIdentity(
+  options: RunEvidenceOperationOptions,
+  runtime: Pick<PreparedOperationRuntime,
+    'command' | 'runtimeAccess' | 'systemToolAccess' | 'preparedRuntime' | 'preparedChildRuntimes'>,
+): string {
+  const { binding, provider, operation } = options;
+  return sha256(stableJson({
     repository: binding.repository,
     baseDigest: binding.baseDigest,
     candidateDigest: binding.candidateDigest,
@@ -1700,23 +1840,27 @@ async function runEvidenceOperation(
     providerId: provider.id,
     operationId: operation.id,
     executionContext: provider.executionContext,
-    executableDigest: executableContentDigest(command),
-    sourceRuntimeDigest: runtimeAccess.identityDigest,
-    executionRuntimeDigest: preparedRuntime.identityDigest,
-    childRuntimeDigests: preparedChildRuntimes.map((entry) => ({
+    executableDigest: executableContentDigest(runtime.command),
+    sourceRuntimeDigest: runtime.runtimeAccess.identityDigest,
+    executionRuntimeDigest: runtime.preparedRuntime.identityDigest,
+    childRuntimeDigests: runtime.preparedChildRuntimes.map((entry) => ({
       tool: entry.tool,
       source: entry.sourceAccess.identityDigest,
       execution: entry.prepared.identityDigest,
     })),
-    dependencyProjectionDigest: dependencyDigest,
-    systemToolDigest: systemToolAccess.identityDigest,
+    dependencyProjectionDigest: options.dependencyDigest,
+    systemToolDigest: runtime.systemToolAccess.identityDigest,
     runnerPolicy: EVIDENCE_RUNNER_POLICY,
     platform: process.platform,
     architecture: process.arch,
   }));
-  const commandDigest = sha256(stableJson({
+}
+
+function operationCommandDigest(options: RunEvidenceOperationOptions): string {
+  const { operation } = options;
+  return sha256(stableJson({
     argv: operation.argv,
-    cwd: executionOffset || '.',
+    cwd: options.executionOffset || '.',
     network: operation.network,
     target: operation.target,
     expectedExit: operation.expectedExit,
@@ -1725,18 +1869,21 @@ async function runEvidenceOperation(
     seed: operation.seed,
     iterations: operation.iterations,
   }));
-  const runnerTmpPath = join(runnerRoot, 'tmp');
-  const runnerHomePath = join(runnerRoot, 'home');
+}
+
+function operationRunner(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+): { sandbox: ReturnType<typeof evidenceSandboxCommand>; env: Record<string, string> } {
+  const runnerTmpPath = join(options.runnerRoot, 'tmp');
+  const runnerHomePath = join(options.runnerRoot, 'home');
   mkdirSync(runnerTmpPath, { recursive: true });
   mkdirSync(runnerHomePath, { recursive: true });
   const runnerTmp = realpathSync(runnerTmpPath);
   const runnerHome = realpathSync(runnerHomePath);
+  const operation = options.operation;
   const env = {
-    PATH: uniqueSorted([
-      ...systemToolAccess.executableDirectories,
-      dirname(preparedRuntime.command),
-      ...preparedChildRuntimes.map((entry) => dirname(entry.prepared.command)),
-    ]).join(':') + ':/usr/bin:/bin',
+    PATH: operationPath(runtime),
     HOME: runnerHome,
     TMPDIR: runnerTmp,
     TMP: runnerTmp,
@@ -1749,91 +1896,162 @@ async function runEvidenceOperation(
     [EVIDENCE_SANDBOX_ACTIVE_ENV]: '1',
     [EVIDENCE_TEMP_ROOT_ENV]: runnerTmp,
     CI: '1',
-    OPENSSL_CONF: preparedRuntime.environment.OPENSSL_CONF ?? '/dev/null',
+    OPENSSL_CONF: runtime.preparedRuntime.environment.OPENSSL_CONF ?? '/dev/null',
   };
-  const sandbox = evidenceSandboxCommand(
-    snapshotRoot,
-    [runnerTmp, runnerHome],
-    [preparedRuntime.command, ...replayCommand.slice(1)],
-    sandboxRuntimeAccess,
-    systemToolAccess.roots,
-    systemToolAccess.literals,
-    systemToolAccess.mapExecutableLiterals,
+  const sandbox = evidenceSandboxCommand({
+    cwd: options.snapshotRoot,
+    writableRoots: [runnerTmp, runnerHome],
+    argv: [runtime.preparedRuntime.command, ...runtime.replayCommand.slice(1)],
+    runtimeAccess: runtime.sandboxRuntimeAccess,
+    systemToolRoots: runtime.systemToolAccess.roots,
+    systemToolLiterals: runtime.systemToolAccess.literals,
+    systemToolMapExecutableLiterals: runtime.systemToolAccess.mapExecutableLiterals,
+  });
+  return { sandbox, env };
+}
+
+function operationPath(runtime: PreparedOperationRuntime): string {
+  return uniqueSorted([
+    ...runtime.systemToolAccess.executableDirectories,
+    dirname(runtime.preparedRuntime.command),
+    ...runtime.preparedChildRuntimes.map((entry) => dirname(entry.prepared.command)),
+  ]).join(':') + ':/usr/bin:/bin';
+}
+
+async function executePreparedOperation(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+  startedAt: string,
+): Promise<EvidenceExecutionResult> {
+  const ignored = dependencyRelativePaths(options.changedFiles);
+  const snapshotDigestBefore = snapshotContentDigest(options.snapshotRoot, ignored);
+  const runner = operationRunner(options, runtime);
+  const capture = await captureEvidenceCommand(options, runner);
+  const finishedAt = new Date().toISOString();
+  const snapshotDigestAfter = snapshotContentDigest(options.snapshotRoot, ignored);
+  const snapshotUnchanged = snapshotDigestBefore === snapshotDigestAfter;
+  const runtimeUnchanged = operationRuntimeUnchanged(runtime);
+  const sandboxDenied = isEvidenceSandboxRuntimeFailure(
+    runner.sandbox.command,
+    {
+      reason: capture.result.reason,
+      exitCode: capture.result.exitCode,
+      stderr: capture.stderrDiagnosticHead,
+    },
+    runner.sandbox.brokered,
   );
-  const ignoredDependencies = dependencyRelativePaths(changedFiles);
-  const snapshotDigestBefore = snapshotContentDigest(snapshotRoot, ignoredDependencies);
+  const outputSummary = summarizeEvidenceExecution(
+    options.operation,
+    capture.result,
+    { snapshotUnchanged, runtimeUnchanged, sandboxDenied },
+  );
+  return {
+    startedAt,
+    finishedAt,
+    result: capture.result,
+    snapshotDigestBefore,
+    snapshotDigestAfter,
+    snapshotUnchanged,
+    runtimeUnchanged,
+    sandboxDenied,
+    outputDigest: capture.outputDigest,
+    outputSummary,
+  };
+}
+
+async function captureEvidenceCommand(
+  options: RunEvidenceOperationOptions,
+  runner: ReturnType<typeof operationRunner>,
+): Promise<{
+  result: EvidenceCommandResult;
+  outputDigest: string;
+  stderrDiagnosticHead: string;
+}> {
   const stdoutHash = createHash('sha256');
   const stderrHash = createHash('sha256');
   let stderrDiagnosticHead = '';
-  let result: {
-    reason: string;
-    exitCode: number;
-    stdout?: string;
-    stderr?: string;
-  };
-  result = await superviseCommand(sandbox.command, sandbox.args, {
-      cwd: executionCwd,
-      env,
-      timeoutMs: operation.timeoutMs,
-      killGraceMs: 1000,
-      killConfirmMs: 2000,
-      captureOutput: {
-        stdoutMaxBytes: operation.maxOutputBytes,
-        stderrMaxBytes: operation.maxOutputBytes,
+  const result = await superviseCommand(runner.sandbox.command, runner.sandbox.args, {
+    cwd: options.executionCwd,
+    env: runner.env,
+    timeoutMs: options.operation.timeoutMs,
+    killGraceMs: 1000,
+    killConfirmMs: 2000,
+    captureOutput: {
+      stdoutMaxBytes: options.operation.maxOutputBytes,
+      stderrMaxBytes: options.operation.maxOutputBytes,
+    },
+    label: `review evidence ${options.provider.id}:${options.operation.id}`,
+    stdout: { write(chunk: string) { stdoutHash.update(chunk); } },
+    stderr: {
+      write(chunk: string) {
+        stderrHash.update(chunk);
+        const remaining = MAX_EVIDENCE_RUNTIME_DIAGNOSTIC_CHARS - stderrDiagnosticHead.length;
+        if (remaining > 0) stderrDiagnosticHead += chunk.slice(0, remaining);
       },
-      label: `review evidence ${provider.id}:${operation.id}`,
-      stdout: { write(chunk: string) { stdoutHash.update(chunk); } },
-      stderr: {
-        write(chunk: string) {
-          stderrHash.update(chunk);
-          const remaining = MAX_EVIDENCE_RUNTIME_DIAGNOSTIC_CHARS - stderrDiagnosticHead.length;
-          if (remaining > 0) stderrDiagnosticHead += chunk.slice(0, remaining);
-        },
-      },
+    },
   });
-  const finishedAt = new Date().toISOString();
-  const snapshotDigestAfter = snapshotContentDigest(snapshotRoot, ignoredDependencies);
-  const snapshotUnchanged = snapshotDigestBefore === snapshotDigestAfter;
-  let runtimeUnchanged = false;
+  return {
+    result,
+    outputDigest: sha256(`${stdoutHash.digest('hex')}:${stderrHash.digest('hex')}`),
+    stderrDiagnosticHead,
+  };
+}
+
+function operationRuntimeUnchanged(runtime: PreparedOperationRuntime): boolean {
   try {
-    runtimeUnchanged = evidenceRuntimeReadAccess(command).identityDigest === runtimeAccess.identityDigest &&
-      systemToolAccess.verifyUnchanged() &&
-      preparedRuntime.verifyUnchanged() &&
-      preparedChildRuntimes.every((entry) =>
+    return evidenceRuntimeReadAccess(runtime.command).identityDigest === runtime.runtimeAccess.identityDigest &&
+      runtime.systemToolAccess.verifyUnchanged() &&
+      runtime.preparedRuntime.verifyUnchanged() &&
+      runtime.preparedChildRuntimes.every((entry) =>
         evidenceRuntimeReadAccess(entry.command).identityDigest === entry.sourceAccess.identityDigest &&
         entry.prepared.verifyUnchanged());
   } catch {
-    runtimeUnchanged = false;
+    return false;
   }
-  const combined = [result.stdout ?? '', result.stderr ?? ''].filter(Boolean).join('\n');
-  const outputSummary = boundText(combined, operation.maxOutputBytes);
-  const sandboxDenied = isEvidenceSandboxRuntimeFailure(sandbox.command, {
-    reason: result.reason,
-    exitCode: result.exitCode,
-    stderr: stderrDiagnosticHead,
-  }, sandbox.brokered);
-  let status: EvidenceRecordStatus;
-  const exitStatus = result.reason === 'exit' ? result.exitCode : undefined;
-  if (result.reason !== 'exit') {
-    status = 'runtime-incomplete';
-  } else if (!snapshotUnchanged || !runtimeUnchanged || sandboxDenied) {
-    status = 'runtime-incomplete';
-  } else {
-    const matched = operation.expectedExit === 'zero'
-      ? result.exitCode === 0
-      : result.exitCode === operation.expectedExitCode;
-    status = matched ? 'verified-pass' : 'verified-failure';
+}
+
+function evidenceStatus(
+  operation: EvidenceOperation,
+  execution: EvidenceExecutionResult,
+): EvidenceRecordStatus {
+  if (execution.result.reason !== 'exit' ||
+      !execution.snapshotUnchanged || !execution.runtimeUnchanged || execution.sandboxDenied) {
+    return 'runtime-incomplete';
   }
-  const errorText = result.reason !== 'exit'
-    ? `runner incomplete: ${result.reason}`
-    : !snapshotUnchanged
-      ? 'runner incomplete: evidence operation mutated its isolated candidate snapshot'
-      : !runtimeUnchanged
-        ? 'runner incomplete: executable runtime libraries changed during evidence execution'
-      : sandboxDenied
-        ? 'runner incomplete: sandbox-exec denied or could not initialize the operation'
-        : '';
-  const summary = boundText([outputSummary, errorText].filter(Boolean).join('\n'), operation.maxOutputBytes);
+  const matched = operation.expectedExit === 'zero'
+    ? execution.result.exitCode === 0
+    : execution.result.exitCode === operation.expectedExitCode;
+  return matched ? 'verified-pass' : 'verified-failure';
+}
+
+function summarizeEvidenceExecution(
+  operation: EvidenceOperation,
+  result: EvidenceCommandResult,
+  integrity: Pick<EvidenceExecutionResult, 'snapshotUnchanged' | 'runtimeUnchanged' | 'sandboxDenied'>,
+): string {
+  const output = boundText(
+    [result.stdout ?? '', result.stderr ?? ''].filter(Boolean).join('\n'),
+    operation.maxOutputBytes,
+  );
+  let error = '';
+  if (result.reason !== 'exit') error = `runner incomplete: ${result.reason}`;
+  else if (!integrity.snapshotUnchanged) {
+    error = 'runner incomplete: evidence operation mutated its isolated candidate snapshot';
+  } else if (!integrity.runtimeUnchanged) {
+    error = 'runner incomplete: executable runtime libraries changed during evidence execution';
+  } else if (integrity.sandboxDenied) {
+    error = 'runner incomplete: sandbox-exec denied or could not initialize the operation';
+  }
+  return boundText([output, error].filter(Boolean).join('\n'), operation.maxOutputBytes);
+}
+
+function evidenceRecord(
+  options: RunEvidenceOperationOptions,
+  runtime: PreparedOperationRuntime,
+  execution: EvidenceExecutionResult,
+): ReviewEvidenceRecord {
+  const { provider, operation, binding } = options;
+  const status = evidenceStatus(operation, execution);
   return {
     id: `${provider.id}:${operation.id}`,
     providerId: provider.id,
@@ -1846,119 +2064,23 @@ async function runEvidenceOperation(
     environment: provider.executionContext.runner === 'host-seatbelt'
       ? `${provider.executionContext.lane}/host-seatbelt-${process.platform}-snapshot`
       : `isolated-${process.platform}-snapshot`,
-    commandDigest,
-    executionIdentityDigest,
-    snapshotDigestBefore,
-    snapshotDigestAfter,
-    replayCommand,
+    commandDigest: runtime.commandDigest,
+    executionIdentityDigest: runtime.executionIdentityDigest,
+    snapshotDigestBefore: execution.snapshotDigestBefore,
+    snapshotDigestAfter: execution.snapshotDigestAfter,
+    replayCommand: runtime.replayCommand,
     seed: operation.seed,
     iterations: operation.iterations,
-    startedAt,
-    finishedAt,
-    exitStatus,
-    outputDigest: sha256(`${stdoutHash.digest('hex')}:${stderrHash.digest('hex')}`),
-    outputSummary: summary,
+    startedAt: execution.startedAt,
+    finishedAt: execution.finishedAt,
+    exitStatus: execution.result.reason === 'exit' ? execution.result.exitCode : undefined,
+    outputDigest: execution.outputDigest,
+    outputSummary: execution.outputSummary,
     candidateDigest: binding.candidateDigest,
     baseDigest: binding.baseDigest,
     scopeDigest: binding.scopeDigest,
-    fresh: snapshotUnchanged && runtimeUnchanged && status !== 'runtime-incomplete',
+    fresh: execution.snapshotUnchanged && execution.runtimeUnchanged && status !== 'runtime-incomplete',
   };
-}
-
-function evidenceSandboxCommand(
-  cwd: string,
-  writableRoots: string[],
-  argv: string[],
-  runtimeAccess: EvidenceRuntimeReadAccess,
-  systemToolRoots: string[] = [],
-  systemToolLiterals: string[] = [],
-  systemToolMapExecutableLiterals: string[] = [],
-): { command: string; args: string[]; brokered: boolean } {
-  if (process.platform === 'darwin' && existsSync('/usr/bin/sandbox-exec')) {
-    const readableCwd = realpathSync(cwd);
-    const realWritableRoots = writableRoots.map((root) => realpathSync(root));
-    const allowedWrites = realWritableRoots.map((root) =>
-      `(allow file-write* (subpath ${JSON.stringify(root)}))`);
-    const allowedWritableRootLiterals = realWritableRoots.flatMap((root) => [
-      `(allow file-read* (literal ${JSON.stringify(root)}))`,
-      `(allow file-read-metadata file-test-existence (literal ${JSON.stringify(root)}))`,
-    ]);
-    const allowedReads = uniqueSorted([
-      readableCwd,
-      ...realWritableRoots,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).map((root) => `(allow file-read* (subpath ${JSON.stringify(root)}))`);
-    const allowedReadMetadata = uniqueSorted([
-      readableCwd,
-      ...realWritableRoots,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).map((root) =>
-      `(allow file-read-metadata file-test-existence (path-ancestors ${JSON.stringify(root)}))`);
-    // Bun and script launchers open ancestor directories while changing from
-    // the operation cwd into an authorized runtime root. Permit traversal of
-    // those directories without granting reads of sibling file contents.
-    const allowedAncestorDirectories = uniqueSorted([
-      readableCwd,
-      ...runtimeAccess.roots,
-      ...systemToolRoots,
-    ]).flatMap((root) => [
-      `(allow file-read-data (literal ${JSON.stringify(root)}))`,
-      `(allow file-read-data (path-ancestors ${JSON.stringify(root)}))`,
-    ]);
-    const runtimeLiteralReads = uniqueSorted([...runtimeAccess.literals, ...systemToolLiterals])
-      .map((file) => `(allow file-read* (literal ${JSON.stringify(file)}))`);
-    const runtimeExecutableMaps = uniqueSorted([
-      ...runtimeAccess.mapExecutableLiterals,
-      ...systemToolMapExecutableLiterals,
-    ])
-      .map((file) => `(allow file-map-executable (literal ${JSON.stringify(file)}))`);
-    const runtimeExecutableMapRoots = uniqueSorted(runtimeAccess.mapExecutableRoots)
-      .map((root) => `(allow file-map-executable (subpath ${JSON.stringify(root)}))`);
-    const systemToolExecutableMapRoots = uniqueSorted(systemToolRoots)
-      .map((root) => `(allow file-map-executable (subpath ${JSON.stringify(root)}))`);
-    const runtimeLiteralMetadata = uniqueSorted([...runtimeAccess.literals, ...systemToolLiterals])
-      .map((file) =>
-        `(allow file-read-metadata file-test-existence (path-ancestors ${JSON.stringify(file)}))`);
-    const deniedSystemMachServices = SYSTEM_SANDBOX_MACH_SERVICES
-      .map((name) => `(global-name ${JSON.stringify(name)})`);
-    const profile = [
-      '(version 1)',
-      '(deny default)',
-      '(import "system.sb")',
-      '(deny network*)',
-      '(deny network-outbound (literal "/private/var/run/syslog"))',
-      '(deny mach-lookup)',
-      `(deny mach-lookup ${deniedSystemMachServices.join(' ')} (local-name "com.apple.cfprefsd.agent"))`,
-      `(if (defined? 'system-socket) (deny system-socket))`,
-      '(deny ipc-posix-shm-read* (ipc-posix-name "apple.shm.notification_center") (ipc-posix-name-prefix "apple.cfprefs."))',
-      '(allow process-exec)',
-      '(allow process-fork)',
-      '(allow signal (target self))',
-      '(allow signal (target children))',
-      '(allow sysctl-read)',
-      '(allow file-read* (literal "/dev/null"))',
-      '(allow file-write* (literal "/dev/null"))',
-      `(allow file-read* (literal ${JSON.stringify(argv[0])}))`,
-      ...runtimeLiteralMetadata,
-      ...runtimeLiteralReads,
-      ...runtimeExecutableMaps,
-      ...runtimeExecutableMapRoots,
-      ...systemToolExecutableMapRoots,
-      ...allowedAncestorDirectories,
-      ...allowedReadMetadata,
-      ...allowedReads,
-      ...allowedWritableRootLiterals,
-      ...allowedWrites,
-    ].join(' ');
-    return {
-      command: '/usr/bin/sandbox-exec',
-      args: ['-p', profile, '--', ...argv],
-      brokered: false,
-    };
-  }
-  throw new Error('review evidence runner requires a supported OS network/filesystem sandbox');
 }
 
 export type EvidenceRuntimeReadAccess = {
@@ -2102,22 +2224,6 @@ export function evidenceRuntimeReadAccess(executable: string): EvidenceRuntimeRe
       missingWeakLinks,
     })),
   };
-}
-
-export function isEvidenceSandboxRuntimeFailure(
-  sandboxCommand: string,
-  result: { reason: string; exitCode: number; stderr?: string },
-  brokered = false,
-): boolean {
-  if ((!brokered && sandboxCommand !== '/usr/bin/sandbox-exec') || result.reason !== 'exit') return false;
-  const stderr = result.stderr ?? '';
-  const brokerFailed = brokered && result.exitCode === 71 &&
-    /^evidence sandbox broker (?:rejected request|timed out|response)/im.test(stderr);
-  const sandboxInitializationFailed = result.exitCode === 71 &&
-    /^(?:sandbox-exec:|sandbox_init:)/im.test(stderr);
-  const dynamicLoaderFailedBeforeMain = result.exitCode !== 0 &&
-    /^dyld\[\d+\]:/m.test(stderr);
-  return brokerFailed || sandboxInitializationFailed || dynamicLoaderFailedBeforeMain;
 }
 
 export function runtimeLibraryLiteralPaths(
@@ -2378,6 +2484,35 @@ function materializeRedactedUntrackedFiles(
   }
 }
 
+function verifyRedactedUntrackedProjection(
+  repo: string,
+  diff: string,
+  expected: CandidateBinding['redactedUntrackedFiles'],
+): void {
+  const expectedByPath = new Map(expected.map((entry) => [entry.path, entry]));
+  const observedPaths = skippedUntrackedSections(diff).map((entry) => entry.path).sort();
+  if (stableJson(observedPaths) !== stableJson([...expectedByPath.keys()].sort())) {
+    throw new Error('review evidence redacted untracked projection does not match candidate diff');
+  }
+  for (const { path } of skippedUntrackedSections(diff)) {
+    const { content, mode } = readBoundedRedactedUntrackedFile(repo, path);
+    const observed = { path, digest: sha256(content), size: content.length, mode };
+    if (stableJson(observed) !== stableJson(expectedByPath.get(path))) {
+      throw new Error(`review evidence redacted untracked file changed after candidate binding: ${path}`);
+    }
+  }
+}
+
+function verifiedReviewWorkspace(
+  cwd: string,
+  diff: string,
+  expected: CandidateBinding['redactedUntrackedFiles'],
+): ReturnType<typeof resolveReviewWorkspace> {
+  const workspace = resolveReviewWorkspace(cwd);
+  verifyRedactedUntrackedProjection(workspace.repositoryRoot, diff, expected);
+  return workspace;
+}
+
 function readBoundedRedactedUntrackedFile(
   repo: string,
   path: string,
@@ -2608,6 +2743,9 @@ function executionContextIncompleteRecord(
   const expected = `${provider.executionContext.runner}/${provider.executionContext.sandboxOwner}`;
   const actual = unavailable.actual;
   const lane = provider.executionContext.runner === 'host-seatbelt' ? provider.executionContext.lane : 'none';
+  const remediation = provider.executionContext.runner === 'host-seatbelt'
+    ? `run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`
+    : 'run review/code on a supported macOS Seatbelt host; Linux and Windows do not currently execute sealed review evidence';
   const outputSummary = [
     `contract owner=${provider.owner}`,
     `actual=${actual}`,
@@ -2615,7 +2753,7 @@ function executionContextIncompleteRecord(
     `scope=${binding.scopeDigest}`,
     `executionContext=${stableJson(provider.executionContext)}`,
     `detail=${unavailable.detail}`,
-    `fix=run the named deterministic host lane ${lane}; do not execute this provider inside sealed review evidence`,
+    `fix=${remediation}`,
   ].join('; ');
   return {
     id: `${provider.id}:${operation.id}`,
@@ -3134,6 +3272,12 @@ function asObject(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function assertAllowedKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  const allowedKeys = new Set(allowed);
+  const unknown = Object.keys(value).filter((key) => !allowedKeys.has(key)).sort();
+  if (unknown.length > 0) throw new Error(`${label} contains unknown fields: ${unknown.join(', ')}`);
+}
+
 function requiredString(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') throw new Error(`${label} must be a non-empty string`);
   return value.trim();
@@ -3166,6 +3310,17 @@ function requiredIdArray(value: unknown, label: string): string[] {
   return requiredStringArray(value, label).map((entry) => requiredId(entry, label));
 }
 
+function requiredUniqueIdArray(value: unknown, label: string): string[] {
+  const ids = requiredIdArray(value, label);
+  assertUnique(ids, label);
+  return ids;
+}
+
+function requiredIdList(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an ID array`);
+  return value.map((entry) => requiredId(entry, label));
+}
+
 function optionalIdArray(value: unknown, label: string): string[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) throw new Error(`${label} must be an ID array`);
@@ -3187,6 +3342,10 @@ function validDate(value: unknown, label: string): string {
 
 function assertUnique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) throw new Error(`${label} IDs must be unique`);
+}
+
+function assertUniqueValues(values: string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`${label} must be unique`);
 }
 
 function assertSha256(value: unknown, label: string): void {

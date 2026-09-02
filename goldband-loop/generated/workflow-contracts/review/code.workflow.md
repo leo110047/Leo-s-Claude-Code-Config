@@ -3,13 +3,14 @@
 
 ## Goal
 
-Evidence-first code review with authoritative lineage and scoped closure.
+Evidence-first code review.
 
 ## Relevant context
 
 - Inspect the user-selected artifact, current repository instructions, and direct evidence.
 - Claude executes bin/goldband review code --host claude. On Codex, read ~/.codex/skills/goldband/.workflow-launcher.json and execute its exact argvPrefix plus review code --host codex.
-- Forward scope, evidence/closure files, or Work Map IDs; runtime owns acceptance lineage and defaults.
+- Forward scope or Work Map IDs; runtime owns lineage.
+- Missing/new contract: use goldband review contract help, init, validate.
 
 ## Hard boundaries
 

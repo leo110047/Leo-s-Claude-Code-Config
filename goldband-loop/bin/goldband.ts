@@ -112,6 +112,9 @@ function printUsage(stream: Pick<Console, "log">): void {
 		"  goldband review code --host <claude|codex> [--work-id <id> --ticket-id <id>] [--evidence-manifest <file>] [--closure-artifact <initial-review-artifact>] [--staged|--worktree|--base <ref>|--diff-file <file>] [--include-untracked] [--review-host-timeout-seconds <60-1800>] [--review-pass-timeout-seconds <60-1800>] [--review-claude-max-budget-usd <0.01-100.00>]",
 	);
 	stream.log(
+		"  goldband review contract help",
+		"  goldband review contract init [--output <path>]",
+		"  goldband review contract validate --manifest <path>",
 		"  goldband review contract inspect",
 		"  goldband review contract import --manifest <path>",
 		"  goldband review contract remove",
@@ -433,18 +436,23 @@ function reviewContract(args: string[]): number {
 			"review contract runtime unavailable: rerun the Goldband workflow installer",
 		);
 	}
-	const runtimeEnvironment = prepareReviewProcessEnvironment(process.env);
-	if (runtimeEnvironment.durability !== "durable") {
-		throw new Error(
-			"review contract store requires a writable durable Goldband state root",
-		);
+	const command = args[0];
+	const needsState = command === "inspect" || command === "import" || command === "remove";
+	const runtimeEnvironment = needsState
+		? prepareReviewProcessEnvironment(process.env)
+		: undefined;
+	if (runtimeEnvironment && runtimeEnvironment.durability !== "durable") {
+		throw new Error("review contract store requires a writable durable Goldband state root");
 	}
+	const runtimeArgs = runtimeEnvironment
+		? [...args, "--goldband-home", runtimeEnvironment.evidenceRoot]
+		: args;
 	const result = spawnSync(
 		process.execPath,
-		[runtimeFile, ...args, "--goldband-home", runtimeEnvironment.evidenceRoot],
+		[runtimeFile, ...runtimeArgs],
 		{
 			cwd: process.cwd(),
-			env: runtimeEnvironment.env,
+			env: runtimeEnvironment?.env ?? process.env,
 			stdio: "inherit",
 		},
 	);

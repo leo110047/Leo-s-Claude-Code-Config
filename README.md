@@ -122,6 +122,26 @@ git pull --ff-only
 目前支援的 capability/action 清單以
 [docs/generated/capabilities.md](docs/generated/capabilities.md) 為準。
 
+### `review/code` 平台邊界
+
+第一次在其他專案建立 evidence contract 時，先執行
+`goldband review contract help` 找到 installed guide、public example 與 JSON
+Schema。`review contract init` 會在 canonical repo root 建立不覆寫既有檔案的
+fail-closed scaffold；完成 project-owned behavior/provider 後，以
+`review contract validate --manifest <path>` 呼叫正式 runtime validator。Validate
+不執行 evidence、不寫入 contract store，也不代表 review 或 deploy 已完成。完整欄位與
+安全邊界見 [manifest authoring guide](docs/review-evidence-manifest.md)。
+
+| 平台 | Goldband Loop 安裝 | executable sealed evidence | `review/code` 結果 |
+| --- | --- | --- | --- |
+| macOS | 支援 | 由 Seatbelt 執行 | evidence complete 後才可啟動 semantic review |
+| Linux | 支援其他 workflow 能力 | **不支援** | typed `runtime-incomplete`；不啟動 semantic review，也沒有 completion/closure authority |
+| Windows | Git Bash/WSL 可安裝部分能力 | **不支援** | 與 Linux 相同，fail closed |
+
+Linux 的 Bubblewrap 目前只負責 managed worktree boundary，**不是**
+`review/code` 的 sealed evidence runner，也不代表 review parity。若 effective
+contract 需要執行 executable evidence，請在受支援的 macOS Seatbelt host 執行。
+
 `review/code` 會先解析不可降級的 evidence contract。Repo 內的
 review 以 canonical Git repo root 作為 diff、snapshot、scope 與 contract 的
 共同座標；從 tracked subdirectory 啟動只會留下 execution offset，不會改變

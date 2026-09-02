@@ -105,8 +105,10 @@ describe('test-free-shards: platform ownership', () => {
   test('Linux keeps mixed files while excluding only macOS review-host cases', () => {
     const files = collectFreeTestFiles(ROOT);
     expect(files).toContain('test/review-evidence.test.ts');
+    expect(files).toContain('test/review-contract-authoring.test.ts');
     expect(files).toContain('test/work-map-review.test.ts');
     expect(files).toContain('test/codex-review-launcher-install.test.ts');
+    expect(files).toContain('test/codex-review-contract-authoring-install.test.ts');
     expect(files).toContain('test/review-receipt-authority-install.test.ts');
     expect(files).toContain('test/workflows-runtime.test.ts');
     expect(files).toContain('test/goldband-review-cli.test.ts');

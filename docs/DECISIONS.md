@@ -1727,7 +1727,18 @@ Implementation contract:
   re-denies the baseline's exact syslog, Mach service, and shared-memory channels in
   addition to broad network, system-socket, and Mach lookup denial,
   so commands cannot use the local system log as an output side channel. The baseline
-  does not grant arbitrary HOME, workspace, or temporary-directory reads. The runtime
+  common Mach allow-clause set is parsed from the current `system.sb` and must
+  exactly match the reviewed contract. Global/local names, registration prefix,
+  XPC lookup prefix, and bootstrap operations receive matching explicit denies;
+  an added or removed Apple clause fails before execution. Live macOS probes prove
+  the syslog socket and one global-name Mach lookup remain blocked; prefix and
+  registration clauses currently have deterministic profile assertions, not live probes.
+  Executable sealed evidence has one supported adapter: macOS Seatbelt. Linux and
+  Windows stop before operation materialization with typed `runtime-incomplete`
+  evidence, no semantic conclusion, and no completion authority. Linux Bubblewrap
+  continues to isolate managed worktrees and is not treated as review-evidence parity.
+  The baseline does not grant arbitrary HOME, workspace, or temporary-directory
+  reads. The runtime
   compares pre/post snapshot digests, gives it
   unique HOME/TMP state that is removed after execution,
   bounds time and output, and persists fresh
@@ -2334,3 +2345,97 @@ Revisit triggers:
 - A real nested-project contract requires an explicit scope identity and
   repo-root monotonic composition rule.
 - Git is no longer the authoritative candidate/base transport for review.
+
+## ADR: Goldband Loop complexity debt is monotonic
+
+Status: Accepted
+
+Decision:
+
+- Enforce the shared source thresholds for Goldband Loop: at most 50 nonblank
+  lines per function, cognitive complexity 12, and four parameters.
+- Keep normal source lint focused on correctness. A dedicated Biome-backed gate
+  owns these quantitative rules and compares normalized per-file violation
+  vectors with a checked-in baseline.
+- Reject a worsened sorted magnitude vector for each file and rule. Require an
+  explicit baseline update when aggregate debt decreases, so line movement alone
+  cannot hide the vector change and the baseline can only shrink. Compare
+  candidate baseline values with the GitHub
+  push-before SHA, GitHub merge-base, GitLab diff base, or parent of the local
+  baseline-changing commit. CI fetches full history, and an unavailable required
+  predecessor is an error rather than an implicit pass.
+- Refactor the executable evidence runner first because it crossed all three
+  limits. Do not attempt an unrelated repository-wide rewrite in the same change.
+
+Why:
+
+Goldband Loop had no local quantitative gate and already contains substantial
+legacy debt. Enabling the thresholds as immediate zero-tolerance lint would make
+the source gate unusable; leaving them unenforced would allow the debt to grow.
+The normalized monotonic baseline makes current debt visible without weakening
+the shared thresholds or claiming the existing source already complies.
+
+The baseline intentionally has no function identity. A repair that removes a
+larger violation can therefore offset a different function becoming worse while
+the ranked vector still improves. Baseline reductions require diff review; this
+gate does not claim per-function regression identity.
+
+Revisit triggers:
+
+- The baseline reaches zero and the rules can move into ordinary source lint.
+- Biome changes diagnostic identities or metrics so normalized vectors no longer
+  represent the intended thresholds.
+- A stable AST-backed function identity is available and per-function monotonicity
+  is worth the additional migration and rename contract.
+
+## ADR: Review contract authoring uses one fail-closed runtime authority
+
+Status: Accepted
+
+Decision:
+
+- Keep `reviewEvidenceManifestSchema.validate()` as the final manifest authority.
+  JSON Schema remains a distributed structural/editor aid and explicitly does
+  not own graph, candidate, lineage, or runner semantics.
+- Expose `review contract validate --manifest <path>` as a side-effect-free
+  authoring check. It reads through the same stable regular-file and runtime
+  validator path as import, but does not resolve or mutate the runtime store,
+  execute providers, create lineage, or invoke a semantic host.
+- Expose `review contract init [--output <path>]` as an exclusive-create,
+  repo-bounded scaffold operation. The scaffold is valid schema v2 but contains
+  one high-risk unsupported cell, so it remains ineligible for semantic review
+  until a project owner replaces it with real behavior and evidence providers.
+- Distribute the canonical guide, one public local-gate example, and both JSON
+  Schemas with Claude and Codex authoring surfaces. Installed help reports their
+  exact paths.
+- Do not infer frameworks, commands, risk, applicability, evidence level, or
+  authorization. Do not add a preset catalog or another manifest validator.
+
+Why:
+
+`review/code` correctly fails closed without a resolvable contract, but an
+installed user in another repository previously had no supported path to learn,
+create, or dry-run validate the first manifest. Internal fixtures and repository
+manifests were not public examples, and the source-only JSON Schema could accept
+some inputs that the runtime rejected. A blocking scaffold plus the production
+validator closes the onboarding gap without fabricating project knowledge or
+weakening completion authority.
+
+Consequences:
+
+- A successful authoring validation proves only contract validity. Its output
+  states that no evidence ran and no completion authority exists.
+- `init` may create one new repository file but cannot overwrite, escape the
+  canonical Git repository, import state, or start review.
+- Safety-critical local conditions shared by JSON Schema and runtime are kept in
+  a representative conformance corpus. Runtime-only graph rules remain
+  explicitly documented rather than represented by a second incomplete
+  implementation.
+- Installed-distribution drift now includes the guide, example, and Schemas.
+
+Revisit triggers:
+
+- Multiple real projects demonstrate repeated, identical provider contracts
+  that justify a curated preset with a named owner and compatibility policy.
+- The manifest model moves to a declarative source capable of generating both
+  the runtime validator and JSON Schema without losing graph semantics.

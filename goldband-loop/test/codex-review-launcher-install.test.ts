@@ -150,6 +150,10 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(existsSync(join(runtimeRoot, "browse", "browse"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "browse", "server", "server.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "shared-rubric.md"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "review", "review-evidence-manifest.md"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "review", "examples", "minimal-local-gate.json"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "review", "schemas", "review-evidence-manifest.schema.json"))).toBe(true);
+			expect(existsSync(join(runtimeRoot, "review", "schemas", "review-behavior-matrix.schema.json"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "rules-resolver.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "rules", "manifest.json"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "distribution-manifest.json"))).toBe(true);
@@ -221,6 +225,8 @@ describe("Codex trusted workflow launcher install", () => {
 			});
 			expect(help.status).toBe(0);
 			expect(help.stdout).toContain("goldband review code");
+			expect(help.stdout).toContain("goldband review contract init");
+			expect(help.stdout).toContain("goldband review contract validate");
 			for (const promptAction of PROMPT_CONTRACT_ACTIONS) {
 				const [capability = "", action = ""] = promptAction.split("/");
 				const guidance = spawnSync(marker.argvPrefix[0], [

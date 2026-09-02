@@ -47,6 +47,12 @@ complete v2 validation. Every other v1 input is rejected with
 observed/supported versions, source, and remediation; safety fields are never
 inferred.
 
+For first-time project onboarding, run `goldband review contract help` to find
+the installed guide, public example, and JSON Schema. `review contract init`
+creates a non-overwriting, fail-closed repo-root scaffold, while
+`review contract validate --manifest <path>` invokes the production validator
+without running evidence, changing the store, or granting completion authority.
+
 The effective contract declares behavior cells and typed provider commands; the
 runtime executes each operation in its own read-only,
 default-deny read/write/network snapshot, verifies the pre/post tree digest, and requires reciprocal provider/cell

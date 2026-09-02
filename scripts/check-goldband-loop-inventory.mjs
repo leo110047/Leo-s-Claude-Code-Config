@@ -502,6 +502,10 @@ function assertInstalledRuntimeSupportFiles(...runtimeRoots) {
     path.join('review', 'findings-schema.md'),
     path.join('review', 'checklist.md'),
     path.join('review', 'greptile-triage.md'),
+    path.join('review', 'review-evidence-manifest.md'),
+    path.join('review', 'examples', 'minimal-local-gate.json'),
+    path.join('review', 'schemas', 'review-evidence-manifest.schema.json'),
+    path.join('review', 'schemas', 'review-behavior-matrix.schema.json'),
     path.join('cross-review', 'core.cjs'),
     path.join('cross-review', 'cli.cjs'),
   ];
