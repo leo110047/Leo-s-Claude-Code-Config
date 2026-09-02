@@ -431,7 +431,7 @@ export async function executeEvidencePlan(
   const tempRoot = mkdtempSync(join(tempParent, 'review-evidence-'));
   const records: ReviewEvidenceRecord[] = [];
   const preparedRuntimes = new Map<string, PreparedEvidenceRuntime>();
-  const workspace = resolveReviewWorkspace(ctx.cwd);
+  const workspace = verifiedReviewWorkspace(ctx.cwd, input.diff, binding.redactedUntrackedFiles);
   let outputBytes = 0;
   try {
     const selectedCells = effectiveEvidenceCells(manifest, binding.changedFiles, onlyCellIds);
@@ -2482,6 +2482,35 @@ function materializeRedactedUntrackedFiles(
     mkdirSync(dirname(destination), { recursive: true });
     writeFileSync(destination, content, { mode: mode === '100755' ? 0o755 : 0o644, flag: 'wx' });
   }
+}
+
+function verifyRedactedUntrackedProjection(
+  repo: string,
+  diff: string,
+  expected: CandidateBinding['redactedUntrackedFiles'],
+): void {
+  const expectedByPath = new Map(expected.map((entry) => [entry.path, entry]));
+  const observedPaths = skippedUntrackedSections(diff).map((entry) => entry.path).sort();
+  if (stableJson(observedPaths) !== stableJson([...expectedByPath.keys()].sort())) {
+    throw new Error('review evidence redacted untracked projection does not match candidate diff');
+  }
+  for (const { path } of skippedUntrackedSections(diff)) {
+    const { content, mode } = readBoundedRedactedUntrackedFile(repo, path);
+    const observed = { path, digest: sha256(content), size: content.length, mode };
+    if (stableJson(observed) !== stableJson(expectedByPath.get(path))) {
+      throw new Error(`review evidence redacted untracked file changed after candidate binding: ${path}`);
+    }
+  }
+}
+
+function verifiedReviewWorkspace(
+  cwd: string,
+  diff: string,
+  expected: CandidateBinding['redactedUntrackedFiles'],
+): ReturnType<typeof resolveReviewWorkspace> {
+  const workspace = resolveReviewWorkspace(cwd);
+  verifyRedactedUntrackedProjection(workspace.repositoryRoot, diff, expected);
+  return workspace;
 }
 
 function readBoundedRedactedUntrackedFile(

@@ -18,7 +18,7 @@ copy_repo_subset() {
   cp -R "$ROOT_DIR/git-hooks" "$TMP_ROOT/git-hooks"
   cp -R "$ROOT_DIR/codex" "$TMP_ROOT/codex"
   cp -R "$ROOT_DIR/mcp" "$TMP_ROOT/mcp"
-  cp -R "$ROOT_DIR/scripts" "$TMP_ROOT/scripts"
+  copy_distribution_fixture_inputs
   cp -R "$ROOT_DIR/.claude-plugin" "$TMP_ROOT/.claude-plugin"
   cp -R "$ROOT_DIR/shell" "$TMP_ROOT/shell"
   chmod +x "$TMP_ROOT/install.sh"

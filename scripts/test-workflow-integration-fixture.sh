@@ -1,3 +1,12 @@
+copy_distribution_fixture_inputs() {
+  cp -R "$ROOT_DIR/scripts" "$TMP_ROOT/scripts"
+  mkdir -p "$TMP_ROOT/docs" "$TMP_ROOT/examples/review-evidence" "$TMP_ROOT/schemas"
+  cp "$ROOT_DIR/docs/review-evidence-manifest.md" "$TMP_ROOT/docs/review-evidence-manifest.md"
+  cp "$ROOT_DIR/examples/review-evidence/minimal-local-gate.json" "$TMP_ROOT/examples/review-evidence/minimal-local-gate.json"
+  cp "$ROOT_DIR/schemas/review-evidence-manifest.schema.json" "$TMP_ROOT/schemas/review-evidence-manifest.schema.json"
+  cp "$ROOT_DIR/schemas/review-behavior-matrix.schema.json" "$TMP_ROOT/schemas/review-behavior-matrix.schema.json"
+}
+
 create_minimal_real_setup_fixture() {
   local loop_dir="$1"
   mkdir -p "$loop_dir/bin" "$loop_dir/browse/dist" "$loop_dir/generated" "$loop_dir/lib" "$loop_dir/review" "$loop_dir/workflows" "$loop_dir/scripts"
@@ -51,6 +60,7 @@ EOF_BROWSE
 
 write_minimal_review_assets() {
   local loop_dir="$1"
+  mkdir -p "$loop_dir/review/examples" "$loop_dir/review/schemas"
   cat > "$loop_dir/review/checklist.md" <<'EOF_CHECKLIST'
 # test checklist
 EOF_CHECKLIST
@@ -69,4 +79,8 @@ EOF_GREPTILE
   cat > "$loop_dir/review/TODOS-format.md" <<'EOF_TODOS'
 # test todos format
 EOF_TODOS
+  cp "$ROOT_DIR/docs/review-evidence-manifest.md" "$loop_dir/review/review-evidence-manifest.md"
+  cp "$ROOT_DIR/examples/review-evidence/minimal-local-gate.json" "$loop_dir/review/examples/minimal-local-gate.json"
+  cp "$ROOT_DIR/schemas/review-evidence-manifest.schema.json" "$loop_dir/review/schemas/review-evidence-manifest.schema.json"
+  cp "$ROOT_DIR/schemas/review-behavior-matrix.schema.json" "$loop_dir/review/schemas/review-behavior-matrix.schema.json"
 }

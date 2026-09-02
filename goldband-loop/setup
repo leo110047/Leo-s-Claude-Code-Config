@@ -865,38 +865,47 @@ create_internal_workflow_docs() {
 install_review_authoring_assets() {
   local goldband_dir="$1"
   local runtime_root="$2"
-  local repo_root
+  local repo_root guide_source example_source manifest_schema_source behavior_schema_source
   repo_root="$(cd "$goldband_dir/.." && pwd -P)"
 
-  [ -f "$repo_root/docs/review-evidence-manifest.md" ] || {
+  guide_source="$repo_root/docs/review-evidence-manifest.md"
+  example_source="$repo_root/examples/review-evidence/minimal-local-gate.json"
+  manifest_schema_source="$repo_root/schemas/review-evidence-manifest.schema.json"
+  behavior_schema_source="$repo_root/schemas/review-behavior-matrix.schema.json"
+  [ -f "$guide_source" ] || guide_source="$goldband_dir/review/review-evidence-manifest.md"
+  [ -f "$example_source" ] || example_source="$goldband_dir/review/examples/minimal-local-gate.json"
+  [ -f "$manifest_schema_source" ] || manifest_schema_source="$goldband_dir/review/schemas/review-evidence-manifest.schema.json"
+  [ -f "$behavior_schema_source" ] || behavior_schema_source="$goldband_dir/review/schemas/review-behavior-matrix.schema.json"
+
+  [ -f "$guide_source" ] || {
     echo "goldband setup failed: missing review manifest authoring guide" >&2
     exit 1
   }
-  [ -f "$repo_root/examples/review-evidence/minimal-local-gate.json" ] || {
+  [ -f "$example_source" ] || {
     echo "goldband setup failed: missing review manifest example" >&2
     exit 1
   }
-  [ -f "$repo_root/schemas/review-evidence-manifest.schema.json" ] || {
+  [ -f "$manifest_schema_source" ] || {
     echo "goldband setup failed: missing review manifest schema" >&2
     exit 1
   }
-  [ -f "$repo_root/schemas/review-behavior-matrix.schema.json" ] || {
+  [ -f "$behavior_schema_source" ] || {
     echo "goldband setup failed: missing review behavior schema" >&2
     exit 1
   }
 
   mkdir -p "$runtime_root/review/examples" "$runtime_root/review/schemas"
   _link_or_copy \
-    "$repo_root/docs/review-evidence-manifest.md" \
+    "$guide_source" \
     "$runtime_root/review/review-evidence-manifest.md"
   _link_or_copy \
-    "$repo_root/examples/review-evidence/minimal-local-gate.json" \
+    "$example_source" \
     "$runtime_root/review/examples/minimal-local-gate.json"
   _link_or_copy \
-    "$repo_root/schemas/review-evidence-manifest.schema.json" \
+    "$manifest_schema_source" \
     "$runtime_root/review/schemas/review-evidence-manifest.schema.json"
   _link_or_copy \
-    "$repo_root/schemas/review-behavior-matrix.schema.json" \
+    "$behavior_schema_source" \
     "$runtime_root/review/schemas/review-behavior-matrix.schema.json"
 }
 
