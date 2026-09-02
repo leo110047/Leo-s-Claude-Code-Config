@@ -61,8 +61,7 @@
         16,
         15,
         15,
-        14,
-        13
+        14
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
         150,

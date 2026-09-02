@@ -128,6 +128,37 @@ async function waitForBrowserClose(operation: Promise<void>, timeoutMs: number):
   }
 }
 
+async function closeBrowserResource(
+  browser: Browser | null,
+  context: BrowserContext | null,
+  connectionMode: 'launched' | 'headed',
+  timeoutMs: number,
+): Promise<void> {
+  if (connectionMode !== 'headed') {
+    if (browser) await waitForBrowserClose(browser.close(), timeoutMs);
+    return;
+  }
+  if (!context) return;
+
+  try {
+    await waitForBrowserClose(context.close(), timeoutMs);
+  } catch (contextError) {
+    // Playwright's persistent-context close handshake can stall even after
+    // Chromium has begun shutting down (observed under Linux/Xvfb). If the
+    // transport is still connected, ask the owning Browser to close directly.
+    // We only report success after the caller verifies disconnection.
+    if (!browser?.isConnected()) return;
+    try {
+      await waitForBrowserClose(browser.close(), timeoutMs);
+    } catch (browserError) {
+      throw new AggregateError(
+        [contextError, browserError],
+        'Chromium headed close failed through both context and browser',
+      );
+    }
+  }
+}
+
 function assertBrowserProcessStopped(proc: ChildProcess | null, recordedStartTime: string): void {
   const pid = proc?.pid;
   if (!proc || !pid) {
@@ -728,10 +759,7 @@ export class BrowserManager {
     if (browser || (this.connectionMode === 'headed' && this.context)) {
       this.intentionalDisconnect = true;
       browser?.removeAllListeners('disconnected');
-      const closeOperation = this.connectionMode === 'headed'
-        ? (this.context ? this.context.close() : Promise.resolve())
-        : (browser ? browser.close() : Promise.resolve());
-      await waitForBrowserClose(closeOperation, timeoutMs);
+      await closeBrowserResource(browser, this.context, this.connectionMode, timeoutMs);
       if (browser?.isConnected()) {
         throw new Error('Chromium remained connected after close');
       }
@@ -755,10 +783,7 @@ export class BrowserManager {
     const processStartTime = proc?.pid ? readProcessStartTime(proc.pid) : '';
     this.intentionalDisconnect = true;
     browser?.removeAllListeners('disconnected');
-    const closeOperation = this.connectionMode === 'headed'
-      ? (context ? context.close() : Promise.resolve())
-      : (browser ? browser.close() : Promise.resolve());
-    await waitForBrowserClose(closeOperation, timeoutMs);
+    await closeBrowserResource(browser, context, this.connectionMode, timeoutMs);
     if (browser?.isConnected()) {
       throw new Error('Chromium remained connected after startup rollback close');
     }

@@ -139,6 +139,40 @@ describe('BrowserManager controller shutdown close', () => {
     expect(bm.browser).toBe(browser);
   });
 
+  it('falls back to direct browser close when a headed context close stalls', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    let connected = true;
+    const browser = installFakeBrowser(
+      bm,
+      async () => { connected = false; },
+      () => connected,
+    );
+    bm.connectionMode = 'headed';
+    bm.context = { close: () => new Promise<void>(() => {}) };
+
+    await bm.close(5);
+
+    expect(browser.isConnected()).toBe(false);
+    expect(bm.browser).toBeNull();
+    expect(bm.context).toBeNull();
+  });
+
+  it('fails closed when both headed close paths stall', async () => {
+    const { BrowserManager } = await import('../src/browser-manager');
+    const bm = new BrowserManager() as any;
+    const browser = installFakeBrowser(
+      bm,
+      () => new Promise<void>(() => {}),
+      () => true,
+    );
+    bm.connectionMode = 'headed';
+    bm.context = { close: () => new Promise<void>(() => {}) };
+
+    await expect(bm.close(5)).rejects.toThrow('both context and browser');
+    expect(bm.browser).toBe(browser);
+  });
+
   it('clears browser and context only after a confirmed disconnect', async () => {
     const { BrowserManager } = await import('../src/browser-manager');
     const bm = new BrowserManager() as any;
