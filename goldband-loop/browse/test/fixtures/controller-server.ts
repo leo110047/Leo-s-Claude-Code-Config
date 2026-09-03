@@ -11,6 +11,11 @@ const stateFile = process.env.BROWSE_STATE_FILE;
 const instanceId = process.env.BROWSE_INSTANCE_ID;
 if (!stateFile || !instanceId) throw new Error('fixture requires BROWSE_STATE_FILE and BROWSE_INSTANCE_ID');
 
+const startupDelayMs = Number.parseInt(process.env.BROWSE_FIXTURE_START_DELAY_MS || '0', 10);
+if (Number.isFinite(startupDelayMs) && startupDelayMs > 0) {
+  await Bun.sleep(startupDelayMs);
+}
+
 const listener = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',

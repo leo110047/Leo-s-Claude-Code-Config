@@ -9,6 +9,7 @@ import {
   controllerOwner,
   probeControllerHealth,
   readControllerState,
+  readControllerStateResult,
   removeOwnedControllerState,
   replaceControllerState,
   updateOwnedControllerState,
@@ -45,6 +46,19 @@ afterEach(() => {
 });
 
 describe('controller state compare-and-swap', () => {
+  test('one read distinguishes missing, valid, malformed, and unreadable state', () => {
+    const stateFile = tempStateFile();
+    expect(readControllerStateResult(stateFile)).toEqual({ status: 'missing' });
+
+    const owner = state('owner-a');
+    fs.writeFileSync(stateFile, JSON.stringify(owner));
+    expect(readControllerStateResult(stateFile)).toEqual({ status: 'valid', state: owner });
+
+    fs.writeFileSync(stateFile, '{not-json');
+    expect(readControllerStateResult(stateFile)).toEqual({ status: 'malformed' });
+    expect(readControllerStateResult(path.dirname(stateFile))).toEqual({ status: 'unreadable' });
+  });
+
   test('startup lock handoff requires the exact live lock and transfers release ownership', () => {
     const stateFile = tempStateFile();
     const parentLock = acquireControllerStartupLock(stateFile);

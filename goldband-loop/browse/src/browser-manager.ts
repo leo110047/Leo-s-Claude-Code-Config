@@ -131,32 +131,17 @@ async function waitForBrowserClose(operation: Promise<void>, timeoutMs: number):
 async function closeBrowserResource(
   browser: Browser | null,
   context: BrowserContext | null,
-  connectionMode: 'launched' | 'headed',
+  pages: readonly Page[],
   timeoutMs: number,
 ): Promise<void> {
-  if (connectionMode !== 'headed') {
-    if (browser) await waitForBrowserClose(browser.close(), timeoutMs);
-    return;
-  }
-  if (!context) return;
-
-  try {
-    await waitForBrowserClose(context.close(), timeoutMs);
-  } catch (contextError) {
-    // Playwright's persistent-context close handshake can stall even after
-    // Chromium has begun shutting down (observed under Linux/Xvfb). If the
-    // transport is still connected, ask the owning Browser to close directly.
-    // We only report success after the caller verifies disconnection.
-    if (!browser?.isConnected()) return;
-    try {
-      await waitForBrowserClose(browser.close(), timeoutMs);
-    } catch (browserError) {
-      throw new AggregateError(
-        [contextError, browserError],
-        'Chromium headed close failed through both context and browser',
-      );
-    }
-  }
+  // Bun + Playwright can leave browser.close() pending while an owned context
+  // still has event-wired pages or an owned context. Close in ownership order;
+  // persistent contexts also disconnect their browser as part of close().
+  await Promise.all(pages
+    .filter((page) => !page.isClosed())
+    .map((page) => waitForBrowserClose(page.close(), timeoutMs)));
+  if (context) await waitForBrowserClose(context.close(), timeoutMs);
+  if (browser?.isConnected()) await waitForBrowserClose(browser.close(), timeoutMs);
 }
 
 function assertBrowserProcessStopped(proc: ChildProcess | null, recordedStartTime: string): void {
@@ -218,6 +203,18 @@ export interface BrowserState {
      */
     owner?: string;
   }>;
+}
+
+interface BrowserSessionResources {
+  browser: Browser;
+  context: BrowserContext;
+  pages: Map<number, Page>;
+  tabSessions: Map<number, TabSession>;
+  tabOwnership: Map<number, string>;
+  activeTabId: number;
+  nextTabId: number;
+  connectionMode: 'launched' | 'headed';
+  intentionalDisconnect: boolean;
 }
 
 export class BrowserManager {
@@ -282,6 +279,90 @@ export class BrowserManager {
   public onDisconnect: ((exitCode?: number) => void | Promise<void>) | null = null;
 
   getConnectionMode(): 'launched' | 'headed' { return this.connectionMode; }
+
+  private captureBrowserSession(): BrowserSessionResources {
+    if (!this.browser || !this.context) throw new Error('Browser not launched');
+    return {
+      browser: this.browser,
+      context: this.context,
+      pages: new Map(this.pages),
+      tabSessions: new Map(this.tabSessions),
+      tabOwnership: new Map(this.tabOwnership),
+      activeTabId: this.activeTabId,
+      nextTabId: this.nextTabId,
+      connectionMode: this.connectionMode,
+      intentionalDisconnect: this.intentionalDisconnect,
+    };
+  }
+
+  private restoreBrowserSession(session: BrowserSessionResources): void {
+    this.browser = session.browser;
+    this.context = session.context;
+    this.pages = session.pages;
+    this.tabSessions = session.tabSessions;
+    this.tabOwnership = session.tabOwnership;
+    this.activeTabId = session.activeTabId;
+    this.nextTabId = session.nextTabId;
+    this.connectionMode = session.connectionMode;
+    this.intentionalDisconnect = session.intentionalDisconnect;
+  }
+
+  private async switchToHandoffContext(newContext: BrowserContext): Promise<void> {
+    this.context = newContext;
+    this.browser = newContext.browser();
+    this.pages.clear();
+    this.tabSessions.clear();
+    this.connectionMode = 'headed';
+
+    if (Object.keys(this.extraHeaders).length > 0) {
+      await newContext.setExtraHTTPHeaders(this.extraHeaders);
+    }
+
+    const browserRef = this.browser;
+    if (browserRef) {
+      browserRef.on('disconnected', () => {
+        if (this.intentionalDisconnect || this.browser !== browserRef) return;
+        void handleChromiumDisconnect(browserRef);
+      });
+    }
+  }
+
+  private closePreviousBrowserSession(session: BrowserSessionResources): void {
+    void closeBrowserResource(
+      session.browser,
+      session.context,
+      [...session.pages.values()],
+      5000,
+    ).catch((error) => {
+      console.error('[browse] Failed to close old headless browser after handoff:', error);
+    });
+  }
+
+  private async rollbackFailedHandoff(
+    session: BrowserSessionResources,
+    newContext: BrowserContext,
+    failure: unknown,
+  ): Promise<string> {
+    const failedBrowser = this.browser;
+    const failedPages = [...this.pages.values()];
+    this.restoreBrowserSession(session);
+
+    let cleanupError: unknown;
+    try {
+      await closeBrowserResource(failedBrowser, newContext, failedPages, 5000);
+    } catch (error) {
+      cleanupError = error;
+    }
+
+    const message = failure instanceof Error ? failure.message : String(failure);
+    const originalStatus = session.browser.isConnected()
+      ? 'Original headless browser restored and still running.'
+      : 'Original headless browser is no longer connected.';
+    const cleanupStatus = cleanupError
+      ? ` Replacement browser cleanup also failed — ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}.`
+      : '';
+    return `ERROR: Handoff failed during state restore — ${message}. ${originalStatus}${cleanupStatus}`;
+  }
 
   // ─── Watch Mode Methods ─────────────────────────────────
   isWatching(): boolean { return this.watching; }
@@ -419,8 +500,10 @@ export class BrowserManager {
     // means "user wanted this, don't restart"; non-zero means "crash, please
     // bring me back." Without this distinction every Cmd+Q gets treated as
     // a crash and the user-visible window keeps respawning.
+    const browserRef = this.browser;
     this.browser.on('disconnected', () => {
-      void handleChromiumDisconnect(this.browser);
+      if (this.intentionalDisconnect || this.browser !== browserRef) return;
+      void handleChromiumDisconnect(browserRef);
     });
 
     const contextOptions: BrowserContextOptions = {
@@ -758,8 +841,12 @@ export class BrowserManager {
     const browser = this.browser;
     if (browser || (this.connectionMode === 'headed' && this.context)) {
       this.intentionalDisconnect = true;
-      browser?.removeAllListeners('disconnected');
-      await closeBrowserResource(browser, this.context, this.connectionMode, timeoutMs);
+      try {
+        await closeBrowserResource(browser, this.context, [...this.pages.values()], timeoutMs);
+      } catch (error) {
+        this.intentionalDisconnect = false;
+        throw error;
+      }
       if (browser?.isConnected()) {
         throw new Error('Chromium remained connected after close');
       }
@@ -782,8 +869,12 @@ export class BrowserManager {
     const proc = browserProcess(browser);
     const processStartTime = proc?.pid ? readProcessStartTime(proc.pid) : '';
     this.intentionalDisconnect = true;
-    browser?.removeAllListeners('disconnected');
-    await closeBrowserResource(browser, context, this.connectionMode, timeoutMs);
+    try {
+      await closeBrowserResource(browser, context, [...this.pages.values()], timeoutMs);
+    } catch (error) {
+      this.intentionalDisconnect = false;
+      throw error;
+    }
     if (browser?.isConnected()) {
       throw new Error('Chromium remained connected after startup rollback close');
     }
@@ -1514,39 +1605,18 @@ export class BrowserManager {
       return `ERROR: Cannot open headed browser — ${msg}. Headless browser still running.`;
     }
 
+    const oldSession = this.captureBrowserSession();
+
     // 3. Restore state into new headed browser
     try {
       // Swap to new browser/context before restoreState (it uses this.context)
-      const oldBrowser = this.browser;
-
-      this.context = newContext;
-      this.browser = newContext.browser();
-      this.pages.clear();
-      this.tabSessions.clear();
-      this.connectionMode = 'headed';
-
-      if (Object.keys(this.extraHeaders).length > 0) {
-        await newContext.setExtraHTTPHeaders(this.extraHeaders);
-      }
-
-      // Register disconnect handler on new browser. Same clean-vs-crash
-      // discrimination as launch() / launchHeaded() above so a user-initiated
-      // Cmd+Q after a handoff doesn't trigger gbd's restart loop.
-      if (this.browser) {
-        const browserRef = this.browser;
-        this.browser.on('disconnected', () => {
-          if (this.intentionalDisconnect) return;
-          void handleChromiumDisconnect(browserRef);
-        });
-      }
-
+      await this.switchToHandoffContext(newContext);
       await this.restoreState(state);
       this.isHeaded = true;
       this.dialogAutoAccept = false;  // User controls dialogs in headed mode
 
       // 4. Close old headless browser (fire-and-forget)
-      oldBrowser.removeAllListeners('disconnected');
-      oldBrowser.close().catch(() => {});
+      this.closePreviousBrowserSession(oldSession);
 
       return [
         `HANDOFF: Browser opened at ${currentUrl}`,
@@ -1554,10 +1624,9 @@ export class BrowserManager {
         `STATUS: Waiting for user. Run 'resume' when done.`,
       ].join('\n');
     } catch (err: unknown) {
-      // Restore failed — close the new context, keep old state
-      await newContext.close().catch(() => {});
-      const msg = err instanceof Error ? err.message : String(err);
-      return `ERROR: Handoff failed during state restore — ${msg}. Headless browser still running.`;
+      // Restore failed — make the original session authoritative before closing
+      // the replacement. Its disconnect listener then ignores this stale browser.
+      return this.rollbackFailedHandoff(oldSession, newContext, err);
     }
   }
 

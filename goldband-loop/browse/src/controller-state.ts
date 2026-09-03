@@ -33,6 +33,12 @@ export interface ControllerState {
   tunnelLocalPort?: number;
 }
 
+export type ControllerStateReadResult =
+  | { status: 'missing' }
+  | { status: 'valid'; state: ControllerState }
+  | { status: 'malformed' }
+  | { status: 'unreadable' };
+
 export interface ControllerOwner {
   pid: number;
   token: string;
@@ -66,13 +72,26 @@ function isControllerState(value: unknown): value is ControllerState {
     && typeof state.serverPath === 'string';
 }
 
-export function readControllerState(stateFile: string): ControllerState | null {
+export function readControllerStateResult(stateFile: string): ControllerStateReadResult {
+  let raw: string;
   try {
-    const parsed = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    return isControllerState(parsed) ? parsed : null;
-  } catch {
-    return null;
+    raw = fs.readFileSync(stateFile, 'utf-8');
+  } catch (error: any) {
+    return error?.code === 'ENOENT' ? { status: 'missing' } : { status: 'unreadable' };
   }
+  try {
+    const parsed = JSON.parse(raw);
+    return isControllerState(parsed)
+      ? { status: 'valid', state: parsed }
+      : { status: 'malformed' };
+  } catch {
+    return { status: 'malformed' };
+  }
+}
+
+export function readControllerState(stateFile: string): ControllerState | null {
+  const result = readControllerStateResult(stateFile);
+  return result.status === 'valid' ? result.state : null;
 }
 
 export function controllerOwner(state: ControllerState): ControllerOwner {
@@ -165,17 +184,21 @@ export function decideControllerTransition(inspection: ControllerInspection): Co
 
 export type ControllerClaimResult =
   | { outcome: 'claimed' }
-  | { outcome: 'refused'; reason: 'malformed' | 'owner-present' | 'race'; inspection?: ControllerInspection };
+  | { outcome: 'refused'; reason: 'malformed' | 'unreadable' | 'owner-present' | 'race'; inspection?: ControllerInspection };
 
 export async function claimControllerState(
   stateFile: string,
   next: ControllerState,
   options: ControllerInspectionOptions = {},
 ): Promise<ControllerClaimResult> {
-  const current = readControllerState(stateFile);
-  if (!current && fs.existsSync(stateFile)) {
+  const readResult = readControllerStateResult(stateFile);
+  if (readResult.status === 'malformed') {
     return { outcome: 'refused', reason: 'malformed' };
   }
+  if (readResult.status === 'unreadable') {
+    return { outcome: 'refused', reason: 'unreadable' };
+  }
+  const current = readResult.status === 'valid' ? readResult.state : null;
   if (current) {
     const inspection = await inspectControllerState(current, options);
     if (decideControllerTransition(inspection) !== 'replace') {

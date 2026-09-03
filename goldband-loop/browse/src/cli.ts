@@ -30,7 +30,7 @@ import {
   decideControllerTransition,
   inspectControllerState,
   probeControllerHealth,
-  readControllerState,
+  readControllerStateResult,
   removeOwnedControllerState,
   sameControllerOwner,
   type ControllerStartupLock,
@@ -114,7 +114,14 @@ if (IS_WINDOWS && !NODE_SERVER_SCRIPT) {
 
 // ─── State File ────────────────────────────────────────────────
 function readState(): ControllerState | null {
-  return readControllerState(config.stateFile);
+  const result = readControllerStateResult(config.stateFile);
+  if (result.status === 'malformed') {
+    throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
+  }
+  if (result.status === 'unreadable') {
+    throw new Error('Existing browse.json is unreadable; state preserved for manual inspection.');
+  }
+  return result.status === 'valid' ? result.state : null;
 }
 
 // isProcessAlive is imported from ./error-handling
@@ -375,7 +382,7 @@ async function restartUpdatedController(
     }
     await killServer(state);
     await prepareControllerReplacement(state);
-    return startServer(extraEnv, startupLock);
+    return await startServer(extraEnv, startupLock);
   } finally {
     startupLock.release();
   }
@@ -391,9 +398,6 @@ async function prepareReplaceableController(state: ControllerState): Promise<voi
 
 async function ensureServer(flags?: GlobalFlags): Promise<ControllerState> {
   const state = readState();
-  if (!state && fs.existsSync(config.stateFile)) {
-    throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
-  }
   const desiredHash = flags?.configHash;
   const extraEnv: Record<string, string> = {};
   if (flags?.proxyUrl) extraEnv.BROWSE_PROXY_URL = flags.proxyUrl;
@@ -972,13 +976,10 @@ async function startHeadedController(
   if (!startupLock) return null;
   try {
     const existing = readState();
-    if (!existing && fs.existsSync(config.stateFile)) {
-      throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
-    }
     if (await retireControllerForHeadedStart(existing) === 'reuse') return null;
     cleanSharedChromiumProfileLocks();
     console.log('Launching headed Chromium with extension + terminal agent...');
-    return startServer(serverEnv, startupLock);
+    return await startServer(serverEnv, startupLock);
   } finally {
     startupLock.release();
   }
@@ -1028,9 +1029,6 @@ function readLockedDisconnectOwner(expected: ControllerState): ControllerState |
 
 async function handleDisconnect(): Promise<void> {
   const existing = readState();
-  if (!existing && fs.existsSync(config.stateFile)) {
-    throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
-  }
   if (!existing || (existing.mode !== 'headed' && !existing.configHash)) {
     console.log('Not in headed/custom-config mode — nothing to disconnect.');
     return;

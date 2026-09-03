@@ -1,9 +1,8 @@
-import * as fs from 'fs';
 import { cleanSingletonLocks, resolveChromiumProfile } from './config';
 import {
   decideControllerTransition,
   inspectControllerState,
-  readControllerState,
+  readControllerStateResult,
   type ControllerInspection,
   type ControllerState,
 } from './controller-state';
@@ -42,13 +41,15 @@ export async function prepareControllerStateForClaim(
   stateFile: string,
   chromiumProfile = resolveChromiumProfile(),
 ): Promise<void> {
-  const current = readControllerState(stateFile);
-  if (!current) {
-    if (fs.existsSync(stateFile)) {
-      throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
-    }
-    return;
+  const readResult = readControllerStateResult(stateFile);
+  if (readResult.status === 'malformed') {
+    throw new Error('Existing browse.json is malformed; state preserved for manual inspection.');
   }
+  if (readResult.status === 'unreadable') {
+    throw new Error('Existing browse.json is unreadable; state preserved for manual inspection.');
+  }
+  if (readResult.status === 'missing') return;
+  const current = readResult.state;
   const inspection = await inspectControllerState(current);
   if (decideControllerTransition(inspection) !== 'replace') {
     throw unavailableControllerError(inspection);

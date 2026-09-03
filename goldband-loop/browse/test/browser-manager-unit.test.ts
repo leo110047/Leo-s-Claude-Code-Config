@@ -139,38 +139,27 @@ describe('BrowserManager controller shutdown close', () => {
     expect(bm.browser).toBe(browser);
   });
 
-  it('falls back to direct browser close when a headed context close stalls', async () => {
+  it('closes the owned context before its launched browser', async () => {
     const { BrowserManager } = await import('../src/browser-manager');
     const bm = new BrowserManager() as any;
+    const order: string[] = [];
     let connected = true;
-    const browser = installFakeBrowser(
+    installFakeBrowser(
       bm,
-      async () => { connected = false; },
+      async () => {
+        expect(order).toEqual(['context']);
+        order.push('browser');
+        connected = false;
+      },
       () => connected,
     );
-    bm.connectionMode = 'headed';
-    bm.context = { close: () => new Promise<void>(() => {}) };
+    bm.context = { close: async () => { order.push('context'); } };
 
-    await bm.close(5);
+    await bm.close(50);
 
-    expect(browser.isConnected()).toBe(false);
+    expect(order).toEqual(['context', 'browser']);
     expect(bm.browser).toBeNull();
     expect(bm.context).toBeNull();
-  });
-
-  it('fails closed when both headed close paths stall', async () => {
-    const { BrowserManager } = await import('../src/browser-manager');
-    const bm = new BrowserManager() as any;
-    const browser = installFakeBrowser(
-      bm,
-      () => new Promise<void>(() => {}),
-      () => true,
-    );
-    bm.connectionMode = 'headed';
-    bm.context = { close: () => new Promise<void>(() => {}) };
-
-    await expect(bm.close(5)).rejects.toThrow('both context and browser');
-    expect(bm.browser).toBe(browser);
   });
 
   it('clears browser and context only after a confirmed disconnect', async () => {
@@ -178,7 +167,7 @@ describe('BrowserManager controller shutdown close', () => {
     const bm = new BrowserManager() as any;
     let connected = true;
     installFakeBrowser(bm, async () => { connected = false; }, () => connected);
-    bm.context = { marker: 'context' };
+    bm.context = { close: async () => {} };
 
     await bm.close(50);
     expect(bm.browser).toBeNull();
