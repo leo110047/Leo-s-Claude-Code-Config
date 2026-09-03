@@ -40,8 +40,14 @@ Codex does not auto-load:
 - Proceed autonomously on reversible, in-scope, verifiable work. Stop and ask
   for irreversible or outward-facing actions, materially ambiguous requests,
   or scope expansion beyond what the user named.
-- Stop after two failed fix attempts on the same failing signal. Report what
-  was tried and observed instead of trying a third variation.
+- A fix attempt is a completed corrective action based on a stated root-cause
+  hypothesis, followed by relevant verification. Inspection and reruns without
+  a corrective action do not count; neither do tool, sandbox, or permission
+  failures that prevent the action from completing or verification from running.
+- After two consecutive attempts under the same hypothesis leave the same
+  verification blocked by the same failure class, stop editing and return to
+  diagnosis. Cosmetic output changes do not reset the count; a different failure
+  class or new evidence-backed hypothesis does.
 - Never weaken, skip, or delete a test, assertion, or lint rule to make a
   check pass. If a gate is wrong, update its stated policy, implementation, and
   regression coverage together with evidence.

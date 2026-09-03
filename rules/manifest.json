@@ -160,7 +160,9 @@
       ],
       "reviewCriteria": [
         "Proceed only on reversible, in-scope, verifiable work; outward-facing or materially ambiguous actions require user authority.",
-        "Stop after two unchanged failed attempts and never weaken a test, assertion, type, or lint rule to pass.",
+        "Count only a completed corrective action based on a stated root-cause hypothesis and followed by relevant verification as a fix attempt; inspection and reruns without a corrective action do not count, nor do tool, sandbox, or permission failures that prevent the action from completing or verification from running.",
+        "After two attempts under one hypothesis leave the same verification blocked by the same failure class, return to diagnosis; cosmetic output changes do not reset the count, but a different failure class or new evidence-backed hypothesis does.",
+        "Ask only when continuing requires user authority, a scope decision, or external state change; never weaken a test, assertion, type, or lint rule to pass.",
         "A successful-looking fix without a causal explanation is not verified."
       ]
     },
