@@ -173,7 +173,11 @@ review runner 會先產生 typed `runtime-incomplete`，不會把 nested sandbox
 macOS sandbox 會載入 Apple 的 common system process baseline，並精確重新封鎖 baseline 的 syslog、Mach service、
 shared-memory、network 與 system socket 通道。含非系統 dylib 的 Mach-O runtime 會先複製到私有 sealed projection，
 將已驗證的 load commands 改寫到 projection、ad-hoc sign 並重新雜湊最終 bytes；operation 不能讀原始 host package tree，
-也不能修改 projection。除此之外只允許 candidate 與必要 dependency roots，
+也不能修改 projection。明確宣告 `pythonRuntime` 的 operation 另支援 Python 3.14 + `uv`：runtime 會在 operation
+專屬目錄以 frozen/offline lockfile 建立 candidate-bound environment，先完成 interpreter、stdlib、path 與
+dependency integrity preflight；準備失敗是 typed `runtime-incomplete` 且不啟動 semantic host，preflight 後的 gate
+exit mismatch 才是 `verified-failure`。Python／uv 只從 bounded system／Homebrew roots 選取並在 Seatbelt
+內檢查；registry package 會以安裝後的 `WHEEL` tag 唯一選出 lock 內實際使用的 wheel filename/hash，無法唯一對應就 fail closed，未使用 cache entry 不影響 identity。除此之外只允許 candidate 與必要 dependency roots，
 不會因此允許任意 HOME、其他 workspace 或 `/tmp` 內容。初審有 findings 且
 候選內容修正後，可用 `--closure-artifact <initial-artifact>` 做一次只看 repair
 delta、原 finding IDs 與 rerun evidence 的 closure；修正版 manifest 新增或修改的

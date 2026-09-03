@@ -167,6 +167,17 @@
       "providerIds": ["review-evidence-tests"]
     },
     {
+      "id": "python-candidate-runtime",
+      "behavior": "An explicitly declared zero-dependency Python 3.14 uv operation executes from a lock-bound candidate environment after runtime preflight.",
+      "kind": "boundary",
+      "input": "the repository Python runtime fixture, its pyproject.toml and uv.lock, and the declared Python version gate",
+      "preconditions": "the operation opts into pythonRuntime, declares no dependencies, and denies network access",
+      "expected": "the review runtime materializes the frozen/offline candidate environment and returns fresh verified-pass only after Python 3.14 runtime preflight and the declared gate succeed",
+      "risk": "high",
+      "disposition": "automated",
+      "providerIds": ["python-runtime-tests"]
+    },
+    {
       "id": "redacted-untracked-candidate-binding",
       "behavior": "Secret-like untracked content stays out of the semantic diff but remains digest-bound and executable in each isolated candidate snapshot.",
       "kind": "exception",
@@ -428,6 +439,47 @@
           "maxOutputBytes": 65536,
           "network": "deny",
           "evidenceLevel": "local"
+        }
+      ]
+    },
+    {
+      "id": "python-runtime-tests",
+      "owner": "goldband-loop Python review runtime tests",
+      "kind": "project-gate",
+      "lifecycle": "persistent",
+      "cellIds": ["python-candidate-runtime"],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.review-evidence.json",
+          "schemas/review-evidence-manifest.schema.json",
+          "goldband-loop/test/codex-review-launcher-install.test.ts",
+          "goldband-loop/test/review-contract-authoring.test.ts",
+          "goldband-loop/test/review-evidence.test.ts",
+          "goldband-loop/test/fixtures/python-runtime",
+          "goldband-loop/workflows/review-evidence.ts"
+        ]
+      },
+      "executionContext": {
+        "sandboxOwner": "review-runtime",
+        "runner": "sealed"
+      },
+      "operations": [
+        {
+          "id": "candidate-python-runtime",
+          "target": "candidate",
+          "argv": ["python3.14", "-I", "-S", "-c", "import sys; assert sys.version_info[:2] == (3, 14)"],
+          "expectedExit": "zero",
+          "timeoutMs": 30000,
+          "maxOutputBytes": 4096,
+          "network": "deny",
+          "evidenceLevel": "local",
+          "pythonRuntime": {
+            "interpreter": "python3.14",
+            "resolver": "uv",
+            "projectFile": "goldband-loop/test/fixtures/python-runtime/pyproject.toml",
+            "lockFile": "goldband-loop/test/fixtures/python-runtime/uv.lock"
+          }
         }
       ]
     },

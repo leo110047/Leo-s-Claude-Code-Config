@@ -26,6 +26,7 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  type Dirent,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -62,7 +63,7 @@ const MAX_REVIEW_EVIDENCE_OPERATIONS = 64;
 const MAX_REVIEW_CLOSURE_DELTA_BYTES = 64 * 1024;
 const MAX_EVIDENCE_RUNTIME_DIAGNOSTIC_CHARS = 16 * 1024;
 const DEFAULT_REVIEW_EVIDENCE_MANIFEST = 'goldband.review-evidence.json';
-const EVIDENCE_RUNNER_POLICY = 'per-operation-sealed-runtime-readonly-snapshot-default-deny-read-write-network-v54';
+const EVIDENCE_RUNNER_POLICY = 'per-operation-sealed-runtime-readonly-snapshot-default-deny-read-write-network-v55';
 const MAX_REDACTED_UNTRACKED_BYTES = 256 * 1024;
 const REVIEW_RECEIPT_TRUSTED_CONFIG_ENV = 'GOLDBAND_REVIEW_RECEIPT_TRUSTED_CONFIG';
 const SUPPORTED_REVIEW_HOST_EVIDENCE_LANE = 'macos-review-contract-host';
@@ -159,8 +160,16 @@ type EvidenceOperation = {
   authorizationId?: string;
   evidenceLevel: EvidenceLevel;
   requiredSystemTools: string[];
+  pythonRuntime?: PythonEvidenceRuntime;
   seed?: string;
   iterations?: number;
+};
+
+type PythonEvidenceRuntime = {
+  interpreter: 'python3.14';
+  resolver: 'uv';
+  projectFile: string;
+  lockFile: string;
 };
 
 type EvidenceApplicability = { kind: 'paths'; pathPrefixes: string[] } | { kind: 'global'; reason: string };
@@ -819,6 +828,18 @@ function validatePersistedEvidenceRecord(
   binding: CandidateBinding,
   manifest: ReviewEvidenceManifest,
 ): void {
+  validatePersistedRecordShape(record);
+  validatePersistedRecordProvenance(record, binding);
+  validatePersistedRecordAuthority(record, manifest);
+  if (record.kind === 'disposition') {
+    validatePersistedDispositionRecord(record, manifest);
+    return;
+  }
+  const operation = persistedRecordOperation(record, manifest);
+  validatePersistedCommandRecord(record, operation);
+}
+
+function validatePersistedRecordShape(record: ReviewEvidenceRecord): void {
   requiredId(record.id, 'initial evidence record.id');
   if (!Array.isArray(record.cellIds) || record.cellIds.length === 0) {
     throw new Error(`initial evidence record.cellIds must be non-empty: ${record.id}`);
@@ -840,6 +861,12 @@ function validatePersistedEvidenceRecord(
     throw new Error(`initial evidence record.outputSummary is invalid: ${record.id}`);
   }
   if (typeof record.fresh !== 'boolean') throw new Error(`initial evidence record.fresh is invalid: ${record.id}`);
+}
+
+function validatePersistedRecordProvenance(
+  record: ReviewEvidenceRecord,
+  binding: CandidateBinding,
+): void {
   if (
     record.candidateDigest !== binding.candidateDigest ||
     record.baseDigest !== binding.baseDigest ||
@@ -847,24 +874,39 @@ function validatePersistedEvidenceRecord(
   ) {
     throw new Error(`initial evidence record provenance is mismatched: ${record.id}`);
   }
+}
+
+function validatePersistedRecordAuthority(
+  record: ReviewEvidenceRecord,
+  manifest: ReviewEvidenceManifest,
+): void {
   for (const cellId of record.cellIds) {
     const cell = manifest.behaviorMatrix.find((entry) => entry.id === cellId);
     if (!cell || !recordAuthorizedForCell(record, cell, manifest)) {
       throw new Error(`initial evidence record is not authorized for behavior cell ${cellId}: ${record.id}`);
     }
   }
-  if (record.kind === 'disposition') {
-    const cell = manifest.behaviorMatrix.find((entry) => entry.id === record.cellIds[0])!;
-    const expectedSummary = cell.reason ?? cell.disposition;
-    if (record.evidenceLevel !== 'fixture' ||
-        record.environment !== 'deterministic-manifest-validation' ||
-        record.outputSummary !== expectedSummary ||
-        record.outputDigest !== sha256(expectedSummary) ||
-        !record.fresh) {
-      throw new Error(`initial evidence disposition record contract is invalid: ${record.id}`);
-    }
-    return;
+}
+
+function validatePersistedDispositionRecord(
+  record: ReviewEvidenceRecord,
+  manifest: ReviewEvidenceManifest,
+): void {
+  const cell = manifest.behaviorMatrix.find((entry) => entry.id === record.cellIds[0])!;
+  const expectedSummary = cell.reason ?? cell.disposition;
+  if (record.evidenceLevel !== 'fixture' ||
+      record.environment !== 'deterministic-manifest-validation' ||
+      record.outputSummary !== expectedSummary ||
+      record.outputDigest !== sha256(expectedSummary) ||
+      !record.fresh) {
+    throw new Error(`initial evidence disposition record contract is invalid: ${record.id}`);
   }
+}
+
+function persistedRecordOperation(
+  record: ReviewEvidenceRecord,
+  manifest: ReviewEvidenceManifest,
+): EvidenceOperation {
   if (!record.providerId || !record.operationId) {
     throw new Error(`initial evidence command record lacks provider identity: ${record.id}`);
   }
@@ -876,6 +918,13 @@ function validatePersistedEvidenceRecord(
       record.evidenceLevel !== operation.evidenceLevel) {
     throw new Error(`initial evidence command record contract is invalid: ${record.id}`);
   }
+  return operation;
+}
+
+function validatePersistedCommandRecord(
+  record: ReviewEvidenceRecord,
+  operation: EvidenceOperation,
+): void {
   if (record.status === 'coverage-gap') {
     throw new Error(`initial evidence command record cannot claim coverage-gap: ${record.id}`);
   }
@@ -888,15 +937,44 @@ function validatePersistedEvidenceRecord(
     throw new Error(`initial evidence command record status does not match its exit contract: ${record.id}`);
   }
   assertSha256(record.commandDigest, `initial evidence record.commandDigest: ${record.id}`);
+  if (record.status === 'runtime-incomplete' && record.executionIdentityDigest === undefined) {
+    validatePersistedPreExecutionIncompleteRecord(record);
+    return;
+  }
   assertSha256(record.executionIdentityDigest, `initial evidence record.executionIdentityDigest: ${record.id}`);
   assertSha256(record.snapshotDigestBefore, `initial evidence record.snapshotDigestBefore: ${record.id}`);
   assertSha256(record.snapshotDigestAfter, `initial evidence record.snapshotDigestAfter: ${record.id}`);
+  validatePersistedReplayCommand(record);
+}
+
+function validatePersistedReplayCommand(record: ReviewEvidenceRecord): void {
   if (!Array.isArray(record.replayCommand) || record.replayCommand.length === 0 ||
       record.replayCommand.some((value) => typeof value !== 'string')) {
     throw new Error(`initial evidence record.replayCommand is invalid: ${record.id}`);
   }
   if (record.fresh && record.snapshotDigestBefore !== record.snapshotDigestAfter) {
     throw new Error(`initial evidence record changed its snapshot while marked fresh: ${record.id}`);
+  }
+}
+
+function validatePersistedPreExecutionIncompleteRecord(record: ReviewEvidenceRecord): void {
+  if (record.exitStatus !== undefined || record.fresh) {
+    throw new Error(`initial pre-execution incomplete record has an exit result: ${record.id}`);
+  }
+  const snapshotDigests = [record.snapshotDigestBefore, record.snapshotDigestAfter];
+  if (snapshotDigests.some((digest) => digest !== undefined)) {
+    for (const digest of snapshotDigests) {
+      assertSha256(digest, `initial pre-execution incomplete snapshot digest: ${record.id}`);
+    }
+    if (record.snapshotDigestBefore !== record.snapshotDigestAfter) {
+      throw new Error(`initial pre-execution incomplete record changed its snapshot: ${record.id}`);
+    }
+  }
+  if (record.replayCommand !== undefined && (
+    !Array.isArray(record.replayCommand) || record.replayCommand.length === 0 ||
+    record.replayCommand.some((value) => typeof value !== 'string')
+  )) {
+    throw new Error(`initial pre-execution incomplete replay command is invalid: ${record.id}`);
   }
 }
 
@@ -1349,7 +1427,7 @@ function validateTransitionEvidenceBinding(value: unknown): TransitionEvidenceBi
 
 function validateEvidenceOperation(value: unknown): EvidenceOperation {
   const item = asObject(value, 'evidence operation');
-  assertAllowedKeys(item, ['id', 'target', 'argv', 'expectedExit', 'expectedExitCode', 'timeoutMs', 'maxOutputBytes', 'network', 'authorizationId', 'evidenceLevel', 'requiredSystemTools', 'seed', 'iterations'], 'evidence operation');
+  assertAllowedKeys(item, ['id', 'target', 'argv', 'expectedExit', 'expectedExitCode', 'timeoutMs', 'maxOutputBytes', 'network', 'authorizationId', 'evidenceLevel', 'requiredSystemTools', 'pythonRuntime', 'seed', 'iterations'], 'evidence operation');
   const target = requiredString(item.target, 'evidence operation.target');
   if (target !== 'base' && target !== 'candidate') throw new Error(`invalid evidence operation target: ${target}`);
   const expectedExit = requiredString(item.expectedExit, 'evidence operation.expectedExit');
@@ -1372,13 +1450,10 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
     throw new Error('evidence operation executable must be a PATH-resolved command name');
   }
   const requiredSystemTools = validateRequiredSystemTools(item.requiredSystemTools);
+  const pythonRuntime = optionalPythonEvidenceRuntime(item.pythonRuntime, argv, network);
+  validatePythonSystemToolOwnership(pythonRuntime, requiredSystemTools);
   const timeoutMs = boundedInteger(item.timeoutMs, 'evidence operation.timeoutMs', 100, 15 * 60 * 1000);
-  const maxOutputBytes = boundedInteger(
-    item.maxOutputBytes,
-    'evidence operation.maxOutputBytes',
-    1,
-    MAX_REVIEW_EVIDENCE_OUTPUT_BYTES,
-  );
+  const maxOutputBytes = boundedInteger(item.maxOutputBytes, 'evidence operation.maxOutputBytes', 1, MAX_REVIEW_EVIDENCE_OUTPUT_BYTES);
   const expectedExitCode = item.expectedExitCode === undefined
     ? undefined
     : boundedInteger(item.expectedExitCode, 'evidence operation.expectedExitCode', 1, 255);
@@ -1400,11 +1475,88 @@ function validateEvidenceOperation(value: unknown): EvidenceOperation {
     authorizationId,
     evidenceLevel,
     requiredSystemTools: uniqueSorted(requiredSystemTools),
+    pythonRuntime,
     seed: optionalString(item.seed),
-    iterations: item.iterations === undefined
-      ? undefined
-      : boundedInteger(item.iterations, 'evidence operation.iterations', 1, 1_000_000),
+    iterations: item.iterations === undefined ? undefined : boundedInteger(item.iterations, 'evidence operation.iterations', 1, 1_000_000),
   };
+}
+
+function optionalPythonEvidenceRuntime(
+  value: unknown,
+  argv: string[],
+  network: EvidenceOperation['network'],
+): PythonEvidenceRuntime | undefined {
+  return value === undefined ? undefined : validatePythonEvidenceRuntime(value, argv, network);
+}
+
+function validatePythonSystemToolOwnership(
+  pythonRuntime: PythonEvidenceRuntime | undefined,
+  requiredSystemTools: string[],
+): void {
+  if (pythonRuntime && requiredSystemTools.some((tool) => tool === 'python3.14' || tool === 'uv')) {
+    throw new Error('Python evidence runtime owns its interpreter and resolver; do not redeclare them as system tools');
+  }
+}
+
+function validatePythonEvidenceRuntime(
+  value: unknown,
+  argv: string[],
+  network: EvidenceOperation['network'],
+): PythonEvidenceRuntime {
+  const item = asObject(value, 'evidence operation.pythonRuntime');
+  assertAllowedKeys(
+    item,
+    ['interpreter', 'resolver', 'projectFile', 'lockFile'],
+    'evidence operation.pythonRuntime',
+  );
+  const interpreter = requiredString(
+    item.interpreter,
+    'evidence operation.pythonRuntime.interpreter',
+  );
+  const resolver = requiredString(item.resolver, 'evidence operation.pythonRuntime.resolver');
+  if (interpreter !== 'python3.14') {
+    throw new Error(`unsupported evidence Python interpreter: ${interpreter}`);
+  }
+  if (resolver !== 'uv') throw new Error(`unsupported evidence Python resolver: ${resolver}`);
+  if (argv[0] !== interpreter) {
+    throw new Error('Python evidence operation argv must start with its declared interpreter');
+  }
+  if (network !== 'deny') {
+    throw new Error('Python evidence runtime requires network deny');
+  }
+  return {
+    interpreter,
+    resolver,
+    projectFile: validatePythonContractPath(
+      item.projectFile,
+      'evidence operation.pythonRuntime.projectFile',
+      'pyproject.toml',
+    ),
+    lockFile: validatePythonContractPath(
+      item.lockFile,
+      'evidence operation.pythonRuntime.lockFile',
+      'uv.lock',
+    ),
+  };
+}
+
+function validatePythonContractPath(
+  value: unknown,
+  field: string,
+  requiredBasename: string,
+): string {
+  const path = requiredString(value, field);
+  const segments = path.split('/');
+  if (
+    isAbsolute(path) ||
+    /^[A-Za-z]:\//.test(path) ||
+    path.includes('\\') ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..') ||
+    basename(path) !== requiredBasename
+  ) {
+    throw new Error(`${field} must be a normalized repo-relative ${requiredBasename} path`);
+  }
+  return path;
 }
 
 function validateOperationNetwork(item: Record<string, unknown>): Pick<EvidenceOperation, 'network' | 'authorizationId'> {
@@ -1504,6 +1656,7 @@ export function transitionEvidenceOperationContractDigest(operations: EvidenceOp
         authorizationId: operation.authorizationId ?? null,
         evidenceLevel: operation.evidenceLevel,
         requiredSystemTools: operation.requiredSystemTools ?? [],
+        pythonRuntime: operation.pythonRuntime ?? null,
         seed: operation.seed ?? null,
         iterations: operation.iterations ?? null,
       })),
@@ -1718,6 +1871,17 @@ type PreparedChildRuntime = {
   prepared: PreparedEvidenceRuntime;
 };
 
+type PreparedPythonEvidenceRuntime = {
+  sourceCommand: string;
+  sourceAccess: EvidenceRuntimeReadAccess;
+  sourceRuntimeUnchanged: () => boolean;
+  preparedRuntime: PreparedEvidenceRuntime;
+  operationEnvironment: Record<string, string>;
+  identityDigest: string;
+};
+
+class PythonRuntimePreparationError extends Error {}
+
 type PreparedOperationRuntime = {
   replayCommand: string[];
   command: string;
@@ -1726,6 +1890,9 @@ type PreparedOperationRuntime = {
   preparedRuntime: PreparedEvidenceRuntime;
   preparedChildRuntimes: PreparedChildRuntime[];
   sandboxRuntimeAccess: EvidenceRuntimeReadAccess;
+  sourceRuntimeUnchanged: () => boolean;
+  operationEnvironment: Record<string, string>;
+  pythonRuntimeDigest?: string;
   executionIdentityDigest: string;
   commandDigest: string;
 };
@@ -1754,20 +1921,33 @@ async function runEvidenceOperation(
   options: RunEvidenceOperationOptions,
 ): Promise<ReviewEvidenceRecord> {
   const startedAt = new Date().toISOString();
-  const runtime = prepareOperationRuntime(options);
-  const execution = await executePreparedOperation(options, runtime, startedAt);
-  return evidenceRecord(options, runtime, execution);
+  try {
+    const runtime = await prepareOperationRuntime(options);
+    const execution = await executePreparedOperation(options, runtime, startedAt);
+    return evidenceRecord(options, runtime, execution);
+  } catch (error) {
+    if (!(error instanceof PythonRuntimePreparationError)) throw error;
+    return pythonRuntimeIncompleteRecord(options, startedAt, error);
+  }
 }
 
-function prepareOperationRuntime(
+async function prepareOperationRuntime(
   options: RunEvidenceOperationOptions,
-): PreparedOperationRuntime {
+): Promise<PreparedOperationRuntime> {
   const replayCommand = options.operation.argv.map((value) =>
     value.replaceAll('{seed}', options.operation.seed ?? ''));
-  const command = resolveExecutable(replayCommand[0]!);
-  const runtimeAccess = evidenceRuntimeReadAccess(command);
+  let python: PreparedPythonEvidenceRuntime | undefined;
+  if (options.operation.pythonRuntime) {
+    try {
+      python = await preparePythonEvidenceRuntime(options);
+    } catch (error) {
+      throw new PythonRuntimePreparationError(errorMessage(error));
+    }
+  }
+  const command = python?.sourceCommand ?? resolveExecutable(replayCommand[0]!);
+  const runtimeAccess = python?.sourceAccess ?? evidenceRuntimeReadAccess(command);
   const systemToolAccess = evidenceSystemToolAccess(options.operation.requiredSystemTools);
-  const preparedRuntime = cachedEvidenceRuntime(options, command, runtimeAccess);
+  const preparedRuntime = python?.preparedRuntime ?? cachedEvidenceRuntime(options, command, runtimeAccess);
   const preparedChildRuntimes = options.operation.requiredSystemTools
     .filter((tool) => tool !== 'git')
     .map((tool) => prepareChildRuntime(options, tool));
@@ -1783,8 +1963,22 @@ function prepareOperationRuntime(
     preparedRuntime,
     preparedChildRuntimes,
     sandboxRuntimeAccess,
+    sourceRuntimeUnchanged: python?.sourceRuntimeUnchanged ?? (() => {
+      try {
+        return evidenceRuntimeReadAccess(command).identityDigest === runtimeAccess.identityDigest;
+      } catch {
+        return false;
+      }
+    }),
+    operationEnvironment: python?.operationEnvironment ?? {},
+    pythonRuntimeDigest: python?.identityDigest,
     executionIdentityDigest: operationExecutionIdentity(options, {
-      command, runtimeAccess, systemToolAccess, preparedRuntime, preparedChildRuntimes,
+      command,
+      runtimeAccess,
+      systemToolAccess,
+      preparedRuntime,
+      preparedChildRuntimes,
+      pythonRuntimeDigest: python?.identityDigest,
     }),
     commandDigest: operationCommandDigest(options),
   };
@@ -1825,10 +2019,956 @@ function prepareChildRuntime(
   };
 }
 
+async function preparePythonEvidenceRuntime(
+  options: RunEvidenceOperationOptions,
+): Promise<PreparedPythonEvidenceRuntime> {
+  const contract = options.operation.pythonRuntime!;
+  const inputs = preparePythonRuntimeInputs(options, contract);
+  const environmentRoot = materializePythonEnvironment(options, inputs);
+  const environmentPython = validateMaterializedPythonEnvironment(
+    environmentRoot,
+    inputs.sourceCommand,
+    options.binding.repository,
+    options.snapshotRoot,
+  );
+  const environmentDigest = dependencyEnvironmentDigest(environmentRoot);
+  const dependencyIdentityDigest = pythonDependencyIdentityDigest(
+    environmentRoot,
+    options.snapshotRoot,
+  );
+  const offlineArtifactDigest = pythonOfflineArtifactDigest(
+    environmentRoot,
+    inputs.lockFile,
+    options.snapshotRoot,
+  );
+  const environmentAccess = pythonEnvironmentReadAccess(environmentRoot, environmentDigest);
+  const runtimeAccess = mergeEvidenceRuntimeReadAccess([inputs.sourceAccess, environmentAccess]);
+  runPythonBootstrapPreflight({
+    options,
+    environmentPython,
+    environmentRoot,
+    projectRoot: dirname(inputs.projectFile),
+    runtimeAccess,
+  });
+  const identityDigest = pythonExecutionIdentity(
+    contract,
+    inputs,
+    dependencyIdentityDigest,
+    offlineArtifactDigest,
+  );
+  return preparedPythonRuntime({
+    inputs,
+    environmentRoot,
+    environmentPython,
+    runtimeAccess,
+    identityDigest,
+    environmentDigest,
+  });
+}
+
+type PythonRuntimeInputs = {
+  projectFile: string;
+  lockFile: string;
+  sourceCommand: string;
+  sourceAccess: EvidenceRuntimeReadAccess;
+  sourceInspection: PythonRuntimeInspection;
+  sourceIdentity: string;
+  preparedUv: PreparedEvidenceRuntime;
+  ambientCacheRoot: string;
+};
+
+function preparePythonRuntimeInputs(
+  options: RunEvidenceOperationOptions,
+  contract: PythonEvidenceRuntime,
+): PythonRuntimeInputs {
+  const projectFile = requiredSnapshotFile(options.snapshotRoot, contract.projectFile);
+  const lockFile = requiredSnapshotFile(options.snapshotRoot, contract.lockFile);
+  if (dirname(projectFile) !== dirname(lockFile)) {
+    throw new Error('declared pyproject.toml and uv.lock must share one project directory');
+  }
+  const selectedPython = resolveTrustedPythonTool(
+    contract.interpreter,
+    options.binding.repository,
+    'Python interpreter',
+  );
+  const sourceCommand = realpathSync(selectedPython);
+  const source = inspectPythonRuntime(sourceCommand, options.snapshotRoot);
+  const sourceAccess = pythonRuntimeReadAccess(sourceCommand, source);
+  const sourceIdentity = sourceAccess.identityDigest;
+  const uvCommand = resolveTrustedPythonTool(
+    contract.resolver,
+    options.binding.repository,
+    'uv resolver',
+  );
+  const uvAccess = evidenceRuntimeReadAccess(uvCommand);
+  const preparedUv = cachedEvidenceRuntime(options, uvCommand, uvAccess);
+  const ambientCacheRoot = pythonLockNeedsOfflineCache(lockFile)
+    ? uvCacheRoot(options, preparedUv)
+    : emptyPythonUvCache(options);
+  return {
+    projectFile,
+    lockFile,
+    sourceCommand,
+    sourceAccess,
+    sourceInspection: source,
+    sourceIdentity,
+    preparedUv,
+    ambientCacheRoot,
+  };
+}
+
+function pythonLockNeedsOfflineCache(lockFile: string): boolean {
+  return /^(?:wheels|sdist)\s*=/m.test(readFileSync(lockFile, 'utf8'));
+}
+
+function emptyPythonUvCache(options: RunEvidenceOperationOptions): string {
+  const root = join(options.runnerRoot, 'python-empty-uv-cache');
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  return root;
+}
+
+function materializePythonEnvironment(
+  options: RunEvidenceOperationOptions,
+  inputs: PythonRuntimeInputs,
+): string {
+  const pythonRoot = join(options.runnerRoot, 'python-runtime');
+  const environmentRoot = join(pythonRoot, 'environment');
+  const homeRoot = join(pythonRoot, 'home');
+  const tempRoot = join(pythonRoot, 'tmp');
+  for (const root of [pythonRoot, homeRoot, tempRoot]) mkdirSync(root, { recursive: true, mode: 0o700 });
+  const cacheRoot = join(pythonRoot, 'uv-cache');
+  materializeCandidate(inputs.ambientCacheRoot, cacheRoot);
+  const cacheAccess = ambientUvCacheReadAccess(cacheRoot);
+  const preparationAccess = mergeEvidenceRuntimeReadAccess([
+    inputs.preparedUv.access,
+    inputs.sourceAccess,
+    cacheAccess,
+  ]);
+  runPythonEnvironmentSync({
+    options,
+    projectRoot: dirname(inputs.projectFile),
+    environmentRoot,
+    homeRoot,
+    tempRoot,
+    cacheRoot,
+    sourceCommand: inputs.sourceCommand,
+    preparedUv: inputs.preparedUv,
+    preparationAccess,
+  });
+  materializePythonLaunchers(environmentRoot, inputs.sourceCommand);
+  removeUvVirtualenvCustomization(environmentRoot);
+  return environmentRoot;
+}
+
+function pythonExecutionIdentity(
+  contract: PythonEvidenceRuntime,
+  inputs: PythonRuntimeInputs,
+  dependencyIdentityDigest: string,
+  offlineArtifactDigest: string,
+): string {
+  const components = {
+    contract,
+    projectFileDigest: sha256(readFileSync(inputs.projectFile)),
+    lockFileDigest: sha256(readFileSync(inputs.lockFile)),
+    interpreterIdentityDigest: inputs.sourceIdentity,
+    uvIdentityDigest: inputs.preparedUv.identityDigest,
+    dependencyEnvironmentDigest: dependencyIdentityDigest,
+    offlineArtifactDigest,
+    runnerPolicy: EVIDENCE_RUNNER_POLICY,
+  };
+  return sha256(stableJson(components));
+}
+
+function preparedPythonRuntime(input: {
+  inputs: PythonRuntimeInputs;
+  environmentRoot: string;
+  environmentPython: string;
+  runtimeAccess: EvidenceRuntimeReadAccess;
+  identityDigest: string;
+  environmentDigest: string;
+}): PreparedPythonEvidenceRuntime {
+  const { inputs, environmentRoot, environmentPython, runtimeAccess, identityDigest, environmentDigest } = input;
+  return {
+    sourceCommand: inputs.sourceCommand,
+    sourceAccess: inputs.sourceAccess,
+    sourceRuntimeUnchanged: () => {
+      try {
+        return pythonRuntimeReadAccess(
+          inputs.sourceCommand,
+          inputs.sourceInspection,
+        ).identityDigest === inputs.sourceIdentity;
+      } catch {
+        return false;
+      }
+    },
+    preparedRuntime: {
+      command: environmentPython,
+      access: runtimeAccess,
+      identityDigest,
+      environment: {},
+      verifyUnchanged: () => {
+        try {
+          return dependencyEnvironmentDigest(environmentRoot) === environmentDigest;
+        } catch {
+          return false;
+        }
+      },
+    },
+    operationEnvironment: {
+      PYTHONNOUSERSITE: '1',
+      PYTHONDONTWRITEBYTECODE: '1',
+      PYTHONHASHSEED: '0',
+      PYTHONPATH: '',
+      VIRTUAL_ENV: environmentRoot,
+      UV_OFFLINE: '1',
+      UV_PYTHON_DOWNLOADS: 'never',
+    },
+    identityDigest,
+  };
+}
+
+function materializePythonLaunchers(environmentRoot: string, sourceCommand: string): void {
+  const sourceDigest = executableContentDigest(sourceCommand);
+  for (const name of ['python', 'python3', 'python3.14']) {
+    const launcher = join(environmentRoot, 'bin', name);
+    if (existsSync(launcher)) rmSync(launcher);
+    copyFileSync(sourceCommand, launcher, constants.COPYFILE_EXCL);
+    chmodSync(launcher, 0o555);
+    if (executableContentDigest(launcher) !== sourceDigest) {
+      throw new Error(`materialized Python launcher identity mismatch: ${name}`);
+    }
+  }
+}
+
+function removeUvVirtualenvCustomization(environmentRoot: string): void {
+  const sitePackages = join(environmentRoot, 'lib', 'python3.14', 'site-packages');
+  const pth = join(sitePackages, '_virtualenv.pth');
+  const module = join(sitePackages, '_virtualenv.py');
+  if (!existsSync(pth)) return;
+  const stat = lstatSync(pth);
+  if (!stat.isFile() || stat.isSymbolicLink() || readFileSync(pth, 'utf8').trim() !== 'import _virtualenv') {
+    throw new Error('uv created an unrecognized virtualenv site customization');
+  }
+  rmSync(pth);
+  if (existsSync(module)) {
+    const moduleStat = lstatSync(module);
+    if (!moduleStat.isFile() || moduleStat.isSymbolicLink()) {
+      throw new Error('uv virtualenv support module is not a regular file');
+    }
+    rmSync(module);
+  }
+}
+
+function requiredSnapshotFile(snapshotRoot: string, relativePath: string): string {
+  const file = resolveWithin(snapshotRoot, relativePath);
+  const stat = lstatSync(file, { throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`Python runtime contract file is missing or not a regular file: ${relativePath}`);
+  }
+  if (!realpathSync(file).startsWith(`${realpathSync(snapshotRoot)}${sep}`)) {
+    throw new Error(`Python runtime contract file escapes candidate snapshot: ${relativePath}`);
+  }
+  return file;
+}
+
+function rejectRepositoryRuntime(command: string, repository: string, label: string): void {
+  const selected = join(realpathSync(dirname(resolve(command))), basename(command));
+  const executable = realpathSync(command);
+  const root = realpathSync(repository);
+  if (
+    selected === root || selected.startsWith(`${root}${sep}`) ||
+    executable === root || executable.startsWith(`${root}${sep}`)
+  ) {
+    throw new Error(`${label} must not come from the source checkout or its virtual environment`);
+  }
+}
+
+const TRUSTED_PYTHON_TOOL_ROOTS = [
+  '/opt/homebrew/bin',
+  '/opt/homebrew/Cellar',
+  '/usr/local/bin',
+  '/usr/local/Cellar',
+  '/usr/bin',
+  '/bin',
+  '/Library/Frameworks',
+];
+
+function resolveTrustedPythonTool(command: string, repository: string, label: string): string {
+  const selected = resolveExecutable(command);
+  rejectRepositoryRuntime(selected, repository, label);
+  const canonical = realpathSync(selected);
+  if (![selected, canonical].every(pathIsInTrustedPythonToolRoot)) {
+    throw new Error(`${label} must resolve from a trusted host package root`);
+  }
+  return selected;
+}
+
+function pathIsInTrustedPythonToolRoot(path: string): boolean {
+  const absolute = resolve(path);
+  return TRUSTED_PYTHON_TOOL_ROOTS.some(
+    (root) => absolute === root || absolute.startsWith(`${root}${sep}`),
+  );
+}
+
+type PythonRuntimeInspection = {
+  executable: string;
+  version: string;
+  basePrefix: string;
+  stdlib: string;
+};
+
+function inspectPythonRuntime(command: string, snapshotRoot: string): PythonRuntimeInspection {
+  const expectedPrefix = pythonBasePrefix(command);
+  const bootstrapAccess = mergeEvidenceRuntimeReadAccess([
+    evidenceRuntimeReadAccess(command),
+    pythonPrefixReadAccess(expectedPrefix),
+  ]);
+  const script = [
+    'import json,sys,sysconfig',
+    'print(json.dumps({"executable":sys.executable,"version":"%d.%d"%sys.version_info[:2],"basePrefix":sys.base_prefix,"stdlib":sysconfig.get_path("stdlib")}))',
+  ].join(';');
+  const sandbox = evidenceSandboxCommand({
+    cwd: snapshotRoot,
+    writableRoots: [],
+    argv: [command, '-I', '-S', '-c', script],
+    runtimeAccess: bootstrapAccess,
+  });
+  const result = spawnSync(sandbox.command, sandbox.args, {
+    cwd: snapshotRoot,
+    encoding: 'utf8',
+    timeout: 10_000,
+    maxBuffer: 64 * 1024,
+    env: { PATH: '/usr/bin:/bin', LANG: 'C.UTF-8', LC_ALL: '' },
+  });
+  if (result.status !== 0) {
+    throw new Error(`Python interpreter preflight failed: ${boundText(result.stderr || result.stdout, 4096)}`);
+  }
+  const value = asObject(JSON.parse(result.stdout), 'Python interpreter inspection');
+  const inspection = {
+    executable: requiredString(value.executable, 'Python interpreter executable'),
+    version: requiredString(value.version, 'Python interpreter version'),
+    basePrefix: requiredString(value.basePrefix, 'Python interpreter base prefix'),
+    stdlib: requiredString(value.stdlib, 'Python interpreter stdlib'),
+  };
+  if (inspection.version !== '3.14') {
+    throw new Error(`Python interpreter version mismatch: expected=3.14 actual=${inspection.version}`);
+  }
+  if (realpathSync(inspection.executable) !== realpathSync(command)) {
+    throw new Error('Python interpreter reported an unexpected executable');
+  }
+  for (const [label, path] of [['base prefix', inspection.basePrefix], ['stdlib', inspection.stdlib]] as const) {
+    if (!isAbsolute(path) || !existsSync(path)) throw new Error(`Python interpreter ${label} is unavailable`);
+  }
+  if (realpathSync(inspection.basePrefix) !== expectedPrefix) {
+    throw new Error('Python interpreter reported an unexpected base prefix');
+  }
+  return inspection;
+}
+
+function pythonBasePrefix(command: string): string {
+  let candidate = dirname(realpathSync(command));
+  for (let depth = 0; depth < 12; depth += 1) {
+    if (existsSync(join(candidate, 'lib', 'python3.14'))) return realpathSync(candidate);
+    const parent = dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  throw new Error('Python 3.14 base prefix cannot be derived without executing the interpreter');
+}
+
+function pythonPrefixReadAccess(prefix: string): EvidenceRuntimeReadAccess {
+  const digest = directoryContentDigest(prefix, 'Python interpreter bootstrap runtime');
+  return {
+    roots: [prefix],
+    literals: [],
+    mapExecutableRoots: [prefix],
+    mapExecutableLiterals: [],
+    images: [],
+    links: [],
+    missingWeakLinks: [],
+    identityDigest: sha256(stableJson({ kind: 'python-bootstrap-prefix', prefix, digest })),
+  };
+}
+
+function pythonRuntimeReadAccess(
+  command: string,
+  inspection: PythonRuntimeInspection,
+): EvidenceRuntimeReadAccess {
+  const base = evidenceRuntimeReadAccess(command);
+  const prefix = realpathSync(inspection.basePrefix);
+  const stdlib = realpathSync(inspection.stdlib);
+  if (stdlib !== prefix && !stdlib.startsWith(`${prefix}${sep}`)) {
+    throw new Error('Python stdlib resolves outside the declared interpreter prefix');
+  }
+  const prefixDigest = directoryContentDigest(prefix, 'Python interpreter runtime');
+  return mergeEvidenceRuntimeReadAccess([
+    base,
+    {
+      roots: [prefix],
+      literals: [],
+      mapExecutableRoots: [prefix],
+      mapExecutableLiterals: [],
+      images: [],
+      links: [],
+      missingWeakLinks: [],
+      identityDigest: sha256(stableJson({
+        executable: realpathSync(command),
+        reportedExecutable: inspection.executable,
+        version: inspection.version,
+        prefix,
+        prefixDigest,
+      })),
+    },
+  ]);
+}
+
+function uvCacheRoot(
+  options: RunEvidenceOperationOptions,
+  preparedUv: PreparedEvidenceRuntime,
+): string {
+  const configuredCache = process.env.UV_CACHE_DIR;
+  const selected = configuredCache
+    ? resolve(configuredCache)
+    : sandboxedUvCacheRoot(options, preparedUv);
+  if (!isAbsolute(selected) || !existsSync(selected) || !statSync(selected).isDirectory()) {
+    throw new Error('uv offline cache is unavailable');
+  }
+  rejectRepositoryRuntime(selected, options.binding.repository, 'uv cache');
+  return realpathSync(selected);
+}
+
+function sandboxedUvCacheRoot(
+  options: RunEvidenceOperationOptions,
+  preparedUv: PreparedEvidenceRuntime,
+): string {
+  const sandbox = evidenceSandboxCommand({
+    cwd: options.snapshotRoot,
+    writableRoots: [],
+    argv: [preparedUv.command, 'cache', 'dir', '--no-config'],
+    runtimeAccess: preparedUv.access,
+  });
+  const result = spawnSync(sandbox.command, sandbox.args, {
+    cwd: options.snapshotRoot,
+    encoding: 'utf8',
+    timeout: 10_000,
+    maxBuffer: 64 * 1024,
+    env: {
+      HOME: process.env.HOME ?? tmpdir(),
+      PATH: '/usr/bin:/bin',
+      LANG: 'C.UTF-8',
+      LC_ALL: '',
+      UV_PYTHON_DOWNLOADS: 'never',
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(`uv cache discovery failed: ${boundText(result.stderr || result.stdout, 4096)}`);
+  }
+  return result.stdout.trim();
+}
+
+function ambientUvCacheReadAccess(cacheRoot: string): EvidenceRuntimeReadAccess {
+  return {
+    roots: [cacheRoot],
+    literals: [],
+    mapExecutableRoots: [],
+    mapExecutableLiterals: [],
+    images: [],
+    links: [],
+    missingWeakLinks: [],
+    identityDigest: sha256(stableJson({ kind: 'uv-offline-cache-read-boundary', cacheRoot })),
+  };
+}
+
+function runPythonEnvironmentSync(input: {
+  options: RunEvidenceOperationOptions;
+  projectRoot: string;
+  environmentRoot: string;
+  homeRoot: string;
+  tempRoot: string;
+  cacheRoot: string;
+  sourceCommand: string;
+  preparedUv: PreparedEvidenceRuntime;
+  preparationAccess: EvidenceRuntimeReadAccess;
+}): void {
+  runPythonUvStep(input, 'locked project check', [
+    'lock',
+    '--project', input.projectRoot,
+    '--check',
+    '--offline',
+    '--python', input.sourceCommand,
+    '--no-managed-python',
+    '--no-python-downloads',
+    '--no-config',
+    '--color', 'never',
+  ]);
+  runPythonUvStep(input, 'frozen offline environment preparation', [
+    'sync',
+    '--project', input.projectRoot,
+    '--frozen',
+    '--offline',
+    '--no-install-project',
+    '--no-editable',
+    '--link-mode', 'copy',
+    '--python', input.sourceCommand,
+    '--no-managed-python',
+    '--no-python-downloads',
+    '--no-config',
+    '--no-progress',
+    '--color', 'never',
+  ]);
+}
+
+function runPythonUvStep(
+  input: {
+    options: RunEvidenceOperationOptions;
+    projectRoot: string;
+    environmentRoot: string;
+    homeRoot: string;
+    tempRoot: string;
+    cacheRoot: string;
+    sourceCommand: string;
+    preparedUv: PreparedEvidenceRuntime;
+    preparationAccess: EvidenceRuntimeReadAccess;
+  },
+  label: string,
+  args: string[],
+): void {
+  const sandbox = evidenceSandboxCommand({
+    cwd: input.options.snapshotRoot,
+    writableRoots: [dirname(input.environmentRoot)],
+    argv: [input.preparedUv.command, ...args],
+    runtimeAccess: input.preparationAccess,
+  });
+  const result = spawnSync(sandbox.command, sandbox.args, {
+    cwd: input.projectRoot,
+    encoding: 'utf8',
+    timeout: input.options.operation.timeoutMs,
+    maxBuffer: input.options.operation.maxOutputBytes,
+    env: {
+      PATH: `${dirname(input.sourceCommand)}:/usr/bin:/bin`,
+      HOME: input.homeRoot,
+      TMPDIR: input.tempRoot,
+      TMP: input.tempRoot,
+      TEMP: input.tempRoot,
+      LANG: process.env.LANG ?? 'C.UTF-8',
+      LC_ALL: process.env.LC_ALL ?? '',
+      UV_CACHE_DIR: input.cacheRoot,
+      UV_PROJECT_ENVIRONMENT: input.environmentRoot,
+      UV_OFFLINE: '1',
+      UV_PYTHON_DOWNLOADS: 'never',
+      UV_NO_MANAGED_PYTHON: '1',
+      CI: '1',
+    },
+  });
+  if (result.status !== 0) {
+    const reason = result.error?.message ?? result.signal ?? `exit ${String(result.status)}`;
+    throw new Error(`uv ${label} failed (${reason}): ${boundText(
+      [result.stdout, result.stderr].filter(Boolean).join('\n'),
+      4096,
+    )}`);
+  }
+}
+
+export function validateMaterializedPythonEnvironment(
+  environmentRoot: string,
+  sourceCommand: string,
+  repository: string,
+  candidateRoot = environmentRoot,
+): string {
+  const environmentPython = join(environmentRoot, 'bin', 'python3.14');
+  if (!existsSync(environmentPython) || executableContentDigest(environmentPython) !== executableContentDigest(sourceCommand)) {
+    throw new Error('materialized Python environment does not use the declared interpreter');
+  }
+  visitDirectory(environmentRoot, 'materialized Python environment', (absolute, relativePath, entry) => {
+    if (entry.isSymbolicLink()) {
+      throw new Error(`materialized Python environment contains a symlink escape: ${relativePath}`);
+    }
+    const lower = relativePath.toLowerCase();
+    if (lower.endsWith('.pth') || lower.endsWith('.egg-link') || /(^|\/)(sitecustomize|usercustomize)\.py$/.test(lower)) {
+      throw new Error(`materialized Python environment contains forbidden site customization: ${relativePath}`);
+    }
+    if (!entry.isFile()) return;
+    if (lower.endsWith('direct_url.json')) {
+      validatePythonDirectUrl(absolute, [environmentRoot, candidateRoot]);
+    }
+    const stat = statSync(absolute);
+    if (stat.size <= 1024 * 1024 && readFileSync(absolute).includes(Buffer.from(repository))) {
+      throw new Error(`materialized Python environment refers to the source checkout: ${relativePath}`);
+    }
+  });
+  return environmentPython;
+}
+
+function validatePythonDirectUrl(file: string, allowedRoots: string[]): void {
+  const value = asObject(JSON.parse(readFileSync(file, 'utf8')), 'Python direct_url.json');
+  const dirInfo = value.dir_info === undefined ? undefined : asObject(value.dir_info, 'Python direct_url dir_info');
+  if (dirInfo?.editable === true) throw new Error('materialized Python environment contains an editable install');
+  if (typeof value.url !== 'string' || !value.url.startsWith('file://')) return;
+  const path = decodeURIComponent(value.url.slice('file://'.length));
+  const roots = allowedRoots.map((root) => realpathSync(root));
+  const selected = isAbsolute(path) && existsSync(path) ? realpathSync(path) : path;
+  if (isAbsolute(selected) && !roots.some((root) => selected === root || selected.startsWith(`${root}${sep}`))) {
+    throw new Error('materialized Python environment contains an external local install');
+  }
+}
+
+function dependencyEnvironmentDigest(environmentRoot: string): string {
+  return directoryContentDigest(environmentRoot, 'materialized Python environment');
+}
+
+function pythonDependencyIdentityDigest(
+  environmentRoot: string,
+  candidateRoot: string,
+): string {
+  const sitePackages = join(environmentRoot, 'lib', 'python3.14', 'site-packages');
+  if (!existsSync(sitePackages)) throw new Error('materialized Python environment has no Python 3.14 site-packages');
+  return stablePythonSitePackagesDigest(sitePackages, [environmentRoot, candidateRoot]);
+}
+
+function pythonOfflineArtifactDigest(
+  environmentRoot: string,
+  lockFile: string,
+  candidateRoot: string,
+): string {
+  const sitePackages = join(environmentRoot, 'lib', 'python3.14', 'site-packages');
+  const lockText = readFileSync(lockFile, 'utf8');
+  const artifacts = readdirSync(sitePackages, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith('.dist-info'))
+    .map((entry) => usedPythonArtifact(
+      join(sitePackages, entry.name),
+      lockText,
+      candidateRoot,
+      environmentRoot,
+    ))
+    .sort((left, right) => `${left.name}\0${left.version}`.localeCompare(`${right.name}\0${right.version}`));
+  return sha256(stableJson(artifacts));
+}
+
+function usedPythonArtifact(
+  distInfo: string,
+  lockText: string,
+  candidateRoot: string,
+  environmentRoot: string,
+): {
+  name: string;
+  version: string;
+  selectedArtifact: SelectedUvLockArtifact;
+  wheelDigest: string;
+  recordDigest: string;
+} {
+  const metadata = readFileSync(join(distInfo, 'METADATA'), 'utf8');
+  const name = pythonMetadataField(metadata, 'Name');
+  const version = pythonMetadataField(metadata, 'Version');
+  const lockPackage = matchingUvLockPackage(lockText, name, version);
+  const wheelMetadata = readFileSync(join(distInfo, 'WHEEL'), 'utf8');
+  const directUrl = join(distInfo, 'direct_url.json');
+  return {
+    name: normalizePythonPackageName(name),
+    version,
+    selectedArtifact: existsSync(directUrl)
+      ? pythonDirectSourceArtifact(directUrl, candidateRoot, environmentRoot)
+      : selectedUvLockArtifact(lockPackage, wheelMetadata),
+    wheelDigest: sha256(wheelMetadata),
+    recordDigest: stablePythonRecordDigest(join(distInfo, 'RECORD')),
+  };
+}
+
+export type SelectedUvLockArtifact = {
+  kind: 'wheel' | 'sdist' | 'direct-source';
+  filename: string;
+  hash: string;
+};
+
+export function selectedUvLockArtifact(
+  lockPackage: string,
+  wheelMetadata: string,
+): SelectedUvLockArtifact {
+  const tags = [...wheelMetadata.matchAll(/^Tag:\s*(\S+)\s*$/gmi)].map((match) => match[1]!.toLowerCase());
+  if (tags.length === 0) throw new Error('installed Python artifact WHEEL metadata has no compatibility tag');
+  const wheels = uvLockArtifactList(lockPackage, 'wheels');
+  const compatible = wheels.filter((artifact) =>
+    wheelFilenameTags(artifact.filename).some((tag) => tags.includes(tag)));
+  if (compatible.length === 1) return { kind: 'wheel', ...compatible[0]! };
+  if (compatible.length > 1) {
+    throw new Error('installed Python artifact maps to multiple compatible uv.lock wheels');
+  }
+  if (wheels.length > 0) {
+    throw new Error('installed Python artifact does not map to a compatible uv.lock wheel');
+  }
+  const sdists = uvLockArtifactList(lockPackage, 'sdist');
+  if (sdists.length !== 1) {
+    throw new Error('installed Python artifact does not map uniquely to a uv.lock source distribution');
+  }
+  return { kind: 'sdist', ...sdists[0]! };
+}
+
+function wheelFilenameTags(filename: string): string[] {
+  const lower = filename.toLowerCase();
+  if (!lower.endsWith('.whl')) throw new Error('uv.lock wheel artifact filename must end with .whl');
+  const segments = lower.slice(0, -4).split('-');
+  if (segments.length < 5) throw new Error('uv.lock wheel artifact filename has no compatibility tags');
+  const [pythonTags, abiTags, platformTags] = segments.slice(-3).map((value) => value!.split('.'));
+  const tags: string[] = [];
+  for (const pythonTag of pythonTags!) {
+    for (const abiTag of abiTags!) {
+      for (const platformTag of platformTags!) tags.push(`${pythonTag}-${abiTag}-${platformTag}`);
+    }
+  }
+  return tags;
+}
+
+function uvLockArtifactList(
+  lockPackage: string,
+  field: 'wheels' | 'sdist',
+): Array<{ filename: string; hash: string }> {
+  const value = field === 'wheels'
+    ? lockPackage.match(/^wheels\s*=\s*\[([\s\S]*?)^\]\s*$/m)?.[1]
+    : lockPackage.match(/^sdist\s*=\s*(\{[^\n]+\})\s*$/m)?.[1];
+  if (!value) return [];
+  return [...value.matchAll(/\{([^{}]+)\}/g)].map((match) => {
+    const item = match[1]!;
+    const location = item.match(/(?:url|path)\s*=\s*"([^"]+)"/)?.[1];
+    const hash = item.match(/hash\s*=\s*"(sha256:[a-f0-9]{64})"/)?.[1];
+    if (!location || !hash) throw new Error(`uv.lock ${field} artifact must declare a location and sha256 hash`);
+    const cleanLocation = location.split(/[?#]/, 1)[0]!;
+    const filename = decodeURIComponent(cleanLocation.slice(cleanLocation.lastIndexOf('/') + 1));
+    if (!filename) throw new Error(`uv.lock ${field} artifact has no filename`);
+    return { filename, hash };
+  });
+}
+
+function pythonMetadataField(metadata: string, field: string): string {
+  const match = metadata.match(new RegExp(`^${field}:\\s*(.+)$`, 'mi'));
+  if (!match?.[1]) throw new Error(`installed Python artifact has no ${field}`);
+  return match[1].trim();
+}
+
+function normalizePythonPackageName(value: string): string {
+  return value.toLowerCase().replace(/[-_.]+/g, '-');
+}
+
+function matchingUvLockPackage(lockText: string, name: string, version: string): string {
+  const matches = lockText
+    .split(/(?=^\[\[package\]\]\s*$)/m)
+    .filter((block) => block.startsWith('[[package]]'))
+    .filter((block) => {
+      const blockName = block.match(/^name\s*=\s*"([^"]+)"\s*$/m)?.[1];
+      const blockVersion = block.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
+      return blockName && normalizePythonPackageName(blockName) === normalizePythonPackageName(name) && blockVersion === version;
+    });
+  if (matches.length !== 1) {
+    throw new Error(`installed Python artifact does not map uniquely to uv.lock: ${name}==${version}`);
+  }
+  return matches[0]!.trim();
+}
+
+function pythonDirectSourceArtifact(
+  directUrlFile: string,
+  candidateRoot: string,
+  environmentRoot: string,
+): SelectedUvLockArtifact {
+  const value = asObject(JSON.parse(readFileSync(directUrlFile, 'utf8')), 'Python direct_url.json');
+  if (typeof value.url !== 'string' || !value.url.startsWith('file://')) {
+    return {
+      kind: 'direct-source',
+      filename: 'direct_url.json',
+      hash: `sha256:${sha256(stableJson(value))}`,
+    };
+  }
+  const source = decodeURIComponent(value.url.slice('file://'.length));
+  const candidate = realpathSync(candidateRoot);
+  const selected = realpathSync(source);
+  if (selected !== candidate && !selected.startsWith(`${candidate}${sep}`)) {
+    throw new Error('installed Python artifact source is outside the candidate');
+  }
+  const digest = statSync(selected).isDirectory()
+    ? directoryContentDigest(selected, 'candidate Python artifact source')
+    : sha256(readFileSync(selected));
+  const identity = sha256(stableJson({
+    path: relative(candidate, selected),
+    digest,
+    directUrl: normalizedTextDigest(readFileSync(directUrlFile), [candidateRoot, environmentRoot]),
+  }));
+  return {
+    kind: 'direct-source',
+    filename: relative(candidate, selected) || '.',
+    hash: `sha256:${identity}`,
+  };
+}
+
+function stablePythonSitePackagesDigest(sitePackages: string, replaceRoots: string[]): string {
+  const entries: Array<{ path: string; kind: string; mode?: number; digest?: string }> = [];
+  visitDirectory(sitePackages, 'materialized Python site-packages', (absolute, relativePath, entry) => {
+    const item = stablePythonSitePackageEntry(absolute, relativePath, entry, replaceRoots);
+    if (item) entries.push(item);
+  });
+  return sha256(stableJson(entries.sort((left, right) => left.path.localeCompare(right.path))));
+}
+
+function stablePythonSitePackageEntry(
+  absolute: string,
+  relativePath: string,
+  entry: Dirent,
+  replaceRoots: string[],
+): { path: string; kind: string; mode?: number; digest?: string } | undefined {
+  if (relativePath.endsWith('.pyc') || relativePath.includes('/__pycache__/')) return undefined;
+  if (relativePath.endsWith('/uv_cache.json')) return undefined;
+  if (entry.isDirectory()) return { path: relativePath, kind: 'directory' };
+  if (entry.isSymbolicLink()) {
+    return { path: relativePath, kind: 'symlink', digest: sha256(readlinkSync(absolute)) };
+  }
+  if (!entry.isFile()) return undefined;
+  const digest = relativePath.endsWith('/RECORD')
+    ? stablePythonRecordDigest(absolute)
+    : relativePath.endsWith('/direct_url.json')
+      ? normalizedTextDigest(readFileSync(absolute), replaceRoots)
+      : sha256(readFileSync(absolute));
+  return { path: relativePath, kind: 'file', mode: statSync(absolute).mode & 0o777, digest };
+}
+
+function stablePythonRecordDigest(file: string): string {
+  const rows = readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((row) => !row.includes('__pycache__/') && !row.endsWith('.pyc'))
+    .map((row) => /\/(direct_url|uv_cache)\.json,/.test(row) ? `${row.split(',')[0]},<normalized>` : row)
+    .sort();
+  return sha256(rows.join('\n'));
+}
+
+function normalizedTextDigest(value: Buffer, roots: string[]): string {
+  let text = value.toString('utf8');
+  for (const root of roots) {
+    text = text.replaceAll(root, '<runtime-root>');
+    try {
+      text = text.replaceAll(realpathSync(root), '<runtime-root>');
+    } catch {
+      // The lexical root remains sufficient when it no longer exists.
+    }
+  }
+  return sha256(text);
+}
+
+function pythonEnvironmentReadAccess(
+  environmentRoot: string,
+  environmentDigest: string,
+): EvidenceRuntimeReadAccess {
+  const root = realpathSync(environmentRoot);
+  return {
+    roots: [root],
+    literals: [],
+    mapExecutableRoots: [root],
+    mapExecutableLiterals: [],
+    images: [],
+    links: [],
+    missingWeakLinks: [],
+    identityDigest: environmentDigest,
+  };
+}
+
+function runPythonBootstrapPreflight(input: {
+  options: RunEvidenceOperationOptions;
+  environmentPython: string;
+  environmentRoot: string;
+  projectRoot: string;
+  runtimeAccess: EvidenceRuntimeReadAccess;
+}): void {
+  const { options, environmentPython, environmentRoot, projectRoot, runtimeAccess } = input;
+  const expectedPrefix = realpathSync(environmentRoot);
+  const script = [
+    'import encodings,json,os,site,sys',
+    'expected=os.path.realpath(sys.argv[1])',
+    'assert sys.version_info[:2]==(3,14)',
+    'assert os.path.realpath(sys.prefix)==expected',
+    'assert os.path.realpath(sys.base_prefix)!=expected',
+    'assert all(not p or os.path.realpath(p)!=os.path.realpath(os.getcwd()) for p in sys.path)',
+  ].join(';');
+  const sandbox = evidenceSandboxCommand({
+    cwd: options.snapshotRoot,
+    writableRoots: [],
+    argv: [environmentPython, '-I', '-c', script, expectedPrefix],
+    runtimeAccess,
+  });
+  const result = spawnSync(sandbox.command, sandbox.args, {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    timeout: 10_000,
+    maxBuffer: 64 * 1024,
+    env: {
+      PATH: `${dirname(environmentPython)}:/usr/bin:/bin`,
+      HOME: dirname(environmentRoot),
+      LANG: 'C.UTF-8',
+      LC_ALL: '',
+      PYTHONNOUSERSITE: '1',
+      PYTHONDONTWRITEBYTECODE: '1',
+      PYTHONPATH: '',
+      VIRTUAL_ENV: environmentRoot,
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(`Python bootstrap and stdlib preflight failed: ${boundText(
+      [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
+      4096,
+    )}`);
+  }
+}
+
+function directoryContentDigest(root: string, label: string): string {
+  const entries: Array<{ path: string; kind: string; mode?: number; digest?: string }> = [];
+  visitDirectory(root, label, (absolute, relativePath, entry) => {
+    if (entry.isDirectory()) entries.push({ path: relativePath, kind: 'directory' });
+    else if (entry.isSymbolicLink()) {
+      entries.push({ path: relativePath, kind: 'symlink', digest: sha256(readlinkSync(absolute)) });
+    } else if (entry.isFile()) {
+      entries.push({
+        path: relativePath,
+        kind: 'file',
+        mode: statSync(absolute).mode & 0o777,
+        digest: sha256(readFileSync(absolute)),
+      });
+    }
+  });
+  return sha256(stableJson(entries.sort((left, right) => left.path.localeCompare(right.path))));
+}
+
+function visitDirectory(
+  root: string,
+  label: string,
+  visitor: (absolute: string, relativePath: string, entry: Dirent) => void,
+): void {
+  const pending: Array<{ absolute: string; relative: string }> = [{ absolute: realpathSync(root), relative: '' }];
+  let visited = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    for (const entry of readdirSync(current.absolute, { withFileTypes: true })) {
+      const relativePath = current.relative ? `${current.relative}/${entry.name}` : entry.name;
+      const absolute = join(current.absolute, entry.name);
+      visited += 1;
+      if (visited > 200_000) throw new Error(`${label} exceeds 200000 entries`);
+      visitor(absolute, relativePath, entry);
+      queueDirectoryEntry({ entry, absolute, relativePath, label, pending });
+    }
+  }
+}
+
+function queueDirectoryEntry(input: {
+  entry: Dirent;
+  absolute: string;
+  relativePath: string;
+  label: string;
+  pending: Array<{ absolute: string; relative: string }>;
+}): void {
+  const { entry, absolute, relativePath, label, pending } = input;
+  if (entry.isDirectory()) pending.push({ absolute, relative: relativePath });
+  else if (!entry.isFile() && !entry.isSymbolicLink()) {
+    throw new Error(`${label} contains unsupported entry: ${relativePath}`);
+  }
+}
+
 function operationExecutionIdentity(
   options: RunEvidenceOperationOptions,
   runtime: Pick<PreparedOperationRuntime,
-    'command' | 'runtimeAccess' | 'systemToolAccess' | 'preparedRuntime' | 'preparedChildRuntimes'>,
+    'command' | 'runtimeAccess' | 'systemToolAccess' | 'preparedRuntime' | 'preparedChildRuntimes' | 'pythonRuntimeDigest'>,
 ): string {
   const { binding, provider, operation } = options;
   return sha256(stableJson({
@@ -1848,6 +2988,7 @@ function operationExecutionIdentity(
       source: entry.sourceAccess.identityDigest,
       execution: entry.prepared.identityDigest,
     })),
+    pythonRuntimeDigest: runtime.pythonRuntimeDigest,
     dependencyProjectionDigest: options.dependencyDigest,
     systemToolDigest: runtime.systemToolAccess.identityDigest,
     runnerPolicy: EVIDENCE_RUNNER_POLICY,
@@ -1866,6 +3007,7 @@ function operationCommandDigest(options: RunEvidenceOperationOptions): string {
     expectedExit: operation.expectedExit,
     expectedExitCode: operation.expectedExitCode,
     evidenceLevel: operation.evidenceLevel,
+    pythonRuntime: operation.pythonRuntime,
     seed: operation.seed,
     iterations: operation.iterations,
   }));
@@ -1883,6 +3025,7 @@ function operationRunner(
   const runnerHome = realpathSync(runnerHomePath);
   const operation = options.operation;
   const env = {
+    ...runtime.operationEnvironment,
     PATH: operationPath(runtime),
     HOME: runnerHome,
     TMPDIR: runnerTmp,
@@ -1999,7 +3142,7 @@ async function captureEvidenceCommand(
 
 function operationRuntimeUnchanged(runtime: PreparedOperationRuntime): boolean {
   try {
-    return evidenceRuntimeReadAccess(runtime.command).identityDigest === runtime.runtimeAccess.identityDigest &&
+    return runtime.sourceRuntimeUnchanged() &&
       runtime.systemToolAccess.verifyUnchanged() &&
       runtime.preparedRuntime.verifyUnchanged() &&
       runtime.preparedChildRuntimes.every((entry) =>
@@ -2615,7 +3758,7 @@ function decodeGitQuotedPath(raw: string): string {
 }
 
 function operationNeedsDependencies(operation: EvidenceOperation): boolean {
-  return !['true', 'false'].includes(operation.argv[0]!);
+  return !operation.pythonRuntime && !['true', 'false'].includes(operation.argv[0]!);
 }
 
 function resetSnapshotToRef(
@@ -2768,6 +3911,46 @@ function executionContextIncompleteRecord(
     commandDigest: sha256(stableJson(operation.argv)),
     startedAt: now,
     finishedAt: now,
+    outputDigest: sha256(outputSummary),
+    outputSummary,
+    candidateDigest: binding.candidateDigest,
+    baseDigest: binding.baseDigest,
+    scopeDigest: binding.scopeDigest,
+    fresh: false,
+  };
+}
+
+function pythonRuntimeIncompleteRecord(
+  options: RunEvidenceOperationOptions,
+  startedAt: string,
+  error: PythonRuntimePreparationError,
+): ReviewEvidenceRecord {
+  const { provider, operation, binding } = options;
+  const finishedAt = new Date().toISOString();
+  const outputSummary = boundText(
+    `runtime incomplete before project gate: ${error.message}`,
+    operation.maxOutputBytes,
+  );
+  const snapshotDigest = snapshotContentDigest(
+    options.snapshotRoot,
+    dependencyRelativePaths(options.changedFiles),
+  );
+  return {
+    id: `${provider.id}:${operation.id}`,
+    providerId: provider.id,
+    operationId: operation.id,
+    cellIds: [...provider.cellIds],
+    owner: provider.owner,
+    kind: provider.kind,
+    status: 'runtime-incomplete',
+    evidenceLevel: operation.evidenceLevel,
+    environment: 'python3.14-uv-frozen-offline-runtime-incomplete',
+    commandDigest: operationCommandDigest(options),
+    snapshotDigestBefore: snapshotDigest,
+    snapshotDigestAfter: snapshotDigest,
+    replayCommand: operation.argv.map((value) => value.replaceAll('{seed}', operation.seed ?? '')),
+    startedAt,
+    finishedAt,
     outputDigest: sha256(outputSummary),
     outputSummary,
     candidateDigest: binding.candidateDigest,
@@ -3287,6 +4470,10 @@ function optionalString(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'string') throw new Error('optional value must be a string');
   return value.trim() || undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function requiredId(value: unknown, label: string): string {

@@ -157,6 +157,18 @@ images into a private projection, rewrites their load commands to projected path
 ad-hoc signs and re-attests the transformed bytes, and keeps the original host package
 tree unreadable. The macOS adapter also exactly re-denies inherited syslog, Mach service,
 and shared-memory channels.
+An operation may opt into the single supported Python contract: Python 3.14 with `uv`,
+`pyproject.toml`, and `uv.lock`. When external artifacts are required, the runtime clones the ambient uv cache into the
+operation root, then resolves frozen and offline into a non-editable, candidate-bound
+environment, removes runtime-owned site customization, and performs an isolated
+interpreter/stdlib/path preflight before the project gate. Interpreter, resolver,
+lockfiles, installed artifact set, and environment identities are re-attested. Installed
+wheel tags must uniquely select the used registry wheel filename and hash from the lockfile.
+Host
+tools are selected only from bounded system/Homebrew roots and inspected inside
+Seatbelt; unused ambient cache entries do not participate in identity or validity. Any
+pre-gate failure is `runtime-incomplete`; only a gate exit mismatch after preflight is
+`verified-failure`.
 Secret-like bounded regular untracked files use a separate non-prompt channel:
 their paths and content digests remain in the candidate binding and their exact
 bytes are copied into each isolated executable snapshot, while the semantic diff
