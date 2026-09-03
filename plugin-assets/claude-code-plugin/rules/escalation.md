@@ -18,17 +18,28 @@ mechanics so it does not depend on the model's own confidence.
 
 - The action is irreversible or outward-facing: force-push, publish, release,
   data deletion, spending money, messaging other people.
-- Two materially different interpretations of the request are both
-  implementable and lead to different work.
+- Two plausible interpretations are both implementable, would change the
+  target, behavior, or external effect, and current evidence cannot resolve
+  which one the user intends.
 - The correct fix requires expanding scope beyond what the user named.
+
+## Fix Attempts
+
+- A fix attempt is a completed corrective action based on a stated root-cause
+  hypothesis, followed by relevant verification.
+- Inspection and reruns without a corrective action do not count; neither do
+  tool, sandbox, or permission failures that prevent the action from completing
+  or verification from running.
+- After two consecutive attempts under the same hypothesis leave the same
+  verification blocked by the same failure class, stop editing and return to
+  diagnosis. Cosmetic output changes do not reset the count; a different
+  failure class or new evidence-backed hypothesis does.
 
 ## Hard Stop Tripwires
 
-Stop editing, report findings, and ask when any of these fire:
+Stop editing and report findings when any of these fire. Ask only when
+continuing requires user authority, a scope decision, or external state change:
 
-- Two consecutive fix attempts did not change the failing signal. Do not try a
-  third variation of the same hypothesis; write down what was tried and what
-  was observed instead.
 - You are about to weaken, skip, or delete a test, assertion, type, or lint
   rule so that a check passes.
 - You discover mid-task that the plan or request rests on a false premise.
@@ -45,5 +56,5 @@ Stop editing, report findings, and ask when any of these fire:
 ## When Stopping
 
 Leave the working tree clean or clearly described. Report: hypotheses tried,
-evidence observed, what is verified versus suspected, and the single question
-or decision that unblocks the work.
+evidence observed, what is verified versus suspected, and the next diagnostic
+step or user decision required.

@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, beforeAll, afterAll } from 'bun:test';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import {
@@ -10,18 +11,20 @@ import {
 import { __resetRegistry } from '../src/token-registry';
 import { BrowserManager } from '../src/browser-manager';
 import { resolveConfig } from '../src/config';
+import { controllerOwner, type ControllerState } from '../src/controller-state';
 
 // Tests for the v1.41+ ownsTerminalAgent flag.
 //
 // Embedders (gbrowser phoenix overlay) that run their own PTY server and write
 // terminal-port / terminal-internal-token / terminal-agent-pid themselves were
-// getting those files clobbered by goldband's shutdown(). The flag (default true)
-// gates four side effects (v1.44+):
+// getting those files clobbered by goldband's shutdown(). Cleanup now requires
+// BOTH a matching controller owner and this flag (default true). Together they
+// gate four side effects (v1.44+):
 //   1. identity-based kill of the PID in <stateDir>/terminal-agent-pid
 //   2. unlink terminal-port
 //   3. unlink terminal-internal-token
 //   4. unlink terminal-agent-pid
-// False = embedder owns them, goldband stays hands-off.
+// False or no matching controller owner = goldband stays hands-off.
 //
 // Pre-v1.44 used `pkill -f terminal-agent\.ts` which matched sibling goldband
 // sessions on the same host — see browse/src/terminal-agent-control.ts header.
@@ -124,12 +127,9 @@ function terminationCalls(
 }
 
 describe('buildFetchHandler ownsTerminalAgent gate', () => {
-  // shutdown() reads `path.dirname(config.stateFile)` from module-level config
-  // (composition gap — see TODOS T9). So unlinks target the real state dir,
-  // not a per-test temp dir. If a real goldband daemon is running on this host,
-  // its terminal-port + terminal-internal-token + terminal-agent-pid live
-  // where this test writes. Save + restore real-daemon file contents around
-  // the whole suite so the test never clobbers a developer's running session.
+  // These tests use the default config state dir to cover the exact historical
+  // shared-file path. Save and restore any real-daemon discovery files so the
+  // suite never clobbers a developer's running session.
   let realPortBackup: string | null = null;
   let realTokenBackup: string | null = null;
   let realAgentRecordBackup: string | null = null;
@@ -183,34 +183,30 @@ describe('buildFetchHandler ownsTerminalAgent gate', () => {
     expect(terminationCalls(calls).length).toBe(0);
   });
 
-  test('2. ownsTerminalAgent:true deletes all three files; identity-based kill probes the recorded PID', async () => {
+  test('2. ownerless embedder preserves shared files even when ownsTerminalAgent:true', async () => {
     writeSentinels();
     const handle = buildFetchHandler(makeMinimalConfig({ ownsTerminalAgent: true }));
     const calls = await withStubs(async () => {
       await runShutdown(handle);
     });
-    expect(readIfExists(PORT_FILE)).toBeNull();
-    expect(readIfExists(TOKEN_FILE)).toBeNull();
-    expect(readIfExists(AGENT_RECORD_FILE)).toBeNull();
-    // isProcessAlive sends signal 0; PID is the sentinel-dead PID, so the
-    // probe returns false and no SIGTERM is sent.
-    const probes = calls.filter(([pid, sig]) => pid === SENTINEL_DEAD_PID && sig === 0);
-    expect(probes.length).toBeGreaterThan(0);
+    expect(readIfExists(PORT_FILE)).toBe(SENTINEL_PORT);
+    expect(readIfExists(TOKEN_FILE)).toBe(SENTINEL_TOKEN);
+    expect(readIfExists(AGENT_RECORD_FILE)).not.toBeNull();
+    expect(calls.length).toBe(0);
     expect(terminationCalls(calls).length).toBe(0);
   });
 
-  test('3. ownsTerminalAgent unset defaults to true (deletes all three; probes recorded PID)', async () => {
+  test('3. ownerless embedder default also preserves shared files', async () => {
     writeSentinels();
     // Note: no ownsTerminalAgent in the overrides — uses the `?? true` default.
     const handle = buildFetchHandler(makeMinimalConfig());
     const calls = await withStubs(async () => {
       await runShutdown(handle);
     });
-    expect(readIfExists(PORT_FILE)).toBeNull();
-    expect(readIfExists(TOKEN_FILE)).toBeNull();
-    expect(readIfExists(AGENT_RECORD_FILE)).toBeNull();
-    const probes = calls.filter(([pid, sig]) => pid === SENTINEL_DEAD_PID && sig === 0);
-    expect(probes.length).toBeGreaterThan(0);
+    expect(readIfExists(PORT_FILE)).toBe(SENTINEL_PORT);
+    expect(readIfExists(TOKEN_FILE)).toBe(SENTINEL_TOKEN);
+    expect(readIfExists(AGENT_RECORD_FILE)).not.toBeNull();
+    expect(calls.length).toBe(0);
   });
 
   test('4. CLI start() call site passes ownsTerminalAgent: true literally (static grep)', () => {
@@ -228,5 +224,110 @@ describe('buildFetchHandler ownsTerminalAgent gate', () => {
     // The pattern looks for the trailing comma and trailing context so the
     // match cannot be satisfied by the JSDoc reference earlier in the file.
     expect(source).toMatch(/ownsTerminalAgent:\s*true,\s*\/\/\s*CLI spawns terminal-agent\.ts/);
+  });
+});
+
+describe('buildFetchHandler shutdown ownership safety', () => {
+  function makeOwnedShutdownFixture(dir: string, manager: BrowserManager) {
+    const stateFile = path.join(dir, 'browse.json');
+    const profileDir = path.join(dir, 'chromium-profile');
+    fs.mkdirSync(profileDir, { recursive: true });
+    const lockPath = path.join(profileDir, 'SingletonLock');
+    fs.symlinkSync(`${os.hostname()}-${process.pid}`, lockPath);
+    const ownerState: ControllerState = {
+      pid: process.pid,
+      port: 34568,
+      token: 'shutdown-owner-token-0123456789',
+      startedAt: '2026-09-02T00:00:00.000Z',
+      serverPath: '/test/server.ts',
+      instanceId: 'shutdown-owner',
+      phase: 'ready',
+      mode: 'headed',
+    };
+    fs.writeFileSync(stateFile, JSON.stringify(ownerState));
+    const baseConfig = resolveConfig();
+    return {
+      stateFile,
+      profileDir,
+      lockPath,
+      ownerState,
+      config: makeMinimalConfig({
+        config: {
+          ...baseConfig,
+          projectDir: dir,
+          stateDir: dir,
+          stateFile,
+          consoleLog: path.join(dir, 'console.log'),
+          networkLog: path.join(dir, 'network.log'),
+          dialogLog: path.join(dir, 'dialog.log'),
+          auditLog: path.join(dir, 'audit.log'),
+        },
+        browserManager: manager,
+        chromiumProfile: profileDir,
+        controllerOwner: controllerOwner(ownerState),
+        ownsTerminalAgent: false,
+      }),
+    };
+  }
+
+  test('close rejection preserves controller state and live profile locks', async () => {
+    __resetRegistry();
+    __resetShuttingDown();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'browse-shutdown-owner-'));
+    const manager = new BrowserManager();
+    manager.close = async () => { throw new Error('fixture close rejected'); };
+    const fixture = makeOwnedShutdownFixture(dir, manager);
+    const handle = buildFetchHandler(fixture.config);
+
+    try {
+      await expect(handle.shutdown(0)).rejects.toThrow('ownership state and profile locks were preserved');
+      expect(fs.readFileSync(fixture.stateFile, 'utf-8')).toBe(JSON.stringify(fixture.ownerState));
+      expect(fs.readlinkSync(fixture.lockPath)).toBe(`${os.hostname()}-${process.pid}`);
+    } finally {
+      __resetShuttingDown();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('live profile lock blocks state deletion even after browser close succeeds', async () => {
+    __resetRegistry();
+    __resetShuttingDown();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'browse-shutdown-lock-'));
+    const fixture = makeOwnedShutdownFixture(dir, new BrowserManager());
+    const handle = buildFetchHandler(fixture.config);
+
+    try {
+      await expect(handle.shutdown(0)).rejects.toThrow('ownership state and profile locks were preserved');
+      expect(fs.readFileSync(fixture.stateFile, 'utf-8')).toBe(JSON.stringify(fixture.ownerState));
+      expect(fs.readlinkSync(fixture.lockPath)).toBe(`${os.hostname()}-${process.pid}`);
+    } finally {
+      __resetShuttingDown();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('unconfirmed owned Xvfb stop preserves controller state and profile locks', async () => {
+    __resetRegistry();
+    __resetShuttingDown();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'browse-shutdown-xvfb-'));
+    const fixture = makeOwnedShutdownFixture(dir, new BrowserManager());
+    fixture.config.xvfb = {
+      pid: 4242,
+      startTime: 'fixture-start',
+      display: ':99',
+      close: () => {},
+      closeStrict: async () => { throw new Error('fixture Xvfb stop unknown'); },
+    };
+    fixture.config.ownsXvfb = true;
+    const handle = buildFetchHandler(fixture.config);
+
+    try {
+      await expect(handle.shutdown(0)).rejects.toThrow('ownership state and profile locks were preserved');
+      expect(fs.readFileSync(fixture.stateFile, 'utf-8')).toBe(JSON.stringify(fixture.ownerState));
+      expect(fs.readlinkSync(fixture.lockPath)).toBe(`${os.hostname()}-${process.pid}`);
+    } finally {
+      __resetShuttingDown();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

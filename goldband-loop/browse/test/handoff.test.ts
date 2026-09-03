@@ -10,6 +10,7 @@ import { startTestServer } from './test-server';
 import { BrowserManager, type BrowserState } from '../src/browser-manager';
 import { handleWriteCommand as _handleWriteCommand } from '../src/write-commands';
 import { handleMetaCommand } from '../src/meta-commands';
+import { hasXvfbProbeTools, pickFreeDisplay, spawnXvfb, type XvfbHandle } from '../src/xvfb';
 
 const handleWriteCommand = (cmd: string, args: string[], b: BrowserManager) =>
   _handleWriteCommand(cmd, args, b.getActiveSession(), b);
@@ -17,8 +18,22 @@ const handleWriteCommand = (cmd: string, args: string[], b: BrowserManager) =>
 let testServer: ReturnType<typeof startTestServer>;
 let bm: BrowserManager;
 let baseUrl: string;
+let xvfb: XvfbHandle | null = null;
+let originalDisplay: string | undefined;
+const needsLinuxDisplay = process.platform === 'linux'
+  && !process.env.DISPLAY
+  && !process.env.WAYLAND_DISPLAY;
+const canRunHeadedHandoff = !needsLinuxDisplay || hasXvfbProbeTools();
 
 beforeAll(async () => {
+  originalDisplay = process.env.DISPLAY;
+  if (needsLinuxDisplay && canRunHeadedHandoff) {
+    const display = pickFreeDisplay();
+    if (display === null) throw new Error('No free X display is available for headed handoff tests.');
+    xvfb = await spawnXvfb(display);
+    process.env.DISPLAY = xvfb.display;
+  }
+
   testServer = startTestServer(0);
   baseUrl = testServer.url;
 
@@ -26,10 +41,17 @@ beforeAll(async () => {
   await bm.launch();
 });
 
-afterAll(() => {
-  try { testServer.server.stop(); } catch {}
-  setTimeout(() => process.exit(0), 500);
-});
+afterAll(async () => {
+  const cleanupErrors: unknown[] = [];
+  try { await bm?.close(15_000); } catch (error) { cleanupErrors.push(error); }
+  try { await testServer?.server.stop(true); } catch (error) { cleanupErrors.push(error); }
+  try { await xvfb?.closeStrict(); } catch (error) { cleanupErrors.push(error); }
+  if (originalDisplay === undefined) delete process.env.DISPLAY;
+  else process.env.DISPLAY = originalDisplay;
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'handoff test cleanup failed');
+  }
+}, 20_000);
 
 // ─── Unit Tests: Failure Tracking (no browser needed) ────────────
 
@@ -172,7 +194,48 @@ describe('handoff edge cases', () => {
 // Each handoff test creates its own BrowserManager since handoff swaps the browser.
 // These tests run sequentially (one browser at a time) to avoid resource issues.
 
-describe('handoff integration', () => {
+describe.skipIf(!canRunHeadedHandoff)('handoff integration', () => {
+  test('failed headed restore returns control to the original headless browser', async () => {
+    const hbm = new BrowserManager();
+    await hbm.launch();
+    const restoreState = hbm.restoreState.bind(hbm);
+
+    try {
+      await handleWriteCommand('goto', [baseUrl + '/basic.html'], hbm);
+      const ownedTabId = await hbm.newTab(baseUrl + '/form.html', 'owner-a');
+      const originalBrowser = (hbm as any).browser;
+      const originalTabIds = [...(hbm as any).pages.keys()];
+      const originalNextTabId = (hbm as any).nextTabId;
+      let replacementBrowser: any;
+      (hbm as any).restoreState = async (state: BrowserState) => {
+        replacementBrowser = (hbm as any).browser;
+        await restoreState(state);
+        throw new Error('forced failure after replacement state mutation');
+      };
+
+      const result = await hbm.handoff('force restore failure');
+
+      expect(result).toContain('ERROR: Handoff failed during state restore');
+      expect(result).toContain('forced failure after replacement state mutation');
+      expect(result).toContain('Original headless browser restored and still running.');
+      expect(hbm.getConnectionMode()).toBe('launched');
+      expect((hbm as any).browser).toBe(originalBrowser);
+      expect(originalBrowser.isConnected()).toBe(true);
+      expect(replacementBrowser.isConnected()).toBe(false);
+      expect([...(hbm as any).pages.keys()]).toEqual(originalTabIds);
+      expect(hbm.getActiveTabId()).toBe(ownedTabId);
+      expect(hbm.getTabOwner(ownedTabId)).toBe('owner-a');
+      expect((hbm as any).nextTabId).toBe(originalNextTabId);
+
+      const { handleReadCommand } = await import('../src/read-commands');
+      const text = await handleReadCommand('text', [], hbm);
+      expect(text.length).toBeGreaterThan(0);
+    } finally {
+      (hbm as any).restoreState = restoreState;
+      await hbm.close();
+    }
+  }, 45000);
+
   test('full handoff: cookies preserved, headed mode active, commands work', async () => {
     const hbm = new BrowserManager();
     await hbm.launch();

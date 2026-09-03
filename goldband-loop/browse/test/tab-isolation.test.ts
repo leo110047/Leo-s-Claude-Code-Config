@@ -235,13 +235,12 @@ import * as path from 'path';
 const CLI_SRC = fs.readFileSync(path.join(import.meta.dir, '../src/cli.ts'), 'utf-8');
 
 describe('pair-agent CLI behavior', () => {
-  // Extract the pair-agent block: from "pair-agent" dispatch to "process.exit(0)"
-  const pairStart = CLI_SRC.indexOf("command === 'pair-agent'");
-  const pairEnd = CLI_SRC.indexOf('process.exit(0)', pairStart);
+  const pairStart = CLI_SRC.indexOf('async function ensurePairAgentHeaded');
+  const pairEnd = CLI_SRC.indexOf('// ─── Main', pairStart);
   const pairBlock = CLI_SRC.slice(pairStart, pairEnd);
 
   it('auto-switches to headed mode unless --headless', () => {
-    expect(pairBlock).toContain("state.mode !== 'headed'");
+    expect(pairBlock).toContain("state.mode === 'headed'");
     expect(pairBlock).toContain("--headless");
     expect(pairBlock).toContain("connect");
   });
@@ -250,6 +249,14 @@ describe('pair-agent CLI behavior', () => {
     expect(pairBlock).toContain('process.execPath');
     // browseBin should be set to execPath, not argv[1]
     expect(pairBlock).toContain('const browseBin = process.execPath');
+  });
+
+  it('accepts a headed switch only after child success and exact owner health', () => {
+    expect(pairBlock).toContain('const connectExit = await connectProc.exited');
+    expect(pairBlock).toContain('connectExit === 0');
+    expect(pairBlock).toContain("newState?.mode === 'headed'");
+    expect(pairBlock).toContain("await probeControllerHealth(newState) === 'healthy'");
+    expect(pairBlock).not.toContain('isServerHealthy(newState.port)');
   });
 
   it('isNgrokAvailable checks goldband env, NGROK_AUTHTOKEN, and native config', () => {

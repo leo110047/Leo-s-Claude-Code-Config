@@ -44,7 +44,7 @@ For an empty invocation, show this generated capability menu and stop:
 
 ## Human decisions
 
-- Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.
+- Ask only when user authority is required, or two plausible answers would change the target, behavior, or external effect and current evidence or preferences cannot resolve intent.
 - Batch related decisions when they can be answered together; split only when an earlier answer changes the next question, risk level, or required evidence.
 - Tool schemas and UI own question shape, option labels, validation, and persistence. Prompts should provide only concise decision context.
 - Avoid prompt-owned formats: prompt-owned formatting rubrics, scores, word-count rules, per-finding question rules.

@@ -40,14 +40,36 @@ import { initAuditLog, writeAuditEntry } from './audit';
 import { inspectElement, modifyStyle, resetModifications, getModificationHistory, detachSession, type InspectorResult } from './cdp-inspector';
 // Bun.spawn used instead of child_process.spawn (compiled bun binaries
 // fail posix_spawn on all executables including /bin/bash)
-import { safeUnlink, safeUnlinkQuiet } from './error-handling';
+import { safeUnlink, safeUnlinkQuiet, readProcessStartTime } from './error-handling';
 import { readAgentRecord, killAgentByRecord, agentRecordPath, spawnTerminalAgent } from './terminal-agent-control';
 import { isProcessAlive } from './error-handling';
 import { sanitizeBody, stripLoneSurrogateEscapes } from './sanitize';
 import { startSocksBridge, testUpstream, type BridgeHandle } from './socks-bridge';
 import { parseProxyConfig, toUpstreamConfig, ProxyConfigError } from './proxy-config';
 import { redactProxyUrl } from './proxy-redact';
-import { shouldSpawnXvfb, pickFreeDisplay, spawnXvfb, xvfbInstallHint, type XvfbHandle } from './xvfb';
+import {
+  shouldSpawnXvfb,
+  pickFreeDisplay,
+  spawnXvfb,
+  xvfbInstallHint,
+  XvfbStartupCleanupError,
+  type XvfbHandle,
+  type XvfbOwnershipRecord,
+} from './xvfb';
+import {
+  acquireControllerStartupLock,
+  claimControllerState,
+  controllerOwner,
+  readControllerState,
+  removeOwnedControllerState,
+  sameControllerOwner,
+  updateOwnedControllerState,
+  acceptControllerStartupLockHandoff,
+  type ControllerStartupLock,
+  type ControllerOwner,
+  type ControllerState,
+} from './controller-state';
+import { prepareControllerStateForClaim } from './controller-recovery';
 import { logTunnelDenial } from './tunnel-denial-log';
 import {
   mintSseSessionToken, validateSseSessionToken, extractSseCookie,
@@ -114,6 +136,8 @@ initAuditLog(config.auditLog);
 // Null before the first buildFetchHandler call, which is correct: nothing to
 // shut down yet.
 let activeShutdown: ((code?: number) => Promise<void>) | null = null;
+let activeControllerOwner: ControllerOwner | null = null;
+let preserveControllerStateOnExit = false;
 
 // AUTH_TOKEN is injectable via process.env.AUTH_TOKEN so embedders
 // (gbrowser's gbd daemon spawn) can pre-allocate the token and hand it to
@@ -195,11 +219,15 @@ export interface ServerConfig {
   browserManager: BrowserManager;
   /** Optional Chromium profile path override. Resolved by resolveChromiumProfile(). */
   chromiumProfile?: string;
-  /** Caller-owned. shutdown() does NOT call xvfb.stop(); caller is responsible. */
+  /** Xvfb handle; caller-owned unless ownsXvfb is explicitly true. */
   xvfb?: XvfbHandle | null;
+  /** True only for start()'s internally spawned Xvfb; shutdown verifies it stopped before releasing state. */
+  ownsXvfb?: boolean;
   /** Caller-owned. shutdown() does NOT call proxyBridge.close(); caller is responsible. */
   proxyBridge?: BridgeHandle | null;
   startTime: number;
+  /** Owner identity for compare-and-update/delete of the canonical state file. */
+  controllerOwner?: ControllerOwner;
   /**
    * Overlay hook. Runs AFTER goldband resolves auth and BEFORE route dispatch.
    * Invalid tokens are auto-rejected at the goldband layer (401 returned
@@ -255,6 +283,8 @@ export interface ServerHandle {
    * stopListeners() for that. CLI relies on process.exit() to drop sockets.
    */
   shutdown: (exitCode?: number) => Promise<void>;
+  /** Close factory-owned runtime resources without exiting or touching shared state. */
+  rollbackStartup: () => Promise<void>;
   /**
    * Graceful listener stop for embedders. Calls server.stop(true) on each
    * passed Bun.Server. CLI doesn't need this (process.exit handles it).
@@ -530,27 +560,247 @@ const CONSOLE_LOG_PATH = config.consoleLog;
 const NETWORK_LOG_PATH = config.networkLog;
 const DIALOG_LOG_PATH = config.dialogLog;
 
-/**
- * Per-process state-file temp path. The state-file write pattern is
- * `writeFileSync(tmp, ...) → renameSync(tmp, stateFile)` for atomicity,
- * but a shared `${stateFile}.tmp` filename means two concurrent writers
- * (cold-start race when N CLIs hit a fresh repo simultaneously, parallel
- * /tunnel/start handlers, or a combination) collide on the rename: the
- * first writer's renameSync moves the shared temp file out of the way,
- * the second writer's writeFileSync re-creates it, the second rename
- * then races with the first writer's already-renamed state. Worst case
- * the second renameSync throws ENOENT mid-air, killing one of the
- * spawning daemons during startup.
- *
- * Per-process suffix (pid + 4 random bytes) makes each writer's temp
- * path unique. The atomic rename still gives last-writer-wins semantics
- * for the final state.json content; the only behavior change is that
- * concurrent writers no longer kill each other on the rename.
- */
-function tmpStatePath(): string {
-  return `${config.stateFile}.tmp.${process.pid}.${crypto.randomBytes(4).toString('hex')}`;
+function ownsControllerState(
+  owner: ControllerOwner | undefined,
+  stateFile = config.stateFile,
+): boolean {
+  if (!owner) return false;
+  return sameControllerOwner(readControllerState(stateFile), owner);
 }
 
+function activeControllerOwnsState(): boolean {
+  return Boolean(activeControllerOwner) && ownsControllerState(activeControllerOwner ?? undefined);
+}
+
+function shouldSkipTerminalWatchdog(
+  guardTripped: boolean,
+  owner: ControllerOwner | undefined,
+  stateFile: string,
+): boolean {
+  return isShuttingDown || guardTripped || !ownsControllerState(owner, stateFile);
+}
+
+function cleanupOwnedTerminalAgent(enabled: boolean, stateFile = config.stateFile): void {
+  if (!enabled) return;
+  try {
+    const stateDir = path.dirname(stateFile);
+    const record = readAgentRecord(stateDir);
+    if (record) killAgentByRecord(record, 'SIGTERM');
+  } catch (err: any) {
+    console.warn('[browse] Failed to kill terminal-agent:', err.message);
+  }
+  const stateDir = path.dirname(stateFile);
+  safeUnlinkQuiet(path.join(stateDir, 'terminal-port'));
+  safeUnlinkQuiet(path.join(stateDir, 'terminal-internal-token'));
+  safeUnlinkQuiet(agentRecordPath(stateDir));
+}
+
+function cleanupControllerState(
+  owner: ControllerOwner | undefined,
+  stateFile = config.stateFile,
+): void {
+  if (owner) removeOwnedControllerState(stateFile, owner);
+}
+
+async function rethrowAfterFailedControllerStartup(
+  owner: ControllerOwner,
+  error: unknown,
+): Promise<never> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (!sameControllerOwner(readControllerState(config.stateFile), owner)) {
+      activeControllerOwner = null;
+      throw error;
+    }
+    if (removeOwnedControllerState(config.stateFile, owner)) {
+      activeControllerOwner = null;
+      throw error;
+    }
+    await Bun.sleep(25);
+  }
+  preserveControllerStateOnExit = true;
+  throw new AggregateError(
+    [error],
+    'Controller startup failed and its reservation could not be removed; state preserved to prevent a second controller.',
+  );
+}
+
+function cleanupStaleBrowseStateFiles(stateDir: string): void {
+  try {
+    const browseStatesDir = path.join(stateDir, 'browse-states');
+    if (!fs.existsSync(browseStatesDir)) return;
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    for (const file of fs.readdirSync(browseStatesDir)) {
+      const filePath = path.join(browseStatesDir, file);
+      if (Date.now() - fs.statSync(filePath).mtimeMs <= maxAgeMs) continue;
+      fs.unlinkSync(filePath);
+      console.log(`[browse] Deleted stale state file: ${file}`);
+    }
+  } catch (err: any) {
+    console.warn('[browse] Failed to clean stale state files:', err.message);
+  }
+}
+
+interface ControllerStartupResources {
+  handle: ServerHandle | null;
+  localServer: ReturnType<typeof Bun.serve> | null;
+  proxyBridge: BridgeHandle | null;
+  xvfb: XvfbHandle | null;
+  xvfbStartupCleanupFailure: XvfbStartupCleanupError | null;
+}
+
+function emptyControllerStartupResources(): ControllerStartupResources {
+  return {
+    handle: null,
+    localServer: null,
+    proxyBridge: null,
+    xvfb: null,
+    xvfbStartupCleanupFailure: null,
+  };
+}
+
+function ownedXvfbConfig(xvfb: XvfbHandle | null): Pick<ServerConfig, 'xvfb' | 'ownsXvfb'> {
+  return xvfb ? { xvfb, ownsXvfb: true } : {};
+}
+
+function initialControllerRollbackFailures(resources: ControllerStartupResources): unknown[] {
+  return resources.xvfbStartupCleanupFailure
+    ? [resources.xvfbStartupCleanupFailure]
+    : [];
+}
+
+async function rollbackControllerStartupResources(
+  resources: ControllerStartupResources,
+  owner: ControllerOwner,
+): Promise<void> {
+  const failures = initialControllerRollbackFailures(resources);
+  try { resources.localServer?.stop(true); } catch (error) { failures.push(error); }
+  try {
+    if (resources.handle) await resources.handle.rollbackStartup();
+    else await browserManager.closeForStartupRollback();
+  } catch (error) { failures.push(error); }
+  try { await resources.proxyBridge?.close(); } catch (error) { failures.push(error); }
+  try { await resources.xvfb?.closeStrict(); } catch (error) { failures.push(error); }
+  if (failures.length === 0) {
+    try {
+      if (ownsControllerState(owner)) cleanSingletonLocks(resolveChromiumProfile());
+    } catch (error) { failures.push(error); }
+  }
+  if (failures.length > 0) {
+    preserveControllerStateOnExit = true;
+    throw new AggregateError(
+      failures,
+      'Controller startup rollback was incomplete; reservation preserved to prevent a second controller.',
+    );
+  }
+}
+
+async function handleControllerStartupFailure(
+  resources: ControllerStartupResources,
+  owner: ControllerOwner,
+  error: unknown,
+): Promise<never> {
+  try {
+    await rollbackControllerStartupResources(resources, owner);
+  } catch (rollbackError) {
+    preserveControllerStateOnExit = true;
+    throw new AggregateError(
+      [error, rollbackError],
+      'Controller startup failed and rollback was incomplete; reservation preserved.',
+    );
+  }
+  return rethrowAfterFailedControllerStartup(owner, error);
+}
+
+function publishOwnedControllerState(
+  owner: ControllerOwner | null | undefined,
+  update: (current: ControllerState) => ControllerState,
+  failureMessage: string,
+  stateFile = config.stateFile,
+): void {
+  if (!owner || !updateOwnedControllerState(stateFile, owner, update)) {
+    throw new Error(failureMessage);
+  }
+}
+
+function createControllerReservation(
+  port: number,
+  envCfg: ReturnType<typeof resolveConfigFromEnv>,
+): ControllerState {
+  const processStartTime = readProcessStartTime(process.pid);
+  return {
+    pid: process.pid,
+    port,
+    token: envCfg.authToken,
+    startedAt: new Date().toISOString(),
+    serverPath: path.resolve(import.meta.dir, 'server.ts'),
+    instanceId: process.env.BROWSE_INSTANCE_ID || crypto.randomUUID(),
+    ...(processStartTime ? { processStartTime } : {}),
+    phase: 'starting',
+    binaryVersion: readVersionHash() || undefined,
+    mode: process.env.BROWSE_HEADED === '1' ? 'headed' : 'launched',
+    ...(process.env.BROWSE_CONFIG_HASH ? { configHash: process.env.BROWSE_CONFIG_HASH } : {}),
+  };
+}
+
+function publishReadyControllerState(
+  reservation: ControllerState,
+  owner: ControllerOwner,
+  mode: 'launched' | 'headed',
+  xvfb: XvfbHandle | null,
+): void {
+  const state: ControllerState = {
+    ...reservation,
+    phase: 'ready',
+    mode,
+    ...(xvfb ? { xvfbPid: xvfb.pid, xvfbStartTime: xvfb.startTime, xvfbDisplay: xvfb.display } : {}),
+  };
+  publishOwnedControllerState(
+    owner,
+    () => state,
+    'Controller lost ownership before ready publish; refusing to serve as authoritative owner.',
+  );
+}
+
+function recordSpawnedXvfbOwnership(
+  owner: ControllerOwner,
+  record: XvfbOwnershipRecord,
+): void {
+  publishOwnedControllerState(
+    owner,
+    (current) => ({
+      ...current,
+      xvfbPid: record.pid,
+      xvfbDisplay: record.display,
+      ...(record.startTime ? { xvfbStartTime: record.startTime } : {}),
+    }),
+    'Controller lost ownership while recording its spawned Xvfb; refusing startup.',
+  );
+}
+
+function captureXvfbStartupFailure(
+  resources: ControllerStartupResources,
+  owner: ControllerOwner,
+  error: unknown,
+): string {
+  if (error instanceof XvfbStartupCleanupError) {
+    resources.xvfbStartupCleanupFailure = error;
+    recordSpawnedXvfbOwnership(owner, error.record);
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function reserveControllerOwnership(
+  port: number,
+  envCfg: ReturnType<typeof resolveConfigFromEnv>,
+): Promise<ControllerState> {
+  const reservation = createControllerReservation(port, envCfg);
+  const claim = await claimControllerState(config.stateFile, reservation);
+  if (claim.outcome !== 'claimed') {
+    const status = claim.inspection ? ` (${claim.inspection.status})` : '';
+    throw new Error(`Controller ownership claim refused: ${claim.reason}${status}.`);
+  }
+  return reservation;
+}
 
 // ─── Sidebar agent / chat state ripped ──────────────────────────────
 // ChatEntry, SidebarSession, TabAgentState interfaces; chatBuffer,
@@ -1334,29 +1584,31 @@ if (import.meta.main) {
       console.log('[browse] Received SIGTERM (ignoring — use /stop or Ctrl+C for intentional shutdown)');
     }
   });
-  // Windows: taskkill /F bypasses SIGTERM, but 'exit' fires for some shutdown paths.
-  // Defense-in-depth — primary cleanup is the CLI's stale-state detection via health check.
-  if (process.platform === 'win32') {
-    process.on('exit', () => {
-      safeUnlinkQuiet(config.stateFile);
-    });
-  }
+  // Last-resort owner-aware cleanup. This also covers startup failures that
+  // call process.exit before buildFetchHandler installs activeShutdown.
+  process.on('exit', () => {
+    if (activeControllerOwner && !preserveControllerStateOnExit) {
+      cleanupControllerState(activeControllerOwner);
+    }
+  });
 }
 
 // Emergency cleanup for crashes (OOM, uncaught exceptions, browser disconnect)
 function emergencyCleanup() {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  // Xvfb cleanup MUST happen before state-file deletion. spawnXvfb detaches
-  // the child, so without this, an uncaught exception leaves the Xvfb
-  // running with no PID record — orphan accumulates and eventually
-  // exhausts the :99-:120 display range. Read the state file FIRST,
-  // call cleanupXvfb (validates cmdline + start-time before kill), THEN
-  // delete the state file.
+  // A synchronous fatal path cannot prove that Chromium and Xvfb stopped.
+  // Preserve the ownership record and profile locks so the next CLI can make
+  // a liveness/identity-based recovery decision instead of creating a peer.
+  preserveControllerStateOnExit = true;
+  const currentState = readControllerState(config.stateFile);
+  const ownsCurrentState = activeControllerOwnsState();
+  // Best-effort Xvfb signalling is safe because cleanupXvfb validates cmdline
+  // and start identity. The state record is deliberately retained regardless,
+  // because this synchronous fatal path cannot confirm final process death.
   try {
-    if (fs.existsSync(config.stateFile)) {
-      const raw = fs.readFileSync(config.stateFile, 'utf-8');
-      const state = JSON.parse(raw);
+    if (ownsCurrentState && currentState) {
+      const state = currentState;
       if (state.xvfbPid && state.xvfbStartTime) {
         // Lazy import — emergencyCleanup may run on platforms where
         // ./xvfb's Linux-specific helpers fail to load. Best effort.
@@ -1370,12 +1622,8 @@ function emergencyCleanup() {
         } catch { /* best effort */ }
       }
     }
-  } catch { /* state file unparseable — fall through to lock + state cleanup */ }
+  } catch { /* state file unparseable or Xvfb unverifiable — preserve state */ }
 
-  // Clean Chromium profile locks via the shared helper (defensive guard
-  // refuses to operate on unrecognized profile dirs).
-  cleanSingletonLocks(resolveChromiumProfile());
-  safeUnlinkQuiet(config.stateFile);
 }
 // Same import.meta.main gate as SIGINT/SIGTERM — embedders register their
 // own crash handlers.
@@ -1421,6 +1669,71 @@ if (import.meta.main) {
  * The returned ServerHandle is callable directly. Bun.serve is the caller's
  * responsibility — embedders may fd-pass; CLI uses Bun.serve normally.
  */
+function createRuntimeResourceCloser(
+  manager: BrowserManager,
+  clearAgentWatchdog: () => void,
+  closeBrowser: () => Promise<void> = () => manager.close(),
+): () => Promise<void> {
+  let closePromise: Promise<void> | null = null;
+  return () => {
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      try { detachSession(); } catch (err: any) {
+        console.warn('[browse] Failed to detach CDP session:', err.message);
+      }
+      inspectorSubscribers.clear();
+      if (manager.isWatching()) manager.stopWatch();
+      clearInterval(flushInterval);
+      clearInterval(idleCheckInterval);
+      clearAgentWatchdog();
+      try { await flushBuffers(); } finally { await closeBrowser(); }
+    })();
+    return closePromise;
+  };
+}
+
+function createRuntimeResourceClosers(
+  manager: BrowserManager,
+  clearAgentWatchdog: () => void,
+): { close: () => Promise<void>; rollback: () => Promise<void> } {
+  return {
+    close: createRuntimeResourceCloser(manager, clearAgentWatchdog),
+    rollback: createRuntimeResourceCloser(
+      manager,
+      clearAgentWatchdog,
+      () => manager.closeForStartupRollback(),
+    ),
+  };
+}
+
+function createShutdownHandler(
+  cfg: ServerConfig,
+  owner: ControllerOwner | undefined,
+  ownsTerminalAgent: boolean,
+  closeRuntimeResources: () => Promise<void>,
+): (exitCode?: number) => Promise<void> {
+  return async (exitCode: number = 0) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log('[browse] Shutting down...');
+    const ownsCurrentState = ownsControllerState(owner, cfg.config.stateFile);
+    try {
+      await closeRuntimeResources();
+      if (cfg.ownsXvfb && cfg.xvfb) await cfg.xvfb.closeStrict();
+      if (ownsCurrentState) cleanSingletonLocks(resolveChromiumProfile(cfg.chromiumProfile));
+    } catch (error) {
+      preserveControllerStateOnExit = true;
+      throw new AggregateError(
+        [error],
+        'Controller shutdown was incomplete; ownership state and profile locks were preserved.',
+      );
+    }
+    cleanupOwnedTerminalAgent(ownsTerminalAgent && ownsCurrentState, cfg.config.stateFile);
+    cleanupControllerState(owner, cfg.config.stateFile);
+    process.exit(exitCode);
+  };
+}
+
 export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
   if (!cfg.authToken || cfg.authToken.length < 16) {
     throw new Error('buildFetchHandler: cfg.authToken must be a non-empty string >= 16 chars');
@@ -1439,6 +1752,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
   initRegistry(cfg.authToken);
 
   const { authToken, browserManager: cfgBrowserManager, startTime, beforeRoute, browsePort } = cfg;
+  const cfgControllerOwner = cfg.controllerOwner;
   // Strict opt-out: only explicit `false` flips the gate. Any other value
   // (undefined, truthy non-bool from a JS caller bypassing TS, etc.) defaults
   // to goldband-owns. Matches the "default-true preserves CLI bit-for-bit"
@@ -1478,8 +1792,11 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
 
   if (ownsTerminalAgent) {
     agentWatchdogInterval = setInterval(() => {
-      if (isShuttingDown) return;
-      if (agentRespawnGuardTripped) return;
+      if (shouldSkipTerminalWatchdog(
+        agentRespawnGuardTripped,
+        cfgControllerOwner,
+        cfg.config.stateFile,
+      )) return;
       const stateDir = path.dirname(cfg.config.stateFile);
       const record = readAgentRecord(stateDir);
       // If the record exists and the PID is alive, the agent is healthy
@@ -1531,45 +1848,12 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
     return header === `Bearer ${authToken}`;
   }
 
-  // Factory-scoped shutdown. Closes the cfg-provided browserManager so
-  // embedders that pass their own BrowserManager get correct teardown.
-  // Module-level shutdown was deleted in v1.35.0.0.
-  async function shutdown(exitCode: number = 0) {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
+  const clearAgentWatchdog = () => { if (agentWatchdogInterval) clearInterval(agentWatchdogInterval); };
+  const { close: closeRuntimeResources, rollback: rollbackRuntimeResources } = createRuntimeResourceClosers(cfgBrowserManager, clearAgentWatchdog);
+  const shutdown = createShutdownHandler(cfg, cfgControllerOwner, ownsTerminalAgent, closeRuntimeResources);
 
-    console.log('[browse] Shutting down...');
-    if (ownsTerminalAgent) {
-      // Identity-based kill (v1.44+). Replaces the v1.43- `pkill -f
-      // terminal-agent\.ts` regex teardown which matched sibling goldband
-      // sessions on the same host. Only the PID recorded in
-      // `<stateDir>/terminal-agent-pid` by THIS daemon's agent is signaled.
-      try {
-        const stateDir = path.dirname(config.stateFile);
-        const record = readAgentRecord(stateDir);
-        if (record) killAgentByRecord(record, 'SIGTERM');
-      } catch (err: any) {
-        console.warn('[browse] Failed to kill terminal-agent:', err.message);
-      }
-      safeUnlinkQuiet(path.join(path.dirname(config.stateFile), 'terminal-port'));
-      safeUnlinkQuiet(path.join(path.dirname(config.stateFile), 'terminal-internal-token'));
-      safeUnlinkQuiet(agentRecordPath(path.dirname(config.stateFile)));
-    }
-    try { detachSession(); } catch (err: any) {
-      console.warn('[browse] Failed to detach CDP session:', err.message);
-    }
-    inspectorSubscribers.clear();
-    if (cfgBrowserManager.isWatching()) cfgBrowserManager.stopWatch();
-    clearInterval(flushInterval);
-    clearInterval(idleCheckInterval);
-    if (agentWatchdogInterval) clearInterval(agentWatchdogInterval);
-    await flushBuffers();
-
-    await cfgBrowserManager.close();
-
-    cleanSingletonLocks(resolveChromiumProfile());
-    safeUnlinkQuiet(config.stateFile);
-    process.exit(exitCode);
+  async function rollbackStartup(): Promise<void> {
+    await rollbackRuntimeResources();
   }
 
   // Named lifecycle helper (matches closeTunnel style). Logs failures so
@@ -1729,6 +2013,7 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
         const healthy = await browserManager.isHealthy();
         return new Response(JSON.stringify({
           status: healthy ? 'healthy' : 'unhealthy',
+          ...(cfgControllerOwner?.instanceId ? { instanceId: cfgControllerOwner.instanceId } : {}),
           mode: browserManager.getConnectionMode(),
           uptime: Math.floor((Date.now() - startTime) / 1000),
           tabs: browserManager.getTabCount(),
@@ -2336,11 +2621,10 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
           console.log(`[browse] Tunnel listener bound on 127.0.0.1:${tunnelPort}, ngrok → ${tunnelUrl}`);
 
           // Update state file
-          const stateContent = JSON.parse(fs.readFileSync(config.stateFile, 'utf-8'));
-          stateContent.tunnel = { url: tunnelUrl, domain: domain || null, startedAt: new Date().toISOString() };
-          const tmpState = tmpStatePath();
-          fs.writeFileSync(tmpState, JSON.stringify(stateContent, null, 2), { mode: 0o600 });
-          fs.renameSync(tmpState, config.stateFile);
+          publishOwnedControllerState(cfgControllerOwner, (current) => ({
+            ...current,
+            tunnel: { url: tunnelUrl, domain: domain || null, startedAt: new Date().toISOString() },
+          }), 'controller ownership changed before tunnel state publish', cfg.config.stateFile);
 
           return new Response(JSON.stringify({ url: tunnelUrl }), {
             status: 200, headers: { 'Content-Type': 'application/json' },
@@ -2865,26 +3149,60 @@ export function buildFetchHandler(cfg: ServerConfig): ServerHandle {
     fetchLocal: makeFetchHandler('local'),
     fetchTunnel: makeFetchHandler('tunnel'),
     shutdown,
+    rollbackStartup,
     stopListeners,
   };
 }
 
-export async function start() {
-  // Clear old log files
-  safeUnlink(CONSOLE_LOG_PATH);
-  safeUnlink(NETWORK_LOG_PATH);
-  safeUnlink(DIALOG_LOG_PATH);
+function acquireServerStartupCoordination(): ControllerStartupLock {
+  const handoff = process.env.BROWSE_STARTUP_LOCK_HANDOFF;
+  if (handoff) {
+    const adoptedLock = acceptControllerStartupLockHandoff(config.stateFile, handoff);
+    if (!adoptedLock) {
+      throw new Error('Controller startup lock handoff is invalid or no longer owned; refusing startup.');
+    }
+    return adoptedLock;
+  }
+  const startupLock = acquireControllerStartupLock(config.stateFile);
+  if (!startupLock) {
+    throw new Error('Another controller transition holds the startup lock; refusing direct startup.');
+  }
+  return startupLock;
+}
 
+export async function start() {
+  const startupLock = acquireServerStartupCoordination();
+  try {
+    return await startUnderControllerStartupLock();
+  } finally {
+    startupLock?.release();
+  }
+}
+
+async function startUnderControllerStartupLock() {
+  await prepareControllerStateForClaim(config.stateFile, resolveChromiumProfile());
   const port = await findPort();
   LOCAL_LISTEN_PORT = port;
 
+  // The shared startup lock and replacement-resource gate have completed.
+  // Reserve ownership before launching Chromium or any X server.
+  const envCfg = resolveConfigFromEnv();
+  const reservation = await reserveControllerOwnership(port, envCfg);
+  const startupOwner = controllerOwner(reservation);
+  activeControllerOwner = startupOwner;
+  preserveControllerStateOnExit = false;
+  const startupResources = emptyControllerStartupResources();
+  try {
+  // Only the reserved owner may rotate project-scoped logs.
+  safeUnlink(CONSOLE_LOG_PATH);
+  safeUnlink(NETWORK_LOG_PATH);
+  safeUnlink(DIALOG_LOG_PATH);
   // ─── Proxy config (D8 + codex F5) ──────────────────────────────
   // BROWSE_PROXY_URL is set by the CLI when --proxy was passed. For SOCKS5
   // with auth, we run a local 127.0.0.1 bridge that relays to the
   // authenticated upstream (Chromium can't do SOCKS5 auth itself). For
   // HTTP/HTTPS or unauthenticated SOCKS5, we pass the URL directly to
   // Chromium's proxy.server option.
-  let proxyBridge: BridgeHandle | null = null;
   const proxyUrl = process.env.BROWSE_PROXY_URL;
   if (proxyUrl) {
     let parsed;
@@ -2896,8 +3214,7 @@ export async function start() {
       });
     } catch (err) {
       if (err instanceof ProxyConfigError) {
-        console.error(`[browse] error: ${err.message} (${err.hint})`);
-        process.exit(1);
+        throw new Error(`${err.message} (${err.hint})`);
       }
       throw err;
     }
@@ -2917,13 +3234,12 @@ export async function start() {
         console.log(`[browse] [proxy] upstream test ok in ${test.ms}ms (${test.attempts} attempt${test.attempts === 1 ? '' : 's'})`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[browse] [proxy] FAIL upstream ${redactProxyUrl(proxyUrl)}: ${msg}`);
-        process.exit(1);
+        throw new Error(`[proxy] FAIL upstream ${redactProxyUrl(proxyUrl)}: ${msg}`);
       }
 
-      proxyBridge = await startSocksBridge({ upstream: toUpstreamConfig(parsed) });
-      console.log(`[browse] [proxy] bridge listening on 127.0.0.1:${proxyBridge.port}`);
-      browserManager.setProxyConfig({ server: `socks5://127.0.0.1:${proxyBridge.port}` });
+      startupResources.proxyBridge = await startSocksBridge({ upstream: toUpstreamConfig(parsed) });
+      console.log(`[browse] [proxy] bridge listening on 127.0.0.1:${startupResources.proxyBridge.port}`);
+      browserManager.setProxyConfig({ server: `socks5://127.0.0.1:${startupResources.proxyBridge.port}` });
     } else {
       // HTTP/HTTPS or unauth SOCKS5 — pass through to Chromium directly.
       browserManager.setProxyConfig({
@@ -2936,17 +3252,15 @@ export async function start() {
 
     // Tear down bridge on shutdown.
     process.on('exit', () => {
-      if (proxyBridge) {
-        proxyBridge.close().catch(() => { /* shutting down anyway */ });
+      if (startupResources.proxyBridge) {
+        startupResources.proxyBridge.close().catch(() => { /* shutting down anyway */ });
       }
     });
   }
-
   // ─── Xvfb auto-spawn (Linux + headed + no DISPLAY) ─────────────
   // codex F2: walk display range to pick a free one (never hardcode :99);
   // record start-time alongside PID so cleanup can validate ownership and
   // not kill a recycled PID.
-  let xvfb: XvfbHandle | null = null;
   const xvfbDecision = shouldSpawnXvfb(process.env, process.platform);
   if (xvfbDecision.spawn) {
     let displayNum: number | null = null;
@@ -2954,35 +3268,24 @@ export async function start() {
       displayNum = pickFreeDisplay();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[browse] [xvfb] FAILED: ${msg}`);
-      console.error(`[browse] [xvfb] hint: ${xvfbInstallHint()}`);
-      process.exit(1);
+      throw new Error(`[xvfb] FAILED: ${msg} (${xvfbInstallHint()})`);
     }
     if (displayNum == null) {
-      console.error('[browse] no free X display in range :99-:120 — refusing to clobber existing X servers');
-      process.exit(1);
+      throw new Error('no free X display in range :99-:120 — refusing to clobber existing X servers');
     }
 
     try {
-      xvfb = await spawnXvfb(displayNum);
-      process.env.DISPLAY = xvfb.display;
-      console.log(`[browse] [xvfb] spawned on ${xvfb.display} (pid ${xvfb.pid})`);
+      startupResources.xvfb = await spawnXvfb(displayNum, (record) => recordSpawnedXvfbOwnership(startupOwner, record));
+      process.env.DISPLAY = startupResources.xvfb.display;
+      console.log(`[browse] [xvfb] spawned on ${startupResources.xvfb.display} (pid ${startupResources.xvfb.pid})`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[browse] [xvfb] FAILED: ${msg}`);
-      console.error(`[browse] [xvfb] hint: ${xvfbInstallHint()}`);
-      process.exit(1);
+      const msg = captureXvfbStartupFailure(startupResources, startupOwner, err);
+      throw new Error(`[xvfb] FAILED: ${msg} (${xvfbInstallHint()})`);
     }
-    process.on('exit', () => { try { xvfb?.close(); } catch { /* shutting down */ } });
+    process.on('exit', () => { try { startupResources.xvfb?.close(); } catch { /* shutting down */ } });
   } else if (process.env.BROWSE_HEADED === '1') {
     console.log(`[browse] [xvfb] skipped: ${xvfbDecision.reason}`);
   }
-
-  // Read env once — single source of truth for authToken (and other env).
-  // Threaded through launchHeaded, buildFetchHandler, and the state file
-  // write so all consumers see the same value. v1.34.x's module-level
-  // AUTH_TOKEN const was deleted in v1.35.0.0.
-  const envCfg = resolveConfigFromEnv();
 
   // Launch browser (headless or headed with extension)
   // BROWSE_HEADLESS_SKIP=1 skips browser launch entirely (for HTTP-only testing)
@@ -3002,42 +3305,31 @@ export async function start() {
   // ─── Build the request handlers via buildFetchHandler factory ───
   // CLI path passes env-derived values; no beforeRoute hook. Phoenix uses
   // the same factory with its own cfg + overlay hook.
-  const handle = buildFetchHandler({
+  const handle = startupResources.handle = buildFetchHandler({
     ...envCfg,
     browsePort: port,        // actual bound port (resolveConfigFromEnv default is 0)
     browserManager,          // module-level instance, same as today
-    xvfb,
-    proxyBridge,
+    ...ownedXvfbConfig(startupResources.xvfb),
+    proxyBridge: startupResources.proxyBridge,
     startTime,
+    controllerOwner: activeControllerOwner,
     ownsTerminalAgent: true, // CLI spawns terminal-agent.ts itself (see cli.ts:1037-1063)
   });
 
-  Bun.serve({
+  startupResources.localServer = Bun.serve({
     port,
     hostname: '127.0.0.1',
     fetch: handle.fetchLocal,
   });
 
-  // Write state file (atomic: write .tmp then rename)
-  const state: Record<string, unknown> = {
-    pid: process.pid,
-    port,
-    token: envCfg.authToken,
-    startedAt: new Date().toISOString(),
-    serverPath: path.resolve(import.meta.dir, 'server.ts'),
-    binaryVersion: readVersionHash() || undefined,
-    mode: browserManager.getConnectionMode(),
-    // D2 daemon-mismatch detection: CLI computes the same hash from its
-    // resolved flags and refuses if it differs from this stored value.
-    ...(process.env.BROWSE_CONFIG_HASH ? { configHash: process.env.BROWSE_CONFIG_HASH } : {}),
-    // Xvfb child PID + start-time + display so disconnect (or a future
-    // daemon launch on this state file) can validate-then-cleanup orphans
-    // without clobbering a recycled PID.
-    ...(xvfb ? { xvfbPid: xvfb.pid, xvfbStartTime: xvfb.startTime, xvfbDisplay: xvfb.display } : {}),
-  };
-  const tmpFile = tmpStatePath();
-  fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), { mode: 0o600 });
-  fs.renameSync(tmpFile, config.stateFile);
+  // Promote the startup reservation only if it is still ours. Xvfb identity
+  // travels with the same owner so recovery never signals a recycled PID.
+  publishReadyControllerState(
+    reservation,
+    startupOwner,
+    browserManager.getConnectionMode(),
+    startupResources.xvfb,
+  );
 
   browserManager.serverPort = port;
 
@@ -3056,23 +3348,7 @@ export async function start() {
     }
   }
 
-  // Clean up stale state files (older than 7 days)
-  try {
-    const stateDir = path.join(config.stateDir, 'browse-states');
-    if (fs.existsSync(stateDir)) {
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      for (const file of fs.readdirSync(stateDir)) {
-        const filePath = path.join(stateDir, file);
-        const stat = fs.statSync(filePath);
-        if (Date.now() - stat.mtimeMs > SEVEN_DAYS) {
-          fs.unlinkSync(filePath);
-          console.log(`[browse] Deleted stale state file: ${file}`);
-        }
-      }
-    }
-  } catch (err: any) {
-    console.warn('[browse] Failed to clean stale state files:', err.message);
-  }
+  cleanupStaleBrowseStateFiles(config.stateDir);
 
   console.log(`[browse] Server running on http://127.0.0.1:${port} (PID: ${process.pid})`);
   console.log(`[browse] State file: ${config.stateFile}`);
@@ -3114,11 +3390,14 @@ export async function start() {
         console.log(`[browse] Tunnel listener bound on 127.0.0.1:${tunnelPort}, ngrok → ${tunnelUrl}`);
 
         // Update state file with tunnel URL
-        const stateContent = JSON.parse(fs.readFileSync(config.stateFile, 'utf-8'));
-        stateContent.tunnel = { url: tunnelUrl, domain: domain || null, startedAt: new Date().toISOString() };
-        const tmpState = tmpStatePath();
-        fs.writeFileSync(tmpState, JSON.stringify(stateContent, null, 2), { mode: 0o600 });
-        fs.renameSync(tmpState, config.stateFile);
+        publishOwnedControllerState(
+          activeControllerOwner,
+          (current) => ({
+            ...current,
+            tunnel: { url: tunnelUrl, domain: domain || null, startedAt: new Date().toISOString() },
+          }),
+          'controller ownership changed before tunnel state publish',
+        );
       } catch (err: any) {
         console.error(`[browse] Failed to start tunnel: ${err.message}`);
         // Same cleanup as /tunnel/start's error path: tear down BOTH
@@ -3144,14 +3423,17 @@ export async function start() {
       tunnelActive = true;
       const tunnelPort = boundTunnel.port;
       console.log(`[browse] Tunnel listener bound (local-only test mode) on 127.0.0.1:${tunnelPort}`);
-      const stateContent = JSON.parse(fs.readFileSync(config.stateFile, 'utf-8'));
-      stateContent.tunnelLocalPort = tunnelPort;
-      const tmpState = tmpStatePath();
-      fs.writeFileSync(tmpState, JSON.stringify(stateContent, null, 2), { mode: 0o600 });
-      fs.renameSync(tmpState, config.stateFile);
+      publishOwnedControllerState(
+        activeControllerOwner,
+        (current) => ({ ...current, tunnelLocalPort: tunnelPort }),
+        'controller ownership changed before tunnel state publish',
+      );
     } catch (err: any) {
       console.error(`[browse] BROWSE_TUNNEL_LOCAL_ONLY=1 listener bind failed: ${err.message}`);
     }
+  }
+  } catch (error) {
+    return handleControllerStartupFailure(startupResources, startupOwner, error);
   }
 }
 
@@ -3170,6 +3452,7 @@ export async function start() {
  */
 export function __resetShuttingDown(): void {
   isShuttingDown = false;
+  preserveControllerStateOnExit = false;
 }
 
 // Auto-kickoff only when this module is the entry point. Embedders

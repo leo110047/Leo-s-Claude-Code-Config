@@ -136,13 +136,53 @@ The daemon model means:
 
 ### State file
 
-The server writes `.goldband/browse.json` (atomic write via tmp + rename, mode 0o600):
+The server writes `.goldband/browse.json` (atomic write via a unique tmp file +
+rename, mode 0o600):
 
 ```json
-{ "pid": 12345, "port": 34567, "token": "uuid-v4", "startedAt": "...", "binaryVersion": "abc123" }
+{
+  "pid": 12345,
+  "port": 34567,
+  "token": "uuid-v4",
+  "startedAt": "...",
+  "instanceId": "uuid-v4",
+  "processStartTime": "OS-stable process start identity",
+  "phase": "ready",
+  "binaryVersion": "abc123"
+}
 ```
 
-The CLI reads this file to find the server. If the file is missing or the server fails an HTTP health check, the CLI spawns a new server. On Windows, PID-based process detection is unreliable in Bun binaries, so the health check (GET /health) is the primary liveness signal on all platforms.
+The file is the authoritative capability pointer for one canonical project state
+path. Startup first publishes an owner-bound `starting` reservation, then promotes
+that same `instanceId` to `ready`. Publish, tunnel updates, and shutdown cleanup use
+compare-and-swap under a project-scoped ownership lock. A stale server cannot
+overwrite or delete a newer owner's pointer.
+If startup fails after acquiring Chromium, Xvfb, or a listener, rollback removes
+the reservation only after those resources are confirmed stopped. A timeout,
+permission denial, or unknown process state preserves the reservation fail closed.
+Xvfb records its PID and display in the starting reservation immediately after
+spawn, then adds the validated process start identity. Probe failure or readiness
+timeout signals the authoritative child handle and waits for exit; if exit cannot
+be confirmed, the partial or complete record remains non-replaceable.
+Normal shutdown follows the same ownership rule: browser close timeout/rejection,
+an owned Xvfb that cannot be confirmed stopped, or a live/unverifiable Chromium
+profile lock preserves both the controller pointer and all singleton files.
+Fatal synchronous cleanup likewise retains the recovery record for the next
+identity-aware CLI invocation.
+
+The CLI combines `GET /health`, tri-state PID liveness, and process start identity.
+A healthy matching owner is reused. Only a confirmed-dead owner or a mismatched
+process identity (recycled PID) may be recovered automatically. An unreachable or
+unverifiable owner—such as localhost denial plus POSIX `EPERM`—fails closed: the
+state file and browser are preserved and the command tells the caller to retry from
+a host lane with localhost and process-control access. Malformed state is preserved
+for inspection rather than overwritten. Normal, version-restart, connect, disconnect,
+and supervisor replacement all use the same resource-preparation gate; a partial
+Xvfb identity is unverifiable, never equivalent to no Xvfb. The CLI transfers
+its startup-lock lease to the spawned daemon with an exact nonce-bound handoff;
+the daemon verifies and atomically adopts the on-disk lease before proceeding.
+A directly invoked `server.ts` has no handoff, so it must acquire the same lock
+and pass the same Chromium/Xvfb replacement gate before claiming `browse.json`.
 
 ### Port selection
 
@@ -150,7 +190,12 @@ Random port between 10000-60000 (retry up to 5 on collision). This means 10 Cond
 
 ### Version auto-restart
 
-The build writes `git rev-parse HEAD` to `browse/dist/.version`. On each CLI invocation, if the binary's version doesn't match the running server's `binaryVersion`, the CLI kills the old server and starts a new one. This prevents the "stale binary" class of bugs entirely — rebuild the binary, next command picks it up automatically.
+The build writes `git rev-parse HEAD` to `browse/dist/.version`. On each CLI
+invocation, if the binary's version doesn't match the running server's
+`binaryVersion`, the CLI restarts only after validating controller identity under
+the shared startup lock. Legacy states without exact instance and process identity
+are not automatically reused or signalled; confirmed-dead legacy state can be
+recovered, while unverifiable state is preserved for manual inspection.
 
 ## Security model
 

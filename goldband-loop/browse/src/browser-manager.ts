@@ -17,11 +17,12 @@
 
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Locator, type Cookie } from 'playwright';
 import type { ChildProcess } from 'node:child_process';
+import { probeProcessLiveness, readProcessStartTime } from './error-handling';
 import { writeSecureFile, mkdirSecure } from './file-permissions';
 import { addConsoleEntry, addNetworkEntry, addDialogEntry, networkBuffer, type DialogEntry } from './buffers';
 import { validateNavigationUrl } from './url-validation';
 import { TabSession, type RefEntry } from './tab-session';
-import { resolveChromiumProfile, cleanSingletonLocks } from './config';
+import { resolveChromiumProfile } from './config';
 
 /**
  * Detect whether GOLDBAND_CHROMIUM_PATH points at a custom Chromium build that
@@ -104,6 +105,64 @@ export async function resolveDisconnectCause(browser: Browser | null): Promise<'
   return proc?.exitCode === 0 && proc?.signalCode == null ? 'clean' : 'crash';
 }
 
+function browserProcess(browser: Browser | null): ChildProcess | null {
+  return (
+    browser as (Browser & { process?: () => ChildProcess | null }) | null
+  )?.process?.() ?? null;
+}
+
+async function waitForBrowserClose(operation: Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Chromium close did not complete within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function closeBrowserResource(
+  browser: Browser | null,
+  context: BrowserContext | null,
+  pages: readonly Page[],
+  timeoutMs: number,
+): Promise<void> {
+  // Bun + Playwright can leave browser.close() pending while an owned context
+  // still has event-wired pages or an owned context. Close in ownership order;
+  // persistent contexts also disconnect their browser as part of close().
+  await Promise.all(pages
+    .filter((page) => !page.isClosed())
+    .map((page) => waitForBrowserClose(page.close(), timeoutMs)));
+  if (context) await waitForBrowserClose(context.close(), timeoutMs);
+  if (browser?.isConnected()) await waitForBrowserClose(browser.close(), timeoutMs);
+}
+
+function assertBrowserProcessStopped(proc: ChildProcess | null, recordedStartTime: string): void {
+  const pid = proc?.pid;
+  if (!proc || !pid) {
+    throw new Error('Chromium child process identity is unavailable after close');
+  }
+  if (proc.exitCode !== null || proc.signalCode !== null) return;
+  const liveness = probeProcessLiveness(pid);
+  if (liveness === 'dead') return;
+  if (liveness === 'alive' && recordedStartTime) {
+    const currentStartTime = readProcessStartTime(pid);
+    if (currentStartTime && currentStartTime !== recordedStartTime) return;
+  }
+  throw new Error(
+    liveness === 'unknown'
+      ? `Chromium process ${pid} liveness could not be confirmed after close`
+      : `Chromium process ${pid} is still alive after close`,
+  );
+}
+
 /**
  * Headless `launch()` disconnect handler. Exits 0 on clean user-quit, 1 on
  * crash. Inlined into the launch() body via a one-line dispatch so
@@ -144,6 +203,18 @@ export interface BrowserState {
      */
     owner?: string;
   }>;
+}
+
+interface BrowserSessionResources {
+  browser: Browser;
+  context: BrowserContext;
+  pages: Map<number, Page>;
+  tabSessions: Map<number, TabSession>;
+  tabOwnership: Map<number, string>;
+  activeTabId: number;
+  nextTabId: number;
+  connectionMode: 'launched' | 'headed';
+  intentionalDisconnect: boolean;
 }
 
 export class BrowserManager {
@@ -208,6 +279,90 @@ export class BrowserManager {
   public onDisconnect: ((exitCode?: number) => void | Promise<void>) | null = null;
 
   getConnectionMode(): 'launched' | 'headed' { return this.connectionMode; }
+
+  private captureBrowserSession(): BrowserSessionResources {
+    if (!this.browser || !this.context) throw new Error('Browser not launched');
+    return {
+      browser: this.browser,
+      context: this.context,
+      pages: new Map(this.pages),
+      tabSessions: new Map(this.tabSessions),
+      tabOwnership: new Map(this.tabOwnership),
+      activeTabId: this.activeTabId,
+      nextTabId: this.nextTabId,
+      connectionMode: this.connectionMode,
+      intentionalDisconnect: this.intentionalDisconnect,
+    };
+  }
+
+  private restoreBrowserSession(session: BrowserSessionResources): void {
+    this.browser = session.browser;
+    this.context = session.context;
+    this.pages = session.pages;
+    this.tabSessions = session.tabSessions;
+    this.tabOwnership = session.tabOwnership;
+    this.activeTabId = session.activeTabId;
+    this.nextTabId = session.nextTabId;
+    this.connectionMode = session.connectionMode;
+    this.intentionalDisconnect = session.intentionalDisconnect;
+  }
+
+  private async switchToHandoffContext(newContext: BrowserContext): Promise<void> {
+    this.context = newContext;
+    this.browser = newContext.browser();
+    this.pages.clear();
+    this.tabSessions.clear();
+    this.connectionMode = 'headed';
+
+    if (Object.keys(this.extraHeaders).length > 0) {
+      await newContext.setExtraHTTPHeaders(this.extraHeaders);
+    }
+
+    const browserRef = this.browser;
+    if (browserRef) {
+      browserRef.on('disconnected', () => {
+        if (this.intentionalDisconnect || this.browser !== browserRef) return;
+        void handleChromiumDisconnect(browserRef);
+      });
+    }
+  }
+
+  private closePreviousBrowserSession(session: BrowserSessionResources): void {
+    void closeBrowserResource(
+      session.browser,
+      session.context,
+      [...session.pages.values()],
+      5000,
+    ).catch((error) => {
+      console.error('[browse] Failed to close old headless browser after handoff:', error);
+    });
+  }
+
+  private async rollbackFailedHandoff(
+    session: BrowserSessionResources,
+    newContext: BrowserContext,
+    failure: unknown,
+  ): Promise<string> {
+    const failedBrowser = this.browser;
+    const failedPages = [...this.pages.values()];
+    this.restoreBrowserSession(session);
+
+    let cleanupError: unknown;
+    try {
+      await closeBrowserResource(failedBrowser, newContext, failedPages, 5000);
+    } catch (error) {
+      cleanupError = error;
+    }
+
+    const message = failure instanceof Error ? failure.message : String(failure);
+    const originalStatus = session.browser.isConnected()
+      ? 'Original headless browser restored and still running.'
+      : 'Original headless browser is no longer connected.';
+    const cleanupStatus = cleanupError
+      ? ` Replacement browser cleanup also failed — ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}.`
+      : '';
+    return `ERROR: Handoff failed during state restore — ${message}. ${originalStatus}${cleanupStatus}`;
+  }
 
   // ─── Watch Mode Methods ─────────────────────────────────
   isWatching(): boolean { return this.watching; }
@@ -345,8 +500,10 @@ export class BrowserManager {
     // means "user wanted this, don't restart"; non-zero means "crash, please
     // bring me back." Without this distinction every Cmd+Q gets treated as
     // a crash and the user-visible window keeps respawning.
+    const browserRef = this.browser;
     this.browser.on('disconnected', () => {
-      void handleChromiumDisconnect(this.browser);
+      if (this.intentionalDisconnect || this.browser !== browserRef) return;
+      void handleChromiumDisconnect(browserRef);
     });
 
     const contextOptions: BrowserContextOptions = {
@@ -432,14 +589,6 @@ export class BrowserManager {
     const path = require('path');
     const userDataDir = resolveChromiumProfile();
     fs.mkdirSync(userDataDir, { recursive: true });
-
-    // Pre-launch cleanup of stale SingletonLock/Socket/Cookie. Chromium's
-    // ProcessSingleton refuses to start when these exist from a prior crash
-    // (SIGKILL, hard crash) — the lockfiles point at a PID that may no longer
-    // exist. Shutdown cleanup doesn't run on hard crashes, so we clean here
-    // too. Safe under external coordination: gbd.lock for gbrowser,
-    // single-instance CLI check for goldband.
-    cleanSingletonLocks(userDataDir);
 
     // Support custom Chromium binary via GOLDBAND_CHROMIUM_PATH env var.
     // Used by Goldband Loop Browser.app to point at the bundled Chromium.
@@ -688,27 +837,50 @@ export class BrowserManager {
     this.consecutiveFailures = 0;
   }
 
-  async close() {
+  async close(timeoutMs: number = 5000): Promise<void> {
     const browser = this.browser;
     if (browser || (this.connectionMode === 'headed' && this.context)) {
-      if (this.connectionMode === 'headed') {
-        // Headed/persistent context mode: close the context (which closes the browser)
-        this.intentionalDisconnect = true;
-        if (browser) browser.removeAllListeners('disconnected');
-        await Promise.race([
-          this.context ? this.context.close() : Promise.resolve(),
-          new Promise(resolve => setTimeout(resolve, 5000)),
-        ]).catch(() => {});
-      } else if (browser) {
-        // Launched mode: close the browser we spawned
-        browser.removeAllListeners('disconnected');
-        await Promise.race([
-          browser.close(),
-          new Promise(resolve => setTimeout(resolve, 5000)),
-        ]).catch(() => {});
+      this.intentionalDisconnect = true;
+      try {
+        await closeBrowserResource(browser, this.context, [...this.pages.values()], timeoutMs);
+      } catch (error) {
+        this.intentionalDisconnect = false;
+        throw error;
+      }
+      if (browser?.isConnected()) {
+        throw new Error('Chromium remained connected after close');
       }
       this.browser = null;
+      this.context = null;
     }
+  }
+
+  /**
+   * Startup rollback is allowed to release controller ownership only after the
+   * acquired Chromium resource is proven closed. In addition to close()'s
+   * timeout/rejection/connectivity checks, startup rollback requires a child
+   * process identity and confirmed stop before releasing the reservation.
+   */
+  async closeForStartupRollback(timeoutMs: number = 5000): Promise<void> {
+    const browser = this.browser;
+    const context = this.context;
+    if (!browser && !(this.connectionMode === 'headed' && context)) return;
+
+    const proc = browserProcess(browser);
+    const processStartTime = proc?.pid ? readProcessStartTime(proc.pid) : '';
+    this.intentionalDisconnect = true;
+    try {
+      await closeBrowserResource(browser, context, [...this.pages.values()], timeoutMs);
+    } catch (error) {
+      this.intentionalDisconnect = false;
+      throw error;
+    }
+    if (browser?.isConnected()) {
+      throw new Error('Chromium remained connected after startup rollback close');
+    }
+    assertBrowserProcessStopped(proc, processStartTime);
+    this.browser = null;
+    this.context = null;
   }
 
   /** Health check — verifies Chromium is connected AND responsive */
@@ -1433,39 +1605,18 @@ export class BrowserManager {
       return `ERROR: Cannot open headed browser — ${msg}. Headless browser still running.`;
     }
 
+    const oldSession = this.captureBrowserSession();
+
     // 3. Restore state into new headed browser
     try {
       // Swap to new browser/context before restoreState (it uses this.context)
-      const oldBrowser = this.browser;
-
-      this.context = newContext;
-      this.browser = newContext.browser();
-      this.pages.clear();
-      this.tabSessions.clear();
-      this.connectionMode = 'headed';
-
-      if (Object.keys(this.extraHeaders).length > 0) {
-        await newContext.setExtraHTTPHeaders(this.extraHeaders);
-      }
-
-      // Register disconnect handler on new browser. Same clean-vs-crash
-      // discrimination as launch() / launchHeaded() above so a user-initiated
-      // Cmd+Q after a handoff doesn't trigger gbd's restart loop.
-      if (this.browser) {
-        const browserRef = this.browser;
-        this.browser.on('disconnected', () => {
-          if (this.intentionalDisconnect) return;
-          void handleChromiumDisconnect(browserRef);
-        });
-      }
-
+      await this.switchToHandoffContext(newContext);
       await this.restoreState(state);
       this.isHeaded = true;
       this.dialogAutoAccept = false;  // User controls dialogs in headed mode
 
       // 4. Close old headless browser (fire-and-forget)
-      oldBrowser.removeAllListeners('disconnected');
-      oldBrowser.close().catch(() => {});
+      this.closePreviousBrowserSession(oldSession);
 
       return [
         `HANDOFF: Browser opened at ${currentUrl}`,
@@ -1473,10 +1624,9 @@ export class BrowserManager {
         `STATUS: Waiting for user. Run 'resume' when done.`,
       ].join('\n');
     } catch (err: unknown) {
-      // Restore failed — close the new context, keep old state
-      await newContext.close().catch(() => {});
-      const msg = err instanceof Error ? err.message : String(err);
-      return `ERROR: Handoff failed during state restore — ${msg}. Headless browser still running.`;
+      // Restore failed — make the original session authoritative before closing
+      // the replacement. Its disconnect listener then ignores this stale browser.
+      return this.rollbackFailedHandoff(oldSession, newContext, err);
     }
   }
 

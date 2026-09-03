@@ -340,6 +340,21 @@ describe('resolveGoldbandHome', () => {
       if (orig !== undefined) process.env.GOLDBAND_HOME = orig;
     }
   });
+
+  test('honors an inherited HOME when GOLDBAND_HOME is unset', () => {
+    const originalGoldbandHome = process.env.GOLDBAND_HOME;
+    const originalHome = process.env.HOME;
+    delete process.env.GOLDBAND_HOME;
+    process.env.HOME = '/tmp/inherited-home';
+    try {
+      expect(resolveGoldbandHome()).toBe('/tmp/inherited-home/.goldband');
+    } finally {
+      if (originalGoldbandHome === undefined) delete process.env.GOLDBAND_HOME;
+      else process.env.GOLDBAND_HOME = originalGoldbandHome;
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+    }
+  });
 });
 
 describe('resolveChromiumProfile', () => {
@@ -392,12 +407,15 @@ describe('resolveChromiumProfile', () => {
 });
 
 describe('cleanSingletonLocks', () => {
+  function writeDeadLock(profileDir: string): void {
+    fs.symlinkSync(`${os.hostname()}-2147483646`, path.join(profileDir, 'SingletonLock'));
+  }
+
   test('removes SingletonLock/Socket/Cookie when basename is chromium-profile', () => {
     const tmpDir = path.join(os.tmpdir(), `clean-locks-${Date.now()}`, 'chromium-profile');
     fs.mkdirSync(tmpDir, { recursive: true });
-    for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
-      fs.writeFileSync(path.join(tmpDir, f), 'stale');
-    }
+    writeDeadLock(tmpDir);
+    for (const f of ['SingletonSocket', 'SingletonCookie']) fs.writeFileSync(path.join(tmpDir, f), 'stale');
     cleanSingletonLocks(tmpDir);
     for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
       expect(fs.existsSync(path.join(tmpDir, f))).toBe(false);
@@ -426,7 +444,7 @@ describe('cleanSingletonLocks', () => {
   test('respects explicit CHROMIUM_PROFILE env even with non-standard basename', () => {
     const tmpDir = path.join(os.tmpdir(), `custom-name-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, 'SingletonLock'), 'stale');
+    writeDeadLock(tmpDir);
     const orig = process.env.CHROMIUM_PROFILE;
     process.env.CHROMIUM_PROFILE = tmpDir;
     try {
@@ -444,6 +462,30 @@ describe('cleanSingletonLocks', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     expect(() => cleanSingletonLocks(tmpDir)).not.toThrow();
     expect(() => cleanSingletonLocks(tmpDir)).not.toThrow();
+    fs.rmSync(path.dirname(tmpDir), { recursive: true, force: true });
+  });
+
+  test('preserves all singleton files when the lock PID is alive', () => {
+    const tmpDir = path.join(os.tmpdir(), `live-locks-${Date.now()}`, 'chromium-profile');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.symlinkSync(`${os.hostname()}-${process.pid}`, path.join(tmpDir, 'SingletonLock'));
+    fs.writeFileSync(path.join(tmpDir, 'SingletonSocket'), 'live');
+    fs.writeFileSync(path.join(tmpDir, 'SingletonCookie'), 'live');
+
+    expect(() => cleanSingletonLocks(tmpDir)).toThrow('still owned or unverifiable');
+    expect(fs.lstatSync(path.join(tmpDir, 'SingletonLock')).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'SingletonSocket'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'SingletonCookie'))).toBe(true);
+    fs.rmSync(path.dirname(tmpDir), { recursive: true, force: true });
+  });
+
+  test('preserves an unparsable singleton lock instead of guessing it is stale', () => {
+    const tmpDir = path.join(os.tmpdir(), `unknown-locks-${Date.now()}`, 'chromium-profile');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'SingletonLock'), 'unknown-owner');
+
+    expect(() => cleanSingletonLocks(tmpDir)).toThrow('owner is unverifiable');
+    expect(fs.existsSync(path.join(tmpDir, 'SingletonLock'))).toBe(true);
     fs.rmSync(path.dirname(tmpDir), { recursive: true, force: true });
   });
 });

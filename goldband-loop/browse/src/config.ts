@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { mkdirSecure } from './file-permissions';
-import { safeUnlinkQuiet } from './error-handling';
+import { probeProcessLiveness, safeUnlinkQuiet } from './error-handling';
 
 export interface BrowseConfig {
   projectDir: string;
@@ -162,7 +162,8 @@ export function readVersionHash(execPath: string = process.execPath): string | n
  *   2. $HOME/.goldband (default)
  */
 export function resolveGoldbandHome(): string {
-  return process.env.GOLDBAND_HOME || path.join(os.homedir(), '.goldband');
+  return process.env.GOLDBAND_HOME
+    || path.join(process.env.HOME || os.homedir(), '.goldband');
 }
 
 /**
@@ -194,10 +195,25 @@ export function resolveChromiumProfile(explicit?: string): string {
  * Prevents accidentally deleting lock files from an unrelated directory if
  * profile resolution is misconfigured upstream (CWD drift, env injection).
  *
- * Caller MUST ensure external coordination has already guaranteed no live
- * peer is using this profile (gbd.lock for gbrowser; single-instance CLI
- * check for goldband).
+ * The SingletonLock target must also name a confirmed-dead PID. A live,
+ * permission-denied, unparsable, or platform-unknown owner fails closed before
+ * any of the three singleton files are removed.
  */
+function assertSingletonLockOwnerDead(userDataDir: string): void {
+  const singletonLock = path.join(userDataDir, 'SingletonLock');
+  let target: string;
+  try {
+    target = fs.readlinkSync(singletonLock);
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return;
+    throw new Error('Chromium profile lock owner is unverifiable; refusing cleanup.');
+  }
+  const pid = Number.parseInt(target.match(/-(\d+)$/)?.[1] ?? '', 10);
+  if (!Number.isInteger(pid) || probeProcessLiveness(pid) !== 'dead') {
+    throw new Error('Chromium profile is still owned or unverifiable; refusing cleanup.');
+  }
+}
+
 export function cleanSingletonLocks(userDataDir: string): void {
   if (!path.isAbsolute(userDataDir)) {
     console.warn(`[browse] cleanSingletonLocks: refusing relative path: ${userDataDir}`);
@@ -214,6 +230,7 @@ export function cleanSingletonLocks(userDataDir: string): void {
     console.warn(`[browse] cleanSingletonLocks: refusing to clean unrecognized profile dir: ${resolved}`);
     return;
   }
+  assertSingletonLockOwnerDead(resolved);
   for (const lockFile of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
     safeUnlinkQuiet(path.join(resolved, lockFile));
   }

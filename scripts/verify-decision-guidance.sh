@@ -9,8 +9,10 @@ check_contains() {
   local pattern="$2"
   local label="$3"
   local file="$ROOT_DIR/$rel"
+  local normalized
+  normalized="$(tr -s '[:space:]' ' ' < "$file")"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq "$pattern" <<< "$normalized"; then
     echo "[OK] $label"
   else
     echo "[FAIL] $label missing in $rel"
@@ -32,6 +34,26 @@ check_contains "ARCHITECTURE.md" "inventory gate" "architecture doc explains inv
 check_contains "goldband-loop/inventory.json" "\"runtimeRoot\": \"goldband\"" "Goldband Loop inventory declares runtime root"
 
 check_contains "skills/global/systematic-debugging/SKILL.md" "healthiest complete fix" "systematic-debugging skill keeps healthiest complete fix policy"
+for rel in \
+  "codex/AGENTS.md" \
+  "rules/escalation.md" \
+  "skills/global/systematic-debugging/SKILL.md" \
+  "goldband.manifest.json"; do
+  check_contains "$rel" "tool, sandbox, or permission failures" "fix-attempt exclusions remain explicit in $rel"
+  check_contains "$rel" "different failure class or new evidence-backed hypothesis" "fix-attempt reset remains explicit in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/escalation.md" "goldband.manifest.json"; do
+  check_contains "$rel" "change the target, behavior, or external effect" "material ambiguity stays defined in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/architecture-boundaries.md" "goldband.manifest.json"; do
+  check_contains "$rel" "current request or product contract" "required surface scope stays explicit in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/security.md" "goldband.manifest.json"; do
+  check_contains "$rel" "controls matched to" "security controls stay threat-matched in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/session-handoff.md" "goldband.manifest.json"; do
+  check_contains "$rel" "lasting architectural or process consequences" "durable decision threshold stays explicit in $rel"
+done
 check_contains "goldband.manifest.json" '"prohibitedSharedBoilerplate"' "manifest declares prohibited shared prompt boilerplate"
 check_contains "scripts/test-workflow-contracts.mjs" "legacy per-workflow prompt files remain" "workflow contract gate rejects legacy prompt files"
 

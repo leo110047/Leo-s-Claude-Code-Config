@@ -7,7 +7,7 @@
     "modelOwns": ["semantic-reasoning", "task-decomposition", "tool-selection", "adaptation"],
     "runtimeOwns": ["routing", "authorization", "side-effect-gates", "typed-evidence", "stop-conditions", "state", "observability", "interaction-schema"],
     "interactionPolicy": {
-      "askOnlyWhen": "Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.",
+      "askOnlyWhen": "Ask only when user authority is required, or two plausible answers would change the target, behavior, or external effect and current evidence or preferences cannot resolve intent.",
       "batching": "Batch related decisions when they can be answered together; split only when an earlier answer changes the next question, risk level, or required evidence.",
       "formatOwner": "Tool schemas and UI own question shape, option labels, validation, and persistence. Prompts should provide only concise decision context.",
       "avoidPromptFormats": ["prompt-owned formatting rubrics", "scores", "word-count rules", "per-finding question rules"]
@@ -41,8 +41,8 @@
       "enforcement": "semantic-review",
       "reviewCriteria": [
         "Keep each domain fact, decision, and capability under one authoritative owner and operation.",
-        "Contain provider and wire details inside adapters; shared contracts stay provider-neutral and runtime-validated.",
-        "Trace required surfaces through routing, registration, inventory, and dependency injection to the owning operation.",
+        "Keep provider-specific SDK and wire details inside the owning adapter; shared contracts stay provider-neutral and runtime-validated.",
+        "Trace only surfaces required by the current request or product contract through routing, registration, inventory, and dependency injection; do not add surfaces for parity or symmetry.",
         "Use deterministic logic for hard invariants and fail explicitly when a core AI capability is unavailable."
       ]
     },
@@ -90,10 +90,10 @@
       "groups": ["security"],
       "enforcement": "deterministic-and-review",
       "reviewCriteria": [
-        "Treat localhost, child processes, SDK callbacks, tool output, and machine-generated content as untrusted boundaries.",
-        "Validate before privileged state or side effects; authenticate identity and authorize the requested action separately.",
+        "Localhost, child processes, SDK callbacks, tool output, and machine-generated content are not trusted merely because they are local or structured.",
+        "Validate the actual untrusted data or authority before privileged state or side effects; authenticate identity and authorize the requested action separately.",
         "Preserve native permission authority, fail closed on missing or malformed values, and never expose secrets in output.",
-        "Use boundary-appropriate protections such as safe paths, argument arrays, parameterized queries, origin checks, and size limits."
+        "Add only controls matched to an actual boundary and threat, such as safe paths, argument arrays, parameterized queries, origin checks, or size limits."
       ]
     },
     {
@@ -127,8 +127,10 @@
       "groups": ["escalation"],
       "enforcement": "deterministic-and-review",
       "reviewCriteria": [
-        "Proceed only on reversible, in-scope, verifiable work; outward-facing or materially ambiguous actions require user authority.",
-        "Stop after two unchanged failed attempts and never weaken a test, assertion, type, or lint rule to pass.",
+        "Proceed on reversible, in-scope, verifiable work; ask before outward-facing actions, scope expansion, or when two plausible interpretations would change the target, behavior, or external effect and current evidence cannot resolve intent.",
+        "Count only a completed corrective action based on a stated root-cause hypothesis and followed by relevant verification as a fix attempt; inspection and reruns without a corrective action do not count, nor do tool, sandbox, or permission failures that prevent the action from completing or verification from running.",
+        "After two attempts under one hypothesis leave the same verification blocked by the same failure class, return to diagnosis; cosmetic output changes do not reset the count, but a different failure class or new evidence-backed hypothesis does.",
+        "Ask only when continuing requires user authority, a scope decision, or external state change; never weaken a test, assertion, type, or lint rule to pass.",
         "A successful-looking fix without a causal explanation is not verified."
       ]
     },
@@ -139,8 +141,8 @@
       "groups": ["handoff"],
       "enforcement": "advisory-and-review",
       "reviewCriteria": [
-        "Persist durable decisions and partial-work evidence where the next session can verify them.",
-        "Do not duplicate facts already owned by code or git history, and do not persist memory without host policy and user authority.",
+        "Record only repo-scoped decisions with lasting architectural or process consequences, using the repository's existing convention; leave the shortest useful handoff in an existing location only for work another session must continue.",
+        "Do not duplicate facts already owned by code or git history, create a new record unless the repository or user requires it, or persist memory without host policy and user authority.",
         "Supersede conflicting records and verify recalled state before acting on it."
       ]
     },
@@ -151,7 +153,7 @@
       "groups": ["semantic"],
       "enforcement": "semantic-review",
       "reviewCriteria": [
-        "Verify single authoritative truth, no dead code, and complete wiring to every required surface.",
+        "Verify single authoritative truth, no dead code, and complete wiring only to surfaces required by the current request or product contract.",
         "Reject symptom patches, duplicated authority, provider leakage, and unsafe permission bypasses.",
         "Require live evidence for provider, authentication, permission, process, platform, and deployment claims.",
         "Prefer deterministic ownership of known formats and safety invariants; isolate optional AI failure.",

@@ -10,8 +10,8 @@
  *   5. resize control message — terminal accepts and stays alive.
  *   6. close behavior — sending close terminates the PTY child.
  *
- * Uses /bin/bash via BROWSE_TERMINAL_BINARY override so CI doesn't need
- * the `claude` binary installed.
+ * Uses a temporary Claude-compatible wrapper around /bin/bash via
+ * BROWSE_TERMINAL_BINARY so CI doesn't need the `claude` binary installed.
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
@@ -20,8 +20,6 @@ import * as path from 'path';
 import * as os from 'os';
 
 const AGENT_SCRIPT = path.join(import.meta.dir, '../src/terminal-agent.ts');
-const BASH = '/bin/bash';
-
 let stateDir: string;
 let agentProc: any;
 let agentPort: number;
@@ -52,14 +50,23 @@ function readTokenFile(): string {
 beforeAll(() => {
   stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goldband-term-'));
   const stateFile = path.join(stateDir, 'browse.json');
+  const terminalBinary = path.join(stateDir, 'fake-claude');
   // browse.json must exist so the agent's readBrowseToken doesn't throw.
   fs.writeFileSync(stateFile, JSON.stringify({ token: 'test-browse-token' }));
+  // terminal-agent passes Claude's --append-system-prompt pair. Consume that
+  // pair before starting bash so the PTY assertion proves command execution
+  // instead of sometimes passing from terminal input echo alone.
+  fs.writeFileSync(
+    terminalBinary,
+    '#!/bin/bash\nif [ "$#" -ne 2 ] || [ "$1" != "--append-system-prompt" ] || [ -z "$2" ]; then exit 64; fi\nshift 2\nexec /bin/bash\n',
+    { mode: 0o700 },
+  );
   agentProc = Bun.spawn(['bun', 'run', AGENT_SCRIPT], {
     env: {
       ...process.env,
       BROWSE_STATE_FILE: stateFile,
       BROWSE_SERVER_PORT: '0', // not used in this test
-      BROWSE_TERMINAL_BINARY: BASH,
+      BROWSE_TERMINAL_BINARY: terminalBinary,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

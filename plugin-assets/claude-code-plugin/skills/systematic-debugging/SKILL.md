@@ -38,8 +38,15 @@ you are not ready to propose a fix.
 
 - Do not propose a fix before you can state the observed symptom, reproduction
   path, and evidence source.
-- Do not stack multiple small fixes together. One hypothesis, one test, one
-  result.
+- A fix attempt is a completed corrective action based on a stated root-cause
+  hypothesis, followed by relevant verification.
+- Inspection and reruns without a corrective action do not count; neither do
+  tool, sandbox, or permission failures that prevent the action from completing
+  or verification from running.
+- After two consecutive attempts under the same hypothesis leave the same
+  verification blocked by the same failure class, stop editing and return to
+  diagnosis. Cosmetic output changes do not reset the count; a different
+  failure class or new evidence-backed hypothesis does.
 - Do not stop at the first plausible cause; compare against working examples and
   recent changes.
 - Do not treat a non-reproducible issue as permission to guess. Gather more
