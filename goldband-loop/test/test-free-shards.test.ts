@@ -10,6 +10,7 @@ import {
   stableHash,
   assignFilesToShards,
   buildShardArgs,
+  FREE_SHARD_WALL_CLOCK_TIMEOUT_MS,
   normalizeRelativePath,
 } from '../scripts/test-free-shards';
 
@@ -132,6 +133,14 @@ describe('test-free-shards: platform ownership', () => {
 });
 
 describe('test-free-shards: sharding', () => {
+  test('each shard has a hard wall-clock deadline longer than its per-test timeout', () => {
+    expect(FREE_SHARD_WALL_CLOCK_TIMEOUT_MS).toBe(10 * 60_000);
+    expect(FREE_SHARD_WALL_CLOCK_TIMEOUT_MS).toBeGreaterThan(10_000);
+    const source = fs.readFileSync(path.join(ROOT, 'scripts/test-free-shards.ts'), 'utf-8');
+    expect(source).toContain('await superviseCommand(process.execPath, buildShardArgs(files)');
+    expect(source).toContain('timeoutMs: FREE_SHARD_WALL_CLOCK_TIMEOUT_MS');
+  });
+
   test('stableHash is deterministic', () => {
     expect(stableHash('foo.test.ts')).toBe(stableHash('foo.test.ts'));
     expect(stableHash('foo.test.ts')).not.toBe(stableHash('bar.test.ts'));

@@ -29,6 +29,7 @@
     "test:free": "bun run scripts/test-free-shards.ts",
     "test:windows": "bun run scripts/test-free-shards.ts --windows-only",
     "test:ml": "bun test browse/test/security-bunnative.test.ts browse/test/security-bench.test.ts",
+    "probe:browser-close": "bun run scripts/browser-close-probe.ts",
     "check:surfaces": "node ../scripts/test-workflow-contracts.mjs && bun run scripts/gen-llms-txt.ts --dry-run",
     "start": "bun run browse/src/server.ts",
     "eval:list": "bun run scripts/eval-list.ts",
