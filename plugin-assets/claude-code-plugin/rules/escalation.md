@@ -18,8 +18,9 @@ mechanics so it does not depend on the model's own confidence.
 
 - The action is irreversible or outward-facing: force-push, publish, release,
   data deletion, spending money, messaging other people.
-- Two materially different interpretations of the request are both
-  implementable and lead to different work.
+- Two plausible interpretations are both implementable, would change the
+  target, behavior, or external effect, and current evidence cannot resolve
+  which one the user intends.
 - The correct fix requires expanding scope beyond what the user named.
 
 ## Fix Attempts

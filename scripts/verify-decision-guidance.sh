@@ -42,6 +42,18 @@ for rel in \
   check_contains "$rel" "tool, sandbox, or permission failures" "fix-attempt exclusions remain explicit in $rel"
   check_contains "$rel" "different failure class or new evidence-backed hypothesis" "fix-attempt reset remains explicit in $rel"
 done
+for rel in "codex/AGENTS.md" "rules/escalation.md" "goldband.manifest.json"; do
+  check_contains "$rel" "change the target, behavior, or external effect" "material ambiguity stays defined in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/architecture-boundaries.md" "goldband.manifest.json"; do
+  check_contains "$rel" "current request or product contract" "required surface scope stays explicit in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/security.md" "goldband.manifest.json"; do
+  check_contains "$rel" "controls matched to" "security controls stay threat-matched in $rel"
+done
+for rel in "codex/AGENTS.md" "rules/session-handoff.md" "goldband.manifest.json"; do
+  check_contains "$rel" "lasting architectural or process consequences" "durable decision threshold stays explicit in $rel"
+done
 check_contains "goldband.manifest.json" '"prohibitedSharedBoilerplate"' "manifest declares prohibited shared prompt boilerplate"
 check_contains "scripts/test-workflow-contracts.mjs" "legacy per-workflow prompt files remain" "workflow contract gate rejects legacy prompt files"
 

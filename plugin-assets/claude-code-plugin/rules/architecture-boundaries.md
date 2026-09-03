@@ -36,12 +36,12 @@ authority stays with its owner.
   authoritative result, but must not independently re-derive or reconcile the
   same truth. Caches and projections require explicit provenance, invalidation,
   and freshness rules.
-- A capability is complete only when every surface required by its product
-  contract is wired, registered, reachable, and verified. Service, API, CLI,
-  MCP, UI, and other facades call the owner's operation instead of reimplementing
-  it. Wiring includes routing, mounting, inventory, and dependency injection;
-  an isolated or unreachable implementation is unfinished. Surfaces the
-  contract does not require need not exist.
+- A capability is complete only when every surface required by the current
+  request or product contract is wired, registered, reachable, and verified.
+  Service, API, CLI, MCP, UI, and other facades call the owner's operation
+  instead of reimplementing it. Wiring includes routing, mounting, inventory,
+  and dependency injection; an isolated or unreachable implementation is
+  unfinished. Do not add a surface merely for parity or symmetry.
 
 ### AI-assisted paths
 

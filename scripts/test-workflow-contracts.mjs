@@ -431,7 +431,7 @@ assert.match(release, /explicit approval/i);
 
 assert.equal(
   manifest.promptArchitecture.interactionPolicy.askOnlyWhen,
-  'Ask only when the answer can materially change the result and cannot be safely inferred from current evidence or user-stated preferences.',
+  'Ask only when user authority is required, or two plausible answers would change the target, behavior, or external effect and current evidence or preferences cannot resolve intent.',
 );
 assert.match(
   manifest.promptArchitecture.interactionPolicy.batching,
@@ -452,10 +452,7 @@ assertPromptSurfaceBudget(
   PROMPT_SURFACE_BUDGETS.rootRouterSkillBytes,
 );
 assert.match(rootSkill, /## Human decisions/);
-assert.match(
-  rootSkill,
-  /Ask only when the answer can materially change the result/,
-);
+assert.match(rootSkill, /Ask only when user authority is required/);
 assert.match(rootSkill, /Batch related decisions/);
 assert.match(rootSkill, /Tool schemas and UI own question shape/);
 assert.throws(

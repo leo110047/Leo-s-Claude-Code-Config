@@ -37,9 +37,10 @@ Condensed from the shared `rules/` policies (architecture boundaries,
 verification, escalation, change scope, security, and session handoff), which
 Codex does not auto-load:
 
-- Proceed autonomously on reversible, in-scope, verifiable work. Stop and ask
-  for irreversible or outward-facing actions, materially ambiguous requests,
-  or scope expansion beyond what the user named.
+- Proceed autonomously on reversible, in-scope, verifiable work. Ask before
+  irreversible or outward-facing actions, scope expansion, or when two
+  plausible interpretations would change the target, behavior, or external
+  effect and current evidence cannot resolve the user's intent.
 - A fix attempt is a completed corrective action based on a stated root-cause
   hypothesis, followed by relevant verification. Inspection and reruns without
   a corrective action do not count; neither do tool, sandbox, or permission
@@ -54,27 +55,32 @@ Codex does not auto-load:
 - Fix at the layer where the root cause lives. Prefer reuse and deletion over
   addition. A single call-site abstraction needs a real ownership boundary,
   external adapter, test seam, or stable domain concept.
-- Keep external SDK and wire types behind adapters. Shared contracts stay
-  provider-neutral and runtime-validated; native permission authority must not
-  be bypassed or silently widened.
+- Keep provider-specific SDK and wire types inside the owning adapter. Shared
+  contracts stay provider-neutral and runtime-validated; preserve native
+  permission authority.
 - Give each domain fact, decision, and capability one authoritative owner.
   Facades call the owner's operations, caches and projections remain traceable
-  to them, and every required user surface must be wired and reachable.
+  to them. Wire only surfaces required by the current request or product
+  contract; do not add UI, API, CLI, MCP, or other surfaces for symmetry.
 - Use deterministic logic for known structure, hard invariants, and safety
   constraints. Isolate optional AI failure; when AI is the core capability,
   fail explicitly instead of fabricating or silently downgrading results.
-- Treat localhost, child-process, SDK, HTTP, WebSocket, and tool boundaries as
-  untrusted. Validate before side effects or persistence, and require live
-  evidence for provider, approval, process, or platform behavior claims.
+- Localhost, child-process, SDK, HTTP, WebSocket, and tool boundaries are not
+  trusted merely because they are local or structured. Validate the actual
+  untrusted data or authority before side effects or persistence, and add only
+  controls matched to that threat. Require live evidence for provider,
+  approval, process, or platform behavior claims.
 - Before adding or expanding a permanent approval, permission, state, gate,
   artifact, lineage, coordination workflow, external side effect, or generic
   mechanism, choose the smallest sufficient solution that fully covers the
   current requirement, root-cause class, and required safety boundary; use a
   heavier mechanism only when current evidence names what the smaller option
   cannot cover.
-- Persist durable decisions to `docs/DECISIONS.md`-style records and leave a
-  written handoff (tried, verified vs suspected, next step) when stopping
-  partway.
+- Record only repo-scoped decisions with lasting architectural or process
+  consequences, using the repository's existing convention. For work another
+  session must continue, leave the shortest useful handoff in an existing
+  location; do not duplicate code or Git history or create a new record unless
+  the repository or user requires it.
 
 ## UI and Skills
 

@@ -9,23 +9,26 @@ reliable cross-session storage.
 
 ## Where Durable Facts Go
 
-- Repo-scoped decisions with lasting consequences: a dated record in
-  `docs/DECISIONS.md` (decision, why, implementation contract), or the repo's
-  equivalent decision log.
+- Repo-scoped decisions with lasting architectural or process consequences:
+  record the decision, rationale, and implementation contract using the
+  repository's existing convention. Do not create a new record unless the
+  repository or user requires it.
 - Cross-session task state, direction reversals, and user preferences not
   derivable from the repo: persistent memory only when host policy allows it
   and the user explicitly asks; otherwise use a repo-local handoff/report.
   Use absolute dates and omit or redact sensitive data.
-- Investigations that ended without a fix: a short written record of findings
-  and the next step, in a report file or authorized memory — never only in the
-  conversation.
+- Investigations that another session must continue: preserve only findings
+  and the next step that cannot be recovered from code, tests, or git history,
+  using an existing repo record or authorized memory. Do not invent a handoff
+  location.
 - Nothing the repo already records (git history, code structure, past fixes):
   do not duplicate it into memory or decision logs.
 
 ## Required Behavior
 
-- Before ending a blocked or partial session, write down: what was tried,
-  what is verified versus suspected, and the single next step.
+- Before ending work another session must continue, leave the shortest useful
+  handoff: what was tried, what is verified versus suspected, and the single
+  next step.
 - Convert relative dates ("yesterday", "next sprint") to absolute dates before
   persisting anything.
 - When a new decision reverses an earlier record, update or mark the old
