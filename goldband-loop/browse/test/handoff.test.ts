@@ -10,7 +10,7 @@ import { startTestServer } from './test-server';
 import { BrowserManager, type BrowserState } from '../src/browser-manager';
 import { handleWriteCommand as _handleWriteCommand } from '../src/write-commands';
 import { handleMetaCommand } from '../src/meta-commands';
-import { pickFreeDisplay, spawnXvfb, type XvfbHandle } from '../src/xvfb';
+import { hasXvfbProbeTools, pickFreeDisplay, spawnXvfb, type XvfbHandle } from '../src/xvfb';
 
 const handleWriteCommand = (cmd: string, args: string[], b: BrowserManager) =>
   _handleWriteCommand(cmd, args, b.getActiveSession(), b);
@@ -20,10 +20,14 @@ let bm: BrowserManager;
 let baseUrl: string;
 let xvfb: XvfbHandle | null = null;
 let originalDisplay: string | undefined;
+const needsLinuxDisplay = process.platform === 'linux'
+  && !process.env.DISPLAY
+  && !process.env.WAYLAND_DISPLAY;
+const canRunHeadedHandoff = !needsLinuxDisplay || hasXvfbProbeTools();
 
 beforeAll(async () => {
   originalDisplay = process.env.DISPLAY;
-  if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+  if (needsLinuxDisplay && canRunHeadedHandoff) {
     const display = pickFreeDisplay();
     if (display === null) throw new Error('No free X display is available for headed handoff tests.');
     xvfb = await spawnXvfb(display);
@@ -190,7 +194,7 @@ describe('handoff edge cases', () => {
 // Each handoff test creates its own BrowserManager since handoff swaps the browser.
 // These tests run sequentially (one browser at a time) to avoid resource issues.
 
-describe('handoff integration', () => {
+describe.skipIf(!canRunHeadedHandoff)('handoff integration', () => {
   test('failed headed restore returns control to the original headless browser', async () => {
     const hbm = new BrowserManager();
     await hbm.launch();

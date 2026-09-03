@@ -367,6 +367,10 @@ function assertCompatibleConfig(state: ControllerState, flags?: GlobalFlags): vo
   }
 }
 
+function canInspectBeforeStartupLock(state: ControllerState | null): state is ControllerState {
+  return state !== null && state.phase !== 'starting';
+}
+
 async function restartUpdatedController(
   state: ControllerState,
   extraEnv: Record<string, string>,
@@ -418,7 +422,10 @@ async function ensureServer(flags?: GlobalFlags): Promise<ControllerState> {
     return state;
   }
 
-  if (state) {
+  // A starting owner is protected by the startup lock transferred from its
+  // launching CLI. Do not classify that legitimate transition as an unhealthy
+  // live owner before consulting the lock; contenders must wait for ready.
+  if (canInspectBeforeStartupLock(state)) {
     const inspection = await inspectControllerState(state);
     if (decideControllerTransition(inspection) === 'refuse') {
       throw unavailableControllerError(inspection);

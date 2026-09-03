@@ -54,6 +54,10 @@ if (claim.outcome !== 'claimed') {
   throw new Error(`fixture claim refused: ${claim.reason}`);
 }
 const owner = controllerOwner(startingState);
+const readyDelayMs = Number.parseInt(process.env.BROWSE_FIXTURE_READY_DELAY_MS || '0', 10);
+if (Number.isFinite(readyDelayMs) && readyDelayMs > 0) {
+  await Bun.sleep(readyDelayMs);
+}
 if (!updateOwnedControllerState(stateFile, owner, (current) => ({ ...current, phase: 'ready' }))) {
   listener.stop(true);
   throw new Error('fixture lost ownership before ready');

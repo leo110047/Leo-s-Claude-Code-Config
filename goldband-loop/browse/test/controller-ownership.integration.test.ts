@@ -172,6 +172,7 @@ describeWithLocalhost('controller ownership integration', () => {
     const stateFile = path.join(dir, 'browse.json');
     const results = await Promise.all(Array.from({ length: 8 }, () => runCli(stateFile, {
       BROWSE_SERVER_SCRIPT: FIXTURE_SERVER,
+      BROWSE_FIXTURE_READY_DELAY_MS: '250',
     })));
 
     for (const result of results) {
