@@ -9,6 +9,7 @@ import { runWorkflow } from '../workflows/runtime';
 import {
   finalizeClosureReviewLineage,
   finalizeInitialReviewLineage,
+  assertReviewContractNotWeaker,
   prepareReviewLineage,
   readReviewLineageForTest,
   releaseReviewLineage,
@@ -29,6 +30,51 @@ afterEach(() => {
 });
 
 describe('authoritative review lineage', () => {
+	test('permits wider provider applicability but rejects narrower coverage', () => {
+		const baseline = manifest();
+		baseline.providers[0]!.applicability = {
+			kind: 'paths',
+			pathPrefixes: ['workflows/review-evidence.ts'],
+		};
+		const wider = structuredClone(baseline);
+		wider.providers[0]!.applicability = {
+			kind: 'paths',
+			pathPrefixes: ['workflows/review-evidence.ts', 'workflows/review.ts'],
+		};
+		expect(() => assertReviewContractNotWeaker(baseline, wider)).not.toThrow();
+
+		const broader = structuredClone(baseline);
+		broader.providers[0]!.applicability = {
+			kind: 'paths',
+			pathPrefixes: ['workflows'],
+		};
+		expect(() => assertReviewContractNotWeaker(baseline, broader)).not.toThrow();
+
+		const narrower = structuredClone(baseline);
+		narrower.providers[0]!.applicability = {
+			kind: 'paths',
+			pathPrefixes: ['test'],
+		};
+		expect(() => assertReviewContractNotWeaker(baseline, narrower))
+			.toThrow('contract laundering blocked');
+	});
+
+	test('permits reason removal only when an unsupported cell gains typed evidence', () => {
+		const unsupported = manifest();
+		unsupported.behaviorMatrix[0] = {
+			...unsupported.behaviorMatrix[0]!,
+			disposition: 'unsupported',
+			providerIds: [],
+			reason: 'The provider is not wired.',
+		};
+		unsupported.providers = [];
+		const rewritten = structuredClone(unsupported);
+		rewritten.behaviorMatrix[0]!.reason = 'A different unsupported explanation.';
+		expect(() => assertReviewContractNotWeaker(unsupported, rewritten))
+			.toThrow('required behavior reason changed');
+		expect(() => assertReviewContractNotWeaker(unsupported, manifest())).not.toThrow();
+	});
+
   test('rejects an empty initial candidate before lineage creation and permits a later candidate', async () => {
     const fixture = repository();
     const diffFile = join(fixture.repo, 'candidate.diff');
@@ -128,6 +174,58 @@ describe('authoritative review lineage', () => {
       priorBlockersOpen: true,
       completionAuthorized: false,
     });
+  });
+
+  test('guides deterministic-only lineage into monotonic evidence repair', () => {
+    const fixture = repository();
+    const gap = manifest();
+    gap.behaviorMatrix[0] = {
+      ...gap.behaviorMatrix[0]!,
+      disposition: 'unsupported',
+      providerIds: [],
+      reason: 'No deterministic provider is wired yet.',
+    };
+    gap.providers = [];
+    const first = prepare(fixture, gap);
+    const artifact = initialArtifact(gap, [{
+      id: 'D-001',
+      file: '<evidence-manifest>',
+      severity: 'high',
+      summary: 'deployment evidence is missing',
+      blocking: true,
+      classification: 'coverage-gap',
+      category: 'deterministic-evidence',
+      behaviorCellIds: ['deployment-safe'],
+    }]);
+    artifact.hostCallCount = 0;
+    const artifactFile = join(fixture.state, 'deterministic-only.json');
+    writeFileSync(artifactFile, `${JSON.stringify(artifact)}\n`);
+    finalizeInitialReviewLineage({
+      handle: first,
+      key,
+      repository: 'repo',
+      baseDigest: 'a'.repeat(64),
+      scopeDigest: 'b'.repeat(64),
+      artifact,
+      artifactFile,
+      findings: artifact.findings,
+      deterministicComplete: false,
+      runtimeIncomplete: false,
+    });
+    releaseReviewLineage(first);
+
+    expect(() => prepare(fixture, manifest(), undefined, {
+      candidateDigest: 'f'.repeat(64),
+    })).toThrow(`repair deterministic evidence with: --closure-artifact ${artifactFile}`);
+    const repair = prepare(fixture, manifest(), artifact, {
+      candidateDigest: 'f'.repeat(64),
+    });
+    expect(repair.predecessor?.authoritativeArtifact).toMatchObject({
+      runId: artifact.runId,
+      receiptId: artifact.runtimeReceipt.id,
+      hostCallCount: 0,
+    });
+    releaseReviewLineage(repair);
   });
 
   test('detects all inherited contract downgrade classes and permits additive coverage', () => {

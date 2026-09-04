@@ -975,6 +975,165 @@ describe('review evidence contracts', () => {
     )).toThrow();
   });
 
+  test('repairs deterministic-only lineage before the first semantic host call', async () => {
+    const repo = gitFixture();
+    const state = join(repo, '.state');
+    const diffFile = join(repo, 'candidate.diff');
+    const evidenceFile = join(repo, 'evidence.json');
+    const unsupported = manifest();
+    unsupported.behaviorMatrix[0] = {
+      ...unsupported.behaviorMatrix[0]!,
+      disposition: 'unsupported',
+      providerIds: [],
+      reason: 'The deterministic provider is not wired yet.',
+    };
+    unsupported.providers = [];
+    writeFileSync(evidenceFile, `${JSON.stringify(unsupported)}\n`);
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+bad();\n');
+
+    const initial = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+    });
+    const initialArtifactFile = initial.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const initialArtifact = JSON.parse(readFileSync(initialArtifactFile, 'utf8')) as InitialReviewArtifact;
+    expect(initialArtifact.hostCallCount).toBe(0);
+    expect(initialArtifact.findings.map((finding) => finding.id)).toEqual(['D-001']);
+
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+still-bad();\n');
+    const incompleteRecovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: initialArtifactFile,
+    });
+    expect(String(incompleteRecovery.output)).toContain('Phase: evidence-repair.');
+    expect(String(incompleteRecovery.output)).toContain('Semantic host calls: 0.');
+    expect(String(incompleteRecovery.output)).toContain('completion-authorized: false');
+    const incompleteArtifactFile = incompleteRecovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const incompleteArtifact = JSON.parse(
+      readFileSync(incompleteArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(incompleteArtifact.findings.map((finding) => finding.id)).toEqual(['D-001']);
+
+    const repaired = manifest();
+    writeFileSync(evidenceFile, `${JSON.stringify(repaired)}\n`);
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+good();\n');
+    const recovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: incompleteArtifactFile,
+    });
+
+    expect(String(recovery.output)).toContain('Phase: evidence-repair.');
+    expect(String(recovery.output)).toContain('Semantic host calls: 1.');
+    expect(String(recovery.output)).toContain('completion-authorized: true');
+    const recoveredArtifactFile = recovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const recoveredArtifact = validateInitialReviewArtifact(
+      JSON.parse(readFileSync(recoveredArtifactFile, 'utf8')),
+    );
+    expect(recoveredArtifact).toMatchObject({
+      phase: 'initial',
+      hostCallCount: 1,
+      predecessor: {
+        transition: 'evidence-repair',
+        runId: incompleteArtifact.runId,
+        receiptId: incompleteArtifact.runtimeReceipt.id,
+        findingIds: ['D-001'],
+      },
+    });
+  });
+
+  test('partial evidence repair preserves unresolved deterministic finding identity', async () => {
+    const repo = gitFixture();
+    const state = join(repo, '.state');
+    const diffFile = join(repo, 'candidate.diff');
+    const evidenceFile = join(repo, 'evidence.json');
+    const unsupported = manifest();
+    unsupported.behaviorMatrix = [
+      {
+        ...unsupported.behaviorMatrix[0]!,
+        disposition: 'unsupported',
+        providerIds: [],
+        reason: 'Behavior A evidence is not wired yet.',
+      },
+      {
+        ...unsupported.behaviorMatrix[0]!,
+        id: 'behavior-b',
+        behavior: 'The second invariant has deterministic evidence.',
+        disposition: 'unsupported',
+        providerIds: [],
+        reason: 'Behavior B evidence is not wired yet.',
+      },
+    ];
+    unsupported.providers = [];
+    writeFileSync(evidenceFile, `${JSON.stringify(unsupported)}\n`);
+    writeFileSync(
+      diffFile,
+      'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+bad();\n',
+    );
+
+    const initial = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state,
+      diffFile: 'candidate.diff', evidenceManifestFile: 'evidence.json',
+    });
+    const initialArtifactFile = initial.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const initialArtifact = JSON.parse(
+      readFileSync(initialArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(initialArtifact.findings.map((finding) => ({
+      id: finding.id,
+      behaviorCellIds: finding.behaviorCellIds,
+    }))).toEqual([
+      { id: 'D-001', behaviorCellIds: ['behavior-a'] },
+      { id: 'D-002', behaviorCellIds: ['behavior-b'] },
+    ]);
+
+    const partial = structuredClone(unsupported);
+    partial.behaviorMatrix[0] = {
+      ...partial.behaviorMatrix[0]!,
+      disposition: 'static',
+      providerIds: ['provider-a'],
+      reason: undefined,
+    };
+    partial.providers = manifest().providers;
+    writeFileSync(evidenceFile, `${JSON.stringify(partial)}\n`);
+    writeFileSync(
+      diffFile,
+      'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+partly-fixed();\n',
+    );
+    const recovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state,
+      diffFile: 'candidate.diff', evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: initialArtifactFile,
+    });
+    const recoveryArtifactFile = recovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const recoveryArtifact = JSON.parse(
+      readFileSync(recoveryArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(recoveryArtifact.hostCallCount).toBe(0);
+    expect(recoveryArtifact.findings.map((finding) => ({
+      id: finding.id,
+      behaviorCellIds: finding.behaviorCellIds,
+    }))).toEqual([{ id: 'D-002', behaviorCellIds: ['behavior-b'] }]);
+  });
+
   test('semantic host cannot mint verified failure from deterministic evidence IDs', () => {
     const evidence = bundle([{
       ...record(),
@@ -2245,6 +2404,19 @@ describe('review evidence contracts', () => {
     }
     if (alive) process.kill(pid, 'SIGKILL');
     expect(alive).toBe(false);
+  });
+
+  test('pre-semantic artifacts cannot contain semantic findings', () => {
+    const forged = initialArtifact();
+    forged.hostCallCount = 0;
+    forged.findings[0] = {
+      ...forged.findings[0]!,
+      id: 'D-001',
+      category: 'deterministic-evidence',
+      classification: 'semantic-concern',
+    };
+    expect(() => validateInitialReviewArtifact(forged))
+      .toThrow('pre-semantic recovery requires deterministic-only findings');
   });
 
   test('closure accepts only original finding IDs and evidence-backed direct regressions', () => {

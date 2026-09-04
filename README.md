@@ -188,12 +188,18 @@ candidate、model output 與 artifact input 視為不可信，但信任同一 OS
 若同一 host user 已惡意控制 authority store，需另加 privileged helper 或 OS-backed key 才能隔離。
 Closure receipt 採 at-most-once：repair binding 與 Work Map 因果鏈驗證完成後會以 atomic claim 消耗；
 claim 後若 process crash 或後續失敗，必須重新做 initial review，不能重播同一 receipt。
+若 authoritative artifact 的 `hostCallCount=0` 且只有 deterministic findings，同一
+`--closure-artifact` 入口會明確路由成 pre-semantic evidence repair，而不是 semantic closure。
+它保留原 lineage、receipt、finding IDs 與 contract authority，只重跑受修復或 monotonic strengthening
+影響的 typed cells；evidence 仍不完整時維持零 host calls 與未關閉 blockers，通過後才執行該
+lineage 唯一一次 initial semantic review。新 artifact 會讀得出 predecessor digests 與 affected cells。
 被 secret redaction 隱藏的 untracked 檔仍會以 digest 綁定並經非 prompt 通道放入 executable snapshot。Fixture/local/live/device/production evidence 會分開標示，green gate 不會
 被解讀成整體 deploy readiness。
 
 跨次 review 由 installed runtime 的 signed acceptance lineage 管理。新
-manifest 只能增加 coverage，不能刪除、反轉或降低既有 required cells；有未關閉
-finding 時只能走 scoped closure。空的 initial candidate 會在建立 lineage 前被拒絕；
+manifest 只能增加 coverage，不能刪除、反轉或降低既有 required cells；`manual`／`unsupported`
+可以 strengthening 成有 typed provider 的 disposition，反向或不同 evidence 模式間的替換仍會被拒絕。
+有未關閉 finding 時，只能依 artifact state 走 evidence repair 或 scoped closure。空的 initial candidate 會在建立 lineage 前被拒絕；
 standalone lineage 會綁定正規化 changed-file scope，舊 signed record 也只有在
 authoritative artifact 證明 scope 相同時才會遷移；若 artifact 無法驗證，signed
 candidate digest 完全相同仍會保留 blocker，但不會讓無關候選繼承不可判定的 broad scope。

@@ -289,6 +289,16 @@ export type InitialReviewArtifact = {
   evidence: ReviewEvidenceBundle;
   findings: ReviewFinding[];
   hostCallCount: 0 | 1;
+  predecessor?: {
+    transition: 'evidence-repair';
+    artifactDigest: string;
+    runId: string;
+    receiptId: string;
+    candidateDigest: string;
+    behaviorContractDigest: string;
+    findingIds: string[];
+    affectedCellIds: string[];
+  };
   createdAt: string;
   runtimeReceipt: {
     schemaVersion: 1;
@@ -325,6 +335,7 @@ type InitialReviewRuntimeReceipt = {
 };
 
 export type ClosureReviewInput = {
+  kind: 'semantic-closure' | 'evidence-repair';
   artifact: InitialReviewArtifact;
   repairedBinding: CandidateBinding;
   originalBehaviorContractDigest: string;
@@ -638,14 +649,7 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
   if (item.schemaVersion !== 1 || item.phase !== 'initial') {
     throw new Error('invalid initial review artifact header');
   }
-  if (item.hostCallCount !== 1) {
-    throw new Error('closure requires a completed initial semantic host call');
-  }
-  const findings = Array.isArray(item.findings) ? item.findings as ReviewFinding[] : undefined;
-  if (!findings) throw new Error('initial review artifact.findings must be an array');
-  if (findings.length === 0) throw new Error('closure is forbidden when initial review has no findings');
-  const ids = findings.map((finding) => requiredId(finding.id, 'initial finding.id'));
-  if (new Set(ids).size !== ids.length) throw new Error('initial finding IDs must be unique');
+  const findings = validateInitialArtifactFindings(item);
   const artifact = value as InitialReviewArtifact;
   const runtimeReceipt = asObject(artifact.runtimeReceipt, 'initial review artifact.runtimeReceipt');
   if (runtimeReceipt.schemaVersion !== 1) {
@@ -700,6 +704,7 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
   if (!Array.isArray(artifact.evidence.records)) {
     throw new Error('initial review artifact evidence records are invalid');
   }
+  validateEvidenceRepairPredecessor(artifact, manifest);
   const recordIds = new Set<string>();
   for (const record of artifact.evidence.records) {
     validatePersistedEvidenceRecord(record, binding, manifest);
@@ -709,7 +714,7 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
   const recomputedCompleteness = evaluateEvidenceCompleteness(
     manifest,
     artifact.evidence.records,
-    effectiveEvidenceCells(manifest, binding.changedFiles),
+    persistedArtifactEvidenceCells(artifact, manifest),
   );
   if (stableJson(recomputedCompleteness) !== stableJson(artifact.evidence.completeness)) {
     throw new Error('initial review artifact evidence completeness is not recomputable');
@@ -723,6 +728,72 @@ export function validateInitialReviewArtifact(value: unknown): InitialReviewArti
     throw new Error('initial review artifact.createdAt is invalid');
   }
   return artifact;
+}
+
+function validateInitialArtifactFindings(item: Record<string, unknown>): ReviewFinding[] {
+  if (item.hostCallCount !== 0 && item.hostCallCount !== 1) {
+    throw new Error('initial review artifact host call count is invalid');
+  }
+  if (!Array.isArray(item.findings)) {
+    throw new Error('initial review artifact.findings must be an array');
+  }
+  if (item.findings.length === 0) {
+    throw new Error('closure is forbidden when initial review has no findings');
+  }
+  const findings = item.findings as ReviewFinding[];
+  const ids = findings.map((finding) => requiredId(finding.id, 'initial finding.id'));
+  if (new Set(ids).size !== ids.length) throw new Error('initial finding IDs must be unique');
+  if (item.hostCallCount === 0 && findings.some((finding) =>
+    finding.category !== 'deterministic-evidence' ||
+    !finding.id?.startsWith('D-') ||
+    !['verified-failure', 'coverage-gap', 'runtime-incomplete'].includes(finding.classification ?? ''))) {
+    throw new Error('pre-semantic recovery requires deterministic-only findings');
+  }
+  return findings;
+}
+
+function validateEvidenceRepairPredecessor(
+  artifact: InitialReviewArtifact,
+  manifest: ReviewEvidenceManifest,
+): void {
+  const predecessor = artifact.predecessor;
+  if (!predecessor) return;
+  if (predecessor.transition !== 'evidence-repair') {
+    throw new Error('initial review artifact predecessor transition is invalid');
+  }
+  assertSha256(predecessor.artifactDigest, 'initial review predecessor artifactDigest');
+  assertSha256(predecessor.candidateDigest, 'initial review predecessor candidateDigest');
+  assertSha256(
+    predecessor.behaviorContractDigest,
+    'initial review predecessor behaviorContractDigest',
+  );
+  requiredId(predecessor.runId, 'initial review predecessor runId');
+  requiredId(predecessor.receiptId, 'initial review predecessor receiptId');
+  assertUniqueIds(predecessor.findingIds, 'initial review artifact predecessor findingIds');
+  assertUniqueIds(predecessor.affectedCellIds, 'initial review artifact predecessor affectedCellIds');
+  const validCellIds = new Set(manifest.behaviorMatrix.map((cell) => cell.id));
+  if (predecessor.affectedCellIds.some((id) => !validCellIds.has(id))) {
+    throw new Error('initial review artifact predecessor affectedCellIds are invalid');
+  }
+}
+
+function assertUniqueIds(value: unknown, label: string): asserts value is string[] {
+  if (!Array.isArray(value) || value.length === 0 ||
+      value.some((id) => typeof id !== 'string' || !id) ||
+      new Set(value).size !== value.length) {
+    throw new Error(`${label} are invalid`);
+  }
+}
+
+function persistedArtifactEvidenceCells(
+  artifact: InitialReviewArtifact,
+  manifest: ReviewEvidenceManifest,
+): ReviewEvidenceManifest['behaviorMatrix'] {
+  if (!artifact.predecessor) {
+    return effectiveEvidenceCells(manifest, artifact.binding.changedFiles);
+  }
+  const affected = new Set(artifact.predecessor.affectedCellIds);
+  return manifest.behaviorMatrix.filter((cell) => affected.has(cell.id));
 }
 
 function validatePersistedContractResolution(
@@ -1034,7 +1105,9 @@ export function buildClosureInput(
     ...findingCellIds,
     ...contractChangedCellIds,
   ]);
+  assertEvidenceRepairAffectsCells(artifact, affectedCellIds);
   return {
+    kind: artifact.hostCallCount === 0 ? 'evidence-repair' : 'semantic-closure',
     artifact,
     repairedBinding,
     originalBehaviorContractDigest: artifact.binding.behaviorContractDigest,
@@ -1043,6 +1116,21 @@ export function buildClosureInput(
     affectedFindingIds: artifact.findings.map((finding) => finding.id!),
     affectedCellIds,
   };
+}
+
+function assertEvidenceRepairAffectsCells(
+  artifact: InitialReviewArtifact,
+  affectedCellIds: string[],
+): void {
+  if (artifact.hostCallCount === 0 && affectedCellIds.length === 0) {
+    throw new Error(
+      'evidence repair does not affect an unresolved deterministic finding or add contract coverage',
+    );
+  }
+}
+
+export function initialReviewArtifactDigest(artifact: InitialReviewArtifact): string {
+  return sha256(stableJson(artifact));
 }
 
 export function validateClosureResults(

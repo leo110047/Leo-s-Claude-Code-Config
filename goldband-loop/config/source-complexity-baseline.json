@@ -681,8 +681,8 @@
         45,
         38,
         37,
-        35,
         32,
+        30,
         29,
         27,
         27,
@@ -704,7 +704,7 @@
         89,
         87,
         78,
-        72,
+        67,
         61,
         56,
         52
@@ -729,7 +729,7 @@
     "workflows/review-lineage.ts": {
       "lint/complexity/noExcessiveCognitiveComplexity": [
         55,
-        31,
+        14,
         14,
         13
       ],
@@ -742,7 +742,7 @@
     },
     "workflows/review.ts": {
       "lint/complexity/noExcessiveCognitiveComplexity": [
-        105,
+        97,
         26,
         22,
         17,
@@ -750,11 +750,11 @@
         13
       ],
       "lint/complexity/noExcessiveLinesPerFunction": [
-        182,
+        168,
         112,
         86,
         71,
-        69,
+        65,
         62,
         55
       ],

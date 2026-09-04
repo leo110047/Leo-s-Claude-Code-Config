@@ -617,7 +617,7 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(lineCount(hostCallLog)).toBe(authorityHostCallsBefore);
 			writeFileSync(runtimeReceiptFile, trustedRuntimeReceipt);
 
-			if (installedPath === "full-verified") {
+				if (installedPath === "full-verified") {
 				writeFileSync(join(repo, "review-me.txt"), "repaired\n");
 				const closure = spawnInstalledRuntime(
 					marker.argvPrefix[0],
@@ -656,10 +656,92 @@ describe("Codex trusted workflow launcher install", () => {
 				phase: "closure",
 				hostCallCount: 1,
 				results: [{ findingId: "S-001", status: "closed" }],
-				});
-			}
+					});
+				}
 
-			const cleanRepo = join(fixture, "clean-repo");
+				const repairRepo = join(fixture, "pre-semantic-repair-repo");
+				mkdirSync(repairRepo, { recursive: true });
+				expect(spawnSync("git", ["init", "-q"], { cwd: repairRepo }).status).toBe(0);
+				writeFileSync(join(repairRepo, "review-me.txt"), "baseline\n");
+				writeFileSync(
+					join(repairRepo, "goldband.review-evidence.json"),
+					`${JSON.stringify(installedUnsupportedManifest())}\n`,
+				);
+				expect(spawnSync("git", ["add", "."], { cwd: repairRepo }).status).toBe(0);
+				expect(spawnSync("git", [
+					"-c", "user.name=Goldband Test", "-c", "user.email=goldband@example.invalid",
+					"commit", "-qm", "pre-semantic repair fixture",
+				], { cwd: repairRepo }).status).toBe(0);
+				writeFileSync(
+					join(repairRepo, "candidate.patch"),
+					installedCandidatePatch("deterministic blocker"),
+				);
+				const deterministicHostCallsBefore = lineCount(hostCallLog);
+				const deterministicInitial = runInstalledReview(repairRepo, [
+					"--diff-file", "candidate.patch", "--host", "codex",
+				]);
+				expect(deterministicInitial.status, deterministicInitial.stderr).toBe(0);
+				const deterministicResult = JSON.parse(deterministicInitial.stdout) as {
+					artifacts: string[];
+				};
+				const deterministicArtifactFile = deterministicResult.artifacts.find((file) =>
+					file.endsWith("-review-evidence.json"))!;
+				const deterministicArtifact = JSON.parse(
+					readFileSync(deterministicArtifactFile, "utf8"),
+				);
+				expect(deterministicArtifact.hostCallCount).toBe(0);
+				expect(deterministicArtifact.findings[0].id).toBe("D-001");
+				expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore);
+
+				const repairedManifest = join(fixture, "pre-semantic-repaired-contract.json");
+				writeFileSync(repairedManifest, `${JSON.stringify(installedHighRiskReviewEvidenceManifest())}\n`);
+				writeFileSync(
+					join(repairRepo, "candidate.patch"),
+					installedCandidatePatch("deterministic evidence repaired"),
+				);
+				const repairedReview = runInstalledReview(repairRepo, [
+					"--diff-file", "candidate.patch",
+					"--host", "codex",
+					"--evidence-manifest", repairedManifest,
+					"--closure-artifact", deterministicArtifactFile,
+				]);
+				expect(repairedReview.status, repairedReview.stderr).toBe(0);
+				expect(repairedReview.stdout).toContain("Phase: evidence-repair.");
+				const repairedResult = JSON.parse(repairedReview.stdout) as { artifacts: string[] };
+				const repairedArtifactFile = repairedResult.artifacts.find((file) =>
+					file.endsWith("-review-evidence.json"))!;
+				const repairedArtifact = JSON.parse(readFileSync(repairedArtifactFile, "utf8"));
+				if (nestedEvidenceBoundaryUnavailable) {
+					expect(repairedArtifact.hostCallCount).toBe(0);
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore);
+				} else {
+					expect(repairedArtifact).toMatchObject({
+						hostCallCount: 1,
+						predecessor: {
+							transition: "evidence-repair",
+							runId: deterministicArtifact.runId,
+							receiptId: deterministicArtifact.runtimeReceipt.id,
+							findingIds: ["D-001"],
+						},
+					});
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore + 1);
+					writeFileSync(
+						join(repairRepo, "candidate.patch"),
+						installedCandidatePatch("semantic finding repaired"),
+					);
+					const repairedClosure = runInstalledReview(repairRepo, [
+						"--diff-file", "candidate.patch",
+						"--host", "codex",
+						"--evidence-manifest", repairedManifest,
+						"--closure-artifact", repairedArtifactFile,
+					]);
+					expect(repairedClosure.status, repairedClosure.stderr).toBe(0);
+					expect(repairedClosure.stdout).toContain("Phase: closure.");
+					expect(repairedClosure.stdout).toContain("[closed] S-001");
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore + 2);
+				}
+
+				const cleanRepo = join(fixture, "clean-repo");
 			mkdirSync(cleanRepo, { recursive: true });
 			expect(spawnSync("git", ["init", "-q"], { cwd: cleanRepo }).status).toBe(0);
 			writeFileSync(join(cleanRepo, "review-me.txt"), "baseline\n");
@@ -1131,6 +1213,24 @@ function installedReviewEvidenceManifest() {
 		}],
 		authorizations: [],
 	};
+}
+
+function installedUnsupportedManifest() {
+	const value = installedHighRiskReviewEvidenceManifest();
+	value.behaviorMatrix[0] = {
+		...value.behaviorMatrix[0],
+		disposition: "unsupported",
+		providerIds: [],
+		reason: "The installed deterministic provider is not wired yet.",
+	};
+	value.providers = [];
+	return value;
+}
+
+function installedHighRiskReviewEvidenceManifest() {
+	const value = installedReviewEvidenceManifest();
+	value.behaviorMatrix[0] = { ...value.behaviorMatrix[0], risk: "high" };
+	return value;
 }
 
 function writeInstalledFixtureWheel(python: string, output: string): void {

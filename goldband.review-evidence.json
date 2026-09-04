@@ -79,6 +79,17 @@
       "providerIds": ["review-evidence-tests"]
     },
     {
+      "id": "pre-semantic-evidence-repair",
+      "behavior": "A deterministic-only blocker lineage can repair typed evidence before its first semantic host call without replacing lineage authority.",
+      "kind": "exception",
+      "input": "an authoritative hostCallCount=0 artifact, a repaired candidate, and an optional monotonic contract strengthening",
+      "preconditions": "all unresolved findings came from deterministic evidence and the predecessor receipt is current and unclaimed",
+      "expected": "the runtime reruns only affected typed evidence, preserves predecessor provenance, keeps failed repair blockers open, and dispatches exactly one initial semantic host only after evidence becomes eligible",
+      "risk": "high",
+      "disposition": "automated",
+      "providerIds": ["review-evidence-tests", "installed-runtime-tests"]
+    },
+    {
       "id": "scoped-closure-rerun",
       "behavior": "Closure reruns affected behavior contracts and closes only original findings with fresh matching evidence.",
       "kind": "normal",
@@ -292,6 +303,7 @@
         "deterministic-classification-authority",
         "deterministic-finding-preservation",
         "evidence-host-eligibility",
+        "pre-semantic-evidence-repair",
         "scoped-closure-rerun",
         "compact-closure-delta",
         "closure-evidence-relevance",
@@ -312,6 +324,8 @@
           "schemas/review-evidence-manifest.schema.json",
           "goldband-loop/workflows/review-evidence.ts",
           "goldband-loop/workflows/review-evidence-sandbox.ts",
+          "goldband-loop/workflows/review-lineage.ts",
+          "goldband-loop/workflows/review.ts",
           "goldband-loop/test/review-evidence.test.ts",
           "goldband-loop/test/review-evidence-platform.test.ts"
         ]
@@ -404,7 +418,7 @@
       "owner": "goldband-loop installed runtime test suite",
       "kind": "project-gate",
       "lifecycle": "persistent",
-      "cellIds": ["installed-codex-runtime-path", "runtime-owned-initial-receipt"],
+      "cellIds": ["installed-codex-runtime-path", "runtime-owned-initial-receipt", "pre-semantic-evidence-repair"],
       "applicability": {
         "kind": "paths",
         "pathPrefixes": [

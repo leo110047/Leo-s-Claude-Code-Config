@@ -66,6 +66,14 @@ inside the trusted host boundary. Receipt claims are atomic and at-most-once; cr
 failure requires a new initial review. Prompt-redacted untracked files remain digest-bound and executable
 through a separate snapshot-only channel. Missing resolvable contracts, unsupported isolation,
 candidate drift, and provenance mismatch fail closed before semantic review.
+When the authoritative artifact has `hostCallCount=0` and deterministic-only
+findings, the same flag routes to an explicit pre-semantic evidence repair, not
+semantic closure. It keeps the original lineage, receipt, finding IDs, policy,
+and provider/operation authority; reruns only affected or newly strengthened
+typed cells; and invokes the lineage's first semantic host exactly once only
+after evidence is eligible. A failed repair emits a successor artifact with the
+blockers still open, while every repair artifact records predecessor digests and
+affected cells.
 On macOS, the default-deny profile imports Apple's common system process baseline
 for process startup, then exactly re-denies its syslog, Mach service, and shared-memory
 channels as well as broad network and system-socket access. Dynamically linked
@@ -77,7 +85,9 @@ and projected dependency roots are readable.
 The installed runtime also persists a signed acceptance lineage. It compares
 every successor manifest before evidence or host dispatch, preserves unresolved
 finding IDs across restarts, and forces repaired candidates through the exact
-initial artifact's scoped closure. Empty initial candidates fail before lineage
+initial artifact's state-appropriate evidence repair or scoped closure. A
+`manual` or `unsupported` gap may strengthen into a typed evidence disposition;
+reverse or lateral disposition changes remain blocked. Empty initial candidates fail before lineage
 creation. Standalone lineages include the normalized changed-file scope, while
 signed legacy records are read through only when their authoritative artifact
 proves the same scope. If that artifact is unavailable, an exact signed

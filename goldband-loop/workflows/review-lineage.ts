@@ -18,6 +18,7 @@ import type {
   InitialReviewArtifact,
   ReviewEvidenceManifest,
 } from './review-evidence';
+import { initialReviewArtifactDigest } from './review-evidence';
 import type { ReviewContractResolution } from './review-contract-resolution';
 import type { ReviewClosureResult, ReviewFinding } from './types';
 
@@ -89,6 +90,7 @@ type ReviewLineagePayload = {
     runId: string;
     receiptId: string;
     createdAt?: string;
+    hostCallCount?: 0 | 1;
   };
   verdict: ReviewVerdict;
   appliedWaiverIds: string[];
@@ -365,10 +367,11 @@ function bootstrapLineageFromArtifact(options: {
     unresolvedFindings,
     authoritativeArtifact: {
       file: '<migrated-runtime-receipt>',
-      digest: sha256(stableJson(options.artifact)),
+      digest: initialReviewArtifactDigest(options.artifact),
       runId: options.artifact.runId,
       receiptId: options.artifact.runtimeReceipt.id,
       createdAt: options.artifact.createdAt,
+      hostCallCount: options.artifact.hostCallCount,
     },
     verdict: verdictFor({
       noNewFindings: options.artifact.findings.length === 0,
@@ -435,10 +438,11 @@ export function finalizeInitialReviewLineage(options: {
     ...(options.findings.length > 0 ? {
       authoritativeArtifact: {
         file: options.artifactFile,
-        digest: sha256(stableJson(options.artifact)),
+        digest: initialReviewArtifactDigest(options.artifact),
         runId: options.artifact.runId,
         receiptId: options.artifact.runtimeReceipt.id,
         createdAt: options.artifact.createdAt,
+        hostCallCount: options.artifact.hostCallCount,
       },
     } : {}),
     verdict,
@@ -532,38 +536,11 @@ function assertMonotonicContract(
   for (const cell of predecessor.behaviorMatrix) {
     const next = currentCells.get(cell.id);
     if (!next) authorizeOrThrow(policy, cell.id, 'cell-contract', applied, 'required behavior cell was removed');
-    else {
-      if (stableJson({ ...cell, risk: undefined, disposition: undefined, providerIds: undefined }) !==
-          stableJson({ ...next, risk: undefined, disposition: undefined, providerIds: undefined })) {
-        authorizeOrThrow(policy, cell.id, 'cell-contract', applied, 'required behavior semantics changed');
-      }
-      if (riskRank(next.risk) < riskRank(cell.risk)) {
-        authorizeOrThrow(policy, cell.id, 'risk', applied, 'required behavior risk was downgraded');
-      }
-      if (next.disposition !== cell.disposition) {
-        authorizeOrThrow(policy, cell.id, 'disposition', applied, 'required behavior disposition changed');
-      }
-      for (const providerId of cell.providerIds) {
-        if (!next.providerIds.includes(providerId)) {
-          authorizeOrThrow(policy, cell.id, 'provider-contract', applied, 'required provider was detached');
-        }
-      }
-    }
+    else assertBehaviorCellNotWeaker(cell, next, policy, applied);
     for (const providerId of cell.providerIds) {
       const before = predecessorProviders.get(providerId);
       const after = currentProviders.get(providerId);
-      const providerWeakened = !before || !after ||
-        before.owner !== after.owner ||
-        before.kind !== after.kind ||
-        before.lifecycle !== after.lifecycle ||
-        stableJson(before.applicability) !== stableJson(after.applicability) ||
-        stableJson(before.executionContext) !== stableJson(after.executionContext) ||
-        before.cellIds.some((cellId) => !after.cellIds.includes(cellId)) ||
-        before.operations.some((operation) => {
-          const successor = after.operations.find((item) => item.id === operation.id);
-          return !successor || stableJson(normalizeOperation(operation)) !== stableJson(normalizeOperation(successor));
-        });
-      if (providerWeakened) {
+      if (providerContractWeakened(before, after)) {
         authorizeOrThrow(policy, cell.id, 'provider-contract', applied, 'required provider contract changed');
       }
     }
@@ -579,6 +556,77 @@ function assertMonotonicContract(
     }
   }
   return [...applied].sort();
+}
+
+function assertBehaviorCellNotWeaker(
+  before: ReviewEvidenceManifest['behaviorMatrix'][number],
+  after: ReviewEvidenceManifest['behaviorMatrix'][number],
+  policy: ReviewPolicy,
+  applied: Set<string>,
+): void {
+  const semantics = (cell: typeof before) => stableJson({
+    ...cell,
+    risk: undefined,
+    disposition: undefined,
+    providerIds: undefined,
+    reason: undefined,
+  });
+  if (semantics(before) !== semantics(after)) {
+    authorizeOrThrow(policy, before.id, 'cell-contract', applied, 'required behavior semantics changed');
+  }
+  if (!isDispositionStrengthening(before.disposition, after.disposition) &&
+      before.reason !== after.reason) {
+    authorizeOrThrow(policy, before.id, 'cell-contract', applied, 'required behavior reason changed');
+  }
+  if (riskRank(after.risk) < riskRank(before.risk)) {
+    authorizeOrThrow(policy, before.id, 'risk', applied, 'required behavior risk was downgraded');
+  }
+  if (!dispositionPreservedOrStrengthened(before.disposition, after.disposition)) {
+    authorizeOrThrow(policy, before.id, 'disposition', applied, 'required behavior disposition changed');
+  }
+  if (before.providerIds.some((providerId) => !after.providerIds.includes(providerId))) {
+    authorizeOrThrow(policy, before.id, 'provider-contract', applied, 'required provider was detached');
+  }
+}
+
+function providerContractWeakened(
+  before: ReviewEvidenceManifest['providers'][number] | undefined,
+  after: ReviewEvidenceManifest['providers'][number] | undefined,
+): boolean {
+  if (!before || !after) return true;
+  return before.owner !== after.owner ||
+    before.kind !== after.kind ||
+    before.lifecycle !== after.lifecycle ||
+    !applicabilityPreservedOrStrengthened(before.applicability, after.applicability) ||
+    stableJson(before.executionContext) !== stableJson(after.executionContext) ||
+    before.cellIds.some((cellId) => !after.cellIds.includes(cellId)) ||
+    before.operations.some((operation) => {
+      const successor = after.operations.find((item) => item.id === operation.id);
+      return !successor || stableJson(normalizeOperation(operation)) !== stableJson(normalizeOperation(successor));
+    });
+}
+
+function isDispositionStrengthening(
+  before: string,
+  after: string,
+): boolean {
+  return ['manual', 'unsupported'].includes(before) &&
+    ['automated', 'static', 'runtime-readback'].includes(after);
+}
+
+function dispositionPreservedOrStrengthened(before: string, after: string): boolean {
+  return before === after || isDispositionStrengthening(before, after);
+}
+
+function applicabilityPreservedOrStrengthened(
+  before: ReviewEvidenceManifest['providers'][number]['applicability'],
+  after: ReviewEvidenceManifest['providers'][number]['applicability'],
+): boolean {
+  if (after.kind === 'global') return true;
+  if (before.kind === 'global') return false;
+  return before.pathPrefixes.every((beforePrefix) =>
+    after.pathPrefixes.some((afterPrefix) =>
+      beforePrefix === afterPrefix || beforePrefix.startsWith(`${afterPrefix}/`)));
 }
 
 export function assertReviewContractNotWeaker(
@@ -711,7 +759,7 @@ function assertAuthoritativeClosureArtifact(
   if (!expected ||
       expected.runId !== artifact.runId ||
       expected.receiptId !== artifact.runtimeReceipt.id ||
-      expected.digest !== sha256(stableJson(artifact)) ||
+      expected.digest !== initialReviewArtifactDigest(artifact) ||
       lineage.unresolvedFindings.some((finding) =>
         !artifact.findings.some((item) => item.id === finding.findingId))) {
     throw new Error('closure artifact is not the authoritative unresolved finding lineage');
@@ -720,14 +768,14 @@ function assertAuthoritativeClosureArtifact(
 
 function verifiedArtifactScope(
   lineage: ReviewLineagePayload,
-): { changedFiles: string[]; createdAt: string } | undefined {
+): { changedFiles: string[]; createdAt: string; hostCallCount?: 0 | 1 } | undefined {
   const artifactFile = lineage.authoritativeArtifact?.file;
   if (!artifactFile) return undefined;
   const stat = lstatSync(artifactFile, { throwIfNoEntry: false });
   if (!stat?.isFile() || stat.isSymbolicLink()) return undefined;
   try {
     const artifact = JSON.parse(readFileSync(artifactFile, 'utf8')) as InitialReviewArtifact;
-    if (sha256(stableJson(artifact)) !== lineage.authoritativeArtifact?.digest ||
+    if (initialReviewArtifactDigest(artifact) !== lineage.authoritativeArtifact?.digest ||
         !Array.isArray(artifact.binding?.changedFiles) ||
         artifact.binding.changedFiles.some((item) => typeof item !== 'string')) {
       return undefined;
@@ -738,6 +786,9 @@ function verifiedArtifactScope(
     return {
       changedFiles: [...new Set(artifact.binding.changedFiles)].sort(),
       createdAt: artifact.createdAt,
+      ...(artifact.hostCallCount === 0 || artifact.hostCallCount === 1
+        ? { hostCallCount: artifact.hostCallCount }
+        : {}),
     };
   } catch {
     return undefined;
@@ -794,7 +845,7 @@ function closureArtifactScope(
   lineage: ReviewLineagePayload,
   artifact?: InitialReviewArtifact,
 ): { changedFiles: string[]; createdAt: string } | undefined {
-  if (!artifact || sha256(stableJson(artifact)) !== lineage.authoritativeArtifact?.digest) {
+  if (!artifact || initialReviewArtifactDigest(artifact) !== lineage.authoritativeArtifact?.digest) {
     return undefined;
   }
   return {
@@ -812,11 +863,12 @@ function openFindingsMessage(lineage: ReviewLineagePayload): string {
     : '<legacy scope unavailable>';
   const runId = artifact?.runId ?? lineage.unresolvedFindings[0]?.artifactRunId ?? '<unknown>';
   const createdAt = artifact?.createdAt ?? verifiedArtifact?.createdAt ?? '<unavailable>';
-  const closureInstruction = artifact && verifiedArtifact
-    ? `close with: --closure-artifact ${artifact.file}`
-    : artifact
-      ? `closure recovery: restore an authoritative artifact matching digest ${artifact.digest}, then use --closure-artifact <restored-path>`
-      : 'closure recovery: authoritative artifact reference is unavailable';
+  const hostCallCount = artifact?.hostCallCount ?? verifiedArtifact?.hostCallCount;
+  const closureInstruction = reviewTransitionInstruction(
+    artifact,
+    Boolean(verifiedArtifact),
+    hostCallCount,
+  );
   return [
     `review lineage has prior findings/blockers open (${findings})`,
     `authoritative run: ${runId}`,
@@ -825,6 +877,22 @@ function openFindingsMessage(lineage: ReviewLineagePayload): string {
     `scope: ${scope}`,
     closureInstruction,
   ].join('; ');
+}
+
+function reviewTransitionInstruction(
+  artifact: ReviewLineagePayload['authoritativeArtifact'],
+  artifactVerified: boolean,
+  hostCallCount?: 0 | 1,
+): string {
+  if (!artifact) return 'closure recovery: authoritative artifact reference is unavailable';
+  if (artifactVerified) {
+    return hostCallCount === 0
+      ? `repair deterministic evidence with: --closure-artifact ${artifact.file}`
+      : `close with: --closure-artifact ${artifact.file}`;
+  }
+  return hostCallCount === 0
+    ? `evidence repair recovery: restore an authoritative artifact matching digest ${artifact.digest}, then use --closure-artifact <restored-path>`
+    : `closure recovery: restore an authoritative artifact matching digest ${artifact.digest}, then use --closure-artifact <restored-path>`;
 }
 
 function verdictFor(input: {
