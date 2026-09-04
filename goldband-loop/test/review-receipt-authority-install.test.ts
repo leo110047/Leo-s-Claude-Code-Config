@@ -138,6 +138,7 @@ describe("review receipt authority provisioning", () => {
 			join(authorityRoot, "review-receipts", `${artifact.runtimeReceipt.id}.json`),
 			"utf8",
 		)).toContain(`"runId": "${artifact.runId}"`);
+		if (process.platform !== "darwin") return;
 
 		const fakeBin = join(root, "bin");
 		const hostCalls = join(root, "claude-host-calls.log");

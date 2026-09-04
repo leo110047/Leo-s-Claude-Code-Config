@@ -976,6 +976,7 @@ describe('review evidence contracts', () => {
   });
 
   test('repairs deterministic-only lineage before the first semantic host call', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const repo = gitFixture();
     const state = join(repo, '.state');
     const diffFile = join(repo, 'candidate.diff');
@@ -1059,6 +1060,7 @@ describe('review evidence contracts', () => {
   });
 
   test('partial evidence repair preserves unresolved deterministic finding identity', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
     const repo = gitFixture();
     const state = join(repo, '.state');
     const diffFile = join(repo, 'candidate.diff');
