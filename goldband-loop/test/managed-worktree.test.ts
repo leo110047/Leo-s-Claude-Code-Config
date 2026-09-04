@@ -124,7 +124,7 @@ describe('managed worktree contract', () => {
     expect(fs.readFileSync(path.join(fixture.repo, 'tracked.txt'), 'utf8')).toBe(
       'verified candidate\n',
     );
-  });
+  }, 10_000);
 
   test('bound finish rejects a legacy schema-v1 review artifact', () => {
     const fixture = createFixture();

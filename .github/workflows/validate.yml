@@ -253,6 +253,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install Python review runtime prerequisites
+        run: brew install python@3.14 uv
       - name: Install Codex CLI for execpolicy contract tests
         run: npm install -g @openai/codex
       - name: Install Goldband Loop dependencies
@@ -281,6 +283,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install Python review runtime prerequisites
+        run: brew install python@3.14 uv
       - name: Install Codex CLI for execpolicy contract tests
         run: npm install -g @openai/codex
       - name: Install Goldband Loop dependencies

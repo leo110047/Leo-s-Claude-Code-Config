@@ -206,6 +206,7 @@ Operation 的主要欄位：
 | `authorizationId` | `network: authorized` 時必填；deny 時禁止。 |
 | `evidenceLevel` | `fixture`、`local`、`sandboxed-service`、`live-provider`、`device-platform` 或 `production-readback`。 |
 | `requiredSystemTools` | 可選的 PATH tool names；不會因此放寬任意 filesystem access。 |
+| `pythonRuntime` | 可選的 first-class Python runtime contract；目前只接受 Python 3.14、`uv`、`pyproject.toml` 與 `uv.lock`。 |
 | `seed`、`iterations` | `property-fuzz` operations 必填，用於 replay。 |
 
 Script launcher 必須把 interpreter 寫進 argv，例如：
@@ -215,6 +216,54 @@ Script launcher 必須把 interpreter 寫進 argv，例如：
 ```
 
 不要只寫 `scripts/check-contract.sh`。Runtime 會拒絕 path-shaped executable，避免 shebang／interpreter 與依賴邊界變成隱含 contract。
+
+### Python 3.14 + uv runtime
+
+Python gate 必須明確 opt in，不能只靠 `argv[0]`、檔名或 framework 猜測：
+
+```json
+{
+  "id": "python-project-gate",
+  "target": "candidate",
+  "argv": ["python3.14", "-c", "import app, sqlalchemy, pydantic"],
+  "expectedExit": "zero",
+  "timeoutMs": 120000,
+  "maxOutputBytes": 8192,
+  "network": "deny",
+  "evidenceLevel": "local",
+  "pythonRuntime": {
+    "interpreter": "python3.14",
+    "resolver": "uv",
+    "projectFile": "pyproject.toml",
+    "lockFile": "uv.lock"
+  }
+}
+```
+
+`projectFile` 與 `lockFile` 是 repo-relative normalized paths，必須位於同一個
+project directory。`argv` 第一項必須和 declared interpreter 相同；目前不接受
+其他 Python 版本、resolver 或 online mode。
+
+Runtime 只從受信任的 macOS system／Homebrew package roots 選取 host
+`python3.14` 與 `uv`，先 attestation，再在 Seatbelt 內執行 interpreter inspection
+與 cache discovery；不會直接執行 caller `PATH` 的任意 shim。驗證 candidate
+lockfiles 後，把 ambient uv cache clone 到 operation 專屬 writable root，以 `--frozen --offline
+--no-install-project --no-editable --link-mode copy` 建立一次性 environment。執行
+identity 綁定 interpreter、uv、兩個 contract files、materialized environment
+與實際安裝到 `site-packages` 的 package name/version、`WHEEL`、`RECORD`、
+installed tree，以及 candidate-local direct source digest。Registry package 另以
+安裝後 `WHEEL` tag 唯一對應 lockfile 的 wheel filename/hash；無法唯一對應會 fail closed；
+未被選用的 ambient cache entry 不作為 identity 或 failure condition。Project 自身不安裝進 environment；gate 從 materialized
+candidate working directory import source。
+
+在 project gate 前，runtime 會用 materialized interpreter 執行 isolated
+bootstrap／stdlib preflight，並拒絕 source checkout 的 `.venv` 或 tool、跨
+repository symlink、editable/local external install、`.pth`、`.egg-link`、
+`sitecustomize`、`usercustomize` 與 ambient `PYTHONPATH`。缺 interpreter、`uv`、
+lockfile、offline artifact，或 environment/bootstrap 完整性失敗，都會產生
+typed `runtime-incomplete`，不執行 project gate，也不啟動 semantic host。只有
+preflight 通過後，gate 的 declared exit mismatch 才是 fresh
+`verified-failure`。
 
 ## Network 與 authorizations
 

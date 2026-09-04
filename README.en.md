@@ -71,6 +71,14 @@ with non-system dependencies executes from a private sealed projection: Goldband
 load commands, ad-hoc signs and re-attests the transformed bytes, and leaves the original host package tree
 unreadable. The macOS profile exactly re-denies inherited syslog, Mach service, and shared-memory channels
 in addition to broad network and system-socket access.
+An explicit `pythonRuntime` contract supports Python 3.14 with `uv`,
+`pyproject.toml`, and `uv.lock`. Goldband creates a per-operation frozen/offline
+environment and completes interpreter, stdlib, path, and dependency-integrity
+preflight before the project gate. Python and uv are selected only from bounded
+system/Homebrew roots and inspected inside Seatbelt. For registry packages, installed
+`WHEEL` tags must uniquely select the used lockfile wheel filename and hash; unrelated cache entries do not affect identity. Preparation failure is typed
+`runtime-incomplete` and prevents semantic dispatch; only a gate mismatch after
+preflight becomes `verified-failure`.
 If
 that review finds an issue and the candidate is repaired,
 `--closure-artifact <initial-artifact>` performs one closure pass over only the

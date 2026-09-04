@@ -2,6 +2,9 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -13,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
   buildClosureInput,
   claimInitialReviewClosure,
@@ -28,8 +31,10 @@ import {
   reviewEvidenceManifestSchema,
   runtimeImageContentDigest,
   runtimeLibraryLiteralPaths,
+  selectedUvLockArtifact,
   selectedEvidenceProviderIds,
   transitionEvidenceOperationContractDigest,
+  validateMaterializedPythonEnvironment,
   validateClosureResults,
   validateInitialReviewArtifact,
   validateTransitionReviewEvidenceManifest,
@@ -828,6 +833,37 @@ describe('review evidence contracts', () => {
     expect(evidence.completeness).toMatchObject({ complete: false, hostEligible: false });
   });
 
+  test('persisted validation accepts a typed pre-execution runtime-incomplete record', () => {
+    const repo = gitFixture();
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const value = validateTransitionManifest(manifest(), repo, input);
+    const binding = createCandidateBinding(repo, input, value);
+    const artifact = initialArtifact();
+    artifact.binding = binding;
+    artifact.evidence.binding = binding;
+    artifact.evidence.manifest = value;
+    artifact.diff = input.diff;
+    const incomplete = {
+      ...record(),
+      id: 'provider-a:pass',
+      status: 'runtime-incomplete' as const,
+      fresh: false,
+      exitStatus: undefined,
+      executionIdentityDigest: undefined,
+      candidateDigest: binding.candidateDigest,
+      baseDigest: binding.baseDigest,
+      scopeDigest: binding.scopeDigest,
+    };
+    artifact.evidence.records = [incomplete];
+    artifact.evidence.completeness = evaluateEvidenceCompleteness(value, [incomplete]);
+    artifact.findings[0]!.evidenceIds = [incomplete.id];
+
+    expect(validateInitialReviewArtifact(artifact).evidence.records[0]).toMatchObject({
+      status: 'runtime-incomplete',
+      fresh: false,
+    });
+  });
+
   test('high-risk unsupported cells fail closed before a semantic host is eligible', () => {
     const value = manifest();
     value.behaviorMatrix[0] = {
@@ -937,6 +973,167 @@ describe('review evidence contracts', () => {
       join(state, 'workflow-runs', 'telemetry', `${result.runId}-review-prompt.json`),
       'utf8',
     )).toThrow();
+  });
+
+  test('repairs deterministic-only lineage before the first semantic host call', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const repo = gitFixture();
+    const state = join(repo, '.state');
+    const diffFile = join(repo, 'candidate.diff');
+    const evidenceFile = join(repo, 'evidence.json');
+    const unsupported = manifest();
+    unsupported.behaviorMatrix[0] = {
+      ...unsupported.behaviorMatrix[0]!,
+      disposition: 'unsupported',
+      providerIds: [],
+      reason: 'The deterministic provider is not wired yet.',
+    };
+    unsupported.providers = [];
+    writeFileSync(evidenceFile, `${JSON.stringify(unsupported)}\n`);
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+bad();\n');
+
+    const initial = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+    });
+    const initialArtifactFile = initial.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const initialArtifact = JSON.parse(readFileSync(initialArtifactFile, 'utf8')) as InitialReviewArtifact;
+    expect(initialArtifact.hostCallCount).toBe(0);
+    expect(initialArtifact.findings.map((finding) => finding.id)).toEqual(['D-001']);
+
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+still-bad();\n');
+    const incompleteRecovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: initialArtifactFile,
+    });
+    expect(String(incompleteRecovery.output)).toContain('Phase: evidence-repair.');
+    expect(String(incompleteRecovery.output)).toContain('Semantic host calls: 0.');
+    expect(String(incompleteRecovery.output)).toContain('completion-authorized: false');
+    const incompleteArtifactFile = incompleteRecovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const incompleteArtifact = JSON.parse(
+      readFileSync(incompleteArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(incompleteArtifact.findings.map((finding) => finding.id)).toEqual(['D-001']);
+
+    const repaired = manifest();
+    writeFileSync(evidenceFile, `${JSON.stringify(repaired)}\n`);
+    writeFileSync(diffFile, 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+good();\n');
+    const recovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock',
+      host: 'mock',
+      cwd: repo,
+      goldbandHome: state,
+      diffFile: 'candidate.diff',
+      evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: incompleteArtifactFile,
+    });
+
+    expect(String(recovery.output)).toContain('Phase: evidence-repair.');
+    expect(String(recovery.output)).toContain('Semantic host calls: 1.');
+    expect(String(recovery.output)).toContain('completion-authorized: true');
+    const recoveredArtifactFile = recovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const recoveredArtifact = validateInitialReviewArtifact(
+      JSON.parse(readFileSync(recoveredArtifactFile, 'utf8')),
+    );
+    expect(recoveredArtifact).toMatchObject({
+      phase: 'initial',
+      hostCallCount: 1,
+      predecessor: {
+        transition: 'evidence-repair',
+        runId: incompleteArtifact.runId,
+        receiptId: incompleteArtifact.runtimeReceipt.id,
+        findingIds: ['D-001'],
+      },
+    });
+  });
+
+  test('partial evidence repair preserves unresolved deterministic finding identity', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const repo = gitFixture();
+    const state = join(repo, '.state');
+    const diffFile = join(repo, 'candidate.diff');
+    const evidenceFile = join(repo, 'evidence.json');
+    const unsupported = manifest();
+    unsupported.behaviorMatrix = [
+      {
+        ...unsupported.behaviorMatrix[0]!,
+        disposition: 'unsupported',
+        providerIds: [],
+        reason: 'Behavior A evidence is not wired yet.',
+      },
+      {
+        ...unsupported.behaviorMatrix[0]!,
+        id: 'behavior-b',
+        behavior: 'The second invariant has deterministic evidence.',
+        disposition: 'unsupported',
+        providerIds: [],
+        reason: 'Behavior B evidence is not wired yet.',
+      },
+    ];
+    unsupported.providers = [];
+    writeFileSync(evidenceFile, `${JSON.stringify(unsupported)}\n`);
+    writeFileSync(
+      diffFile,
+      'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+bad();\n',
+    );
+
+    const initial = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state,
+      diffFile: 'candidate.diff', evidenceManifestFile: 'evidence.json',
+    });
+    const initialArtifactFile = initial.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const initialArtifact = JSON.parse(
+      readFileSync(initialArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(initialArtifact.findings.map((finding) => ({
+      id: finding.id,
+      behaviorCellIds: finding.behaviorCellIds,
+    }))).toEqual([
+      { id: 'D-001', behaviorCellIds: ['behavior-a'] },
+      { id: 'D-002', behaviorCellIds: ['behavior-b'] },
+    ]);
+
+    const partial = structuredClone(unsupported);
+    partial.behaviorMatrix[0] = {
+      ...partial.behaviorMatrix[0]!,
+      disposition: 'static',
+      providerIds: ['provider-a'],
+      reason: undefined,
+    };
+    partial.providers = manifest().providers;
+    writeFileSync(evidenceFile, `${JSON.stringify(partial)}\n`);
+    writeFileSync(
+      diffFile,
+      'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old();\n+partly-fixed();\n',
+    );
+    const recovery = await runWorkflow(getWorkflow('review/code'), {
+      mode: 'mock', host: 'mock', cwd: repo, goldbandHome: state,
+      diffFile: 'candidate.diff', evidenceManifestFile: 'evidence.json',
+      closureArtifactFile: initialArtifactFile,
+    });
+    const recoveryArtifactFile = recovery.artifacts.find((file) =>
+      file.endsWith('-review-evidence.json'))!;
+    const recoveryArtifact = JSON.parse(
+      readFileSync(recoveryArtifactFile, 'utf8'),
+    ) as InitialReviewArtifact;
+    expect(recoveryArtifact.hostCallCount).toBe(0);
+    expect(recoveryArtifact.findings.map((finding) => ({
+      id: finding.id,
+      behaviorCellIds: finding.behaviorCellIds,
+    }))).toEqual([{ id: 'D-002', behaviorCellIds: ['behavior-b'] }]);
   });
 
   test('semantic host cannot mint verified failure from deterministic evidence IDs', () => {
@@ -1147,6 +1344,406 @@ describe('review evidence contracts', () => {
       'verified-pass',
       'verified-pass',
     ]);
+  });
+
+  test('materializes and executes an explicit Python 3.14 uv runtime against the candidate', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    const uv = spawnSync('/usr/bin/which', ['uv'], { encoding: 'utf8' }).stdout.trim();
+    if (!hostBoundaryPrerequisite(Boolean(python), 'python3.14 executable')) return;
+    if (!hostBoundaryPrerequisite(Boolean(uv), 'uv executable')) return;
+    const repo = gitFixture();
+    const wheel = join(repo, 'vendor', 'fixture_dep-1.0.0-py3-none-any.whl');
+    mkdirSync(dirname(wheel), { recursive: true });
+    writeFixtureWheel(python, wheel);
+    writeFileSync(join(repo, 'pyproject.toml'), [
+      '[project]',
+      'name = "python-evidence-fixture"',
+      'version = "0.1.0"',
+      'requires-python = ">=3.14,<3.15"',
+      'dependencies = ["fixture-dep"]',
+      '[tool.uv.sources]',
+      'fixture-dep = { path = "vendor/fixture_dep-1.0.0-py3-none-any.whl" }',
+      '',
+    ].join('\n'));
+    writeFileSync(join(repo, 'app.py'), 'VALUE = "base"\n');
+    const locked = spawnSync(uv, ['lock', '--project', repo, '--python', python, '--offline', '--no-cache'], {
+      encoding: 'utf8',
+    });
+    if (locked.status !== 0) throw new Error(locked.stderr);
+    git(repo, ['add', 'pyproject.toml', 'uv.lock', 'app.py', 'vendor']);
+    git(repo, ['commit', '-m', 'add Python fixture']);
+    writeFileSync(join(repo, 'app.py'), 'VALUE = "candidate"\n');
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation(
+        'python-gate',
+        ['python3.14', '-c', 'import app,fixture_dep; assert app.VALUE == "candidate" and fixture_dep.VALUE == 42; print(app.__file__); print(fixture_dep.__file__)'],
+        'candidate',
+        'zero',
+      ),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: git(repo, ['diff']), changedFiles: ['app.py'] };
+    const cache = mkdtempSync(join(tmpdir(), 'python-evidence-cache-'));
+    roots.push(cache);
+    mkdirSync(join(cache, 'unused'), { recursive: true });
+    symlinkSync(tmpdir(), join(cache, 'unused', 'escape'));
+    const previousCache = process.env.UV_CACHE_DIR;
+    process.env.UV_CACHE_DIR = cache;
+    let evidence: Awaited<ReturnType<typeof executeEvidencePlan>>;
+    let repeated: Awaited<ReturnType<typeof executeEvidencePlan>>;
+    try {
+      evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      writeFileSync(join(cache, 'unused', 'changed-after-first-run'), 'not selected\n');
+      repeated = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+    } finally {
+      if (previousCache === undefined) delete process.env.UV_CACHE_DIR;
+      else process.env.UV_CACHE_DIR = previousCache;
+    }
+
+    expect(evidence.records[0]).toMatchObject({
+      status: 'verified-pass',
+      exitStatus: 0,
+      fresh: true,
+      environment: 'isolated-darwin-snapshot',
+    });
+    expect(evidence.records[0]!.outputSummary).toContain('/operations/');
+    expect(evidence.records[0]!.outputSummary).toContain('/python-runtime/environment/');
+    expect(evidence.records[0]!.outputSummary).not.toContain(repo);
+    expect(evidence.records[0]!.executionIdentityDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(repeated.records[0]).toMatchObject({ status: 'verified-pass', fresh: true });
+    expect(repeated.records[0]!.executionIdentityDigest)
+      .toBe(evidence.records[0]!.executionIdentityDigest);
+  });
+
+  test('binds the one lock wheel selected by installed compatibility tags', () => {
+    const selectedHash = `sha256:${'a'.repeat(64)}`;
+    const unselectedHash = `sha256:${'b'.repeat(64)}`;
+    const lockPackage = [
+      '[[package]]',
+      'name = "fixture-dep"',
+      'version = "1.0.0"',
+      'source = { registry = "https://pypi.org/simple" }',
+      'wheels = [',
+      `  { url = "https://files.example/fixture_dep-1.0.0-cp314-cp314-macosx_14_0_arm64.whl", hash = "${selectedHash}" },`,
+      `  { url = "https://files.example/fixture_dep-1.0.0-cp314-cp314-manylinux_2_39_x86_64.whl", hash = "${unselectedHash}" },`,
+      ']',
+    ].join('\n');
+    const wheelMetadata = [
+      'Wheel-Version: 1.0',
+      'Tag: cp314-cp314-macosx_14_0_arm64',
+      '',
+    ].join('\n');
+
+    expect(selectedUvLockArtifact(lockPackage, wheelMetadata)).toEqual({
+      kind: 'wheel',
+      filename: 'fixture_dep-1.0.0-cp314-cp314-macosx_14_0_arm64.whl',
+      hash: selectedHash,
+    });
+    expect(selectedUvLockArtifact(
+      lockPackage.replace(unselectedHash, `sha256:${'c'.repeat(64)}`),
+      wheelMetadata,
+    ).hash).toBe(selectedHash);
+    expect(selectedUvLockArtifact(
+      lockPackage.replace(selectedHash, `sha256:${'d'.repeat(64)}`),
+      wheelMetadata,
+    ).hash).toBe(`sha256:${'d'.repeat(64)}`);
+    expect(() => selectedUvLockArtifact(
+      lockPackage.replace('manylinux_2_39_x86_64', 'macosx_14_0_arm64'),
+      wheelMetadata,
+    )).toThrow('multiple compatible uv.lock wheels');
+    expect(selectedUvLockArtifact(
+      lockPackage.replace(
+        'fixture_dep-1.0.0-cp314-cp314-macosx_14_0_arm64.whl',
+        'fixture_dep-1.0.0-py2.py3-none-any.whl',
+      ),
+      'Wheel-Version: 1.0\nTag: py2-none-any\nTag: py3-none-any\n',
+    ).filename).toBe('fixture_dep-1.0.0-py2.py3-none-any.whl');
+  });
+
+  test('repository Python provider produces fresh evidence through its declared operation', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    const uv = spawnSync('/usr/bin/which', ['uv'], { encoding: 'utf8' }).stdout.trim();
+    if (!hostBoundaryPrerequisite(Boolean(python), 'python3.14 executable')) return;
+    if (!hostBoundaryPrerequisite(Boolean(uv), 'uv executable')) return;
+    const repo = gitFixture();
+    const fixtureRoot = join(repo, 'goldband-loop', 'test', 'fixtures', 'python-runtime');
+    mkdirSync(fixtureRoot, { recursive: true });
+    for (const file of ['pyproject.toml', 'uv.lock']) {
+      copyFileSync(join(import.meta.dir, 'fixtures', 'python-runtime', file), join(fixtureRoot, file));
+    }
+    writeFileSync(join(fixtureRoot, 'probe.txt'), 'base\n');
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-m', 'add repository Python provider fixture']);
+    writeFileSync(join(fixtureRoot, 'probe.txt'), 'candidate\n');
+
+    const rootManifest = JSON.parse(readFileSync(
+      join(import.meta.dir, '..', '..', 'goldband.review-evidence.json'),
+      'utf8',
+    ));
+    const value = {
+      schemaVersion: rootManifest.schemaVersion,
+      behaviorMatrix: rootManifest.behaviorMatrix.filter(
+        (cell: { id: string }) => cell.id === 'python-candidate-runtime',
+      ),
+      providers: rootManifest.providers.filter(
+        (provider: { id: string }) => provider.id === 'python-runtime-tests',
+      ),
+      authorizations: [],
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = {
+      source: 'git diff',
+      diff: git(repo, ['diff']),
+      changedFiles: ['goldband-loop/test/fixtures/python-runtime/probe.txt'],
+    };
+    const evidence = await executeEvidencePlan(
+      context(repo), input, validated, createCandidateBinding(repo, input, validated),
+    );
+
+    expect(evidence.records).toHaveLength(1);
+    expect(evidence.records[0]).toMatchObject({
+      providerId: 'python-runtime-tests',
+      operationId: 'candidate-python-runtime',
+      status: 'verified-pass',
+      fresh: true,
+      exitStatus: 0,
+    });
+  });
+
+  test('does not execute a Python interpreter selected from an untrusted PATH directory', async () => {
+    const repo = gitFixture();
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="untrusted-python"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\n');
+    writeFileSync(join(repo, 'uv.lock'), 'version = 1\nrevision = 1\nrequires-python = ">=3.14,<3.15"\n');
+    git(repo, ['add', 'pyproject.toml', 'uv.lock']);
+    git(repo, ['commit', '-m', 'add Python fixture']);
+    const toolRoot = mkdtempSync(join(tmpdir(), 'untrusted-python-path-'));
+    roots.push(toolRoot);
+    const sentinel = join(toolRoot, 'executed');
+    const bin = join(toolRoot, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'python3.14'), `#!/bin/sh\n: > '${sentinel}'\nexit 1\n`);
+    chmodSync(join(bin, 'python3.14'), 0o755);
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation('untrusted-python', ['python3.14', '-c', 'raise SystemExit(23)'], 'candidate', 'zero'),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? '/usr/bin:/bin'}`;
+    try {
+      const evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      expect(evidence.records[0]).toMatchObject({ status: 'runtime-incomplete', fresh: false });
+      expect(existsSync(sentinel)).toBe(false);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
+
+  test('classifies Python runtime preparation failure before the project gate', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const repo = gitFixture();
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="missing-lock"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\n');
+    git(repo, ['add', 'pyproject.toml']);
+    git(repo, ['commit', '-m', 'add incomplete Python fixture']);
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation(
+        'python-missing-lock',
+        ['python3.14', '-c', 'raise SystemExit(23)'],
+        'candidate',
+        'zero',
+      ),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const evidence = await executeEvidencePlan(
+      context(repo), input, validated, createCandidateBinding(repo, input, validated),
+    );
+
+    expect(evidence.records[0]).toMatchObject({
+      status: 'runtime-incomplete',
+      fresh: false,
+    });
+    expect(evidence.records[0]!.exitStatus).toBeUndefined();
+    expect(evidence.records[0]!.outputSummary).toContain('before project gate');
+    expect(evidence.records[0]!.outputSummary).toContain('uv.lock');
+    expect(evidence.completeness).toMatchObject({
+      complete: false,
+      hostEligible: false,
+      runtimeIncompleteCellIds: ['behavior-a'],
+    });
+  });
+
+  test('rejects a Python interpreter selected through the source checkout venv', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    const uv = spawnSync('/usr/bin/which', ['uv'], { encoding: 'utf8' }).stdout.trim();
+    if (!python || !uv) return;
+    const repo = gitFixture();
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="source-venv"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\n');
+    const locked = spawnSync(uv, ['lock', '--project', repo, '--python', python, '--offline', '--no-cache'], { encoding: 'utf8' });
+    if (locked.status !== 0) throw new Error(locked.stderr);
+    git(repo, ['add', 'pyproject.toml', 'uv.lock']);
+    git(repo, ['commit', '-m', 'add source venv fixture']);
+    mkdirSync(join(repo, '.venv', 'bin'), { recursive: true });
+    symlinkSync(realpathSync(python), join(repo, '.venv', 'bin', 'python3.14'));
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation('source-venv', ['python3.14', '-c', 'raise SystemExit(23)'], 'candidate', 'zero'),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${join(repo, '.venv', 'bin')}:${previousPath ?? '/usr/bin:/bin'}`;
+    try {
+      const evidence = await executeEvidencePlan(
+        context(repo), input, validated, createCandidateBinding(repo, input, validated),
+      );
+      expect(evidence.records[0]).toMatchObject({ status: 'runtime-incomplete', fresh: false });
+      expect(evidence.records[0]!.outputSummary).toContain('source checkout');
+      expect(evidence.records[0]!.exitStatus).toBeUndefined();
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
+
+  test('rejects a stale uv lock before executing the Python project gate', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    const uv = spawnSync('/usr/bin/which', ['uv'], { encoding: 'utf8' }).stdout.trim();
+    if (!python || !uv) return;
+    const repo = gitFixture();
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="stale-lock"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\ndependencies=[]\n');
+    const locked = spawnSync(uv, ['lock', '--project', repo, '--python', python, '--offline', '--no-cache'], { encoding: 'utf8' });
+    if (locked.status !== 0) throw new Error(locked.stderr);
+    git(repo, ['add', 'pyproject.toml', 'uv.lock']);
+    git(repo, ['commit', '-m', 'add stale lock fixture']);
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="stale-lock-renamed"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\ndependencies=[]\n');
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation('stale-lock', ['python3.14', '-c', 'raise SystemExit(23)'], 'candidate', 'zero'),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: git(repo, ['diff']), changedFiles: ['pyproject.toml'] };
+    const evidence = await executeEvidencePlan(
+      context(repo), input, validated, createCandidateBinding(repo, input, validated),
+    );
+
+    expect(evidence.records[0]).toMatchObject({ status: 'runtime-incomplete', fresh: false });
+    expect(evidence.records[0]!.exitStatus).toBeUndefined();
+    expect(evidence.records[0]!.outputSummary).toContain('locked project check failed');
+  });
+
+  test('keeps a Python project gate mismatch as verified-failure after runtime preflight', async () => {
+    if (!hostBoundaryPrerequisite(process.platform === 'darwin', 'platform=darwin')) return;
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    const uv = spawnSync('/usr/bin/which', ['uv'], { encoding: 'utf8' }).stdout.trim();
+    if (!hostBoundaryPrerequisite(Boolean(python) && Boolean(uv), 'Python 3.14 and uv executables')) return;
+    const repo = gitFixture();
+    writeFileSync(join(repo, 'pyproject.toml'), '[project]\nname="failing-gate"\nversion="0.1.0"\nrequires-python=">=3.14,<3.15"\n');
+    const locked = spawnSync(uv, ['lock', '--project', repo, '--python', python, '--offline', '--no-cache'], { encoding: 'utf8' });
+    if (locked.status !== 0) throw new Error(locked.stderr);
+    git(repo, ['add', 'pyproject.toml', 'uv.lock']);
+    git(repo, ['commit', '-m', 'add failing Python fixture']);
+    const value = manifest();
+    value.providers[0]!.operations[0] = {
+      ...operation('python-failure', ['python3.14', '-c', 'raise SystemExit(23)'], 'candidate', 'zero'),
+      pythonRuntime: {
+        interpreter: 'python3.14',
+        resolver: 'uv',
+        projectFile: 'pyproject.toml',
+        lockFile: 'uv.lock',
+      },
+    };
+    const validated = reviewEvidenceManifestSchema.validate(value);
+    const input = { source: 'git diff', diff: '', changedFiles: [] };
+    const evidence = await executeEvidencePlan(
+      context(repo), input, validated, createCandidateBinding(repo, input, validated),
+    );
+
+    expect(evidence.records[0]).toMatchObject({
+      status: 'verified-failure',
+      exitStatus: 23,
+      fresh: true,
+    });
+  });
+
+  test('rejects Python environment symlinks, pth files, editable installs, and source-checkout references', () => {
+    const python = spawnSync('/usr/bin/which', ['python3.14'], { encoding: 'utf8' }).stdout.trim();
+    if (!python) return;
+    const repo = gitFixture();
+    const root = mkdtempSync(join(tmpdir(), 'python-environment-validation-'));
+    roots.push(root);
+    const environment = join(root, 'environment');
+    const sitePackages = join(environment, 'lib', 'python3.14', 'site-packages');
+    mkdirSync(join(environment, 'bin'), { recursive: true });
+    mkdirSync(sitePackages, { recursive: true });
+    copyFileSync(realpathSync(python), join(environment, 'bin', 'python3.14'));
+    chmodSync(join(environment, 'bin', 'python3.14'), 0o555);
+
+    const pth = join(sitePackages, 'ambient.pth');
+    writeFileSync(pth, '/outside\n');
+    expect(() => validateMaterializedPythonEnvironment(environment, realpathSync(python), repo))
+      .toThrow('forbidden site customization');
+    rmSync(pth);
+
+    const directUrl = join(sitePackages, 'package-1.0.dist-info', 'direct_url.json');
+    mkdirSync(dirname(directUrl), { recursive: true });
+    writeFileSync(directUrl, JSON.stringify({ url: `file://${repo}`, dir_info: { editable: true } }));
+    expect(() => validateMaterializedPythonEnvironment(environment, realpathSync(python), repo))
+      .toThrow('editable install');
+    rmSync(dirname(directUrl), { recursive: true, force: true });
+
+    writeFileSync(join(sitePackages, 'source-reference.txt'), repo);
+    expect(() => validateMaterializedPythonEnvironment(environment, realpathSync(python), repo))
+      .toThrow('refers to the source checkout');
+    rmSync(join(sitePackages, 'source-reference.txt'));
+
+    symlinkSync(repo, join(sitePackages, 'escape'));
+    expect(() => validateMaterializedPythonEnvironment(environment, realpathSync(python), repo))
+      .toThrow('symlink escape');
   });
 
   test('sealed Bun runtime can resolve the candidate cwd and a declared --cwd', async () => {
@@ -1809,6 +2406,19 @@ describe('review evidence contracts', () => {
     }
     if (alive) process.kill(pid, 'SIGKILL');
     expect(alive).toBe(false);
+  });
+
+  test('pre-semantic artifacts cannot contain semantic findings', () => {
+    const forged = initialArtifact();
+    forged.hostCallCount = 0;
+    forged.findings[0] = {
+      ...forged.findings[0]!,
+      id: 'D-001',
+      category: 'deterministic-evidence',
+      classification: 'semantic-concern',
+    };
+    expect(() => validateInitialReviewArtifact(forged))
+      .toThrow('pre-semantic recovery requires deterministic-only findings');
   });
 
   test('closure accepts only original finding IDs and evidence-backed direct regressions', () => {
@@ -2535,6 +3145,21 @@ function compileMachO(args: string[]): void {
   if (result.status !== 0) {
     throw new Error(`Mach-O fixture compilation failed: ${result.stderr}`);
   }
+}
+
+function writeFixtureWheel(python: string, output: string): void {
+  const script = [
+    'import sys,zipfile',
+    'p=sys.argv[1]',
+    'z=zipfile.ZipFile(p,"w",compression=zipfile.ZIP_DEFLATED)',
+    'z.writestr("fixture_dep/__init__.py","VALUE = 42\\n")',
+    'z.writestr("fixture_dep-1.0.0.dist-info/METADATA","Metadata-Version: 2.1\\nName: fixture-dep\\nVersion: 1.0.0\\n")',
+    'z.writestr("fixture_dep-1.0.0.dist-info/WHEEL","Wheel-Version: 1.0\\nGenerator: goldband-test\\nRoot-Is-Purelib: true\\nTag: py3-none-any\\n")',
+    'z.writestr("fixture_dep-1.0.0.dist-info/RECORD","")',
+    'z.close()',
+  ].join(';');
+  const result = spawnSync(python, ['-I', '-S', '-c', script, output], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr);
 }
 
 function manifest(): ReviewEvidenceManifest {

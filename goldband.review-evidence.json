@@ -79,6 +79,17 @@
       "providerIds": ["review-evidence-tests"]
     },
     {
+      "id": "pre-semantic-evidence-repair",
+      "behavior": "A deterministic-only blocker lineage can repair typed evidence before its first semantic host call without replacing lineage authority.",
+      "kind": "exception",
+      "input": "an authoritative hostCallCount=0 artifact, a repaired candidate, and an optional monotonic contract strengthening",
+      "preconditions": "all unresolved findings came from deterministic evidence and the predecessor receipt is current and unclaimed",
+      "expected": "the runtime reruns only affected typed evidence, preserves predecessor provenance, keeps failed repair blockers open, and dispatches exactly one initial semantic host only after evidence becomes eligible",
+      "risk": "high",
+      "disposition": "automated",
+      "providerIds": ["review-evidence-tests", "installed-runtime-tests"]
+    },
+    {
       "id": "scoped-closure-rerun",
       "behavior": "Closure reruns affected behavior contracts and closes only original findings with fresh matching evidence.",
       "kind": "normal",
@@ -165,6 +176,17 @@
       "risk": "high",
       "disposition": "automated",
       "providerIds": ["review-evidence-tests"]
+    },
+    {
+      "id": "python-candidate-runtime",
+      "behavior": "An explicitly declared zero-dependency Python 3.14 uv operation executes from a lock-bound candidate environment after runtime preflight.",
+      "kind": "boundary",
+      "input": "the repository Python runtime fixture, its pyproject.toml and uv.lock, and the declared Python version gate",
+      "preconditions": "the operation opts into pythonRuntime, declares no dependencies, and denies network access",
+      "expected": "the review runtime materializes the frozen/offline candidate environment and returns fresh verified-pass only after Python 3.14 runtime preflight and the declared gate succeed",
+      "risk": "high",
+      "disposition": "automated",
+      "providerIds": ["python-runtime-tests"]
     },
     {
       "id": "redacted-untracked-candidate-binding",
@@ -281,6 +303,7 @@
         "deterministic-classification-authority",
         "deterministic-finding-preservation",
         "evidence-host-eligibility",
+        "pre-semantic-evidence-repair",
         "scoped-closure-rerun",
         "compact-closure-delta",
         "closure-evidence-relevance",
@@ -301,6 +324,8 @@
           "schemas/review-evidence-manifest.schema.json",
           "goldband-loop/workflows/review-evidence.ts",
           "goldband-loop/workflows/review-evidence-sandbox.ts",
+          "goldband-loop/workflows/review-lineage.ts",
+          "goldband-loop/workflows/review.ts",
           "goldband-loop/test/review-evidence.test.ts",
           "goldband-loop/test/review-evidence-platform.test.ts"
         ]
@@ -393,7 +418,7 @@
       "owner": "goldband-loop installed runtime test suite",
       "kind": "project-gate",
       "lifecycle": "persistent",
-      "cellIds": ["installed-codex-runtime-path", "runtime-owned-initial-receipt"],
+      "cellIds": ["installed-codex-runtime-path", "runtime-owned-initial-receipt", "pre-semantic-evidence-repair"],
       "applicability": {
         "kind": "paths",
         "pathPrefixes": [
@@ -428,6 +453,47 @@
           "maxOutputBytes": 65536,
           "network": "deny",
           "evidenceLevel": "local"
+        }
+      ]
+    },
+    {
+      "id": "python-runtime-tests",
+      "owner": "goldband-loop Python review runtime tests",
+      "kind": "project-gate",
+      "lifecycle": "persistent",
+      "cellIds": ["python-candidate-runtime"],
+      "applicability": {
+        "kind": "paths",
+        "pathPrefixes": [
+          "goldband.review-evidence.json",
+          "schemas/review-evidence-manifest.schema.json",
+          "goldband-loop/test/codex-review-launcher-install.test.ts",
+          "goldband-loop/test/review-contract-authoring.test.ts",
+          "goldband-loop/test/review-evidence.test.ts",
+          "goldband-loop/test/fixtures/python-runtime",
+          "goldband-loop/workflows/review-evidence.ts"
+        ]
+      },
+      "executionContext": {
+        "sandboxOwner": "review-runtime",
+        "runner": "sealed"
+      },
+      "operations": [
+        {
+          "id": "candidate-python-runtime",
+          "target": "candidate",
+          "argv": ["python3.14", "-I", "-S", "-c", "import sys; assert sys.version_info[:2] == (3, 14)"],
+          "expectedExit": "zero",
+          "timeoutMs": 30000,
+          "maxOutputBytes": 4096,
+          "network": "deny",
+          "evidenceLevel": "local",
+          "pythonRuntime": {
+            "interpreter": "python3.14",
+            "resolver": "uv",
+            "projectFile": "goldband-loop/test/fixtures/python-runtime/pyproject.toml",
+            "lockFile": "goldband-loop/test/fixtures/python-runtime/uv.lock"
+          }
         }
       ]
     },

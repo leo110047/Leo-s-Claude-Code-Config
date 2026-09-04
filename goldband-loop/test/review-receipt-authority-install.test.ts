@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+	chmodSync,
 	cpSync,
 	mkdirSync,
 	mkdtempSync,
@@ -88,7 +89,7 @@ describe("review receipt authority provisioning", () => {
 		const stateRoot = join(root, "workflow-state");
 		mkdirSync(repo);
 		expect(spawnSync("git", ["init"], { cwd: repo }).status).toBe(0);
-			writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify({
+		const unsupportedManifest = {
 			schemaVersion: 2,
 			behaviorMatrix: [{
 				id: "unsupported-runtime",
@@ -104,7 +105,8 @@ describe("review receipt authority provisioning", () => {
 			}],
 			providers: [],
 			authorizations: [],
-			})}\n`);
+		};
+			writeFileSync(join(repo, "goldband.review-evidence.json"), `${JSON.stringify(unsupportedManifest)}\n`);
 			expect(spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: repo }).status).toBe(0);
 			expect(spawnSync("git", ["config", "user.name", "Goldband Test"], { cwd: repo }).status).toBe(0);
 			expect(spawnSync("git", ["add", "goldband.review-evidence.json"], { cwd: repo }).status).toBe(0);
@@ -136,5 +138,79 @@ describe("review receipt authority provisioning", () => {
 			join(authorityRoot, "review-receipts", `${artifact.runtimeReceipt.id}.json`),
 			"utf8",
 		)).toContain(`"runId": "${artifact.runId}"`);
+		if (process.platform !== "darwin") return;
+
+		const fakeBin = join(root, "bin");
+		const hostCalls = join(root, "claude-host-calls.log");
+		mkdirSync(fakeBin);
+		const fakeClaude = join(fakeBin, "claude");
+		writeFileSync(fakeClaude, [
+			"#!/usr/bin/env bash",
+			"set -euo pipefail",
+			'if [ "${1:-}" = "auth" ]; then',
+			'  printf \'%s\\n\' \'{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}\'',
+			"  exit 0",
+			"fi",
+			'printf "%s\\n" claude >> "$GOLDBAND_TEST_HOST_CALL_LOG"',
+			"cat >/dev/null",
+			'printf \'%s\\n\' \'{"result":"{\\"findings\\":[]}","usage":{"input_tokens":1,"output_tokens":1}}\'',
+		].join("\n"));
+		chmodSync(fakeClaude, 0o755);
+		const repairedManifest = structuredClone(unsupportedManifest);
+		repairedManifest.behaviorMatrix[0] = {
+			...repairedManifest.behaviorMatrix[0],
+			disposition: "static",
+			providerIds: ["claude-repair-gate"],
+			reason: undefined,
+		};
+		repairedManifest.providers = [{
+			id: "claude-repair-gate",
+			owner: "review-receipt-authority-install.test.ts",
+			kind: "static",
+			lifecycle: "persistent",
+			cellIds: ["unsupported-runtime"],
+			applicability: { kind: "global", reason: "Explicit Claude recovery fixture." },
+			executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
+			operations: [{
+				id: "candidate-green",
+				target: "candidate",
+				argv: ["true"],
+				expectedExit: "zero",
+				timeoutMs: 1000,
+				maxOutputBytes: 1024,
+				network: "deny",
+				evidenceLevel: "fixture",
+				requiredSystemTools: ["true"],
+			}],
+		}];
+		const repairedManifestFile = join(root, "repaired-manifest.json");
+		writeFileSync(repairedManifestFile, `${JSON.stringify(repairedManifest)}\n`);
+		writeFileSync(join(repo, "candidate.txt"), "review repaired\n");
+		const repaired = spawnSync(process.execPath, [
+			...reviewArgs,
+			"--evidence-manifest", repairedManifestFile,
+			"--closure-artifact", artifactPath!,
+		], {
+			...reviewOptions,
+			env: {
+				...reviewOptions.env,
+				PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+				GOLDBAND_TEST_HOST_CALL_LOG: hostCalls,
+			},
+		});
+		expect(repaired.status, repaired.stderr).toBe(0);
+		expect(repaired.stdout).toContain("Phase: evidence-repair.");
+		expect(repaired.stdout).toContain("Semantic host calls: 1.");
+		const repairedResult = JSON.parse(repaired.stdout) as { artifacts: string[] };
+		const repairedArtifactPath = repairedResult.artifacts.find((file) =>
+			file.endsWith("-review-evidence.json"))!;
+		const repairedArtifact = JSON.parse(readFileSync(repairedArtifactPath, "utf8"));
+		expect(repairedArtifact.predecessor).toMatchObject({
+			transition: "evidence-repair",
+			runId: artifact.runId,
+			receiptId: artifact.runtimeReceipt.id,
+			findingIds: ["D-001"],
+		});
+		expect(readFileSync(hostCalls, "utf8").trim()).toBe("claude");
 	}, 30_000);
 });

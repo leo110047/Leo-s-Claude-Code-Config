@@ -154,6 +154,10 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(existsSync(join(runtimeRoot, "review", "examples", "minimal-local-gate.json"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "schemas", "review-evidence-manifest.schema.json"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "schemas", "review-behavior-matrix.schema.json"))).toBe(true);
+			expect(readFileSync(join(runtimeRoot, "review", "review-evidence-manifest.md"), "utf8"))
+				.toContain("Python 3.14 + uv runtime");
+			expect(readFileSync(join(runtimeRoot, "review", "schemas", "review-evidence-manifest.schema.json"), "utf8"))
+				.toContain('"pythonRuntime"');
 			expect(existsSync(join(runtimeRoot, "review", "rules-resolver.js"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "review", "rules", "manifest.json"))).toBe(true);
 			expect(existsSync(join(runtimeRoot, "distribution-manifest.json"))).toBe(true);
@@ -613,7 +617,7 @@ describe("Codex trusted workflow launcher install", () => {
 			expect(lineCount(hostCallLog)).toBe(authorityHostCallsBefore);
 			writeFileSync(runtimeReceiptFile, trustedRuntimeReceipt);
 
-			if (installedPath === "full-verified") {
+				if (installedPath === "full-verified") {
 				writeFileSync(join(repo, "review-me.txt"), "repaired\n");
 				const closure = spawnInstalledRuntime(
 					marker.argvPrefix[0],
@@ -652,10 +656,92 @@ describe("Codex trusted workflow launcher install", () => {
 				phase: "closure",
 				hostCallCount: 1,
 				results: [{ findingId: "S-001", status: "closed" }],
-				});
-			}
+					});
+				}
 
-			const cleanRepo = join(fixture, "clean-repo");
+				const repairRepo = join(fixture, "pre-semantic-repair-repo");
+				mkdirSync(repairRepo, { recursive: true });
+				expect(spawnSync("git", ["init", "-q"], { cwd: repairRepo }).status).toBe(0);
+				writeFileSync(join(repairRepo, "review-me.txt"), "baseline\n");
+				writeFileSync(
+					join(repairRepo, "goldband.review-evidence.json"),
+					`${JSON.stringify(installedUnsupportedManifest())}\n`,
+				);
+				expect(spawnSync("git", ["add", "."], { cwd: repairRepo }).status).toBe(0);
+				expect(spawnSync("git", [
+					"-c", "user.name=Goldband Test", "-c", "user.email=goldband@example.invalid",
+					"commit", "-qm", "pre-semantic repair fixture",
+				], { cwd: repairRepo }).status).toBe(0);
+				writeFileSync(
+					join(repairRepo, "candidate.patch"),
+					installedCandidatePatch("deterministic blocker"),
+				);
+				const deterministicHostCallsBefore = lineCount(hostCallLog);
+				const deterministicInitial = runInstalledReview(repairRepo, [
+					"--diff-file", "candidate.patch", "--host", "codex",
+				]);
+				expect(deterministicInitial.status, deterministicInitial.stderr).toBe(0);
+				const deterministicResult = JSON.parse(deterministicInitial.stdout) as {
+					artifacts: string[];
+				};
+				const deterministicArtifactFile = deterministicResult.artifacts.find((file) =>
+					file.endsWith("-review-evidence.json"))!;
+				const deterministicArtifact = JSON.parse(
+					readFileSync(deterministicArtifactFile, "utf8"),
+				);
+				expect(deterministicArtifact.hostCallCount).toBe(0);
+				expect(deterministicArtifact.findings[0].id).toBe("D-001");
+				expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore);
+
+				const repairedManifest = join(fixture, "pre-semantic-repaired-contract.json");
+				writeFileSync(repairedManifest, `${JSON.stringify(installedHighRiskReviewEvidenceManifest())}\n`);
+				writeFileSync(
+					join(repairRepo, "candidate.patch"),
+					installedCandidatePatch("deterministic evidence repaired"),
+				);
+				const repairedReview = runInstalledReview(repairRepo, [
+					"--diff-file", "candidate.patch",
+					"--host", "codex",
+					"--evidence-manifest", repairedManifest,
+					"--closure-artifact", deterministicArtifactFile,
+				]);
+				expect(repairedReview.status, repairedReview.stderr).toBe(0);
+				expect(repairedReview.stdout).toContain("Phase: evidence-repair.");
+				const repairedResult = JSON.parse(repairedReview.stdout) as { artifacts: string[] };
+				const repairedArtifactFile = repairedResult.artifacts.find((file) =>
+					file.endsWith("-review-evidence.json"))!;
+				const repairedArtifact = JSON.parse(readFileSync(repairedArtifactFile, "utf8"));
+				if (nestedEvidenceBoundaryUnavailable) {
+					expect(repairedArtifact.hostCallCount).toBe(0);
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore);
+				} else {
+					expect(repairedArtifact).toMatchObject({
+						hostCallCount: 1,
+						predecessor: {
+							transition: "evidence-repair",
+							runId: deterministicArtifact.runId,
+							receiptId: deterministicArtifact.runtimeReceipt.id,
+							findingIds: ["D-001"],
+						},
+					});
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore + 1);
+					writeFileSync(
+						join(repairRepo, "candidate.patch"),
+						installedCandidatePatch("semantic finding repaired"),
+					);
+					const repairedClosure = runInstalledReview(repairRepo, [
+						"--diff-file", "candidate.patch",
+						"--host", "codex",
+						"--evidence-manifest", repairedManifest,
+						"--closure-artifact", repairedArtifactFile,
+					]);
+					expect(repairedClosure.status, repairedClosure.stderr).toBe(0);
+					expect(repairedClosure.stdout).toContain("Phase: closure.");
+					expect(repairedClosure.stdout).toContain("[closed] S-001");
+					expect(lineCount(hostCallLog)).toBe(deterministicHostCallsBefore + 2);
+				}
+
+				const cleanRepo = join(fixture, "clean-repo");
 			mkdirSync(cleanRepo, { recursive: true });
 			expect(spawnSync("git", ["init", "-q"], { cwd: cleanRepo }).status).toBe(0);
 			writeFileSync(join(cleanRepo, "review-me.txt"), "baseline\n");
@@ -834,6 +920,74 @@ describe("Codex trusted workflow launcher install", () => {
 				"duplicate initial review identity already has an authoritative result",
 			);
 			expect(lineCount(hostCallLog)).toBe(claudeCallsBefore + 1);
+
+			const python = spawnSync("/usr/bin/which", ["python3.14"], { encoding: "utf8" }).stdout.trim();
+			const uv = spawnSync("/usr/bin/which", ["uv"], { encoding: "utf8" }).stdout.trim();
+			if ((!python || !uv) && process.platform === "darwin") {
+				throw new Error("required review host boundary prerequisite is unavailable: Python 3.14 and uv executables");
+			}
+			if (python && uv && process.platform === "darwin") {
+				const pythonRepo = join(fixture, "installed-python-repo");
+				const pythonCache = join(fixture, "installed-python-cache");
+				mkdirSync(pythonRepo, { recursive: true });
+				mkdirSync(pythonCache, { recursive: true });
+				expect(spawnSync("git", ["init", "-q"], { cwd: pythonRepo }).status).toBe(0);
+				writeFileSync(join(pythonRepo, "pyproject.toml"), [
+					"[project]",
+					'name = "installed-python-evidence"',
+					'version = "0.1.0"',
+					'requires-python = ">=3.14,<3.15"',
+					'dependencies = ["fixture-dep"]',
+					"[tool.uv.sources]",
+					'fixture-dep = { path = "vendor/fixture_dep-1.0.0-py3-none-any.whl" }',
+					"",
+				].join("\n"));
+				const fixtureWheel = join(
+					pythonRepo,
+					"vendor",
+					"fixture_dep-1.0.0-py3-none-any.whl",
+				);
+				mkdirSync(dirname(fixtureWheel), { recursive: true });
+				writeInstalledFixtureWheel(python, fixtureWheel);
+				writeFileSync(join(pythonRepo, "app.py"), 'VALUE = "base"\n');
+				const lock = spawnSync(uv, [
+					"lock", "--project", pythonRepo, "--python", python, "--offline", "--no-cache",
+				], { encoding: "utf8" });
+				expect(lock.status, lock.stderr).toBe(0);
+				writeFileSync(
+					join(pythonRepo, "goldband.review-evidence.json"),
+					`${JSON.stringify(installedPythonEvidenceManifest())}\n`,
+				);
+				expect(spawnSync("git", ["add", "."], { cwd: pythonRepo }).status).toBe(0);
+				const commit = spawnSync("git", [
+					"-c", "user.name=Goldband Test",
+					"-c", "user.email=goldband@example.invalid",
+					"commit", "-qm", "installed Python fixture",
+				], { cwd: pythonRepo, encoding: "utf8" });
+				expect(commit.status, commit.stderr).toBe(0);
+				writeFileSync(join(pythonRepo, "app.py"), 'VALUE = "candidate"\n');
+				const installedPython = runInstalledReview(
+					pythonRepo,
+					["--host", "codex", "--worktree"],
+					{
+						GOLDBAND_TEST_CLEAN_REVIEW: "1",
+						GOLDBAND_HOME: join(fixture, "installed-python-state"),
+						UV_CACHE_DIR: pythonCache,
+					},
+				);
+				expect(installedPython.status, installedPython.stderr).toBe(0);
+				const output = JSON.parse(installedPython.stdout) as { artifacts: string[] };
+				const evidenceFile = output.artifacts.find((file) => file.endsWith("-review-evidence.json"));
+				const evidence = JSON.parse(readFileSync(evidenceFile!, "utf8"));
+				expect(evidence.evidence.records[0]).toMatchObject({
+					status: "verified-pass",
+					fresh: true,
+					exitStatus: 0,
+				});
+				expect(evidence.evidence.records[0].outputSummary).toContain("/operations/");
+				expect(evidence.evidence.records[0].outputSummary).toContain("/python-runtime/environment/");
+				expect(evidence.evidence.records[0].outputSummary).not.toContain(pythonRepo);
+			}
 
 			const browser = spawnInstalledRuntime(
 				marker.argvPrefix[0],
@@ -1055,6 +1209,81 @@ function installedReviewEvidenceManifest() {
 				maxOutputBytes: 1024,
 				network: "deny",
 				evidenceLevel: "fixture",
+			}],
+		}],
+		authorizations: [],
+	};
+}
+
+function installedUnsupportedManifest() {
+	const value = installedHighRiskReviewEvidenceManifest();
+	value.behaviorMatrix[0] = {
+		...value.behaviorMatrix[0],
+		disposition: "unsupported",
+		providerIds: [],
+		reason: "The installed deterministic provider is not wired yet.",
+	};
+	value.providers = [];
+	return value;
+}
+
+function installedHighRiskReviewEvidenceManifest() {
+	const value = installedReviewEvidenceManifest();
+	value.behaviorMatrix[0] = { ...value.behaviorMatrix[0], risk: "high" };
+	return value;
+}
+
+function writeInstalledFixtureWheel(python: string, output: string): void {
+	const script = [
+		"import sys,zipfile",
+		"p=sys.argv[1]",
+		'with zipfile.ZipFile(p,"w",compression=zipfile.ZIP_DEFLATED) as z:',
+		' z.writestr("fixture_dep/__init__.py","VALUE = 42\\n")',
+		' z.writestr("fixture_dep-1.0.0.dist-info/METADATA","Metadata-Version: 2.1\\nName: fixture-dep\\nVersion: 1.0.0\\n")',
+		' z.writestr("fixture_dep-1.0.0.dist-info/WHEEL","Wheel-Version: 1.0\\nGenerator: goldband-test\\nRoot-Is-Purelib: true\\nTag: py3-none-any\\n")',
+		' z.writestr("fixture_dep-1.0.0.dist-info/RECORD","")',
+	].join("\n");
+	const result = spawnSync(python, ["-I", "-S", "-c", script, output], { encoding: "utf8" });
+	if (result.status !== 0) throw new Error(result.stderr);
+}
+
+function installedPythonEvidenceManifest() {
+	return {
+		schemaVersion: 2,
+		behaviorMatrix: [{
+			id: "installed-python-review",
+			behavior: "The installed runtime executes a lock-bound Python candidate gate.",
+			kind: "boundary",
+			input: "Python 3.14 candidate and uv lockfile",
+			preconditions: "the host has Python 3.14, uv, and complete offline artifacts",
+			expected: "the candidate module imports from the materialized snapshot",
+			risk: "high",
+			disposition: "automated",
+			providerIds: ["installed-python-gate"],
+		}],
+		providers: [{
+			id: "installed-python-gate",
+			owner: "codex-review-launcher-install.test.ts",
+			kind: "project-gate",
+			lifecycle: "persistent",
+			cellIds: ["installed-python-review"],
+			applicability: { kind: "global", reason: "Explicit installed Python runtime fixture." },
+			executionContext: { sandboxOwner: "review-runtime", runner: "sealed" },
+			operations: [{
+				id: "python-pass",
+				target: "candidate",
+				argv: ["python3.14", "-c", 'import app,fixture_dep; assert app.VALUE == "candidate" and fixture_dep.VALUE == 42; print(app.__file__); print(fixture_dep.__file__)'],
+				expectedExit: "zero",
+				timeoutMs: 30000,
+				maxOutputBytes: 4096,
+				network: "deny",
+				evidenceLevel: "local",
+				pythonRuntime: {
+					interpreter: "python3.14",
+					resolver: "uv",
+					projectFile: "pyproject.toml",
+					lockFile: "uv.lock",
+				},
 			}],
 		}],
 		authorizations: [],

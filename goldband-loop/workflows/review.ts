@@ -40,6 +40,7 @@ import {
   createCandidateBinding,
   createReviewArtifactPath,
   executeEvidencePlan,
+  initialReviewArtifactDigest,
   readClosureArtifact,
   reviewLineageAuthority,
   removeInitialReviewRuntimeReceipt,
@@ -452,7 +453,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     : undefined;
   if (workMapBinding) workMapReviewBindings.set(ctx.runId, workMapBinding);
   if (!evidenceState.evidence.completeness.hostEligible) {
-    if (evidenceState.closure) {
+    if (evidenceState.closure?.kind === 'semantic-closure') {
       evidenceState.closureResults = evidenceState.closure.affectedFindingIds.map((findingId) => ({
         findingId,
         status: 'evidence-incomplete',
@@ -466,7 +467,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   }
   const adapter = adapterFor(reviewHost(ctx));
   const coreRules = evidenceState.rules;
-  const prompt = evidenceState.closure
+  const prompt = evidenceState.closure?.kind === 'semantic-closure'
     ? buildClosureReviewPrompt(ctx, evidenceState.closure, evidenceState.evidence, coreRules)
     : buildReviewPrompt(
       ctx,
@@ -492,7 +493,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
   try {
     result = await adapter.runJson(
       prompt,
-      evidenceState.closure ? closureEnvelopeJsonSchema : findingsEnvelopeJsonSchema,
+      evidenceState.closure?.kind === 'semantic-closure' ? closureEnvelopeJsonSchema : findingsEnvelopeJsonSchema,
       resolveReviewWorkspace(ctx.cwd).repositoryRoot,
       {
         timeoutMs: timeBudget.nextHostTimeoutMs(),
@@ -524,7 +525,7 @@ async function runReview(ctx: WorkflowContext): Promise<ReviewFinding[]> {
     throw new Error('review/code host-call budget exceeded');
   }
   assertCandidateFresh(ctx, input, evidenceState);
-  if (evidenceState.closure) {
+  if (evidenceState.closure?.kind === 'semantic-closure') {
     const parsed = result.parsed as { results?: unknown };
     const results = closureResultsSchema.validate(parsed?.results);
     evidenceState.closureResults = validateClosureResults(
@@ -550,16 +551,17 @@ function parseFindings(ctx: WorkflowContext): ReviewFinding[] {
 
 function verifyFindings(ctx: WorkflowContext): ReviewFinding[] {
   const state = requiredEvidenceRunState(ctx.runId);
-  if (state.closure) return findingsSchema.validate(ctx.input);
+  if (state.closure?.kind === 'semantic-closure') return findingsSchema.validate(ctx.input);
+  const deterministic = evidenceRepairDeterministicFindings(state);
   if (!state.evidence.completeness.hostEligible) {
-    return aggregateReviewFindings(deterministicEvidenceFindings(state.evidence));
+    return aggregateReviewFindings(deterministic);
   }
   const semantic = classifyReviewFindings(
     aggregateReviewFindings(findingsSchema.validate(ctx.input)),
     state.evidence,
   ).filter((finding) => isRuntimeDiagnostic(finding) || hasConcreteFailurePath(finding));
   return aggregateReviewFindings([
-    ...deterministicEvidenceFindings(state.evidence),
+    ...deterministic,
     ...semantic,
   ]);
 }
@@ -567,12 +569,13 @@ function verifyFindings(ctx: WorkflowContext): ReviewFinding[] {
 function renderReport(ctx: WorkflowContext): string {
   const findings = findingsSchema.validate(ctx.input);
   const evidenceState = requiredEvidenceRunState(ctx.runId);
+  const phase = reviewPhase(evidenceState);
   const lines = [
     '# review/code runtime report',
     '',
     'Read-only review: no files were modified.',
     '',
-    `Phase: ${evidenceState.closure ? 'closure' : 'initial'}.`,
+    `Phase: ${phase}.`,
     `Candidate: ${evidenceState.evidence.binding.candidateDigest}.`,
     `Deterministic evidence: ${evidenceState.evidence.records.filter((record) => record.status === 'verified-pass').length} verified pass, ${evidenceState.evidence.records.filter((record) => record.status === 'verified-failure').length} verified failure, ${evidenceState.evidence.completeness.coverageGapCellIds.length} coverage gap, ${evidenceState.evidence.completeness.runtimeIncompleteCellIds.length} runtime incomplete.`,
     `Semantic host calls: ${evidenceState.hostCallCount}.`,
@@ -587,24 +590,9 @@ function renderReport(ctx: WorkflowContext): string {
       '',
     );
   }
-  const closureComplete = Boolean(
-    evidenceState.closure &&
-    evidenceState.closureResults?.length === evidenceState.closure.affectedFindingIds.length &&
-    evidenceState.closureResults.every((result) => result.status === 'closed'),
-  );
-  const inheritedBlockers = evidenceState.lineage.predecessor?.unresolvedFindings
-    .filter((finding) => finding.blocking).length ?? 0;
-  lines.push(
-    '## Verdict authority',
-    '',
-    `- no-new-findings: ${!evidenceState.closure && findings.length === 0}`,
-    `- prior-blockers-open: ${evidenceState.closure ? !closureComplete : inheritedBlockers > 0 || findings.some((finding) => finding.blocking)}`,
-    `- deterministic-contract-complete: ${evidenceState.evidence.completeness.complete}`,
-    `- runtime-evidence-incomplete: ${evidenceState.evidence.completeness.runtimeIncompleteCellIds.length > 0}`,
-    `- closure-complete: ${closureComplete}`,
-    `- completion-authorized: ${evidenceState.evidence.completeness.complete && (evidenceState.closure ? closureComplete : !findings.some((finding) => finding.blocking))}`,
-    '',
-  );
+  const closureComplete = semanticClosureComplete(evidenceState);
+  const semanticClosure = phase === 'closure';
+  lines.push(...verdictReportLines(evidenceState, findings, closureComplete));
   lines.push('## Typed evidence', '');
   for (const record of evidenceState.evidence.records) {
     lines.push(
@@ -613,7 +601,7 @@ function renderReport(ctx: WorkflowContext): string {
   }
   if (evidenceState.evidence.records.length === 0) lines.push('- No executable evidence records.');
   lines.push('');
-  if (evidenceState.closure) {
+  if (semanticClosure) {
     lines.push('## Closure results', '');
     for (const result of evidenceState.closureResults ?? []) {
       lines.push(`- [${result.status}] ${result.findingId}: ${result.summary}`);
@@ -709,7 +697,7 @@ function renderReport(ctx: WorkflowContext): string {
             completeness: evidenceState.evidence.completeness,
             recordsDigest: sha256(JSON.stringify(evidenceState.evidence.records)),
             hostCallCount: evidenceState.hostCallCount,
-            phase: evidenceState.closure ? 'closure' : 'initial',
+            phase: semanticClosure ? 'closure' : 'initial',
             verdict: phaseArtifact.verdict,
           },
           createdAt: new Date().toISOString(),
@@ -777,6 +765,52 @@ function renderReport(ctx: WorkflowContext): string {
   return report;
 }
 
+function reviewPhase(state: ReviewEvidenceRunState): 'initial' | 'evidence-repair' | 'closure' {
+  return transitionPhase(state.closure);
+}
+
+function transitionPhase(
+  transition?: ClosureReviewInput,
+): 'initial' | 'evidence-repair' | 'closure' {
+  if (transition?.kind === 'semantic-closure') return 'closure';
+  if (transition?.kind === 'evidence-repair') return 'evidence-repair';
+  return 'initial';
+}
+
+function semanticClosureComplete(state: ReviewEvidenceRunState): boolean {
+  return Boolean(
+    state.closure?.kind === 'semantic-closure' &&
+    state.closureResults?.length === state.closure.affectedFindingIds.length &&
+    state.closureResults.every((result) => result.status === 'closed'),
+  );
+}
+
+function verdictReportLines(
+  state: ReviewEvidenceRunState,
+  findings: ReviewFinding[],
+  closureComplete: boolean,
+): string[] {
+  const phase = reviewPhase(state);
+  const inheritedBlockers = state.lineage.predecessor?.unresolvedFindings
+    .filter((finding) => finding.blocking).length ?? 0;
+  const blockersOpen = phase === 'closure'
+    ? !closureComplete
+    : (phase === 'initial' && inheritedBlockers > 0) || findings.some((finding) => finding.blocking);
+  const completionAuthorized = state.evidence.completeness.complete &&
+    (phase === 'closure' ? closureComplete : !findings.some((finding) => finding.blocking));
+  return [
+    '## Verdict authority',
+    '',
+    `- no-new-findings: ${phase !== 'closure' && findings.length === 0}`,
+    `- prior-blockers-open: ${blockersOpen}`,
+    `- deterministic-contract-complete: ${state.evidence.completeness.complete}`,
+    `- runtime-evidence-incomplete: ${state.evidence.completeness.runtimeIncompleteCellIds.length > 0}`,
+    `- closure-complete: ${closureComplete}`,
+    `- completion-authorized: ${completionAuthorized}`,
+    '',
+  ];
+}
+
 function reconcileWorkMapReviewTransition(
   binding: WorkMapReviewBinding,
   reference: EvidenceReference,
@@ -814,8 +848,9 @@ function persistReviewPhaseArtifact(
   findings: ReviewFinding[],
   workMapBinding?: WorkMapReviewBinding,
 ): { file: string; receiptId?: string; verdict: ReviewVerdict } {
-  if (!evidenceState.closure) {
+  if (evidenceState.closure?.kind !== 'semantic-closure') {
     const artifactFile = createReviewArtifactPath(dir, ctx.runId);
+    const predecessor = evidenceRepairPredecessor(evidenceState);
     const issued = writeInitialReviewArtifact(artifactFile, {
       schemaVersion: 1,
       phase: 'initial',
@@ -825,6 +860,7 @@ function persistReviewPhaseArtifact(
       evidence: evidenceState.evidence,
       findings,
       hostCallCount: evidenceState.hostCallCount as 0 | 1,
+      ...(predecessor ? { predecessor } : {}),
       createdAt: new Date().toISOString(),
     }, ctx, workMapBinding
       ? {
@@ -842,14 +878,7 @@ function persistReviewPhaseArtifact(
         key: evidenceState.lineageKey,
         repository: evidenceState.evidence.binding.repository,
         baseDigest: evidenceState.evidence.binding.baseDigest,
-        scopeDigest: reviewLineageScopeDigest(
-          evidenceState.evidence.binding.scopeDigest,
-          workMapBinding
-            ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
-            : {
-              changedFiles: evidenceState.evidence.binding.changedFiles,
-            },
-        ),
+        scopeDigest: initialLineageScopeDigest(evidenceState, workMapBinding),
         artifact: issued,
         artifactFile,
         findings,
@@ -894,6 +923,38 @@ function persistReviewPhaseArtifact(
     rmSync(closureArtifactFile, { force: true });
     throw error;
   }
+}
+
+function evidenceRepairPredecessor(
+  state: ReviewEvidenceRunState,
+): InitialReviewArtifact['predecessor'] | undefined {
+  if (state.closure?.kind !== 'evidence-repair') return undefined;
+  const artifact = state.closure.artifact;
+  return {
+    transition: 'evidence-repair',
+    artifactDigest: initialReviewArtifactDigest(artifact),
+    runId: artifact.runId,
+    receiptId: artifact.runtimeReceipt.id,
+    candidateDigest: artifact.binding.candidateDigest,
+    behaviorContractDigest: artifact.binding.behaviorContractDigest,
+    findingIds: artifact.findings.map((finding) => finding.id!),
+    affectedCellIds: state.closure.affectedCellIds,
+  };
+}
+
+function initialLineageScopeDigest(
+  state: ReviewEvidenceRunState,
+  workMapBinding?: WorkMapReviewBinding,
+): string {
+  if (state.closure?.kind === 'evidence-repair') {
+    return state.lineage.predecessor!.scopeDigest;
+  }
+  return reviewLineageScopeDigest(
+    state.evidence.binding.scopeDigest,
+    workMapBinding
+      ? { workId: workMapBinding.workId, ticketId: workMapBinding.ticketId }
+      : { changedFiles: state.evidence.binding.changedFiles },
+  );
 }
 
 function discardUncommittedReviewPhaseArtifact(
@@ -1509,15 +1570,15 @@ function recordReviewPromptTelemetry(
       corePrompt,
       coreBundle,
       coreRulesText,
-      diff: closure ? '' : diff,
+      diff: closure?.kind === 'semantic-closure' ? '' : diff,
     }),
-    phase: closure ? 'closure' : 'initial',
+    phase: transitionPhase(closure),
     hostCallBudget: 1,
     hostCallCount: 1,
     matrixBytes: Buffer.byteLength(behaviorMatrixProjection(evidence)),
     evidenceBytes: Buffer.byteLength(evidenceSummaryProjection(evidence)),
     repairDeltaBytes: closure ? Buffer.byteLength(closure.repairDelta) : 0,
-    originalDiffBytesSent: closure ? 0 : Buffer.byteLength(diff),
+    originalDiffBytesSent: closure?.kind === 'semantic-closure' ? 0 : Buffer.byteLength(diff),
     specialistMode: timeoutPolicy.specialistMode,
     hostTimeoutMs: timeoutPolicy.hostTimeoutMs,
     passTimeoutMs: timeoutPolicy.passTimeoutMs,
@@ -1624,6 +1685,47 @@ function deterministicEvidenceFindings(evidence: ReviewEvidenceBundle): ReviewFi
     });
   }
   return findings;
+}
+
+function evidenceRepairDeterministicFindings(
+  state: ReviewEvidenceRunState,
+): ReviewFinding[] {
+  const findings = deterministicEvidenceFindings(state.evidence);
+  if (state.closure?.kind !== 'evidence-repair') return findings;
+  return preserveDeterministicFindingIds(findings, state.closure.artifact.findings);
+}
+
+function preserveDeterministicFindingIds(
+  findings: ReviewFinding[],
+  predecessors: ReviewFinding[],
+): ReviewFinding[] {
+  const priorByIdentity = new Map(predecessors.map((finding) => [
+    deterministicFindingIdentity(finding),
+    finding.id!,
+  ]));
+  const reservedIds = new Set(predecessors.map((finding) => finding.id!));
+  let nextId = predecessors.reduce((highest, finding) => {
+    const match = /^D-(\d+)$/.exec(finding.id ?? '');
+    return Math.max(highest, match ? Number(match[1]) : 0);
+  }, 0) + 1;
+  return findings.map((finding) => {
+    const preservedId = priorByIdentity.get(deterministicFindingIdentity(finding));
+    if (preservedId) return { ...finding, id: preservedId };
+    let id = `D-${String(nextId++).padStart(3, '0')}`;
+    while (reservedIds.has(id)) id = `D-${String(nextId++).padStart(3, '0')}`;
+    reservedIds.add(id);
+    return { ...finding, id };
+  });
+}
+
+function deterministicFindingIdentity(finding: ReviewFinding): string {
+  return JSON.stringify({
+    classification: finding.classification,
+    behaviorCellIds: [...(finding.behaviorCellIds ?? [])].sort(),
+    evidenceIds: finding.classification === 'verified-failure'
+      ? [...(finding.evidenceIds ?? [])].sort()
+      : [],
+  });
 }
 
 function behaviorMatrixProjection(evidence: ReviewEvidenceBundle): string {

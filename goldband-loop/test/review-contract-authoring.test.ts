@@ -119,6 +119,40 @@ describe("review contract authoring", () => {
 		}
 	});
 
+	test("JSON Schema and runtime validator expose the same opt-in Python 3.14 uv contract", () => {
+		const validateJsonSchema = jsonSchemaValidator();
+		const example = JSON.parse(
+			readFileSync(join(repoRoot, "examples", "review-evidence", "minimal-local-gate.json"), "utf8"),
+		) as ReviewEvidenceManifest;
+		const python = structuredClone(example);
+		python.providers[0]!.operations[0] = {
+			...python.providers[0]!.operations[0]!,
+			argv: ["python3.14", "-c", "import app"],
+			pythonRuntime: {
+				interpreter: "python3.14",
+				resolver: "uv",
+				projectFile: "pyproject.toml",
+				lockFile: "uv.lock",
+			},
+		};
+		expect(validateJsonSchema(python), JSON.stringify(validateJsonSchema.errors)).toBe(true);
+		expect(reviewEvidenceManifestSchema.validate(python).providers[0]!.operations[0]!.pythonRuntime)
+			.toEqual(python.providers[0]!.operations[0]!.pythonRuntime);
+
+		for (const mutate of [
+			(value: ReviewEvidenceManifest) => { value.providers[0]!.operations[0]!.argv[0] = "python3"; },
+			(value: ReviewEvidenceManifest) => { value.providers[0]!.operations[0]!.network = "authorized"; },
+			(value: ReviewEvidenceManifest) => { value.providers[0]!.operations[0]!.requiredSystemTools = ["uv"]; },
+			(value: ReviewEvidenceManifest) => { value.providers[0]!.operations[0]!.pythonRuntime!.projectFile = "../pyproject.toml"; },
+			(value: ReviewEvidenceManifest) => { value.providers[0]!.operations[0]!.pythonRuntime!.lockFile = "requirements.txt"; },
+		]) {
+			const invalid = structuredClone(python);
+			mutate(invalid);
+			expect(validateJsonSchema(invalid)).toBe(false);
+			expect(() => reviewEvidenceManifestSchema.validate(invalid)).toThrow();
+		}
+	});
+
 	test("JSON Schema and runtime conformance corpus covers local constraints and runtime-only graph rules", () => {
 		const validateJsonSchema = jsonSchemaValidator();
 		const example = JSON.parse(

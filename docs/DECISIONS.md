@@ -1943,6 +1943,18 @@ Decision:
 - Preserve blocking finding IDs and behavior-cell bindings. A successor initial
   review cannot supersede them; only the authoritative initial artifact may
   enter scoped closure.
+- Route an authoritative `hostCallCount=0` artifact containing only deterministic
+  findings through a typed pre-semantic evidence-repair transition. Reuse the
+  existing artifact flag, receipt authority, lineage owner, monotonic contract
+  comparison, and at-most-once claim rather than adding another mode or receipt.
+  The repair reruns affected and newly strengthened cells; an eligible result may
+  make the lineage's first initial semantic call, while an ineligible result
+  persists a successor deterministic-only artifact and keeps completion false.
+- Record predecessor artifact, receipt, candidate/contract digests, finding IDs,
+  and affected cells in the successor initial artifact. Allow only gap-to-typed
+  disposition strengthening (`manual` or `unsupported` to `automated`, `static`,
+  or `runtime-readback`); reverse and lateral changes still require base-owned
+  waiver authority.
 - Bind lineage to Work Map acceptance when present, selected Rules, base,
   candidate, scope, and manifest identities.
 - Reject an empty initial candidate before acquiring or writing authoritative
@@ -1986,8 +1998,9 @@ Consequences:
   later review cannot erase a blocker because a projection transition failed.
 - Block messages name the authoritative run, creation time, lineage update time,
   changed-path scope, and unresolved finding IDs. They provide the exact
-  `--closure-artifact` instruction when the artifact still verifies; otherwise
-  they name the expected digest and the required restore-then-close recovery.
+  state-appropriate `--closure-artifact` instruction when the artifact still
+  verifies; otherwise they name the expected digest and the required
+  restore-then-repair or restore-then-close recovery.
 
 ## ADR: Same-host execution for provider-owned review evidence
 

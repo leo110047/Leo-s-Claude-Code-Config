@@ -1310,6 +1310,18 @@ Tests spin up a local HTTP server (`browse/test/test-server.ts`) serving HTML
 fixtures from `browse/test/fixtures/`, then exercise the CLI against those
 pages.
 
+For browser shutdown diagnosis, use the repo-owned bounded probe instead of an
+unbounded `bun -e` process:
+
+```bash
+bun run probe:browser-close
+```
+
+The probe has a 30-second wall-clock deadline. On timeout or interruption it
+terminates its complete process group, including the probe browser, and returns
+a non-zero exit code. Maintainers can exercise that cleanup path with
+`bun run probe:browser-close --simulate-hang --timeout-ms 500`.
+
 ### Adding a new command
 
 1. Add the handler in `read-commands.ts` (non-mutating) or `write-commands.ts`

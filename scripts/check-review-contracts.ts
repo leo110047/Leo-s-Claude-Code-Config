@@ -26,7 +26,7 @@ try {
     selectedEvidenceProviderIds(rootManifest, [
       'goldband-loop/test/codex-review-launcher-install.test.ts',
     ]),
-    ['installed-runtime-tests', 'workflow-typecheck'],
+    ['installed-runtime-tests', 'python-runtime-tests', 'workflow-typecheck'],
     'single installed-runtime test change selected unrelated review providers',
   );
   assert.deepEqual(

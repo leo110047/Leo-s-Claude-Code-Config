@@ -137,6 +137,20 @@
                   "if": { "properties": { "expectedExit": { "const": "nonzero" } }, "required": ["expectedExit"] },
                   "then": { "required": ["expectedExitCode"] },
                   "else": { "not": { "required": ["expectedExitCode"] } }
+                },
+                {
+                  "if": { "required": ["pythonRuntime"] },
+                  "then": {
+                    "properties": {
+                      "network": { "const": "deny" },
+                      "argv": {
+                        "prefixItems": [{ "const": "python3.14" }]
+                      },
+                      "requiredSystemTools": {
+                        "items": { "not": { "enum": ["python3.14", "uv"] } }
+                      }
+                    }
+                  }
                 }
               ],
               "properties": {
@@ -154,6 +168,17 @@
                   "type": "array",
                   "uniqueItems": true,
                   "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$" }
+                },
+                "pythonRuntime": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["interpreter", "resolver", "projectFile", "lockFile"],
+                  "properties": {
+                    "interpreter": { "const": "python3.14" },
+                    "resolver": { "const": "uv" },
+                    "projectFile": { "type": "string", "pattern": "^(?:(?!\\.{1,2}(?:/|$))[^/\\\\]+/)*pyproject\\.toml$" },
+                    "lockFile": { "type": "string", "pattern": "^(?:(?!\\.{1,2}(?:/|$))[^/\\\\]+/)*uv\\.lock$" }
+                  }
                 },
                 "seed": { "type": "string", "minLength": 1 },
                 "iterations": { "type": "integer", "minimum": 1, "maximum": 1000000 }

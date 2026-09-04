@@ -26,7 +26,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
+import { superviseCommand } from './process-supervisor.mjs';
 import {
   MACOS_REVIEW_HOST_TEST_NAMES,
   testNamePatternForPlatform,
@@ -115,6 +115,7 @@ const KNOWN_WINDOWS_INCOMPATIBLE: Array<{ file: string; reason: string }> = [
 
 export const DEFAULT_SHARD_COUNT = 20;
 export const FREE_TEST_TIMEOUT_MS = 10_000;
+export const FREE_SHARD_WALL_CLOCK_TIMEOUT_MS = 10 * 60_000;
 
 export function normalizeRelativePath(filePath: string): string {
   return filePath.replace(/\\/g, '/');
@@ -283,21 +284,26 @@ function formatShardSummary(shards: string[][]): string[] {
   });
 }
 
-function runShard(files: string[], shardNumber: number, totalShards: number): number {
+async function runShard(files: string[], shardNumber: number, totalShards: number): Promise<number> {
   const header = `[test:free] shard ${shardNumber}/${totalShards} (${files.length} files)`;
   console.log(header);
-  const result = spawnSync(process.execPath, buildShardArgs(files), {
+  // This owns the Bun runner process group and its ordinary descendants. Tests
+  // that deliberately detach fixtures must also provide their own owner-death
+  // lifecycle; a new process group cannot be reclaimed through this one.
+  const result = await superviseCommand(process.execPath, buildShardArgs(files), {
     cwd: ROOT,
     stdio: 'inherit',
     env: process.env,
+    timeoutMs: FREE_SHARD_WALL_CLOCK_TIMEOUT_MS,
+    label: `${header} runner`,
   });
-  if (result.status !== 0) {
-    console.error(`${header} failed with exit code ${result.status ?? 1}`);
+  if (result.exitCode !== 0) {
+    console.error(`${header} failed with exit code ${result.exitCode} (${result.reason})`);
   }
-  return result.status ?? 1;
+  return result.exitCode;
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const options = parseCliOptions(process.argv.slice(2));
   const allFiles = collectFreeTestFiles();
   if (allFiles.length === 0) {
@@ -342,7 +348,7 @@ function main(): number {
   }
 
   for (let index = 0; index < shards.length; index += 1) {
-    const exitCode = runShard(shards[index], index + 1, shards.length);
+    const exitCode = await runShard(shards[index], index + 1, shards.length);
     if (exitCode !== 0) return exitCode;
   }
 
@@ -350,5 +356,5 @@ function main(): number {
 }
 
 if (import.meta.main) {
-  process.exitCode = main();
+  process.exitCode = await main();
 }

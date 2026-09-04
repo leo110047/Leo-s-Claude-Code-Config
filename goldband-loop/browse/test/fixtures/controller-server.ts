@@ -11,6 +11,12 @@ const stateFile = process.env.BROWSE_STATE_FILE;
 const instanceId = process.env.BROWSE_INSTANCE_ID;
 if (!stateFile || !instanceId) throw new Error('fixture requires BROWSE_STATE_FILE and BROWSE_INSTANCE_ID');
 
+const testOwnerPid = Number.parseInt(process.env.BROWSE_TEST_OWNER_PID || '', 10);
+const testOwnerStartTime = process.env.BROWSE_TEST_OWNER_START_TIME;
+if (!Number.isInteger(testOwnerPid) || testOwnerPid <= 0 || !testOwnerStartTime) {
+  throw new Error('fixture requires a stable BROWSE_TEST_OWNER_PID identity');
+}
+
 const startupDelayMs = Number.parseInt(process.env.BROWSE_FIXTURE_START_DELAY_MS || '0', 10);
 if (Number.isFinite(startupDelayMs) && startupDelayMs > 0) {
   await Bun.sleep(startupDelayMs);
@@ -64,11 +70,18 @@ if (!updateOwnedControllerState(stateFile, owner, (current) => ({ ...current, ph
 }
 
 function shutdown(): void {
+  clearInterval(ownerWatchdog);
   listener.stop(true);
   removeOwnedControllerState(stateFile, owner);
   process.exit(0);
 }
 
-process.on('SIGTERM', shutdown);
+const ownerWatchdog = setInterval(() => {
+  if (readProcessStartTime(testOwnerPid) !== testOwnerStartTime) shutdown();
+}, 50);
+
+process.on(
+  'SIGTERM',
+  process.env.BROWSE_FIXTURE_IGNORE_SIGTERM === '1' ? () => {} : shutdown,
+);
 process.on('SIGINT', shutdown);
-setInterval(() => {}, 60_000);

@@ -5,6 +5,7 @@ import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
 import { readProcessStartTime } from '../src/error-handling';
+import { cleanupControllerFixture } from './controller-fixture-lifecycle';
 import { canStartTestServer } from './test-server';
 
 const CLI_PATH = path.resolve(import.meta.dir, '../src/cli.ts');
@@ -13,7 +14,9 @@ const SERVER_PATH = path.resolve(import.meta.dir, '../src/server.ts');
 const FIXTURE_SERVER = path.resolve(import.meta.dir, 'fixtures/controller-server.ts');
 const FIXTURE_EMBEDDER_FAILURE = path.resolve(import.meta.dir, 'fixtures/embedder-start-failure.ts');
 const tempDirs: string[] = [];
-const ownedPids: number[] = [];
+const TEST_OWNER_START_TIME = readProcessStartTime(process.pid);
+const CLEANUP_SERVER_PATHS = new Set([FIXTURE_SERVER, SERVER_PATH]);
+const FIXTURE_LIFECYCLE_SCENARIO = process.env.BROWSE_FIXTURE_LIFECYCLE_SCENARIO;
 const describeWithLocalhost = process.platform !== 'win32' && canStartTestServer()
   ? describe
   : describe.skip;
@@ -27,6 +30,8 @@ function cliEnv(stateFile: string, extra: Record<string, string> = {}): Record<s
     ...env,
     BROWSE_STATE_FILE: stateFile,
     BROWSE_PARENT_PID: '0',
+    BROWSE_TEST_OWNER_PID: String(process.pid),
+    BROWSE_TEST_OWNER_START_TIME: TEST_OWNER_START_TIME,
     ...extra,
   };
 }
@@ -99,19 +104,54 @@ async function reservePort(): Promise<number> {
 }
 
 afterEach(async () => {
-  for (const pid of ownedPids.splice(0)) {
-    try { process.kill(pid, 'SIGTERM'); } catch {}
-  }
-  await Bun.sleep(100);
+  const cleanupErrors: unknown[] = [];
   for (const dir of tempDirs.splice(0)) {
-    const agentRecord = path.join(dir, 'terminal-agent-pid');
     try {
-      const record = JSON.parse(fs.readFileSync(agentRecord, 'utf-8'));
-      if (Number.isInteger(record.pid)) process.kill(record.pid, 'SIGTERM');
-    } catch {}
-    fs.rmSync(dir, { recursive: true, force: true });
+      await cleanupControllerFixture(path.join(dir, 'browse.json'), CLEANUP_SERVER_PATHS);
+      const agentRecord = path.join(dir, 'terminal-agent-pid');
+      try {
+        const record = JSON.parse(fs.readFileSync(agentRecord, 'utf-8'));
+        if (Number.isInteger(record.pid)) process.kill(record.pid, 'SIGTERM');
+      } catch {}
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'controller ownership fixture cleanup failed');
   }
 });
+
+if (FIXTURE_LIFECYCLE_SCENARIO) {
+  test(`fixture lifecycle child: ${FIXTURE_LIFECYCLE_SCENARIO}`, async () => {
+    const artifactDir = process.env.BROWSE_FIXTURE_LIFECYCLE_ARTIFACT_DIR;
+    if (!artifactDir) throw new Error('fixture lifecycle child requires an artifact directory');
+    const dir = path.join(artifactDir, 'controller-state');
+    fs.mkdirSync(dir, { recursive: true });
+    tempDirs.push(dir);
+    const stateFile = path.join(dir, 'browse.json');
+    const result = await runCli(stateFile, {
+      BROWSE_SERVER_SCRIPT: FIXTURE_SERVER,
+      ...(FIXTURE_LIFECYCLE_SCENARIO === 'ignore-sigterm'
+        ? { BROWSE_FIXTURE_IGNORE_SIGTERM: '1' }
+        : {}),
+    });
+    expect(result.code, result.stderr).toBe(0);
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    fs.writeFileSync(path.join(artifactDir, 'owner.json'), JSON.stringify(state));
+
+    if (FIXTURE_LIFECYCLE_SCENARIO === 'assertion-failure') {
+      expect('fixture published').toBe('assertion passed');
+    }
+    if (FIXTURE_LIFECYCLE_SCENARIO === 'runner-interruption') {
+      await new Promise(() => {});
+    }
+    if (FIXTURE_LIFECYCLE_SCENARIO === 'test-timeout') {
+      await new Promise(() => {});
+    }
+  }, FIXTURE_LIFECYCLE_SCENARIO === 'test-timeout' ? 500 : 60_000);
+}
 
 describeWithLocalhost('controller ownership integration', () => {
   test('unreachable owner is preserved and a host retry reuses the same instance', async () => {
@@ -184,7 +224,6 @@ describeWithLocalhost('controller ownership integration', () => {
     expect(new Set(owners.map((owner) => owner.port)).size).toBe(1);
 
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    ownedPids.push(state.pid);
     expect(state.phase).toBe('ready');
     expect(state.instanceId).toBe(owners[0].instanceId);
     expect(state.pid).toBe(owners[0].pid);
@@ -203,7 +242,6 @@ describeWithLocalhost('controller ownership integration', () => {
 
     expect(result.code, result.stderr).toBe(0);
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    ownedPids.push(state.pid);
     expect(state.phase).toBe('ready');
     expect(fs.existsSync(`${stateFile}.lock`)).toBe(false);
     expect(fs.existsSync(`${stateFile}.lock.reclaim`)).toBe(false);
@@ -230,7 +268,6 @@ describeWithLocalhost('controller ownership integration', () => {
     expect(new Set(owners.map((owner) => owner.instanceId)).size).toBe(1);
     expect(new Set(owners.map((owner) => owner.pid)).size).toBe(1);
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    ownedPids.push(state.pid);
     expect(state.instanceId).toBe(owners[0].instanceId);
     expect(fs.existsSync(`${stateFile}.lock.reclaim`)).toBe(false);
     expect(fs.existsSync(`${stateFile}.owner-lock.reclaim`)).toBe(false);
@@ -253,7 +290,6 @@ describeWithLocalhost('controller ownership integration', () => {
       expect(result.code, result.stderr).toBe(0);
     }
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    ownedPids.push(state.pid);
     expect(state.mode).toBe('headed');
     expect(state.phase).toBe('ready');
     expect(results.filter((result) => result.stdout.includes('Launching headed')).length).toBe(1);
@@ -273,8 +309,6 @@ describeWithLocalhost('controller ownership integration', () => {
     const connected = await runCli(stateFile, env, ['connect']);
     expect(connected.code, connected.stderr).toBe(0);
     const secondState = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-    ownedPids.push(secondState.pid);
-
     expect(secondState.mode).toBe('headed');
     expect(secondState.instanceId).not.toBe(firstState.instanceId);
     expect(secondState.pid).not.toBe(firstState.pid);
@@ -290,8 +324,6 @@ describeWithLocalhost('controller ownership integration', () => {
     expect(initial.code, initial.stderr).toBe(0);
     const before = fs.readFileSync(stateFile, 'utf-8');
     const winner = JSON.parse(before);
-    ownedPids.push(winner.pid);
-
     const loser = await runDirectServer(stateFile);
     expect(loser.code).not.toBe(0);
     expect(loser.stderr).toContain('Existing controller ownership is healthy');
